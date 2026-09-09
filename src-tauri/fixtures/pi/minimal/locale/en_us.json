@@ -1,0 +1,18 @@
+{
+  "project_label": "TTFlow Fixture",
+  "controller_android": "Android",
+  "resource_base": "Base resource",
+  "group_daily": "Daily",
+  "task_start": "Start task",
+  "task_collect": "Collect rewards",
+  "task_exclusive": "Special resource task",
+  "option_stage": "Stage",
+  "case_normal": "Normal",
+  "case_hard": "Hard",
+  "option_retries": "Retries",
+  "input_count": "Retry count",
+  "option_auto": "Auto battle",
+  "option_resolution": "Resolution",
+  "option_logging": "Logging",
+  "preset_daily": "Daily preset"
+}

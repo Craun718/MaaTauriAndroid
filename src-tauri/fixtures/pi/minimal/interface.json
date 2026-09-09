@@ -1,0 +1,174 @@
+{
+  "interface_version": 2,
+  "name": "ttflow_fixture",
+  "label": "$project_label",
+  "version": "0.1.0",
+  "description": "Minimal end-to-end fixture used by TTFlow tests.",
+  "languages": {
+    "zh_cn": "locale/zh_cn.json",
+    "en_us": "locale/en_us.json"
+  },
+  "controller": [
+    {
+      "name": "Android",
+      "label": "$controller_android",
+      "type": "Adb"
+    }
+  ],
+  "resource": [
+    {
+      "name": "base",
+      "label": "$resource_base",
+      "path": ["resource/base"],
+      "option": ["resolution"]
+    }
+  ],
+  "group": [
+    {
+      "name": "daily",
+      "label": "$group_daily"
+    }
+  ],
+  "global_option": ["logging"],
+  "task": [
+    {
+      "name": "start",
+      "label": "$task_start",
+      "entry": "Start",
+      "group": ["daily"],
+      "default_check": true,
+      "option": ["stage", "auto_battle"]
+    },
+    {
+      "name": "collect",
+      "label": "$task_collect",
+      "entry": "Collect",
+      "group": ["daily"],
+      "default_check": true
+    },
+    {
+      "name": "exclusive",
+      "label": "$task_exclusive",
+      "entry": "Exclusive",
+      "resource": ["special"]
+    }
+  ],
+  "option": {
+    "stage": {
+      "type": "select",
+      "label": "$option_stage",
+      "default_case": "normal",
+      "cases": [
+        {
+          "name": "normal",
+          "label": "$case_normal",
+          "pipeline_override": {
+            "Start": {
+              "stage": "normal"
+            }
+          },
+          "option": ["retries"]
+        },
+        {
+          "name": "hard",
+          "label": "$case_hard",
+          "pipeline_override": {
+            "Start": {
+              "stage": "hard"
+            }
+          }
+        }
+      ]
+    },
+    "retries": {
+      "type": "input",
+      "label": "$option_retries",
+      "inputs": [
+        {
+          "name": "count",
+          "label": "$input_count",
+          "default": "3",
+          "pipeline_type": "int",
+          "verify": "^[1-9][0-9]*$"
+        }
+      ],
+      "pipeline_override": {
+        "Start": {
+          "retries": "{count}"
+        }
+      }
+    },
+    "auto_battle": {
+      "type": "switch",
+      "label": "$option_auto",
+      "default_case": "Yes",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "AutoBattle": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No",
+          "pipeline_override": {
+            "AutoBattle": {
+              "enabled": false
+            }
+          }
+        }
+      ]
+    },
+    "resolution": {
+      "type": "select",
+      "label": "$option_resolution",
+      "cases": [
+        {
+          "name": "720p",
+          "pipeline_override": {
+            "__resolution": {
+              "short_side": 720
+            }
+          }
+        }
+      ]
+    },
+    "logging": {
+      "type": "checkbox",
+      "label": "$option_logging",
+      "default_case": ["events"],
+      "cases": [
+        {
+          "name": "events",
+          "pipeline_override": {
+            "__logging": {
+              "events": true
+            }
+          }
+        }
+      ]
+    }
+  },
+  "preset": [
+    {
+      "name": "daily",
+      "label": "$preset_daily",
+      "task": [
+        {
+          "name": "start",
+          "enabled": true,
+          "option": {
+            "stage": "hard",
+            "auto_battle": "No"
+          }
+        },
+        {
+          "name": "collect",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

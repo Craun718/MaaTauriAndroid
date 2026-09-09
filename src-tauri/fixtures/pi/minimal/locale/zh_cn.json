@@ -1,0 +1,18 @@
+{
+  "project_label": "TTFlow 测试资源",
+  "controller_android": "安卓",
+  "resource_base": "基础资源",
+  "group_daily": "日常",
+  "task_start": "开始任务",
+  "task_collect": "领取奖励",
+  "task_exclusive": "专属资源任务",
+  "option_stage": "关卡",
+  "case_normal": "普通",
+  "case_hard": "困难",
+  "option_retries": "重试次数",
+  "input_count": "重试数量",
+  "option_auto": "自动战斗",
+  "option_resolution": "分辨率",
+  "option_logging": "日志",
+  "preset_daily": "日常预设"
+}

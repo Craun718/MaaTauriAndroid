@@ -46,3 +46,13 @@ export async function startRun() {
 export async function exportDiagnostics(executionId?: string) {
   return invoke<DiagnosticExport>("export_diagnostics", { executionId });
 }
+
+export async function captureManualScreenshot(executionId?: string) {
+  return invoke<{ executionId: string; path: string }>("capture_manual_screenshot", {
+    executionId,
+  });
+}
+
+export async function clearDiagnosticData() {
+  return invoke<{ deletedRunCount: number; runsDir: string }>("clear_diagnostic_data");
+}

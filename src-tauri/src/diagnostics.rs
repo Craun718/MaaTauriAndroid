@@ -153,8 +153,66 @@ pub enum DiagnosticError {
     Read { path: PathBuf, source: io::Error },
     #[error("could not write {path}: {source}")]
     Write { path: PathBuf, source: io::Error },
+    #[error("could not remove {path}: {source}")]
+    Remove { path: PathBuf, source: io::Error },
     #[error("diagnostic file {path} is too large for a ZIP archive")]
     TooLarge { path: PathBuf },
+}
+
+pub fn capture_manual_screenshot(
+    source: &dyn DiagnosticSource,
+    run_dir: &Path,
+) -> Result<PathBuf, DiagnosticError> {
+    let screenshot_dir = run_dir.join("screens");
+    fs::create_dir_all(&screenshot_dir).map_err(|source| DiagnosticError::CreateDirectory {
+        path: screenshot_dir.clone(),
+        source,
+    })?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let path = screenshot_dir.join(format!("manual-{timestamp}.png"));
+    capture_png_to(source, 0, &path)?;
+    Ok(path)
+}
+
+pub fn clear_run_directories(runs_dir: &Path) -> Result<usize, DiagnosticError> {
+    let entries = match fs::read_dir(runs_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(source) => {
+            return Err(DiagnosticError::Read {
+                path: runs_dir.to_path_buf(),
+                source,
+            })
+        }
+    };
+
+    let mut deleted = 0_usize;
+    for entry in entries {
+        let entry = entry.map_err(|source| DiagnosticError::Read {
+            path: runs_dir.to_path_buf(),
+            source,
+        })?;
+        let path = entry.path();
+        let is_directory = entry
+            .file_type()
+            .map_err(|source| DiagnosticError::Read {
+                path: path.clone(),
+                source,
+            })?
+            .is_dir();
+        if !is_directory {
+            continue;
+        }
+        fs::remove_dir_all(&path).map_err(|source| DiagnosticError::Remove {
+            path: path.clone(),
+            source,
+        })?;
+        deleted += 1;
+    }
+    Ok(deleted)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -937,6 +995,7 @@ mod tests {
 
     struct FakeSource {
         capture_failures: Mutex<Vec<u32>>,
+        capture_bytes: Vec<u8>,
     }
 
     impl DiagnosticSource for FakeSource {
@@ -944,7 +1003,7 @@ mod tests {
             if self.capture_failures.lock().unwrap().contains(&display_id) {
                 return Err(io::Error::other("capture unavailable"));
             }
-            Ok([0x89, b'P', b'N', b'G', 1, 2, 3].to_vec())
+            Ok(self.capture_bytes.clone())
         }
 
         fn device_info(&self) -> io::Result<Vec<u8>> {
@@ -984,6 +1043,7 @@ mod tests {
         .unwrap();
         let source = FakeSource {
             capture_failures: Mutex::new(vec![2]),
+            capture_bytes: [0x89, b'P', b'N', b'G', 1, 2, 3].to_vec(),
         };
 
         let gaps = collect_artifacts(&source, &run_dir).unwrap();
@@ -997,6 +1057,72 @@ mod tests {
         assert!(filtered.contains("TTFlow started"));
         assert!(filtered.contains("Maa completed"));
         assert!(!filtered.contains("ignored"));
+        fs::remove_dir_all(runs_root).unwrap();
+    }
+
+    #[test]
+    fn manual_screenshots_are_validated_and_named_separately() {
+        let runs_root =
+            std::env::temp_dir().join(format!("ttflow-manual-{}", uuid::Uuid::new_v4()));
+        let run_dir = runs_root.join("run-1");
+        fs::create_dir_all(&run_dir).unwrap();
+        let source = FakeSource {
+            capture_failures: Mutex::new(Vec::new()),
+            capture_bytes: [0x89, b'P', b'N', b'G', 1, 2, 3].to_vec(),
+        };
+
+        let path = capture_manual_screenshot(&source, &run_dir).unwrap();
+
+        assert_eq!(path.parent().unwrap(), run_dir.join("screens").as_path());
+        assert!(path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("manual-") && name.ends_with(".png")));
+        assert_eq!(fs::read(&path).unwrap(), source.capture_bytes);
+        fs::remove_dir_all(runs_root).unwrap();
+    }
+
+    #[test]
+    fn manual_screenshot_rejects_invalid_png_data() {
+        let runs_root =
+            std::env::temp_dir().join(format!("ttflow-manual-{}", uuid::Uuid::new_v4()));
+        let run_dir = runs_root.join("run-1");
+        fs::create_dir_all(&run_dir).unwrap();
+        let source = FakeSource {
+            capture_failures: Mutex::new(Vec::new()),
+            capture_bytes: b"not-a-png".to_vec(),
+        };
+
+        let error = capture_manual_screenshot(&source, &run_dir).unwrap_err();
+
+        assert!(error.to_string().contains("could not read"));
+        let screenshots = run_dir.join("screens").read_dir().unwrap();
+        assert!(!screenshots.into_iter().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("manual-")
+        }));
+        fs::remove_dir_all(runs_root).unwrap();
+    }
+
+    #[test]
+    fn cleanup_removes_only_run_directories_and_accepts_missing_storage() {
+        let runs_root =
+            std::env::temp_dir().join(format!("ttflow-cleanup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(runs_root.join("run-1").join("logs")).unwrap();
+        fs::create_dir_all(runs_root.join("run-2")).unwrap();
+        fs::write(runs_root.join("configuration.json"), b"keep").unwrap();
+
+        let deleted = clear_run_directories(&runs_root).unwrap();
+        let missing = clear_run_directories(&runs_root.join("missing")).unwrap();
+
+        assert_eq!(deleted, 2);
+        assert_eq!(missing, 0);
+        assert!(!runs_root.join("run-1").exists());
+        assert!(!runs_root.join("run-2").exists());
+        assert!(runs_root.join("configuration.json").is_file());
         fs::remove_dir_all(runs_root).unwrap();
     }
 }

@@ -32,7 +32,7 @@ struct AppState {
     maa: Arc<runtime::MaaSessions>,
     runs_dir: RwLock<Option<PathBuf>>,
     latest_log: RwLock<Option<Arc<run_log::RunLogger>>>,
-    diagnostic_export: tokio::sync::Mutex<()>,
+    run_storage: tokio::sync::Mutex<()>,
 }
 
 impl Default for AppState {
@@ -45,7 +45,7 @@ impl Default for AppState {
             maa: Arc::new(runtime::MaaSessions::default()),
             runs_dir: RwLock::new(None),
             latest_log: RwLock::new(None),
-            diagnostic_export: tokio::sync::Mutex::new(()),
+            run_storage: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -92,6 +92,13 @@ impl AppState {
             .latest_log
             .write()
             .expect("latest run log lock poisoned") = Some(logger);
+    }
+
+    fn clear_latest_log(&self) {
+        *self
+            .latest_log
+            .write()
+            .expect("latest run log lock poisoned") = None;
     }
 
     fn latest_log(&self) -> Result<Arc<run_log::RunLogger>, AppError> {
@@ -256,6 +263,20 @@ struct StartRunStatus {
 struct RunStatus {
     state: runtime::RunState,
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ManualScreenshot {
+    execution_id: String,
+    path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClearedDiagnostics {
+    deleted_run_count: usize,
+    runs_dir: String,
 }
 
 #[tauri::command]
@@ -459,6 +480,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
 
     let execution_id = Uuid::new_v4().to_string();
     let runs_dir = state.runs_dir()?;
+    let _lifecycle_guard = state.run_storage.lock().await;
     let logger = Arc::new(run_log::RunLogger::create(&runs_dir, &execution_id)?);
     let initial_event = logger.append(
         run_log::RunEventKind::Preparing,
@@ -505,6 +527,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let resource_paths = resolved.resource.paths.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     let force_stop_target_app = configuration.force_stop_target_app;
+    drop(_lifecycle_guard);
     tokio::spawn(async move {
         let fail = |logger: &run_log::RunLogger, message: String| {
             let _ = logger.append(
@@ -682,6 +705,7 @@ async fn export_diagnostics(
     state: State<'_, AppState>,
     execution_id: Option<String>,
 ) -> Result<diagnostics::DiagnosticExport, AppError> {
+    let _storage_guard = state.run_storage.lock().await;
     let logger = state.latest_log()?;
     let requested = execution_id.unwrap_or_else(|| logger.execution_id().to_string());
     if requested != logger.execution_id() {
@@ -694,7 +718,6 @@ async fn export_diagnostics(
         "ttflow-diagnostics-{}.zip",
         run_log::sanitize(&requested)
     ));
-    let _export_guard = state.diagnostic_export.lock().await;
     let source = diagnostics::platform_source();
     let collector_run_dir = run_dir.clone();
     let collection_gaps = tokio::task::spawn_blocking(move || {
@@ -719,6 +742,66 @@ async fn export_diagnostics(
         let _ = app.emit("run-event", &event);
     }
     Ok(export)
+}
+
+#[tauri::command]
+async fn capture_manual_screenshot(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    execution_id: Option<String>,
+) -> Result<ManualScreenshot, AppError> {
+    let _storage_guard = state.run_storage.lock().await;
+    let logger = state.latest_log()?;
+    let requested = execution_id.unwrap_or_else(|| logger.execution_id().to_string());
+    if requested != logger.execution_id() {
+        return Err(AppError::Message(
+            "Only the latest run can be captured in this session".to_string(),
+        ));
+    }
+    let run_dir = logger.run_dir().to_path_buf();
+    let path = tokio::task::spawn_blocking(move || {
+        let source = diagnostics::platform_source();
+        diagnostics::capture_manual_screenshot(&source, &run_dir)
+    })
+    .await
+    .map_err(|error| AppError::Message(error.to_string()))??;
+    if let Ok(event) = logger.append(
+        run_log::RunEventKind::Screenshot,
+        runtime::run_result()
+            .map(|result| result.state)
+            .unwrap_or(runtime::RunState::Idle),
+        format!("Manual screenshot saved: {}", path.display()),
+        None,
+        Some(serde_json::json!({ "path": path.to_string_lossy() })),
+    ) {
+        let _ = app.emit("run-event", &event);
+    }
+    Ok(ManualScreenshot {
+        execution_id: logger.execution_id().to_string(),
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+async fn clear_diagnostic_data(state: State<'_, AppState>) -> Result<ClearedDiagnostics, AppError> {
+    let _storage_guard = state.run_storage.lock().await;
+    if state.maa.status() != runtime::RunState::Idle {
+        return Err(AppError::Message(
+            "Diagnostics cannot be cleared while a run is active".to_string(),
+        ));
+    }
+    let runs_dir = state.runs_dir()?;
+    let cleanup_runs_dir = runs_dir.clone();
+    let deleted_run_count =
+        tokio::task::spawn_blocking(move || diagnostics::clear_run_directories(&cleanup_runs_dir))
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))??;
+    state.clear_latest_log();
+    runtime::clear_run_result();
+    Ok(ClearedDiagnostics {
+        deleted_run_count,
+        runs_dir: runs_dir.to_string_lossy().into_owned(),
+    })
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -814,7 +897,9 @@ pub fn run() {
             start_run,
             run_status,
             stop_run,
-            export_diagnostics
+            export_diagnostics,
+            capture_manual_screenshot,
+            clear_diagnostic_data
         ])
         .setup(|app| {
             let state = app.state::<AppState>();

@@ -209,7 +209,8 @@ export type RunEventKind =
   | "stopping"
   | "failure"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "screenshot";
 
 export interface RunEvent {
   executionId: string;

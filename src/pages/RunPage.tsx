@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Download, Play, Square } from "lucide-react";
-import { exportDiagnostics, getRunStatus, resolveCurrent, startRun, stopRun } from "../lib/api";
+import { Camera, Download, Play, Square } from "lucide-react";
+import {
+  captureManualScreenshot,
+  exportDiagnostics,
+  getRunStatus,
+  resolveCurrent,
+  startRun,
+  stopRun,
+} from "../lib/api";
 import { EmptyProject } from "./SetupPage";
 import { useAppStore } from "../store/appStore";
 import type { DiagnosticExport, ResolvedRun, RunEvent } from "../lib/types";
@@ -17,6 +24,8 @@ export function RunPage() {
   const [diagnostic, setDiagnostic] = useState<DiagnosticExport>();
   const executionIdRef = useRef<string | undefined>(undefined);
   const [exporting, setExporting] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [screenshotPath, setScreenshotPath] = useState<string>();
 
   useEffect(() => {
     if (!snapshot) return;
@@ -109,6 +118,19 @@ export function RunPage() {
     }
   }
 
+  async function captureScreenshot() {
+    setCapturing(true);
+    try {
+      const result = await captureManualScreenshot(executionId);
+      setScreenshotPath(result.path);
+      setStatus(`Screenshot saved: ${result.path}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCapturing(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">Run</h1>
@@ -124,7 +146,7 @@ export function RunPage() {
           <Play size={18} />
           Start
         </button>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           <button
             type="button"
             disabled={!executionId || runState === "Idle"}
@@ -143,6 +165,15 @@ export function RunPage() {
             <Download size={18} />
             Export
           </button>
+          <button
+            type="button"
+            disabled={!executionId || capturing}
+            onClick={captureScreenshot}
+            className="flex h-12 items-center justify-center gap-2 rounded-md border border-[var(--border)] font-semibold disabled:opacity-50"
+          >
+            <Camera size={18} />
+            Shot
+          </button>
         </div>
       </section>
       {diagnostic && (
@@ -152,6 +183,9 @@ export function RunPage() {
         </section>
       )}
       {status && <p className="text-sm text-[var(--text-muted)]">{status}</p>}
+      {screenshotPath && (
+        <p className="break-all text-xs text-[var(--text-muted)]">{screenshotPath}</p>
+      )}
       <section className="space-y-2">
         <h2 className="font-medium">Queue</h2>
         {run?.tasks.map((item) => (

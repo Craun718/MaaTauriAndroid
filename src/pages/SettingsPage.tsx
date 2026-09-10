@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { CircleAlert, FolderInput } from "lucide-react";
-import { getPrivilegedStatus } from "../lib/api";
+import { CircleAlert, FolderInput, Trash2 } from "lucide-react";
+import { clearDiagnosticData, getPrivilegedStatus } from "../lib/api";
 import { useAppStore } from "../store/appStore";
 
 export function SettingsPage() {
@@ -10,6 +10,8 @@ export function SettingsPage() {
   const busy = useAppStore((state) => state.busy);
   const [path, setPath] = useState(snapshot?.projectPath ?? "");
   const [status, setStatus] = useState<string>();
+  const [cleanupStatus, setCleanupStatus] = useState<string>();
+  const [cleaning, setCleaning] = useState(false);
 
   useEffect(() => {
     getPrivilegedStatus()
@@ -62,6 +64,36 @@ export function SettingsPage() {
           />
           <span className="font-medium">Force stop target app</span>
         </label>
+      </section>
+      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+        <h2 className="font-medium">Diagnostics</h2>
+        <button
+          type="button"
+          disabled={busy || cleaning || !snapshot}
+          onClick={async () => {
+            const confirmed = window.confirm(
+              "Delete all stored run directories? Diagnostic exports inside them will also be removed.",
+            );
+            if (!confirmed) return;
+            setCleaning(true);
+            setCleanupStatus(undefined);
+            try {
+              const result = await clearDiagnosticData();
+              setCleanupStatus(`Deleted ${result.deletedRunCount} run directories`);
+            } catch (error) {
+              setCleanupStatus(
+                error instanceof Error ? error.message : String(error),
+              );
+            } finally {
+              setCleaning(false);
+            }
+          }}
+          className="flex h-11 items-center justify-center gap-2 rounded-md border border-red-300 font-semibold text-red-600 disabled:opacity-50"
+        >
+          <Trash2 size={18} />
+          {cleaning ? "Deleting" : "Delete runs"}
+        </button>
+        {cleanupStatus && <p className="text-sm text-[var(--text-muted)]">{cleanupStatus}</p>}
       </section>
       <section className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <div className="flex items-center gap-2">

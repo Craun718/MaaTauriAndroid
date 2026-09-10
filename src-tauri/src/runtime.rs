@@ -334,6 +334,10 @@ pub fn set_run_result(state: RunState, message: String) {
     set_execution_result(None, state, message)
 }
 
+pub fn clear_run_result() {
+    *RUN_RESULT.lock().expect("run result lock poisoned") = None;
+}
+
 pub fn set_execution_result(execution_id: Option<&str>, state: RunState, message: String) {
     *RUN_RESULT.lock().expect("run result lock poisoned") = Some(RunResult {
         execution_id: execution_id.map(str::to_string),

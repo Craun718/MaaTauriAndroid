@@ -24,6 +24,7 @@ pub enum RunEventKind {
     Failure,
     Completed,
     Cancelled,
+    Screenshot,
 }
 
 #[derive(Debug, Clone, Serialize)]

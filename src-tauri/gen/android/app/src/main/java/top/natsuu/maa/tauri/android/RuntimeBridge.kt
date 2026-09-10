@@ -1,8 +1,8 @@
-package top.natsuu.ttflow
+package top.natsuu.maa.tauri.android
 
 object RuntimeBridge {
     init {
-        System.loadLibrary("ttflow_lib")
+        System.loadLibrary("maa_tauri_android_lib")
     }
 
     @JvmStatic

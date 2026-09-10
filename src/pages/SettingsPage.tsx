@@ -28,7 +28,7 @@ export function SettingsPage() {
           <input
             value={path}
             onChange={(event) => setPath(event.target.value)}
-            placeholder="/storage/emulated/0/TTFlow"
+            placeholder="/storage/emulated/0/MaaTauriAndroid"
             className="h-11 min-w-0 flex-1 rounded-md border border-[var(--border)] px-3"
           />
           <button

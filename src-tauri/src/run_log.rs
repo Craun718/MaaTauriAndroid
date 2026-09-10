@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn appends_isolated_jsonl_events() {
-        let root = std::env::temp_dir().join(format!("ttflow-run-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("maa_tauri_android-run-{}", uuid::Uuid::new_v4()));
         let logger = RunLogger::create(&root, "run/one").unwrap();
         logger
             .append(

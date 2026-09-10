@@ -731,7 +731,7 @@ mod tests {
     #[test]
     fn loads_interface_and_locale_from_a_filesystem_project_root() {
         let root = std::env::temp_dir().join(format!(
-            "ttflow-project-loader-{}-filesystem",
+            "maa_tauri_android-project-loader-{}-filesystem",
             std::process::id()
         ));
         fs::create_dir_all(root.join("locale")).expect("temp project locale should be created");

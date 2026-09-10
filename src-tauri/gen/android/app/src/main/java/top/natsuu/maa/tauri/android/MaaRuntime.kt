@@ -1,4 +1,4 @@
-package top.natsuu.ttflow
+package top.natsuu.maa.tauri.android
 
 object MaaRuntime {
     @Volatile
@@ -13,7 +13,7 @@ object MaaRuntime {
         System.loadLibrary("onnxruntime")
         System.loadLibrary("MaaFramework")
         System.loadLibrary("MaaAndroidNativeControlUnit")
-        System.loadLibrary("ttflow_control")
+        System.loadLibrary("maa_tauri_android_control")
         loaded = true
     }
 }

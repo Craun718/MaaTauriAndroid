@@ -1,4 +1,4 @@
-package top.natsuu.ttflow
+package top.natsuu.maa.tauri.android
 
 import android.content.Context
 import java.io.File
@@ -7,7 +7,7 @@ import java.util.zip.ZipInputStream
 object PiInstaller {
     private const val ASSET_NAME = "pi.zip"
     private const val ROOT_NAME = "pi"
-    private const val MARKER_NAME = ".ttflow-pi-marker"
+    private const val MARKER_NAME = ".maa_tauri_android-pi-marker"
 
     fun install(context: Context): File? {
         val input = try {

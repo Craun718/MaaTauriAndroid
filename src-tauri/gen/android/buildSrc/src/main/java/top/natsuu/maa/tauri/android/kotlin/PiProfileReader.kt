@@ -1,4 +1,4 @@
-package top.natsuu.ttflow.kotlin
+package top.natsuu.maa.tauri.android.kotlin
 
 import java.io.File
 

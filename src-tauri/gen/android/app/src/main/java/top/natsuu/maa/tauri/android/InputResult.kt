@@ -1,4 +1,4 @@
-package top.natsuu.ttflow
+package top.natsuu.maa.tauri.android
 
 import android.os.Parcel
 import android.os.Parcelable

@@ -19,7 +19,7 @@ pub const EXPECTED_ARTIFACTS: &[&str] = &[
     "dumpsys.txt",
     "logs/bugreport-progress.txt",
     "logs/logcat-full.txt",
-    "logs/ttflow-filtered.log",
+    "logs/maa_tauri_android-filtered.log",
     "run.jsonl",
     "screens/main.png",
 ];
@@ -87,12 +87,12 @@ pub fn collect_artifacts(
                 path: full_log_path.clone(),
                 source,
             })?;
-        let filtered = filtered_ttflow_log(&full_log);
+        let filtered = filtered_maa_tauri_android_log(&full_log);
         if filtered.trim().is_empty() {
-            gaps.push("logs/ttflow-filtered.log: no TTFlow or Maa lines matched".to_string());
+            gaps.push("logs/maa_tauri_android-filtered.log: no MaaTauriAndroid or Maa lines matched".to_string());
         } else {
             write_file(
-                &run_dir.join("logs/ttflow-filtered.log"),
+                &run_dir.join("logs/maa_tauri_android-filtered.log"),
                 filtered.as_bytes(),
             )?;
         }
@@ -378,10 +378,10 @@ fn virtual_display_ids(display_state: &str) -> Vec<u32> {
     ids
 }
 
-fn filtered_ttflow_log(log: &str) -> String {
+fn filtered_maa_tauri_android_log(log: &str) -> String {
     log.lines()
         .filter(|line| {
-            ["TTFlow", "ttflow", "Maa", "MAA", "maa"]
+            ["MaaTauriAndroid", "maa_tauri_android", "Maa", "MAA", "maa"]
                 .iter()
                 .any(|token| line.contains(token))
         })
@@ -455,7 +455,7 @@ fn is_diagnostic_bundle(name: &str) -> bool {
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| {
-            name.starts_with("ttflow-diagnostics-")
+            name.starts_with("maa_tauri_android-diagnostics-")
                 && (name.ends_with(".zip") || name.ends_with(".partial"))
         })
 }
@@ -699,9 +699,9 @@ fn with_service<T>(
         .map_err(|error| io::Error::other(error.to_string()))?;
     let service = env
         .call_static_method(
-            "top/natsuu/ttflow/control/ControlHost",
+            "top/natsuu/maa/tauri/android/control/ControlHost",
             "current",
-            "()Ltop/natsuu/ttflow/ITtflowControlService;",
+            "()Ltop/natsuu/maa/tauri/android/IMaaTauriAndroidControlService;",
             &[],
         )
         .and_then(|value| value.l())
@@ -960,7 +960,7 @@ mod tests {
 
     #[test]
     fn export_reports_missing_artifacts_and_creates_a_valid_zip() {
-        let temp = std::env::temp_dir().join(format!("ttflow-diagnostic-{}", uuid::Uuid::new_v4()));
+        let temp = std::env::temp_dir().join(format!("maa_tauri_android-diagnostic-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(temp.join("screens")).unwrap();
         fs::write(temp.join("run.jsonl"), "{\"executionId\":\"run-1\"}\n").unwrap();
         fs::write(temp.join("screens/main.png"), [1, 2, 3]).unwrap();
@@ -1015,7 +1015,7 @@ mod tests {
         }
 
         fn logcat(&self) -> io::Result<Vec<u8>> {
-            Ok(b"ignored\nTTFlow started\nMaa completed".to_vec())
+            Ok(b"ignored\nMaaTauriAndroid started\nMaa completed".to_vec())
         }
 
         fn dumpsys(&self) -> io::Result<Vec<u8>> {
@@ -1031,7 +1031,7 @@ mod tests {
     #[test]
     fn collector_writes_all_platform_artifacts_and_reports_capture_gaps() {
         let runs_root =
-            std::env::temp_dir().join(format!("ttflow-collector-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("maa_tauri_android-collector-{}", uuid::Uuid::new_v4()));
         let run_dir = runs_root.join("run-1");
         fs::create_dir_all(run_dir.join("logs")).unwrap();
         crate::run_log::RunLogger::create(&runs_root, "run-1").unwrap();
@@ -1053,8 +1053,8 @@ mod tests {
         }
         assert!(!run_dir.join("screens/virtual-2.png").is_file());
         assert!(gaps.iter().any(|gap| gap.contains("screens/virtual-2.png")));
-        let filtered = fs::read_to_string(run_dir.join("logs/ttflow-filtered.log")).unwrap();
-        assert!(filtered.contains("TTFlow started"));
+        let filtered = fs::read_to_string(run_dir.join("logs/maa_tauri_android-filtered.log")).unwrap();
+        assert!(filtered.contains("MaaTauriAndroid started"));
         assert!(filtered.contains("Maa completed"));
         assert!(!filtered.contains("ignored"));
         fs::remove_dir_all(runs_root).unwrap();
@@ -1063,7 +1063,7 @@ mod tests {
     #[test]
     fn manual_screenshots_are_validated_and_named_separately() {
         let runs_root =
-            std::env::temp_dir().join(format!("ttflow-manual-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("maa_tauri_android-manual-{}", uuid::Uuid::new_v4()));
         let run_dir = runs_root.join("run-1");
         fs::create_dir_all(&run_dir).unwrap();
         let source = FakeSource {
@@ -1085,7 +1085,7 @@ mod tests {
     #[test]
     fn manual_screenshot_rejects_invalid_png_data() {
         let runs_root =
-            std::env::temp_dir().join(format!("ttflow-manual-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("maa_tauri_android-manual-{}", uuid::Uuid::new_v4()));
         let run_dir = runs_root.join("run-1");
         fs::create_dir_all(&run_dir).unwrap();
         let source = FakeSource {
@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn cleanup_removes_only_run_directories_and_accepts_missing_storage() {
         let runs_root =
-            std::env::temp_dir().join(format!("ttflow-cleanup-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("maa_tauri_android-cleanup-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(runs_root.join("run-1").join("logs")).unwrap();
         fs::create_dir_all(runs_root.join("run-2")).unwrap();
         fs::write(runs_root.join("configuration.json"), b"keep").unwrap();

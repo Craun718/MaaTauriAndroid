@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    ttflow_lib::run()
+    maa_tauri_android_lib::run()
 }

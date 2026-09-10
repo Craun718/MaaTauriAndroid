@@ -460,7 +460,7 @@ fn privileged_status() -> Result<PrivilegedStatus, AppError> {
         }),
         2 => Ok(PrivilegedStatus::PermissionRequired {
             message,
-            setup_required: vec!["Grant TTFlow access in Shizuku".to_string()],
+            setup_required: vec!["Grant MaaTauriAndroid access in Shizuku".to_string()],
         }),
         1 => Ok(PrivilegedStatus::NotInstalled {
             message,
@@ -468,7 +468,7 @@ fn privileged_status() -> Result<PrivilegedStatus, AppError> {
         }),
         4 => Ok(PrivilegedStatus::Disconnected {
             message,
-            setup_required: vec!["Restart Shizuku and reopen TTFlow".to_string()],
+            setup_required: vec!["Restart Shizuku and reopen MaaTauriAndroid".to_string()],
         }),
         5 => Ok(PrivilegedStatus::Error {
             message,
@@ -738,7 +738,7 @@ async fn export_diagnostics(
     }
     let run_dir = logger.run_dir().to_path_buf();
     let output = run_dir.join(format!(
-        "ttflow-diagnostics-{}.zip",
+        "maa_tauri_android-diagnostics-{}.zip",
         run_log::sanitize(&requested)
     ));
     let source = diagnostics::platform_source();
@@ -864,7 +864,7 @@ impl serde::Serialize for AppError {
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_initializeSecretBridge(
+pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_initializeSecretBridge(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
 ) {
@@ -877,7 +877,7 @@ pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_initializeSecretBrid
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_setBootstrapProjectRoot(
+pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_setBootstrapProjectRoot(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     project_root: *mut std::ffi::c_void,
@@ -901,7 +901,7 @@ pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_setBootstrapProjectR
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_configureScreen(
+pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_configureScreen(
     _env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     width: std::os::raw::c_int,
@@ -912,7 +912,7 @@ pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_configureScreen(
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_setControlState(
+pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_setControlState(
     _env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     state: std::os::raw::c_int,

@@ -1,4 +1,4 @@
-package top.natsuu.ttflow.control
+package top.natsuu.maa.tauri.android.control
 
 import android.content.ComponentName
 import android.content.Context
@@ -7,8 +7,8 @@ import android.content.pm.PackageManager
 import android.os.IBinder
 import java.util.UUID
 import rikka.shizuku.Shizuku
-import top.natsuu.ttflow.ITtflowControlService
-import top.natsuu.ttflow.RuntimeBridge
+import top.natsuu.maa.tauri.android.IMaaTauriAndroidControlService
+import top.natsuu.maa.tauri.android.RuntimeBridge
 
 class ControlServiceClient(private val context: Context) : ServiceConnection {
     private var bound = false
@@ -17,7 +17,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         ComponentName(context, PrivilegedControlServiceImpl::class.java),
     )
         .daemon(false)
-        .processNameSuffix("ttflow_control")
+        .processNameSuffix("maa_tauri_android_control")
         .tag(UUID.randomUUID().toString())
         .version(SERVICE_VERSION)
 
@@ -48,7 +48,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             RuntimeBridge.setControlState(STATE_ERROR)
             return
         }
-        ControlHost.attach(ITtflowControlService.Stub.asInterface(binder))
+        ControlHost.attach(IMaaTauriAndroidControlService.Stub.asInterface(binder))
         RuntimeBridge.setControlState(STATE_CONNECTED)
     }
 
@@ -91,7 +91,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         } catch (error: IllegalStateException) {
             started = false
             RuntimeBridge.setControlState(STATE_ERROR)
-            android.util.Log.w("TTFlowControl", "Could not request Shizuku permission", error)
+            android.util.Log.w("MaaTauriAndroidControl", "Could not request Shizuku permission", error)
         }
     }
 
@@ -104,7 +104,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         } catch (error: Throwable) {
             bound = false
             RuntimeBridge.setControlState(STATE_ERROR)
-            android.util.Log.w("TTFlowControl", "Could not bind Shizuku user service", error)
+            android.util.Log.w("MaaTauriAndroidControl", "Could not bind Shizuku user service", error)
         }
     }
 

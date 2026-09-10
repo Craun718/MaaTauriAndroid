@@ -1,11 +1,11 @@
-package top.natsuu.ttflow
+package top.natsuu.maa.tauri.android
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
-import top.natsuu.ttflow.MaaRuntime
-import top.natsuu.ttflow.control.ControlHost
-import top.natsuu.ttflow.control.ControlServiceClient
-import top.natsuu.ttflow.RuntimeBridge
+import top.natsuu.maa.tauri.android.MaaRuntime
+import top.natsuu.maa.tauri.android.control.ControlHost
+import top.natsuu.maa.tauri.android.control.ControlServiceClient
+import top.natsuu.maa.tauri.android.RuntimeBridge
 
 class MainActivity : TauriActivity() {
   private lateinit var controlClient: ControlServiceClient

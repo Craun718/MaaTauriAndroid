@@ -658,7 +658,7 @@ mod tests {
     #[test]
     fn localizes_and_resolves_default_fixture_plan() {
         let project = fixture_project();
-        assert_eq!(project.label, "TTFlow Fixture");
+        assert_eq!(project.label, "MaaTauriAndroid Fixture");
         let resolved = resolve_run(&project, &configuration(&project, "normal", None, "Yes"))
             .expect("fixture should resolve");
 

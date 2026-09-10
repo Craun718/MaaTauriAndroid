@@ -14,7 +14,7 @@
 
 namespace {
 
-constexpr auto kLogTag = "TTFlowControl";
+constexpr auto kLogTag = "MaaTauriAndroidControl";
 
 struct FrameInfo {
     uint32_t width = 0;
@@ -123,7 +123,7 @@ public:
 
         JavaVMAttachArgs args {
             .version = JNI_VERSION_1_6,
-            .name = "TTFlowMaaBridge",
+            .name = "MaaTauriAndroidMaaBridge",
             .group = nullptr,
         };
         if (g_vm->AttachCurrentThread(&env_, &args) == JNI_OK) {
@@ -518,7 +518,7 @@ extern "C" int DispatchInputMessage(MethodParam param) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_ttflow_control_ControlHost_configure(
+Java_top_natsuu_maa_tauri_android_control_ControlHost_configure(
     JNIEnv* env,
     jclass /*clazz*/,
     jint display_id,
@@ -535,7 +535,7 @@ Java_top_natsuu_ttflow_control_ControlHost_configure(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_ttflow_control_ControlHost_attachNative(JNIEnv* env, jclass /*clazz*/, jobject service) {
+Java_top_natsuu_maa_tauri_android_control_ControlHost_attachNative(JNIEnv* env, jclass /*clazz*/, jobject service) {
     if (env == nullptr) {
         return;
     }
@@ -566,7 +566,7 @@ Java_top_natsuu_ttflow_control_ControlHost_attachNative(JNIEnv* env, jclass /*cl
         g_dispatch_detailed_method = env->GetMethodID(
             service_class,
             "dispatchInputDetailed",
-            "(IIIIIILjava/lang/String;Ljava/lang/String;Z)Ltop/natsuu/ttflow/InputResult;");
+            "(IIIIIILjava/lang/String;Ljava/lang/String;Z)Ltop/natsuu/maa/tauri/android/InputResult;");
         clear_exception(*env);
         env->DeleteLocalRef(service_class);
     }
@@ -590,7 +590,7 @@ Java_top_natsuu_ttflow_control_ControlHost_attachNative(JNIEnv* env, jclass /*cl
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_ttflow_control_ControlHost_detachNative(JNIEnv* env, jclass /*clazz*/) {
+Java_top_natsuu_maa_tauri_android_control_ControlHost_detachNative(JNIEnv* env, jclass /*clazz*/) {
     if (env == nullptr) {
         return;
     }

@@ -1,10 +1,10 @@
-package top.natsuu.ttflow;
+package top.natsuu.maa.tauri.android;
 
-import top.natsuu.ttflow.InputResult;
+import top.natsuu.maa.tauri.android.InputResult;
 
 import android.os.ParcelFileDescriptor;
 
-interface ITtflowControlService {
+interface IMaaTauriAndroidControlService {
     ParcelFileDescriptor captureFrame(int displayId);
     int dispatchInput(int displayId, int method, int x, int y, int contact, int keyCode,
             in @nullable String text, in @nullable String packageName, boolean forceStop);

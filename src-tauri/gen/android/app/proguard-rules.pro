@@ -18,7 +18,7 @@
 
 # Shizuku starts the control service by class name.
 -keep class rikka.shizuku.ShizukuProvider { *; }
--keep class top.natsuu.ttflow.control.PrivilegedControlServiceImpl {
+-keep class top.natsuu.maa.tauri.android.control.PrivilegedControlServiceImpl {
     <init>(android.content.Context);
     public *;
 }

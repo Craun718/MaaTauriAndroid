@@ -29,8 +29,8 @@ const snapshot: AppStateSnapshot = {
   project: {
     root: "fixture",
     interfaceVersion: 2,
-    name: "ttflow_fixture",
-    label: "TTFlow Fixture",
+    name: "maa_tauri_android_fixture",
+    label: "MaaTauriAndroid Fixture",
     language: "en_us",
     languages: ["en_us"],
     controllers: [{ name: "Android", label: "Android", controllerType: "Adb" }],

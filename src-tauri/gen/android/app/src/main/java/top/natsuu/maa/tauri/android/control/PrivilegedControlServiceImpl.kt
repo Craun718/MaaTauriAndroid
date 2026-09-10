@@ -1,4 +1,4 @@
-package top.natsuu.ttflow.control
+package top.natsuu.maa.tauri.android.control
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -8,7 +8,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
-import top.natsuu.ttflow.InputResult
+import top.natsuu.maa.tauri.android.InputResult
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 import java.io.BufferedReader
@@ -16,9 +16,9 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStream
 import kotlin.concurrent.thread
-import top.natsuu.ttflow.ITtflowControlService
+import top.natsuu.maa.tauri.android.IMaaTauriAndroidControlService
 
-class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowControlService.Stub() {
+class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAndroidControlService.Stub() {
     private val executor = Executors.newSingleThreadExecutor()
     private val contacts = LinkedHashMap<Int, TouchPointer>()
     private val bugreportProcess = AtomicReference<Process?>(null)
@@ -29,7 +29,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
     override fun captureFrame(displayId: Int): ParcelFileDescriptor {
         val frame = capture(displayId)
         val (readEnd, writeEnd) = ParcelFileDescriptor.createPipe()
-        thread(name = "ttflow-frame-writer") {
+        thread(name = "maa_tauri_android-frame-writer") {
             ParcelFileDescriptor.AutoCloseOutputStream(writeEnd).use { stream ->
                 stream.write(frame)
             }
@@ -70,7 +70,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
         val message = InputResult.messageFor(code)
         if (code != RESULT_OK) {
             android.util.Log.w(
-                "TTFlowControl",
+                "MaaTauriAndroidControl",
                 "Input failed displayId=$displayId method=$method x=$x y=$y " +
                     "contact=$contact keyCode=$keyCode textLength=${text?.length ?: 0} " +
                     "result=$code message=$message",
@@ -83,7 +83,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
         val command = mutableListOf("/system/bin/screencap", "-p")
         if (displayId != 0) command.addAll(listOf("-d", displayId.toString()))
         val process = ProcessBuilder(command).start()
-        process.errorStream?.let { error -> thread(name = "ttflow-capture-error") { error.readBytes() } }
+        process.errorStream?.let { error -> thread(name = "maa_tauri_android-capture-error") { error.readBytes() } }
         process.inputStream.use { input -> input.copyTo(output) }
         val status = process.waitFor()
         if (status != 0) throw IllegalStateException("screencap failed: $status")
@@ -318,14 +318,14 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
                 method.parameterTypes.contentEquals(arrayOf(android.view.InputEvent::class.java, Int::class.javaPrimitiveType))
         }
         if (method == null) {
-            android.util.Log.w("TTFlowControl", "InputManager.injectInputEvent is unavailable")
+            android.util.Log.w("MaaTauriAndroidControl", "InputManager.injectInputEvent is unavailable")
             return false
         }
         return try {
             method.invoke(manager, event, 0) as? Boolean == true
         } catch (error: Throwable) {
             android.util.Log.w(
-                "TTFlowControl",
+                "MaaTauriAndroidControl",
                 "InputManager.injectInputEvent rejected ${event.javaClass.simpleName}",
                 error,
             )
@@ -341,7 +341,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
             true
         } catch (error: Throwable) {
             android.util.Log.w(
-                "TTFlowControl",
+                "MaaTauriAndroidControl",
                 "Could not associate ${event.javaClass.simpleName} with displayId=$displayId",
                 error,
             )
@@ -362,11 +362,11 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
 
     private fun stream(writer: (OutputStream) -> Unit): ParcelFileDescriptor {
         val (readEnd, writeEnd) = ParcelFileDescriptor.createPipe()
-        thread(name = "ttflow-diagnostic-writer") {
+        thread(name = "maa_tauri_android-diagnostic-writer") {
             try {
                 ParcelFileDescriptor.AutoCloseOutputStream(writeEnd).use(writer)
             } catch (error: Throwable) {
-                android.util.Log.w("TTFlowControl", "Diagnostic stream failed", error)
+                android.util.Log.w("MaaTauriAndroidControl", "Diagnostic stream failed", error)
             }
         }
         return readEnd

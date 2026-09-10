@@ -1,4 +1,4 @@
-package top.natsuu.ttflow
+package top.natsuu.maa.tauri.android
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -10,7 +10,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 object SecretBridge {
-    private const val KEY_ALIAS = "ttflow_configuration_secrets"
+    private const val KEY_ALIAS = "maa_tauri_android_configuration_secrets"
     private const val TAG_SIZE = 128
     private const val SEPARATOR = "."
     private const val TRANSFORMATION =

@@ -1,9 +1,9 @@
 {
   "interface_version": 2,
-  "name": "ttflow_fixture",
+  "name": "maa_tauri_android_fixture",
   "label": "$project_label",
   "version": "0.1.0",
-  "description": "Minimal end-to-end fixture used by TTFlow tests.",
+  "description": "Minimal end-to-end fixture used by MaaTauriAndroid tests.",
   "languages": {
     "zh_cn": "locale/zh_cn.json",
     "en_us": "locale/en_us.json"

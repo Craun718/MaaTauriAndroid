@@ -23,7 +23,7 @@ pi_include = [
 # Applied on top of pi.include.
 pi_exclude = []
 
-# applicationId suffix: top.natsuu.ttflow.<resource_id>
+# applicationId suffix: top.natsuu.maa.tauri.android.<resource_id>
 resource_id = "yourpi"
 
 # Optional. Relative paths resolve from the repository root.

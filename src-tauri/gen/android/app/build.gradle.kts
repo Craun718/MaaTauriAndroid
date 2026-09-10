@@ -1,7 +1,7 @@
 import java.util.Properties
 import java.io.File
 import java.util.Locale
-import top.natsuu.ttflow.kotlin.PiProfileReader
+import top.natsuu.maa.tauri.android.kotlin.PiProfileReader
 
 plugins {
     id("com.android.application")
@@ -102,13 +102,13 @@ val piInclude = pathList(
     ),
 )!!
 val piExclude = pathList("pi.exclude").orEmpty()
-val ttflowResourceId = profileProperty("ttflowResourceId", "resourceId") ?: "fixture"
-val ttflowMaaDir = profileProperty("ttflowMaaDir", "maaDir") ?: "vendor/maa/android"
-val ttflowMaaDirPath = File(ttflowMaaDir).let { directory ->
+val maaTauriAndroidResourceId = profileProperty("maaTauriAndroidResourceId", "resourceId") ?: "fixture"
+val maaTauriAndroidMaaDir = profileProperty("maaTauriAndroidMaaDir", "maaDir") ?: "vendor/maa/android"
+val maaTauriAndroidMaaDirPath = File(maaTauriAndroidMaaDir).let { directory ->
     if (directory.isAbsolute) {
         directory.normalize()
     } else {
-        file("../../../../$ttflowMaaDir")
+        file("../../../../$maaTauriAndroidMaaDir")
     }
 }
 val piGeneratedDir = layout.buildDirectory.dir("generated/piAssets")
@@ -161,10 +161,10 @@ piPackedDir.get().asFile.mkdirs()
 android {
     compileSdk = 37
     ndkVersion = "28.2.13676358"
-    namespace = "top.natsuu.ttflow"
+    namespace = "top.natsuu.maa.tauri.android"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "top.natsuu.ttflow.$ttflowResourceId"
+        applicationId = "top.natsuu.maa.tauri.android.$maaTauriAndroidResourceId"
         minSdk = 28
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
@@ -225,7 +225,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            jniLibs.srcDirs(ttflowMaaDirPath)
+            jniLibs.srcDirs(maaTauriAndroidMaaDirPath)
         }
     }
 

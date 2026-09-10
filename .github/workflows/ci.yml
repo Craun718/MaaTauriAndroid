@@ -35,6 +35,7 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
   android-rust:
+    needs: frontend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

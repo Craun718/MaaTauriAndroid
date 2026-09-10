@@ -504,6 +504,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let project_root = project.root.clone();
     let resource_paths = resolved.resource.paths.clone();
     let base_pipeline = resolved.base_pipeline.clone();
+    let force_stop_target_app = configuration.force_stop_target_app;
     tokio::spawn(async move {
         let fail = |logger: &run_log::RunLogger, message: String| {
             let _ = logger.append(
@@ -520,7 +521,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
             );
         };
         let creation = tokio::task::spawn_blocking(move || {
-            runtime::create_session(&project_root, &resource_paths, 0, false)
+            runtime::create_session(&project_root, &resource_paths, 0, force_stop_target_app)
         })
         .await;
 

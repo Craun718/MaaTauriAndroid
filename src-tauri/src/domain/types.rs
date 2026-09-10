@@ -298,6 +298,8 @@ pub enum OptionValue {
 pub struct UserConfiguration {
     pub schema_version: u32,
     pub initialized: bool,
+    #[serde(default)]
+    pub force_stop_target_app: bool,
     pub active_controller: Option<String>,
     pub active_resource: Option<String>,
     pub global_option_values: BTreeMap<String, OptionValue>,
@@ -313,6 +315,7 @@ impl Default for UserConfiguration {
         Self {
             schema_version: 1,
             initialized: false,
+            force_stop_target_app: false,
             active_controller: None,
             active_resource: None,
             global_option_values: BTreeMap::new(),
@@ -322,6 +325,22 @@ impl Default for UserConfiguration {
             active_run_configuration_id: None,
             welcome_fingerprint: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_configuration_defaults_force_stop_to_false() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy.as_object_mut().unwrap().remove("forceStopTargetApp");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert!(!parsed.force_stop_target_app);
     }
 }
 

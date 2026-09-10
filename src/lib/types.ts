@@ -167,6 +167,7 @@ export interface RunConfiguration {
 export interface UserConfiguration {
   schemaVersion: number;
   initialized: boolean;
+  forceStopTargetApp: boolean;
   activeController?: string;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;

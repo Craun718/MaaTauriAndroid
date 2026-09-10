@@ -45,6 +45,7 @@ const snapshot: AppStateSnapshot = {
   configuration: {
     schemaVersion: 1,
     initialized: true,
+    forceStopTargetApp: false,
     globalOptionValues: {},
     controllerOptionValues: {},
     resourceOptionValues: {},

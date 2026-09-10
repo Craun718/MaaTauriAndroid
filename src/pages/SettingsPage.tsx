@@ -6,6 +6,7 @@ import { useAppStore } from "../store/appStore";
 export function SettingsPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const load = useAppStore((state) => state.loadProject);
+  const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const busy = useAppStore((state) => state.busy);
   const [path, setPath] = useState(snapshot?.projectPath ?? "");
   const [status, setStatus] = useState<string>();
@@ -43,6 +44,24 @@ export function SettingsPage() {
             {snapshot.project.name} {snapshot.project.version ?? ""}
           </p>
         )}
+      </section>
+      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+        <h2 className="font-medium">Run behavior</h2>
+        <label className="flex min-h-12 items-center gap-3">
+          <input
+            type="checkbox"
+            checked={snapshot?.configuration.forceStopTargetApp ?? false}
+            disabled={busy || !snapshot}
+            onChange={(event) => {
+              if (!snapshot) return;
+              const next = structuredClone(snapshot.configuration);
+              next.forceStopTargetApp = event.target.checked;
+              void saveConfiguration(next);
+            }}
+            className="h-5 w-5 accent-[var(--accent)]"
+          />
+          <span className="font-medium">Force stop target app</span>
+        </label>
       </section>
       <section className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 use super::types::*;
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -297,17 +298,8 @@ impl ProjectLoader {
             None => Vec::new(),
         };
 
-        let welcome = match document.get("welcome") {
-            Some(Value::Array(items)) => items
-                .iter()
-                .filter_map(Value::as_str)
-                .filter_map(|value| localize(Some(value), &translations))
-                .collect(),
-            Some(Value::String(value)) => {
-                localize(Some(value), &translations).into_iter().collect()
-            }
-            _ => Vec::new(),
-        };
+        let (welcome, welcome_fingerprint, welcome_errors) =
+            parse_welcome(document.get("welcome"), &translations);
 
         Ok(Project {
             root: root.to_string_lossy().into_owned(),
@@ -338,6 +330,8 @@ impl ProjectLoader {
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 welcome,
+                welcome_fingerprint: Some(welcome_fingerprint),
+                welcome_errors,
                 mirrorchyan_rid: document
                     .get("mirrorchyan_rid")
                     .and_then(Value::as_str)
@@ -349,6 +343,37 @@ impl ProjectLoader {
             },
         })
     }
+}
+
+fn parse_welcome(
+    value: Option<&Value>,
+    translations: &BTreeMap<String, String>,
+) -> (Vec<String>, String, Vec<String>) {
+    let mut raw_values = Vec::new();
+    let mut errors = Vec::new();
+    match value {
+        Some(Value::String(value)) => raw_values.push(value.clone()),
+        Some(Value::Array(items)) => {
+            for item in items {
+                if let Some(value) = item.as_str() {
+                    raw_values.push(value.to_string());
+                } else {
+                    errors.push(format!("welcome entry is not a string: {item}"));
+                }
+            }
+        }
+        None => {}
+        Some(other) => errors.push(format!("welcome is not a string or array: {other}")),
+    }
+    let welcome = raw_values
+        .iter()
+        .filter_map(|value| localize(Some(value), translations))
+        .collect();
+    let canonical =
+        serde_json::to_string(&raw_values).unwrap_or_else(|_| format!("{:?}", raw_values));
+    let digest = Sha256::digest(canonical.as_bytes());
+    errors.sort();
+    (welcome, hex::encode(digest), errors)
 }
 
 fn parse_agent(item: &Value) -> Option<AgentDefinition> {

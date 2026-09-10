@@ -271,6 +271,8 @@ pub struct ProjectMetadata {
     pub license: Option<String>,
     pub github: Option<String>,
     pub welcome: Vec<String>,
+    pub welcome_fingerprint: Option<String>,
+    pub welcome_errors: Vec<String>,
     pub mirrorchyan_rid: Option<String>,
     pub mirrorchyan_multiplatform: bool,
 }

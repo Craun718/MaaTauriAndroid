@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppStateSnapshot, ResolvedRun, UserConfiguration } from "./types";
+import type {
+  AppStateSnapshot,
+  DiagnosticExport,
+  ResolvedRun,
+  RunState,
+  UserConfiguration,
+} from "./types";
 
 export async function bootstrapApp() {
   return invoke<AppStateSnapshot>("bootstrap");
@@ -26,13 +32,17 @@ export async function getPrivilegedStatus() {
 }
 
 export async function getRunStatus() {
-  return invoke<{ state: "Idle" | "Running" | "Stopping"; message: string }>("run_status");
+  return invoke<{ executionId?: string; state: RunState; message: string }>("run_status");
 }
 
-export async function stopRun() {
-  return invoke<string>("stop_run");
+export async function stopRun(executionId?: string) {
+  return invoke<string>("stop_run", { executionId });
 }
 
 export async function startRun() {
-  return invoke<{ message: string }>("start_run");
+  return invoke<{ executionId: string; message: string; taskCount: number }>("start_run");
+}
+
+export async function exportDiagnostics(executionId?: string) {
+  return invoke<DiagnosticExport>("export_diagnostics", { executionId });
 }

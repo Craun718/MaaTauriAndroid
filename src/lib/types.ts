@@ -109,6 +109,8 @@ export interface ProjectMetadata {
   title?: string;
   github?: string;
   welcome: string[];
+  welcomeFingerprint?: string;
+  welcomeErrors?: string[];
 }
 
 export interface Project {
@@ -195,4 +197,49 @@ export interface ResolvedRun {
   tasks: ResolvedTask[];
   basePipeline: Record<string, unknown>;
   pipelineOverride: Record<string, unknown>;
+}
+
+export type RunState = "Idle" | "Preparing" | "Running" | "Stopping";
+
+export type RunEventKind =
+  | "started"
+  | "preparing"
+  | "task"
+  | "stopping"
+  | "failure"
+  | "completed"
+  | "cancelled";
+
+export interface RunEvent {
+  executionId: string;
+  sequence: number;
+  atUnixMs: number;
+  kind: RunEventKind;
+  state: RunState;
+  message: string;
+  taskName?: string;
+  data?: Record<string, unknown>;
+}
+
+export interface DiagnosticItem {
+  name: string;
+  present: boolean;
+  byteLength?: number;
+  sha256?: string;
+  reason?: string;
+}
+
+export interface DiagnosticManifest {
+  schemaVersion: number;
+  executionId: string;
+  createdAtUnixMs: number;
+  status: "complete" | "partial";
+  privacyConfirmation: string;
+  items: DiagnosticItem[];
+  partialReasons: string[];
+}
+
+export interface DiagnosticExport {
+  path: string;
+  manifest: DiagnosticManifest;
 }

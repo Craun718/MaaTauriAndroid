@@ -390,7 +390,7 @@ Java_top_natsuu_ttflow_control_ControlHost_configure(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_ttflow_control_ControlHost_attach(JNIEnv* env, jclass /*clazz*/, jobject service) {
+Java_top_natsuu_ttflow_control_ControlHost_attachNative(JNIEnv* env, jclass /*clazz*/, jobject service) {
     if (env == nullptr) {
         return;
     }
@@ -430,7 +430,7 @@ Java_top_natsuu_ttflow_control_ControlHost_attach(JNIEnv* env, jclass /*clazz*/,
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_ttflow_control_ControlHost_detach(JNIEnv* env, jclass /*clazz*/) {
+Java_top_natsuu_ttflow_control_ControlHost_detachNative(JNIEnv* env, jclass /*clazz*/) {
     if (env == nullptr) {
         return;
     }

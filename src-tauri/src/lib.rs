@@ -1,5 +1,7 @@
+mod diagnostics;
 mod domain;
 mod persistence;
+mod run_log;
 mod runtime;
 mod secrets;
 
@@ -11,7 +13,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 #[derive(Clone, Serialize)]
@@ -22,13 +24,30 @@ struct AppStateSnapshot {
     project_path: Option<String>,
 }
 
-#[derive(Default)]
 struct AppState {
     project: RwLock<Option<Project>>,
     configuration: RwLock<UserConfiguration>,
     project_path: RwLock<Option<PathBuf>>,
     store: RwLock<Option<UserConfigurationStore>>,
     maa: Arc<runtime::MaaSessions>,
+    runs_dir: RwLock<Option<PathBuf>>,
+    latest_log: RwLock<Option<Arc<run_log::RunLogger>>>,
+    diagnostic_export: tokio::sync::Mutex<()>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            project: RwLock::new(None),
+            configuration: RwLock::new(UserConfiguration::default()),
+            project_path: RwLock::new(None),
+            store: RwLock::new(None),
+            maa: Arc::new(runtime::MaaSessions::default()),
+            runs_dir: RwLock::new(None),
+            latest_log: RwLock::new(None),
+            diagnostic_export: tokio::sync::Mutex::new(()),
+        }
+    }
 }
 
 impl AppState {
@@ -54,6 +73,33 @@ impl AppState {
             .project_path
             .write()
             .expect("project path lock poisoned") = path;
+    }
+
+    fn runs_dir(&self) -> Result<PathBuf, AppError> {
+        self.runs_dir
+            .read()
+            .expect("runs directory lock poisoned")
+            .clone()
+            .ok_or_else(|| AppError::Message("Run storage is not initialized".to_string()))
+    }
+
+    fn set_runs_dir(&self, path: PathBuf) {
+        *self.runs_dir.write().expect("runs directory lock poisoned") = Some(path);
+    }
+
+    fn set_latest_log(&self, logger: Arc<run_log::RunLogger>) {
+        *self
+            .latest_log
+            .write()
+            .expect("latest run log lock poisoned") = Some(logger);
+    }
+
+    fn latest_log(&self) -> Result<Arc<run_log::RunLogger>, AppError> {
+        self.latest_log
+            .read()
+            .expect("latest run log lock poisoned")
+            .clone()
+            .ok_or_else(|| AppError::Message("No run has been started in this session".to_string()))
     }
 
     fn set_configuration(&self, configuration: UserConfiguration) -> Result<(), PersistenceError> {
@@ -131,6 +177,11 @@ fn normalize_configuration(project: &Project, configuration: &mut UserConfigurat
         configuration.run_configurations.insert(0, default_run);
     }
     configuration.initialized = true;
+
+    let next_fingerprint = project.metadata.welcome_fingerprint.clone();
+    if configuration.welcome_fingerprint.as_ref() != next_fingerprint.as_ref() {
+        configuration.welcome_fingerprint = next_fingerprint;
+    }
 }
 
 fn default_run_configuration(project: &Project, name: &str) -> RunConfiguration {
@@ -195,6 +246,7 @@ enum PrivilegedStatus {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StartRunStatus {
+    execution_id: String,
     message: String,
     task_count: usize,
 }
@@ -294,13 +346,19 @@ fn apply_preset(
         .iter_mut()
         .find(|run| run.id == active_run)
         .ok_or_else(|| AppError::Message("Active run configuration disappeared".to_string()))?;
+    let existing_tasks = run.tasks.clone();
     run.tasks = project
         .tasks
         .iter()
         .map(|task| {
             let configured = preset.tasks.iter().find(|item| item.task_name == task.name);
+            let existing = existing_tasks
+                .iter()
+                .find(|item| item.task_name == task.name);
             ConfiguredTask {
-                instance_id: format!("{}:{}", task.name, Uuid::new_v4()),
+                instance_id: existing
+                    .map(|item| item.instance_id.clone())
+                    .unwrap_or_else(|| format!("{}:{}", task.name, Uuid::new_v4())),
                 task_name: task.name.clone(),
                 enabled: configured
                     .map(|item| item.enabled)
@@ -318,6 +376,25 @@ fn apply_preset(
             }
         })
         .collect();
+    state.set_configuration(configuration.clone())?;
+    Ok(configuration)
+}
+
+#[tauri::command]
+fn reset_task_parameters(state: State<'_, AppState>) -> Result<UserConfiguration, AppError> {
+    let mut configuration = state.configuration()?;
+    let active_run = configuration
+        .active_run_configuration_id
+        .clone()
+        .ok_or_else(|| AppError::Message("No active run configuration".to_string()))?;
+    let run = configuration
+        .run_configurations
+        .iter_mut()
+        .find(|run| run.id == active_run)
+        .ok_or_else(|| AppError::Message("Active run configuration disappeared".to_string()))?;
+    for task in &mut run.tasks {
+        task.option_values.clear();
+    }
     state.set_configuration(configuration.clone())?;
     Ok(configuration)
 }
@@ -361,7 +438,7 @@ fn privileged_status() -> Result<PrivilegedStatus, AppError> {
 }
 
 #[tauri::command]
-async fn start_run(state: State<'_, AppState>) -> Result<StartRunStatus, AppError> {
+async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRunStatus, AppError> {
     let project = state.project()?;
     let configuration = state.configuration()?;
     let resolved = resolve_run(&project, &configuration)?;
@@ -374,20 +451,74 @@ async fn start_run(state: State<'_, AppState>) -> Result<StartRunStatus, AppErro
     let task_count = tasks.len();
     if task_count == 0 {
         return Ok(StartRunStatus {
+            execution_id: String::new(),
             message: "There are no enabled tasks to run".to_string(),
             task_count,
         });
     }
 
-    runtime::set_run_result(
-        runtime::RunState::Running,
+    let execution_id = Uuid::new_v4().to_string();
+    let runs_dir = state.runs_dir()?;
+    let logger = Arc::new(run_log::RunLogger::create(&runs_dir, &execution_id)?);
+    let initial_event = logger.append(
+        run_log::RunEventKind::Preparing,
+        runtime::RunState::Preparing,
+        "The run is being prepared",
+        None,
+        None,
+    )?;
+    app.emit("run-event", &initial_event)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    runtime::set_execution_result(
+        Some(&execution_id),
+        runtime::RunState::Preparing,
         "The run is being prepared".to_string(),
     );
+    let stopped_before_start = state.maa.begin_preparing(&execution_id)?;
+    state.set_latest_log(logger.clone());
+    if stopped_before_start {
+        let cancelled = logger.append(
+            run_log::RunEventKind::Cancelled,
+            runtime::RunState::Idle,
+            "The run was cancelled before Maa started",
+            None,
+            None,
+        )?;
+        let _ = app.emit("run-event", &cancelled);
+        runtime::set_execution_result(
+            Some(&execution_id),
+            runtime::RunState::Idle,
+            "The run was cancelled".to_string(),
+        );
+        state.maa.finish(&execution_id);
+        return Ok(StartRunStatus {
+            execution_id,
+            message: "The run was cancelled".to_string(),
+            task_count,
+        });
+    }
+
     let sessions = state.maa.clone();
+    let run_execution_id = execution_id.clone();
+    let logger_for_run = logger.clone();
     let project_root = project.root.clone();
     let resource_paths = resolved.resource.paths.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     tokio::spawn(async move {
+        let fail = |logger: &run_log::RunLogger, message: String| {
+            let _ = logger.append(
+                run_log::RunEventKind::Failure,
+                runtime::RunState::Idle,
+                message.clone(),
+                None,
+                None,
+            );
+            runtime::set_execution_result(
+                Some(logger.execution_id()),
+                runtime::RunState::Idle,
+                message,
+            );
+        };
         let creation = tokio::task::spawn_blocking(move || {
             runtime::create_session(&project_root, &resource_paths, 0, false)
         })
@@ -395,29 +526,97 @@ async fn start_run(state: State<'_, AppState>) -> Result<StartRunStatus, AppErro
 
         match creation {
             Ok(Ok(tasker)) => {
-                let tasker = match sessions.begin(tasker) {
+                let tasker = match sessions.begin(&run_execution_id, tasker) {
                     Ok(tasker) => tasker,
                     Err(error) => {
-                        runtime::set_run_result(runtime::RunState::Idle, error.to_string());
+                        fail(&logger_for_run, error.to_string());
+                        sessions.finish(&run_execution_id);
                         return;
                     }
                 };
+                if let Ok(event) = logger_for_run.append(
+                    run_log::RunEventKind::Started,
+                    runtime::RunState::Running,
+                    "The run started".to_string(),
+                    None,
+                    None,
+                ) {
+                    let _ = app.emit("run-event", &event);
+                }
+                runtime::set_execution_result(
+                    Some(logger_for_run.execution_id()),
+                    runtime::RunState::Running,
+                    "The run is running".to_string(),
+                );
                 let run_tasker = tasker.clone();
+                let task_logger = logger_for_run.clone();
                 let result = tokio::task::spawn_blocking(move || {
-                    runtime::run_tasks(&run_tasker, &tasks, &base_pipeline)
+                    runtime::run_tasks(&run_tasker, &tasks, &base_pipeline, &task_logger)
                 })
                 .await;
-                if let Err(error) = result {
-                    runtime::set_run_result(runtime::RunState::Idle, error.to_string());
+                let outcome = match result {
+                    Ok(Ok(outcome)) => outcome,
+                    Ok(Err(error)) => {
+                        fail(&logger_for_run, error.to_string());
+                        sessions.finish(&run_execution_id);
+                        return;
+                    }
+                    Err(error) => {
+                        fail(&logger_for_run, error.to_string());
+                        sessions.finish(&run_execution_id);
+                        return;
+                    }
+                };
+                let (kind, state, message) = match outcome {
+                    runtime::RunOutcome::Completed => (
+                        run_log::RunEventKind::Completed,
+                        runtime::RunState::Idle,
+                        "The run completed".to_string(),
+                    ),
+                    runtime::RunOutcome::Stopped => (
+                        run_log::RunEventKind::Cancelled,
+                        runtime::RunState::Idle,
+                        "The run was stopped".to_string(),
+                    ),
+                    runtime::RunOutcome::Failed { entry } => {
+                        if let Err(error) = diagnostics::capture_failure_screenshot(
+                            logger_for_run.run_dir(),
+                            &entry,
+                        ) {
+                            let _ = logger_for_run.append(
+                                run_log::RunEventKind::Failure,
+                                runtime::RunState::Running,
+                                format!("failure screenshot could not be captured: {error}"),
+                                None,
+                                Some(serde_json::json!({ "taskEntry": entry })),
+                            );
+                        }
+                        (
+                            run_log::RunEventKind::Failure,
+                            runtime::RunState::Idle,
+                            format!("Maa task {entry} failed"),
+                        )
+                    }
+                };
+                if let Ok(event) = logger_for_run.append(kind, state, message.clone(), None, None) {
+                    let _ = app.emit("run-event", &event);
                 }
-                sessions.finish(&tasker);
+                runtime::set_execution_result(Some(logger_for_run.execution_id()), state, message);
+                sessions.finish(&run_execution_id);
             }
-            Ok(Err(error)) => runtime::set_run_result(runtime::RunState::Idle, error.to_string()),
-            Err(error) => runtime::set_run_result(runtime::RunState::Idle, error.to_string()),
+            Ok(Err(error)) => {
+                fail(&logger_for_run, error.to_string());
+                sessions.finish(&run_execution_id);
+            }
+            Err(error) => {
+                fail(&logger_for_run, error.to_string());
+                sessions.finish(&run_execution_id);
+            }
         }
     });
 
     Ok(StartRunStatus {
+        execution_id: execution_id.clone(),
         message: "The run is starting".to_string(),
         task_count,
     })
@@ -430,12 +629,95 @@ fn run_status() -> Result<runtime::RunResult, AppError> {
 }
 
 #[tauri::command]
-fn stop_run(state: State<'_, AppState>) -> Result<String, AppError> {
-    if state.maa.request_stop()? {
+fn stop_run(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    execution_id: Option<String>,
+) -> Result<String, AppError> {
+    let requested_id = execution_id.or_else(|| {
+        state
+            .latest_log()
+            .ok()
+            .map(|logger| logger.execution_id().to_string())
+    });
+    if let (Some(requested), Ok(logger)) = (requested_id.as_deref(), state.latest_log()) {
+        if requested != logger.execution_id() {
+            return Err(AppError::Message(
+                "execution id does not match the latest run".to_string(),
+            ));
+        }
+    }
+    if state.maa.request_stop(requested_id.as_deref())? {
+        if let Ok(logger) = state.latest_log() {
+            if requested_id
+                .as_deref()
+                .is_none_or(|id| id == logger.execution_id())
+            {
+                if let Ok(event) = logger.append(
+                    run_log::RunEventKind::Stopping,
+                    runtime::RunState::Stopping,
+                    "Stop was requested",
+                    None,
+                    None,
+                ) {
+                    let _ = app.emit("run-event", &event);
+                }
+            }
+        }
+        runtime::set_execution_result(
+            requested_id.as_deref(),
+            runtime::RunState::Stopping,
+            "The run is stopping".to_string(),
+        );
         Ok("The run is stopping".to_string())
     } else {
         Ok("No run is active".to_string())
     }
+}
+
+#[tauri::command]
+async fn export_diagnostics(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    execution_id: Option<String>,
+) -> Result<diagnostics::DiagnosticExport, AppError> {
+    let logger = state.latest_log()?;
+    let requested = execution_id.unwrap_or_else(|| logger.execution_id().to_string());
+    if requested != logger.execution_id() {
+        return Err(AppError::Message(
+            "Only the latest diagnostic run can be exported in this session".to_string(),
+        ));
+    }
+    let run_dir = logger.run_dir().to_path_buf();
+    let output = run_dir.join(format!(
+        "ttflow-diagnostics-{}.zip",
+        run_log::sanitize(&requested)
+    ));
+    let _export_guard = state.diagnostic_export.lock().await;
+    let source = diagnostics::platform_source();
+    let collector_run_dir = run_dir.clone();
+    let collection_gaps = tokio::task::spawn_blocking(move || {
+        diagnostics::collect_artifacts(&source, &collector_run_dir)
+    })
+    .await
+    .map_err(|error| AppError::Message(error.to_string()))??;
+    let export = diagnostics::export_bundle(&run_dir, output, &requested, collection_gaps)?;
+    if let Ok(event) = logger.append(
+        run_log::RunEventKind::Completed,
+        runtime::run_result()
+            .map(|result| result.state)
+            .unwrap_or(runtime::RunState::Idle),
+        format!("Diagnostic export written: {}", export.path),
+        None,
+        Some(serde_json::json!({
+            "status": export.manifest.status,
+            "path": export.path,
+            "partialReasons": export.manifest.partial_reasons,
+        })),
+    ) {
+        let _ = app.emit("run-event", &event);
+    }
+    Ok(export)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -458,6 +740,10 @@ enum AppError {
     Serialization(String),
     #[error("{0}")]
     Runtime(#[from] runtime::RuntimeError),
+    #[error("{0}")]
+    RunLog(#[from] run_log::RunLogError),
+    #[error("{0}")]
+    Diagnostic(#[from] diagnostics::DiagnosticError),
 }
 
 impl serde::Serialize for AppError {
@@ -522,11 +808,22 @@ pub fn run() {
             save_configuration,
             apply_preset,
             resolve_current,
+            reset_task_parameters,
             privileged_status,
             start_run,
             run_status,
-            stop_run
+            stop_run,
+            export_diagnostics
         ])
+        .setup(|app| {
+            let state = app.state::<AppState>();
+            let root = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| AppError::Path(error.to_string()))?;
+            state.set_runs_dir(root.join("runs"));
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

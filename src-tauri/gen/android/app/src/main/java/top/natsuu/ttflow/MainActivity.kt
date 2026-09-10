@@ -14,6 +14,9 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     MaaRuntime.load()
     RuntimeBridge.initializeSecretBridge()
+    PiInstaller.install(this)?.let { projectRoot ->
+        RuntimeBridge.setBootstrapProjectRoot(projectRoot.absolutePath)
+    }
     RuntimeBridge.configureScreen(
         resources.displayMetrics.widthPixels,
         resources.displayMetrics.heightPixels,

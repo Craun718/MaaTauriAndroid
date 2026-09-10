@@ -13,4 +13,7 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun initializeSecretBridge()
+
+    @JvmStatic
+    external fun setBootstrapProjectRoot(projectRoot: String)
 }

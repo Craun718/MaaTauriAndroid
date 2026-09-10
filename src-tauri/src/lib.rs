@@ -16,6 +16,19 @@ use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
+#[cfg(target_os = "android")]
+static BOOTSTRAP_PROJECT_ROOT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+fn bootstrap_project_root() -> Option<&'static str> {
+    BOOTSTRAP_PROJECT_ROOT.get().map(String::as_str)
+}
+
+#[cfg(not(target_os = "android"))]
+fn bootstrap_project_root() -> Option<&'static str> {
+    None
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AppStateSnapshot {
@@ -286,18 +299,28 @@ fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnaps
         .app_data_dir()
         .map_err(|error| AppError::Path(error.to_string()))?
         .join("configuration.json");
-    let fixture = serde_json::from_str(include_str!("../fixtures/pi/minimal/interface.json"))
-        .map_err(AppError::ProjectLoad)?;
-    let translations = serde_json::from_str::<BTreeMap<String, String>>(include_str!(
-        "../fixtures/pi/minimal/locale/zh_cn.json"
-    ))?;
-    let project = ProjectLoader::default().load_embedded(fixture, translations, "zh_cn")?;
+    let bundled_root = bootstrap_project_root();
+    let project = match bundled_root {
+        Some(root) => ProjectLoader {
+            preferred_language: "zh_cn".to_string(),
+        }
+        .load(PathBuf::from(root).join("interface.json"), "zh_cn")?,
+        None => {
+            let fixture =
+                serde_json::from_str(include_str!("../fixtures/pi/minimal/interface.json"))
+                    .map_err(AppError::ProjectLoad)?;
+            let translations = serde_json::from_str::<BTreeMap<String, String>>(include_str!(
+                "../fixtures/pi/minimal/locale/zh_cn.json"
+            ))?;
+            ProjectLoader::default().load_embedded(fixture, translations, "zh_cn")?
+        }
+    };
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;
     Ok(AppStateSnapshot {
         project: state.project().ok(),
         configuration,
-        project_path: None,
+        project_path: bundled_root.map(str::to_string),
     })
 }
 
@@ -849,6 +872,30 @@ pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_initializeSecretBrid
         if let Err(error) = runtime::initialize_secret_bridge(&mut env) {
             eprintln!("Failed to initialize the secret bridge: {error}");
         }
+    }
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_ttflow_RuntimeBridge_setBootstrapProjectRoot(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    project_root: *mut std::ffi::c_void,
+) {
+    if let Ok(mut env) = unsafe { jni::JNIEnv::from_raw(env.cast()) } {
+        let raw_project_root = unsafe { jni::objects::JObject::from_raw(project_root.cast()) };
+        let project_root = jni::objects::JString::from(raw_project_root);
+        match env.get_string(&project_root) {
+            Ok(project_root) => {
+                if BOOTSTRAP_PROJECT_ROOT
+                    .set(project_root.to_string_lossy().into_owned())
+                    .is_err()
+                {
+                    eprintln!("The bootstrap project root was already initialized");
+                }
+            }
+            Err(error) => eprintln!("Failed to read the bootstrap project root: {error}"),
+        };
     }
 }
 

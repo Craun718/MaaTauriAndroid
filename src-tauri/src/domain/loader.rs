@@ -723,3 +723,51 @@ pub(crate) fn strings(value: Option<&Value>) -> Option<Vec<String>> {
             .collect()
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loads_interface_and_locale_from_a_filesystem_project_root() {
+        let root = std::env::temp_dir().join(format!(
+            "ttflow-project-loader-{}-filesystem",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("locale")).expect("temp project locale should be created");
+        fs::write(
+            root.join("interface.json"),
+            r#"{
+                "interface_version": 2,
+                "name": "profiled",
+                "label": "$profiled",
+                "languages": {"zh_cn": "locale/zh_cn.json"},
+                "resource": [{"name": "base", "path": ["resource/base"]}],
+                "task": [{
+                    "name": "Start",
+                    "entry": "Start",
+                    "pipeline_override": {"Start": {"next": ["Login"]}}
+                }]
+            }"#,
+        )
+        .expect("interface should be written");
+        fs::write(
+            root.join("locale/zh_cn.json"),
+            r#"{"profiled": "配置项目"}"#,
+        )
+        .expect("locale should be written");
+
+        let result = ProjectLoader::default().load(root.join("interface.json"), "zh_cn");
+        let project = result.expect("filesystem interface should load");
+
+        assert_eq!(project.root, root.to_string_lossy());
+        assert_eq!(project.label, "配置项目");
+        assert_eq!(project.resources[0].paths, vec!["resource/base"]);
+        assert_eq!(
+            project.tasks[0].pipeline_override,
+            json!({"Start": {"next": ["Login"]}})
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+}

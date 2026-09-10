@@ -1,0 +1,30 @@
+# Copy this file outside the repository, then set in
+# src-tauri/gen/android/local.properties:
+# pi.profile=/absolute/path/to/your-pi-profile.toml
+
+# Directory containing interface.json. Relative paths resolve against this
+# profile file's directory.
+pi_assets = "/absolute/path/to/your-maa-project"
+
+# Replace the whole list when set. Keep icons and data needed by the resource.
+pi_include = [
+  "interface.json",
+  "tasks/**",
+  "resource/**",
+  "resource_*/**",
+  "config/**",
+  "data/**",
+  "locale/**",
+  "locales/**",
+  "CONTACT",
+  "LICENSE",
+]
+
+# Applied on top of pi.include.
+pi_exclude = []
+
+# applicationId suffix: top.natsuu.ttflow.<resource_id>
+resource_id = "yourpi"
+
+# Optional. Relative paths resolve from the repository root.
+maa_dir = "vendor/maa/android"

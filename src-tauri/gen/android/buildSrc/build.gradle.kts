@@ -19,5 +19,6 @@ repositories {
 dependencies {
     compileOnly(gradleApi())
     implementation("com.android.tools.build:gradle:8.11.0")
+    implementation("org.tomlj:tomlj:1.1.1")
+    testImplementation("junit:junit:4.13.2")
 }
-

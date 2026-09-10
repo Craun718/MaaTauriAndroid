@@ -1,6 +1,11 @@
-import java.util.Properties
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import java.io.File
-import java.util.Locale
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+import java.util.Properties
+import java.util.TreeMap
+
 import top.natsuu.maa.tauri.android.kotlin.PiProfileReader
 
 plugins {
@@ -24,115 +29,129 @@ val localProperties = Properties().apply {
 }
 
 val piProfilePath = providers.gradleProperty("pi.profile").orNull
-    ?: providers.gradleProperty("piProfile").orNull
     ?: localProperties.getProperty("pi.profile")?.trim()?.takeIf { it.isNotEmpty() }
     ?: System.getenv("PI_PROFILE")?.trim()?.takeIf { it.isNotEmpty() }
 val piProfileFile = piProfilePath?.let { path ->
-    val file = rootProject.file(path)
-    require(file.isFile) { "pi.profile points at a missing file: ${file.absolutePath}" }
-    file
+    val profile = rootProject.file(path)
+    require(profile.isFile) { "pi.profile points at a missing file: ${profile.absolutePath}" }
+    require(profile.extension.equals("toml", ignoreCase = true)) {
+        "pi.profile must be a TOML file: ${profile.absolutePath}"
+    }
+    profile
 }
-val piProfile: Map<String, String> = piProfileFile?.let { file ->
-    when (file.extension.lowercase(Locale.ROOT)) {
-        "toml" -> PiProfileReader.read(file)
-        "properties" -> Properties().apply {
-            file.inputStream().use { load(it) }
-        }.map { (key, value) -> key.toString() to value.toString() }.toMap()
-        else -> throw IllegalArgumentException(
-            "pi.profile must be a .toml or .properties file: ${file.absolutePath}",
-        )
-    }
-} ?: emptyMap()
+val piProfile = piProfileFile?.let(PiProfileReader::read)
 
-fun profileProperty(vararg keys: String): String? {
-    for (key in keys) {
-        providers.gradleProperty(key).orNull?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-    }
-    val aliases = keys.flatMap { key ->
-        listOf(
-            key,
-            key.replace('.', '_'),
-            key.replace(Regex("([a-z0-9])([A-Z])")) { match ->
-                "${match.groupValues[1]}_${match.groupValues[2]}"
-            }.lowercase(Locale.ROOT),
-        )
-    }.distinct()
-    for (key in aliases) {
-        piProfile[key]?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-    }
-    return null
-}
-
-fun profilePath(key: String): String? = profileProperty(key)?.let { value ->
-    val file = File(value)
-    if (file.isAbsolute) {
-        file.normalize().absolutePath
-    } else {
-        requireNotNull(piProfileFile) { "$key requires pi.profile when the path is relative" }
-            .parentFile
-            .resolve(value)
-            .normalize()
-            .absolutePath
-    }
+val piAssets = piProfile?.assets
+val piInclude = piProfile?.include ?: listOf(
+    "interface.json",
+    "tasks/**",
+    "resource/**",
+    "resource_*/**",
+    "config/**",
+    "data/**",
+    "locale/**",
+    "locales/**",
+    "agent/**",
+    "python/**",
+    "CONTACT",
+    "LICENSE",
+)
+val piExclude = piProfile?.exclude.orEmpty()
+val maaTauriAndroidResourceId = piProfile?.resourceId ?: "fixture"
+val maaTauriAndroidMaaDir = piProfile?.maaDir ?: "vendor/maa/android"
+val maaTauriAndroidMaaDirPath = if (File(maaTauriAndroidMaaDir).isAbsolute) {
+    File(maaTauriAndroidMaaDir).normalize()
+} else {
+    rootProject.file("../../../..")
+        .resolve(maaTauriAndroidMaaDir)
+        .normalize()
 }
 
-fun pathList(key: String, fallback: List<String>? = null): List<String>? {
-    val rawValue = profileProperty(key)
-        ?: fallback?.joinToString(",")?.takeIf { fallback.isNotEmpty() }
-        ?: return null
-    return rawValue.split(',', '\n')
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-}
-
-val piAssets = profilePath("pi.assets") ?: profilePath("assets")
-val piInclude = pathList(
-    "pi.include",
-    listOf(
-        "interface.json",
-        "tasks/**",
-        "resource/**",
-        "resource_*/**",
-        "config/**",
-        "data/**",
-        "locale/**",
-        "locales/**",
-        "CONTACT",
-        "LICENSE",
-    ),
-)!!
-val piExclude = pathList("pi.exclude").orEmpty()
-val maaTauriAndroidResourceId = profileProperty("maaTauriAndroidResourceId", "resourceId") ?: "fixture"
-val maaTauriAndroidMaaDir = profileProperty("maaTauriAndroidMaaDir", "maaDir") ?: "vendor/maa/android"
-val maaTauriAndroidMaaDirPath = File(maaTauriAndroidMaaDir).let { directory ->
-    if (directory.isAbsolute) {
-        directory.normalize()
-    } else {
-        file("../../../../$maaTauriAndroidMaaDir")
-    }
-}
 val piGeneratedDir = layout.buildDirectory.dir("generated/piAssets")
 val piRootDir = piGeneratedDir.map { it.dir("pi") }
 val piPackedDir = piGeneratedDir.map { it.dir("packed") }
-val syncPiAssets = tasks.register<Sync>("syncPiAssets") {
-    group = "build"
-    description = "Sync the configured Project Interface resources into the generated PI tree"
-    val sourceDir = requireNotNull(piAssets) {
-        "No Project Interface configured; set pi.profile in local.properties or pass -Ppi.profile"
+val agentPackedDir = piPackedDir.map { it.dir("agent") }
+
+fun sha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
     }
-    into(piRootDir)
-    from(sourceDir) {
-        include(piInclude)
-        exclude(piExclude)
-        exclude(".git/**", "node_modules/**", ".venv/**", "__pycache__/**")
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+fun interfaceAgentCount(file: File): Int {
+    val parsed = JsonSlurper().parse(file)
+    require(parsed is Map<*, *>) { "interface.json must contain an object" }
+    return when (val agents = parsed["agent"]) {
+        null -> 0
+        is List<*> -> agents.size
+        else -> 1
     }
-    doLast {
-        require(piRootDir.get().file("interface.json").asFile.isFile) {
-            "The Project Interface profile did not produce interface.json"
+}
+
+fun canonicalValue(value: Any?): Any? = when (value) {
+    is Map<*, *> -> linkedMapOf<String, Any?>().apply {
+        value.entries
+            .map { entry -> entry.key.toString() to canonicalValue(entry.value) }
+            .sortedBy { entry -> entry.first }
+            .forEach { entry -> put(entry.first, entry.second) }
+    }
+    is List<*> -> value.map(::canonicalValue)
+    else -> value
+}
+
+fun canonicalJson(value: Any?): String = JsonOutput.toJson(canonicalValue(value))
+
+fun validateAgentBundle(file: File, index: Int) {
+    val requiredLibraries = setOf(
+        "lib/arm64-v8a/libMaaAgentClient.so",
+        "lib/arm64-v8a/libMaaAgentServer.so",
+    )
+    ZipFile(file).use { archive ->
+        val entries = archive.entries().asSequence()
+            .map { entry -> entry.name.removePrefix("./") }
+            .toSet()
+        requiredLibraries.forEach { path ->
+            require(path in entries) {
+                "agent runtime $index is missing $path: $file"
+            }
         }
     }
 }
-val preparePiAssets = if (piAssets != null) {
+
+val preparePiArchive = if (piProfile != null) {
+    val syncPiAssets = tasks.register<Sync>("syncPiAssets") {
+        group = "build"
+        description = "Sync the configured Project Interface resources into the generated PI tree"
+        val sourceDir = requireNotNull(piAssets) {
+            "No Project Interface configured; set pi.profile in local.properties or pass -Ppi.profile"
+        }
+        into(piRootDir)
+        from(sourceDir) {
+            include(piInclude)
+            exclude(piExclude)
+            exclude(".git/**", "node_modules/**", ".venv/**", "__pycache__/**")
+        }
+        doLast {
+            val interfaceFile = piRootDir.get().file("interface.json").asFile
+            require(interfaceFile.isFile) {
+                "The Project Interface profile did not produce interface.json"
+            }
+            val declaredAgents = interfaceAgentCount(interfaceFile)
+            val configuredAgents = piProfile.agent?.runtimes?.size ?: 0
+            require(declaredAgents == configuredAgents) {
+                "interface.json declares $declaredAgents agents, but the TOML profile configures " +
+                    "$configuredAgents runtime bundles"
+            }
+        }
+    }
+
     tasks.register<Zip>("packPiArchive") {
         group = "build"
         description = "Pack the generated Project Interface tree into assets/pi.zip"
@@ -143,20 +162,96 @@ val preparePiAssets = if (piAssets != null) {
         includeEmptyDirs = false
     }
 } else {
-    tasks.register("clearPiArchive") {
+    tasks.register<Delete>("clearPiArchive") {
         group = "build"
-        description = "Remove a stale Project Interface archive after the profile is removed"
+        description = "Remove stale Project Interface assets when no profile is configured"
+        delete(piPackedDir)
+    }
+}
+
+val prepareAgentRuntime = if (piProfile?.agent != null) {
+    tasks.register("prepareAgentRuntime") {
+        group = "build"
+        description = "Package trusted MaaFW Python agent runtimes and their descriptor"
+        dependsOn(preparePiArchive)
+        val agentProfile = requireNotNull(requireNotNull(piProfile).agent)
+        val runtimes = agentProfile.runtimes
+        inputs.property("abi", "arm64-v8a")
+        inputs.property("timeoutMs", agentProfile.timeoutMs)
+        runtimes.forEach { runtime -> inputs.file(runtime.bundle) }
+        inputs.files(piRootDir)
+        inputs.file(piPackedDir.map { it.file("pi.zip") })
+        inputs.property("runtimeConfig", canonicalJson(runtimes.map { runtime ->
+            linkedMapOf<String, Any?>(
+                "args" to runtime.args,
+                "bundleSha256" to runtime.bundleSha256,
+                "env" to runtime.env,
+                "exec" to runtime.exec,
+                "executables" to runtime.executables,
+                "workingDir" to runtime.workingDir,
+            )
+        }))
+        outputs.dir(agentPackedDir)
         doLast {
-            delete(piPackedDir)
+            val packedRoot = piPackedDir.get().asFile
+            val packedAgentRoot = packedRoot.resolve("agent").apply { mkdirs() }
+            packedAgentRoot.listFiles()?.forEach { it.deleteRecursively() }
+            val packedPiArchive = packedRoot.resolve("pi.zip")
+            require(packedPiArchive.isFile) { "the packed Project Interface archive is missing" }
+            val piArchiveHash = sha256(packedPiArchive)
+
+            val descriptorRuntimes = runtimes.mapIndexed { index, runtime ->
+                validateAgentBundle(runtime.bundle, index)
+                val target = packedAgentRoot.resolve("runtime-$index.zip")
+                runtime.bundle.copyTo(target, overwrite = true)
+                val actualBundleHash = sha256(target)
+                require(actualBundleHash == runtime.bundleSha256) {
+                    "agent runtime $index digest changed while packing: ${runtime.bundle}"
+                }
+                linkedMapOf<String, Any?>(
+                    "args" to runtime.args,
+                    "bundleSha256" to actualBundleHash,
+                    "env" to TreeMap(runtime.env),
+                    "exec" to runtime.exec,
+                    "executables" to runtime.executables,
+                    "interfaceIndex" to index,
+                    "workingDir" to runtime.workingDir,
+                )
+            }
+            val interfaceHash = sha256(piRootDir.get().file("interface.json").asFile)
+            val canonicalDescriptor = linkedMapOf<String, Any?>(
+                "abi" to "arm64-v8a",
+                "interfaceSha256" to interfaceHash,
+                "piSha256" to piArchiveHash,
+                "runtimes" to descriptorRuntimes,
+                "schemaVersion" to 1,
+                "timeoutMs" to agentProfile.timeoutMs,
+            )
+            val fingerprint = sha256(packedAgentRoot.resolve("fingerprint.temp").apply {
+                writeText(canonicalJson(canonicalDescriptor))
+            })
+            packedAgentRoot.resolve("fingerprint.temp").delete()
+
+            val descriptor = LinkedHashMap(canonicalDescriptor)
+            descriptor["fingerprint"] = fingerprint
+            packedAgentRoot.resolve("runtime.json")
+                .writeText(JsonOutput.prettyPrint(JsonOutput.toJson(descriptor)))
+            packedAgentRoot.resolve("runtime.fingerprint").writeText(fingerprint)
+        }
+    }
+} else {
+    tasks.register("clearAgentRuntime") {
+        group = "build"
+        description = "Remove stale agent assets when no Python runtime is configured"
+        doLast {
+            piPackedDir.get().asFile.resolve("agent").deleteRecursively()
         }
     }
 }
 
 tasks.named("preBuild") {
-    dependsOn(preparePiAssets)
+    dependsOn(preparePiArchive, prepareAgentRuntime)
 }
-
-piPackedDir.get().asFile.mkdirs()
 
 android {
     compileSdk = 37
@@ -236,7 +331,9 @@ android {
 
 extensions.configure<com.android.build.api.variant.ApplicationAndroidComponentsExtension> {
     onVariants { variant ->
-        variant.sources.assets?.addStaticSourceDirectory(piPackedDir.get().asFile.absolutePath)
+        if (piProfile != null) {
+            variant.sources.assets?.addStaticSourceDirectory(piPackedDir.get().asFile.absolutePath)
+        }
     }
 }
 

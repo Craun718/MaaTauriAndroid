@@ -1,6 +1,7 @@
 package top.natsuu.maa.tauri.android;
 
 import top.natsuu.maa.tauri.android.InputResult;
+import top.natsuu.maa.tauri.android.AgentLaunch;
 
 import android.os.ParcelFileDescriptor;
 
@@ -19,5 +20,11 @@ interface IMaaTauriAndroidControlService {
     String bugreportProgress();
     ParcelFileDescriptor dumpsys();
     void cancelBugreport();
+    void prepareAgentRuntime(String descriptorJson, String fingerprint, int runtimeIndex,
+            in ParcelFileDescriptor piArchive, in ParcelFileDescriptor runtimeBundle);
+    AgentLaunch startAgent(String fingerprint, int runtimeIndex, int port,
+            String nativeLibraryDir, String executionId);
+    void stopAgent(String executionId);
+    void stopAllAgents();
     int protocolVersion();
 }

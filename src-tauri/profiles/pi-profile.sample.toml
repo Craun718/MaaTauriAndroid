@@ -28,3 +28,22 @@ resource_id = "yourpi"
 
 # Optional. Relative paths resolve from the repository root.
 maa_dir = "vendor/maa/android"
+
+# Required when interface.json declares agents. Each runtime bundle is an
+# Android ZIP containing lib/arm64-v8a/libMaaAgentClient.so and
+# lib/arm64-v8a/libMaaAgentServer.so.
+[agent]
+timeout_ms = 15000
+
+[[agent.runtimes]]
+bundle = "/absolute/path/to/agent-runtime.zip"
+bundle_sha256 = "64-character-lowercase-sha-256"
+exec = "python/bin/python3"
+executables = ["python/bin/python3"]
+args = ["-u", "-m", "maa.agent.agent_server", "{identifier}"]
+working_dir = "{pi}"
+
+[agent.runtimes.env]
+LD_LIBRARY_PATH = "{bundle}/lib/arm64-v8a"
+PYTHONHOME = "{bundle}/python"
+PYTHONPATH = "{pi}"

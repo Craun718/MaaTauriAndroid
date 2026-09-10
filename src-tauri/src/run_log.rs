@@ -4,6 +4,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, thiserror::Error)]
@@ -47,6 +48,21 @@ pub struct RunLogger {
     path: PathBuf,
     file: Mutex<Option<File>>,
     sequence: Mutex<u64>,
+}
+
+static LATEST_LOGGER: RwLock<Option<Arc<RunLogger>>> = RwLock::new(None);
+
+pub fn set_latest_global(logger: Arc<RunLogger>) {
+    *LATEST_LOGGER
+        .write()
+        .expect("latest global run log lock poisoned") = Some(logger);
+}
+
+pub fn latest_global() -> Option<Arc<RunLogger>> {
+    LATEST_LOGGER
+        .read()
+        .expect("latest global run log lock poisoned")
+        .clone()
 }
 
 impl RunLogger {
@@ -140,7 +156,8 @@ mod tests {
 
     #[test]
     fn appends_isolated_jsonl_events() {
-        let root = std::env::temp_dir().join(format!("maa_tauri_android-run-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("maa_tauri_android-run-{}", uuid::Uuid::new_v4()));
         let logger = RunLogger::create(&root, "run/one").unwrap();
         logger
             .append(

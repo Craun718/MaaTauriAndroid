@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import top.natsuu.maa.tauri.android.AgentLaunch
 import top.natsuu.maa.tauri.android.InputResult
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
@@ -23,6 +24,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     private val contacts = LinkedHashMap<Int, TouchPointer>()
     private val bugreportProcess = AtomicReference<Process?>(null)
     private val bugreportProgress = AtomicReference("idle|0")
+    private val agentRuntimeManager = AgentRuntimeManager(
+        File("/data/local/tmp/maa-tauri-android"),
+    )
 
     private val binder = this
 
@@ -162,6 +166,48 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     override fun cancelBugreport() {
         bugreportProgress.set("cancelled|0")
         bugreportProcess.getAndSet(null)?.destroy()
+    }
+
+    override fun prepareAgentRuntime(
+        descriptorJson: String,
+        fingerprint: String,
+        runtimeIndex: Int,
+        piArchive: ParcelFileDescriptor?,
+        runtimeBundle: ParcelFileDescriptor?,
+    ) {
+        requireNotNull(piArchive) { "the Project Interface archive is missing" }
+        requireNotNull(runtimeBundle) { "the agent runtime bundle is missing" }
+        agentRuntimeManager.prepare(
+            descriptorJson,
+            fingerprint,
+            runtimeIndex,
+            piArchive,
+            runtimeBundle,
+        )
+    }
+
+    override fun startAgent(
+        fingerprint: String,
+        runtimeIndex: Int,
+        port: Int,
+        nativeLibraryDir: String?,
+        executionId: String?,
+    ): AgentLaunch {
+        return agentRuntimeManager.start(
+            fingerprint,
+            runtimeIndex,
+            port,
+            requireNotNull(nativeLibraryDir) { "the native library directory is missing" },
+            requireNotNull(executionId) { "the execution id is missing" },
+        )
+    }
+
+    override fun stopAgent(executionId: String?) {
+        agentRuntimeManager.stop(requireNotNull(executionId) { "the execution id is missing" })
+    }
+
+    override fun stopAllAgents() {
+        agentRuntimeManager.stopAll()
     }
 
     override fun protocolVersion(): Int = PROTOCOL_VERSION
@@ -373,7 +419,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     companion object {
-        const val PROTOCOL_VERSION = 2
+        const val PROTOCOL_VERSION = 3
         const val METHOD_START_GAME = 1
         const val METHOD_STOP_GAME = 2
         const val METHOD_INPUT_TEXT = 4

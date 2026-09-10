@@ -13,6 +13,7 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     MaaRuntime.load()
+    RuntimeBridge.attachContext(applicationContext)
     RuntimeBridge.initializeSecretBridge()
     PiInstaller.install(this)?.let { projectRoot ->
         RuntimeBridge.setBootstrapProjectRoot(projectRoot.absolutePath)

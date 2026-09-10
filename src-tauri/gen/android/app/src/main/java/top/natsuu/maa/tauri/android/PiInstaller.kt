@@ -10,13 +10,19 @@ object PiInstaller {
     private const val MARKER_NAME = ".maa_tauri_android-pi-marker"
 
     fun install(context: Context): File? {
+        val archive = File(context.cacheDir, "maa-tauri-android-pi.zip")
         val input = try {
             context.assets.open(ASSET_NAME).buffered()
         } catch (_: java.io.FileNotFoundException) {
             return null
         }
 
-        input.use {
+        try {
+            archive.outputStream().use { output ->
+                input.use { stream -> stream.copyTo(output) }
+            }
+            ZipSafety.validateNoSymlinks(archive)
+
             val root = File(context.filesDir, ROOT_NAME)
             val marker = root.resolve(MARKER_NAME)
             val currentMarker = currentMarker(context)
@@ -27,7 +33,7 @@ object PiInstaller {
             val staging = File(context.filesDir, "$ROOT_NAME.staging")
             staging.deleteRecursively()
             staging.mkdirs()
-            extract(input, staging)
+            extract(archive.inputStream().buffered(), staging)
 
             val interfaceFile = staging.resolve("interface.json")
             require(interfaceFile.isFile) { "The packaged Project Interface has no interface.json" }
@@ -38,6 +44,8 @@ object PiInstaller {
             }
             marker.writeText(currentMarker)
             return root
+        } finally {
+            archive.delete()
         }
     }
 
@@ -48,11 +56,17 @@ object PiInstaller {
 
     private fun extract(input: java.io.InputStream, destination: File) {
         val destinationPrefix = "${destination.canonicalPath}${File.separator}"
+        var entries = 0
+        var totalUncompressed = 0L
+        var totalCompressed = 0L
         ZipInputStream(input).use { archive ->
             while (true) {
                 val entry = archive.nextEntry ?: break
+                require(++entries <= MAX_ENTRIES) { "The Project Interface archive has too many entries" }
                 val output = destination.resolve(entry.name)
-                require(output.canonicalPath.startsWith(destinationPrefix)) {
+                require(!entry.name.contains('\u0000') && !File(entry.name).isAbsolute &&
+                    entry.name.split('/', '\\').none { it == ".." } &&
+                    output.canonicalPath.startsWith(destinationPrefix)) {
                     "Invalid Project Interface archive entry: ${entry.name}"
                 }
 
@@ -61,9 +75,21 @@ object PiInstaller {
                 } else {
                     output.parentFile?.mkdirs()
                     output.outputStream().use { archive.copyTo(it) }
+                    totalUncompressed += output.length()
+                    totalCompressed += entry.compressedSize.takeIf { it >= 0 } ?: output.length()
+                    require(totalUncompressed <= MAX_TOTAL_BYTES) {
+                        "The Project Interface archive exceeds the installed size limit"
+                    }
+                    require(totalUncompressed <= totalCompressed * MAX_RATIO + (1 shl 20)) {
+                        "The Project Interface archive has an unsafe compression ratio"
+                    }
                 }
                 archive.closeEntry()
             }
         }
     }
+
+    private const val MAX_ENTRIES = 100_000
+    private const val MAX_TOTAL_BYTES = 1L shl 30
+    private const val MAX_RATIO = 1_000L
 }

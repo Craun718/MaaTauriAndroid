@@ -1,3 +1,4 @@
+mod agent;
 mod diagnostics;
 mod domain;
 mod persistence;
@@ -521,6 +522,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     );
     let stopped_before_start = state.maa.begin_preparing(&execution_id)?;
     state.set_latest_log(logger.clone());
+    run_log::set_latest_global(logger.clone());
     if stopped_before_start {
         let cancelled = logger.append(
             run_log::RunEventKind::Cancelled,
@@ -547,6 +549,10 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let run_execution_id = execution_id.clone();
     let logger_for_run = logger.clone();
     let project_root = project.root.clone();
+    let agent_count = project.agents.len();
+    let agent_interface_path =
+        std::path::PathBuf::from(project.root.clone()).join("interface.json");
+    let creation_execution_id = run_execution_id.clone();
     let resource_paths = resolved.resource.paths.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     let force_stop_target_app = configuration.force_stop_target_app;
@@ -567,13 +573,23 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
             );
         };
         let creation = tokio::task::spawn_blocking(move || {
-            runtime::create_session(&project_root, &resource_paths, 0, force_stop_target_app)
+            let agent = agent::prepare_android(&agent_interface_path, agent_count)
+                .map_err(|error| crate::runtime::RuntimeError::Maa(error.to_string()))?;
+            runtime::create_session(
+                &creation_execution_id,
+                &project_root,
+                &resource_paths,
+                0,
+                force_stop_target_app,
+                agent.as_ref(),
+            )
         })
         .await;
 
         match creation {
-            Ok(Ok(tasker)) => {
-                let tasker = match sessions.begin(&run_execution_id, tasker) {
+            Ok(Ok(created)) => {
+                let tasker = match sessions.begin(&run_execution_id, created.tasker, created.agent)
+                {
                     Ok(tasker) => tasker,
                     Err(error) => {
                         fail(&logger_for_run, error.to_string());

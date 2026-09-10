@@ -89,7 +89,10 @@ pub fn collect_artifacts(
             })?;
         let filtered = filtered_maa_tauri_android_log(&full_log);
         if filtered.trim().is_empty() {
-            gaps.push("logs/maa_tauri_android-filtered.log: no MaaTauriAndroid or Maa lines matched".to_string());
+            gaps.push(
+                "logs/maa_tauri_android-filtered.log: no MaaTauriAndroid or Maa lines matched"
+                    .to_string(),
+            );
         } else {
             write_file(
                 &run_dir.join("logs/maa_tauri_android-filtered.log"),
@@ -960,7 +963,10 @@ mod tests {
 
     #[test]
     fn export_reports_missing_artifacts_and_creates_a_valid_zip() {
-        let temp = std::env::temp_dir().join(format!("maa_tauri_android-diagnostic-{}", uuid::Uuid::new_v4()));
+        let temp = std::env::temp_dir().join(format!(
+            "maa_tauri_android-diagnostic-{}",
+            uuid::Uuid::new_v4()
+        ));
         fs::create_dir_all(temp.join("screens")).unwrap();
         fs::write(temp.join("run.jsonl"), "{\"executionId\":\"run-1\"}\n").unwrap();
         fs::write(temp.join("screens/main.png"), [1, 2, 3]).unwrap();
@@ -1030,8 +1036,10 @@ mod tests {
 
     #[test]
     fn collector_writes_all_platform_artifacts_and_reports_capture_gaps() {
-        let runs_root =
-            std::env::temp_dir().join(format!("maa_tauri_android-collector-{}", uuid::Uuid::new_v4()));
+        let runs_root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-collector-{}",
+            uuid::Uuid::new_v4()
+        ));
         let run_dir = runs_root.join("run-1");
         fs::create_dir_all(run_dir.join("logs")).unwrap();
         crate::run_log::RunLogger::create(&runs_root, "run-1").unwrap();
@@ -1053,7 +1061,8 @@ mod tests {
         }
         assert!(!run_dir.join("screens/virtual-2.png").is_file());
         assert!(gaps.iter().any(|gap| gap.contains("screens/virtual-2.png")));
-        let filtered = fs::read_to_string(run_dir.join("logs/maa_tauri_android-filtered.log")).unwrap();
+        let filtered =
+            fs::read_to_string(run_dir.join("logs/maa_tauri_android-filtered.log")).unwrap();
         assert!(filtered.contains("MaaTauriAndroid started"));
         assert!(filtered.contains("Maa completed"));
         assert!(!filtered.contains("ignored"));
@@ -1109,8 +1118,10 @@ mod tests {
 
     #[test]
     fn cleanup_removes_only_run_directories_and_accepts_missing_storage() {
-        let runs_root =
-            std::env::temp_dir().join(format!("maa_tauri_android-cleanup-{}", uuid::Uuid::new_v4()));
+        let runs_root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-cleanup-{}",
+            uuid::Uuid::new_v4()
+        ));
         fs::create_dir_all(runs_root.join("run-1").join("logs")).unwrap();
         fs::create_dir_all(runs_root.join("run-2")).unwrap();
         fs::write(runs_root.join("configuration.json"), b"keep").unwrap();

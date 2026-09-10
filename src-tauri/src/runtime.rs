@@ -1,3 +1,4 @@
+use crate::agent::AgentSession;
 use crate::domain::types::ResolvedTask;
 use maa_framework::{
     controller::Controller, resource::Resource, tasker::Tasker, AndroidNativeControllerConfig,
@@ -30,6 +31,7 @@ impl From<maa_framework::MaaError> for RuntimeError {
 pub struct ActiveRun {
     pub execution_id: String,
     pub tasker: Arc<Tasker>,
+    pub agent: Option<Arc<AgentSession>>,
 }
 
 pub struct MaaSessions {
@@ -112,7 +114,12 @@ impl MaaSessions {
         self.post_stop()
     }
 
-    pub fn begin(&self, execution_id: &str, tasker: Tasker) -> Result<Arc<Tasker>, RuntimeError> {
+    pub fn begin(
+        &self,
+        execution_id: &str,
+        tasker: Tasker,
+        agent: Option<AgentSession>,
+    ) -> Result<Arc<Tasker>, RuntimeError> {
         let mut lease = self.lease.lock().expect("Maa run lock poisoned");
         if let SessionLease::Active(run) = &*lease {
             if run.tasker.is_running() || run.tasker.stopping() {
@@ -127,9 +134,11 @@ impl MaaSessions {
             == Some(execution_id);
         self.stop_requested.store(stop_requested, Ordering::SeqCst);
         let tasker = Arc::new(tasker);
+        let agent = agent.map(Arc::new);
         *lease = SessionLease::Active(ActiveRun {
             execution_id: execution_id.to_string(),
             tasker: tasker.clone(),
+            agent,
         });
         if stop_requested {
             tasker.post_stop()?;
@@ -140,6 +149,11 @@ impl MaaSessions {
     pub fn finish(&self, execution_id: &str) {
         let mut lease = self.lease.lock().expect("Maa run lock poisoned");
         if lease_id(&*lease) == Some(execution_id) {
+            if let SessionLease::Active(run) = &*lease {
+                if let Some(agent) = &run.agent {
+                    agent.shutdown();
+                }
+            }
             *lease = SessionLease::Idle;
         }
         let mut pending = self
@@ -367,11 +381,13 @@ pub fn run_result() -> Option<RunResult> {
 }
 
 pub fn create_session(
+    execution_id: &str,
     project_root: &str,
     resource_paths: &[String],
     display_id: u32,
     force_stop: bool,
-) -> Result<Tasker, RuntimeError> {
+    agent: Option<&crate::agent::PreparedAgent>,
+) -> Result<CreatedSession, RuntimeError> {
     let maa_library = library_path()?;
     maa_framework::load_library(&maa_library).map_err(set_error)?;
 
@@ -382,6 +398,20 @@ pub fn create_session(
     }
 
     let resource = Resource::new()?;
+
+    let agent_session = match agent {
+        Some(prepared) if !prepared.descriptor.runtimes.is_empty() => Some(
+            crate::agent::start_session(
+                execution_id,
+                &resource,
+                &prepared.descriptor,
+                prepared.host.clone(),
+            )
+            .map_err(|error| RuntimeError::Maa(error.to_string()))?,
+        ),
+        _ => None,
+    };
+
     for relative in resource_paths {
         let path = resource_path(project_root, relative);
         if !path.is_dir() {
@@ -403,11 +433,20 @@ pub fn create_session(
     tasker.bind_resource(&resource)?;
     tasker.bind_controller(&controller)?;
     if !tasker.inited() {
+        drop(agent_session);
         return Err(RuntimeError::Maa(
             "Maa tasker initialization failed".to_string(),
         ));
     }
-    Ok(tasker)
+    Ok(CreatedSession {
+        tasker,
+        agent: agent_session,
+    })
+}
+
+pub struct CreatedSession {
+    pub tasker: Tasker,
+    pub agent: Option<AgentSession>,
 }
 
 pub enum RunOutcome {

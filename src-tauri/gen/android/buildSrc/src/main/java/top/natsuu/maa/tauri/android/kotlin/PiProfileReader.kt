@@ -1,192 +1,126 @@
 package top.natsuu.maa.tauri.android.kotlin
 
+import org.tomlj.Toml
+import org.tomlj.TomlTable
 import java.io.File
 
+data class PiProfile(
+    val file: File,
+    val assets: String?,
+    val include: List<String>?,
+    val exclude: List<String>,
+    val resourceId: String,
+    val maaDir: String,
+    val agent: AgentProfile?,
+)
+
+data class AgentProfile(
+    val timeoutMs: Long,
+    val runtimes: List<AgentRuntimeProfile>,
+)
+
+data class AgentRuntimeProfile(
+    val bundle: File,
+    val bundleSha256: String?,
+    val exec: String,
+    val executables: List<String>,
+    val args: List<String>,
+    val workingDir: String,
+    val env: Map<String, String>,
+)
+
 object PiProfileReader {
-    fun read(file: File): Map<String, String> {
-        val values = LinkedHashMap<String, String>()
-        val lines = file.readLines()
-        val cursor = intArrayOf(0)
-
-        while (cursor[0] < lines.size) {
-            val lineNumber = cursor[0] + 1
-            val line = stripComment(lines[cursor[0]]).trim()
-            cursor[0]++
-            if (line.isEmpty()) {
-                continue
-            }
-            require(!line.startsWith("[")) {
-                "PI profile tables are not supported: ${file.invariantSeparatorsPath}"
-            }
-
-            val separator = line.indexOfFirst { it == '=' }
-            require(separator > 0) {
-                "Invalid PI profile entry: ${file.invariantSeparatorsPath}:$lineNumber"
-            }
-            val key = line.take(separator).trim().trim('"')
-            require(key.isNotEmpty()) {
-                "Invalid PI profile key: ${file.invariantSeparatorsPath}:$lineNumber"
-            }
-
-            val rawValue = line.drop(separator + 1).trim()
-            values[key] = if (rawValue.startsWith("[")) {
-                parseArray(rawValue, lines, cursor)
-            } else {
-                parseScalar(rawValue, file, lineNumber)
-            }
+    fun read(file: File): PiProfile {
+        val result = Toml.parse(file.toPath())
+        val errors = result.errors()
+        require(errors.isEmpty()) {
+            errors.joinToString("\n") { error -> "${file.invariantSeparatorsPath}:$error" }
         }
 
-        return values
+        val agentTable = result.getTable("agent")
+        return PiProfile(
+            file = file,
+            assets = requiredPath(result, "pi_assets", file),
+            include = stringArray(result, "pi_include"),
+            exclude = stringArray(result, "pi_exclude").orEmpty(),
+            resourceId = resourceId(result),
+            maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
+            agent = agentTable?.let { readAgent(it, file) },
+        )
     }
 
-    private fun parseArray(
-        firstLine: String,
-        lines: List<String>,
-        cursor: IntArray,
-    ): String {
-        var value = firstLine
-        while (unterminatedArray(value)) {
-            val nextLine = lines.getOrNull(cursor[0])
-                ?: throw IllegalArgumentException("Unterminated string array in PI profile")
-            cursor[0]++
-            value += " ${stripComment(nextLine).trim()}"
-        }
+    private fun readAgent(table: TomlTable, profileFile: File): AgentProfile {
+        val runtimes: List<Any> = table.getArray("runtimes")?.toList() ?: emptyList()
+        require(runtimes.isNotEmpty()) { "agent.runtimes must contain at least one runtime" }
+        return AgentProfile(
+            timeoutMs = table.getLong("timeout_ms") ?: 15_000L,
+            runtimes = runtimes.map { value ->
+                require(value is TomlTable) { "agent.runtimes entries must be tables" }
+                readRuntime(value, profileFile)
+            },
+        )
+    }
 
-        val items = mutableListOf<String>()
-        val item = StringBuilder()
-        var inBasicString = false
-        var inLiteralString = false
-        var escaped = false
-
-        value.drop(1).dropLast(1).forEach { char ->
-            when {
-                escaped -> {
-                    item.append(char)
-                    escaped = false
+    private fun readRuntime(table: TomlTable, profileFile: File): AgentRuntimeProfile {
+        val bundle = requiredPath(table, "bundle", profileFile)
+            .let(::File)
+            .canonicalFile
+        require(bundle.isFile) { "agent bundle does not exist: $bundle" }
+        return AgentRuntimeProfile(
+            bundle = bundle,
+            bundleSha256 = table.getString("bundle_sha256")?.lowercase()?.also { value ->
+                require(value.length == 64 && value.all { char ->
+                    char in '0'..'9' || char in 'a'..'f'
+                }) {
+                    "agent bundle_sha256 must be a SHA-256 digest"
                 }
-                inBasicString && char == '\\' -> {
-                    item.append(char)
-                    escaped = true
-                }
-                !inLiteralString && char == '"' -> {
-                    item.append(char)
-                    inBasicString = !inBasicString
-                }
-                !inBasicString && char == '\'' -> {
-                    item.append(char)
-                    inLiteralString = !inLiteralString
-                }
-                !inBasicString && !inLiteralString && char == ',' -> {
-                    if (item.isNotBlank()) {
-                        items += item.toString().trim()
-                    }
-                    item.clear()
-                }
-                else -> item.append(char)
-            }
-        }
-        if (item.isNotBlank()) {
-            items += item.toString().trim()
-        }
+            } ?: throw IllegalArgumentException("agent bundle_sha256 is required"),
+            exec = requiredString(table, "exec"),
+            executables = requireNotNull(stringArray(table, "executables")) {
+                "agent runtime executables is required"
+            },
+            args = requireNotNull(stringArray(table, "args")) {
+                "agent runtime args is required"
+            },
+            workingDir = requiredString(table, "working_dir"),
+            env = table.getTable("env")?.toMap()?.mapValues { (_, value) ->
+                require(value is String) { "agent environment values must be strings" }
+                value
+            } ?: emptyMap(),
+        )
+    }
 
-        return items.joinToString("\n") { rawItem ->
-            require(rawItem.startsWith("\"") || rawItem.startsWith("'")) {
-                "PI profile arrays must contain strings"
-            }
-            parseScalar(rawItem)
+    private fun requiredString(table: TomlTable, key: String): String =
+        table.getString(key)?.takeIf { it.isNotEmpty() }
+            ?: throw IllegalArgumentException("$key is required")
+
+    private fun requiredPath(table: TomlTable, key: String, profileFile: File): String {
+        val value = requiredString(table, key)
+        if (File(value).isAbsolute) {
+            return value
+        }
+        val parent = requireNotNull(profileFile.parentFile) {
+            "${profileFile.invariantSeparatorsPath} must have a parent directory"
+        }
+        return parent.resolve(value).canonicalPath
+    }
+
+    private fun resourceId(table: TomlTable): String {
+        val value = table.getString("resource_id") ?: "fixture"
+        require(value.isNotEmpty() && value.all { char ->
+            char in 'a'..'z' || char in '0'..'9' || char == '_'
+        } && !value[0].isDigit()) {
+            "resource_id may contain only lowercase letters, digits, and underscores"
+        }
+        return value
+    }
+
+    private fun stringArray(table: TomlTable, key: String): List<String>? {
+        val values = table.getArray(key) ?: return null
+        return values.toList().map { value ->
+            require(value is String) { "$key must contain only strings" }
+            value
         }
     }
 
-    private fun unterminatedArray(value: String): Boolean {
-        var inBasicString = false
-        var inLiteralString = false
-        var escaped = false
-
-        value.forEach { char ->
-            when {
-                escaped -> escaped = false
-                inBasicString && char == '\\' -> escaped = true
-                !inLiteralString && char == '"' -> inBasicString = !inBasicString
-                !inBasicString && char == '\'' -> inLiteralString = !inLiteralString
-            }
-        }
-        return inBasicString || inLiteralString || !value.contains(']')
-    }
-
-    private fun parseScalar(value: String): String {
-        return when {
-            value.startsWith('"') -> parseBasicString(value)
-            value.startsWith('\'') -> value.removeSuffix("'").removePrefix("'")
-            value == "true" || value == "false" -> value
-            value.toLongOrNull() != null || value.toDoubleOrNull() != null -> value
-            else -> throw IllegalArgumentException("Unsupported PI profile value: $value")
-        }
-    }
-
-    private fun parseScalar(value: String, file: File, line: Int): String {
-        try {
-            return parseScalar(value)
-        } catch (error: IllegalArgumentException) {
-            throw IllegalArgumentException(
-                "${file.invariantSeparatorsPath}:$line ${error.message}",
-                error,
-            )
-        }
-    }
-
-    private fun parseBasicString(value: String): String {
-        require(value.endsWith("\"") && value.length >= 2) {
-            "Unterminated string in PI profile"
-        }
-
-        val chars = value.drop(1).dropLast(1)
-        val result = StringBuilder()
-        var index = 0
-        while (index < chars.length) {
-            val char = chars[index]
-            if (char != '\\') {
-                result.append(char)
-                index++
-                continue
-            }
-
-            require(index + 1 < chars.length) { "Unterminated escape in PI profile" }
-            val escape = chars[index + 1]
-            when (escape) {
-                '"' -> result.append('"')
-                '\\' -> result.append('\\')
-                'n' -> result.append('\n')
-                't' -> result.append('\t')
-                'r' -> result.append('\r')
-                'u' -> {
-                    val code = chars.drop(index + 2).take(4)
-                    require(code.length == 4 && code.toIntOrNull(16) != null) {
-                        "Invalid Unicode escape in PI profile"
-                    }
-                    result.append(code.toInt(16).toChar())
-                    index += 4
-                }
-                else -> throw IllegalArgumentException("Unsupported escape in PI profile: \\$escape")
-            }
-            index += 2
-        }
-        return result.toString()
-    }
-
-    private fun stripComment(line: String): String {
-        var inBasicString = false
-        var inLiteralString = false
-        var escaped = false
-
-        line.forEachIndexed { index, char ->
-            when {
-                escaped -> escaped = false
-                inBasicString && char == '\\' -> escaped = true
-                !inLiteralString && char == '"' -> inBasicString = !inBasicString
-                !inBasicString && char == '\'' -> inLiteralString = !inLiteralString
-                !inBasicString && !inLiteralString && char == '#' -> return line.take(index)
-            }
-        }
-        return line
-    }
 }

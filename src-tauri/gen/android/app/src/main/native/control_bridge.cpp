@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -99,6 +100,7 @@ jobject g_service = nullptr;
 jmethodID g_capture_method = nullptr;
 jmethodID g_detach_fd_method = nullptr;
 jmethodID g_dispatch_method = nullptr;
+jmethodID g_dispatch_detailed_method = nullptr;
 std::mutex g_state_mutex;
 std::mutex g_frame_mutex;
 std::vector<uint8_t> g_frame_buffer;
@@ -145,6 +147,34 @@ bool clear_exception(JNIEnv& env) {
     return true;
 }
 
+void log_input_failure(
+    int display_id,
+    int method,
+    int x,
+    int y,
+    int contact,
+    int key_code,
+    size_t text_length,
+    jint result,
+    const char* message
+) {
+    __android_log_print(
+        ANDROID_LOG_WARN,
+        kLogTag,
+        "Input failed displayId=%d method=%d x=%d y=%d contact=%d keyCode=%d "
+        "textLength=%zu result=%d message=%s",
+        display_id,
+        method,
+        x,
+        y,
+        contact,
+        key_code,
+        text_length,
+        static_cast<int>(result),
+        message
+    );
+}
+
 void close_service_locked(JNIEnv& env) {
     if (g_service != nullptr) {
         env.DeleteGlobalRef(g_service);
@@ -153,6 +183,7 @@ void close_service_locked(JNIEnv& env) {
     g_capture_method = nullptr;
     g_detach_fd_method = nullptr;
     g_dispatch_method = nullptr;
+    g_dispatch_detailed_method = nullptr;
 }
 
 jmethodID resolve_detach_fd_method(JNIEnv& env) {
@@ -288,12 +319,14 @@ extern "C" int DispatchInputMessage(MethodParam param) {
     AttachedEnv attached;
     JNIEnv* env_ptr = attached.get();
     if (env_ptr == nullptr) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "JNI environment is unavailable for input");
         return -1;
     }
     JNIEnv& env = *env_ptr;
 
     std::lock_guard<std::mutex> state_lock(g_state_mutex);
-    if (g_service == nullptr || g_dispatch_method == nullptr) {
+    if (g_service == nullptr || (g_dispatch_method == nullptr && g_dispatch_detailed_method == nullptr)) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "Control service is unavailable for input");
         return -1;
     }
 
@@ -338,6 +371,8 @@ extern "C" int DispatchInputMessage(MethodParam param) {
     if (first_text != nullptr) {
         text = env.NewStringUTF(first_text);
         if (clear_exception(env) || text == nullptr) {
+            __android_log_print(
+                ANDROID_LOG_ERROR, kLogTag, "Could not create Java input string");
             return -1;
         }
     }
@@ -346,19 +381,131 @@ extern "C" int DispatchInputMessage(MethodParam param) {
         text = nullptr;
     }
 
-    const jint result = env.CallIntMethod(
-        g_service,
-        g_dispatch_method,
-        static_cast<jint>(param.display_id),
-        static_cast<jint>(param.method),
-        static_cast<jint>(x),
-        static_cast<jint>(y),
-        static_cast<jint>(contact),
-        static_cast<jint>(key_code),
-        text,
-        package_name,
-        force_stop
-    );
+    const size_t text_length =
+        first_text == nullptr ? 0U : static_cast<size_t>(std::strlen(first_text));
+    jint result = -1;
+    // Only fall back before a detailed Binder call has been made. Replaying an
+    // input after a post-call decoding error could inject the same event twice.
+    bool use_fallback = g_dispatch_detailed_method == nullptr;
+
+    if (g_dispatch_detailed_method != nullptr) {
+        jobject detailed_result = env.CallObjectMethod(
+            g_service,
+            g_dispatch_detailed_method,
+            static_cast<jint>(param.display_id),
+            static_cast<jint>(param.method),
+            static_cast<jint>(x),
+            static_cast<jint>(y),
+            static_cast<jint>(contact),
+            static_cast<jint>(key_code),
+            text,
+            package_name,
+            force_stop
+        );
+        if (clear_exception(env) || detailed_result == nullptr) {
+            __android_log_print(
+                ANDROID_LOG_WARN,
+                kLogTag,
+                "Detailed input dispatch failed"
+            );
+        } else {
+            jclass result_class = env.GetObjectClass(detailed_result);
+            jfieldID code_field = result_class == nullptr
+                ? nullptr
+                : env.GetFieldID(result_class, "code", "I");
+            jfieldID message_field = result_class == nullptr || code_field == nullptr
+                ? nullptr
+                : env.GetFieldID(result_class, "message", "Ljava/lang/String;");
+            if (clear_exception(env) || code_field == nullptr || message_field == nullptr) {
+                __android_log_print(
+                    ANDROID_LOG_WARN,
+                    kLogTag,
+                    "Could not read InputResult fields"
+                );
+            } else {
+                result = env.GetIntField(detailed_result, code_field);
+                if (clear_exception(env)) {
+                    result = -1;
+                } else {
+                    auto message = static_cast<jstring>(env.GetObjectField(detailed_result, message_field));
+                    if (clear_exception(env)) {
+                        __android_log_print(
+                            ANDROID_LOG_WARN, kLogTag, "Could not read InputResult message");
+                    } else if (result != 0) {
+                        const char* message_bytes =
+                            message == nullptr ? nullptr : env.GetStringUTFChars(message, nullptr);
+                        if (message_bytes == nullptr && message != nullptr) {
+                            __android_log_print(
+                                ANDROID_LOG_WARN, kLogTag, "Could not decode InputResult message");
+                        } else {
+                            log_input_failure(
+                                param.display_id,
+                                static_cast<int>(param.method),
+                                x,
+                                y,
+                                contact,
+                                key_code,
+                                text_length,
+                                result,
+                                message_bytes == nullptr ? "unavailable" : message_bytes
+                            );
+                        }
+                        if (message_bytes != nullptr) {
+                            env.ReleaseStringUTFChars(message, message_bytes);
+                        }
+                    }
+                    if (message != nullptr) {
+                        env.DeleteLocalRef(message);
+                    }
+                    use_fallback = false;
+                }
+            }
+            if (result_class != nullptr) {
+                env.DeleteLocalRef(result_class);
+            }
+        }
+        if (detailed_result != nullptr) {
+            env.DeleteLocalRef(detailed_result);
+        }
+    }
+
+    if (use_fallback) {
+        if (g_dispatch_method == nullptr) {
+            __android_log_print(
+                ANDROID_LOG_ERROR, kLogTag, "Legacy input dispatch method is unavailable");
+            result = -1;
+        } else {
+            result = env.CallIntMethod(
+                g_service,
+                g_dispatch_method,
+                static_cast<jint>(param.display_id),
+                static_cast<jint>(param.method),
+                static_cast<jint>(x),
+                static_cast<jint>(y),
+                static_cast<jint>(contact),
+                static_cast<jint>(key_code),
+                text,
+                package_name,
+                force_stop
+            );
+            if (clear_exception(env)) {
+                __android_log_print(ANDROID_LOG_ERROR, kLogTag, "Legacy input dispatch JNI call failed");
+                result = -1;
+            } else if (result != 0) {
+                log_input_failure(
+                    param.display_id,
+                    static_cast<int>(param.method),
+                    x,
+                    y,
+                    contact,
+                    key_code,
+                    text_length,
+                    result,
+                    "legacy dispatch rejected the input"
+                );
+            }
+        }
+    }
 
     if (text != nullptr) {
         env.DeleteLocalRef(text);
@@ -366,9 +513,7 @@ extern "C" int DispatchInputMessage(MethodParam param) {
     if (package_name != nullptr) {
         env.DeleteLocalRef(package_name);
     }
-    if (clear_exception(env)) {
-        return -1;
-    }
+    clear_exception(env);
     return result;
 }
 
@@ -418,11 +563,26 @@ Java_top_natsuu_ttflow_control_ControlHost_attachNative(JNIEnv* env, jclass /*cl
             "dispatchInput",
             "(IIIIIILjava/lang/String;Ljava/lang/String;Z)I");
         clear_exception(*env);
+        g_dispatch_detailed_method = env->GetMethodID(
+            service_class,
+            "dispatchInputDetailed",
+            "(IIIIIILjava/lang/String;Ljava/lang/String;Z)Ltop/natsuu/ttflow/InputResult;");
+        clear_exception(*env);
         env->DeleteLocalRef(service_class);
     }
     g_detach_fd_method = resolve_detach_fd_method(*env);
 
-    if (g_capture_method == nullptr || g_detach_fd_method == nullptr || g_dispatch_method == nullptr) {
+    if (g_capture_method == nullptr || g_detach_fd_method == nullptr ||
+        (g_dispatch_method == nullptr && g_dispatch_detailed_method == nullptr)) {
+        __android_log_print(
+            ANDROID_LOG_ERROR,
+            kLogTag,
+            "Control service methods are unavailable capture=%d detach=%d legacy=%d detailed=%d",
+            g_capture_method == nullptr ? 0 : 1,
+            g_detach_fd_method == nullptr ? 0 : 1,
+            g_dispatch_method == nullptr ? 0 : 1,
+            g_dispatch_detailed_method == nullptr ? 0 : 1
+        );
         env->DeleteGlobalRef(global_service);
     } else {
         g_service = global_service;

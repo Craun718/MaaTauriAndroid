@@ -48,9 +48,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
         packageName: String?,
         forceStop: Boolean,
     ): Int {
-        return dispatchDetailed(
+        return performDispatch(
             displayId, method, x, y, contact, keyCode, text, packageName, forceStop,
-        ).code
+        )
     }
 
     override fun dispatchInputDetailed(
@@ -64,13 +64,19 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
         packageName: String?,
         forceStop: Boolean,
     ): InputResult {
-        val code = dispatchDetailed(
+        val code = performDispatch(
             displayId, method, x, y, contact, keyCode, text, packageName, forceStop,
         )
-        return InputResult(
-            code,
-            if (code == RESULT_OK) "Input accepted" else inputErrorMessage(code),
-        )
+        val message = InputResult.messageFor(code)
+        if (code != RESULT_OK) {
+            android.util.Log.w(
+                "TTFlowControl",
+                "Input failed displayId=$displayId method=$method x=$x y=$y " +
+                    "contact=$contact keyCode=$keyCode textLength=${text?.length ?: 0} " +
+                    "result=$code message=$message",
+            )
+        }
+        return InputResult(code, message)
     }
 
     override fun capturePng(displayId: Int): ParcelFileDescriptor = stream { output ->
@@ -121,10 +127,11 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
                     }
                     val status = process.waitFor()
                     bugreportProcess.compareAndSet(process, null)
-                    if (!failed && status == 0 && !reportPath.isNullOrBlank() &&
-                        File(reportPath).isFile
+                    val resolvedReportPath = reportPath
+                    if (!failed && status == 0 && !resolvedReportPath.isNullOrBlank() &&
+                        File(resolvedReportPath).isFile
                     ) {
-                        File(reportPath).inputStream().use { input -> input.copyTo(output) }
+                        File(resolvedReportPath).inputStream().use { input -> input.copyTo(output) }
                         bugreportProgress.set("done|100")
                     } else {
                         val fallback = ProcessBuilder("/system/bin/dumpstate").start()
@@ -177,10 +184,12 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
         return bytes
     }
 
-    private fun dispatchDetailed(
+    private fun performDispatch(
+        displayId: Int,
         method: Int,
         x: Int,
         y: Int,
+        contact: Int,
         keyCode: Int,
         text: String?,
         packageName: String?,
@@ -190,11 +199,25 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
             METHOD_START_GAME -> {
                 val target = packageName.orEmpty()
                 if (target.isNotEmpty()) {
-                    if (forceStop) shell("am", "force-stop", target)
-                    shell("monkey", "-p", target, "-c", "android.intent.category.LAUNCHER", "1")
+                    if (forceStop) {
+                        val stopped = shell("am", "force-stop", target)
+                        if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
+                    }
+                    val launched = shell(
+                        "monkey",
+                        "-p",
+                        target,
+                        "-c",
+                        "android.intent.category.LAUNCHER",
+                        "1",
+                    )
+                    if (launched != RESULT_OK) return RESULT_COMMAND_FAILED
                 }
             }
-            METHOD_STOP_GAME -> shell("am", "force-stop", packageName.orEmpty())
+            METHOD_STOP_GAME -> {
+                val stopped = shell("am", "force-stop", packageName.orEmpty())
+                if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
+            }
             METHOD_INPUT_TEXT -> {
                 if (!text.isNullOrEmpty()) {
                     return shell("input", "--display", displayId.toString(), "text", text)
@@ -270,13 +293,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
                 InputDevice.SOURCE_TOUCHSCREEN,
                 0,
             )
-            try {
-                event.javaClass.getMethod("setDisplayId", Int::class.javaPrimitiveType)
-                    .invoke(event, displayId)
-            } catch (_: Throwable) {
-            }
-            val injected = injectEvent(event)
+            val displayAssigned = setDisplayId(event, displayId)
+            val injected = displayAssigned && injectEvent(event)
             event.recycle()
+            if (!displayAssigned) return RESULT_INJECTION_FAILED
             if (action == MotionEvent.ACTION_UP) contacts.remove(contact)
             return if (injected) RESULT_OK else RESULT_INJECTION_FAILED
         }
@@ -285,6 +305,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
     private fun injectKey(displayId: Int, keyCode: Int, action: Int): Int {
         val now = SystemClock.uptimeMillis()
         val event = KeyEvent(now, now, action, keyCode, 0)
+        if (!setDisplayId(event, displayId)) return RESULT_INJECTION_FAILED
         return if (injectEvent(event)) RESULT_OK else RESULT_INJECTION_FAILED
     }
 
@@ -295,17 +316,37 @@ class PrivilegedControlServiceImpl(private val context: Context?) : ITtflowContr
         val method = manager.javaClass.methods.firstOrNull { method ->
             method.name == "injectInputEvent" &&
                 method.parameterTypes.contentEquals(arrayOf(android.view.InputEvent::class.java, Int::class.javaPrimitiveType))
-        } ?: return false
-        return method.invoke(manager, event, 0) as? Boolean == true
+        }
+        if (method == null) {
+            android.util.Log.w("TTFlowControl", "InputManager.injectInputEvent is unavailable")
+            return false
+        }
+        return try {
+            method.invoke(manager, event, 0) as? Boolean == true
+        } catch (error: Throwable) {
+            android.util.Log.w(
+                "TTFlowControl",
+                "InputManager.injectInputEvent rejected ${event.javaClass.simpleName}",
+                error,
+            )
+            false
+        }
     }
 
-    private fun inputErrorMessage(code: Int): String = when (code) {
-        RESULT_INVALID_CONTACT -> "Contact id is invalid"
-        RESULT_UNKNOWN_CONTACT -> "Contact is not part of the active gesture"
-        RESULT_NO_ACTIVE_CONTACT -> "Gesture has no active contacts"
-        RESULT_INJECTION_FAILED -> "Android rejected input injection"
-        RESULT_UNSUPPORTED_METHOD -> "Input method is not supported"
-        else -> "Input command failed"
+    private fun setDisplayId(event: android.view.InputEvent, displayId: Int): Boolean {
+        return try {
+            event.javaClass
+                .getMethod("setDisplayId", Int::class.javaPrimitiveType)
+                .invoke(event, displayId)
+            true
+        } catch (error: Throwable) {
+            android.util.Log.w(
+                "TTFlowControl",
+                "Could not associate ${event.javaClass.simpleName} with displayId=$displayId",
+                error,
+            )
+            false
+        }
     }
 
     private fun shell(vararg args: String): Int {

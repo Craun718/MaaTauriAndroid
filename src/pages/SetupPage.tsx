@@ -1,5 +1,5 @@
 import { OptionEditor } from "../components/OptionEditor";
-import { defaultOptionValue } from "../lib/options";
+import { activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 import type { UserConfiguration } from "../lib/types";
 
@@ -8,6 +8,7 @@ export function SetupPage() {
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   if (!snapshot?.project) return <EmptyProject />;
   const { project, configuration } = snapshot;
+  const resource = activeResource(project, configuration);
 
   function update(mutate: (configuration: UserConfiguration) => UserConfiguration) {
     void saveConfiguration(mutate(structuredClone(configuration)));
@@ -38,21 +39,12 @@ export function SetupPage() {
       </section>
       <section className="space-y-3">
         <h2 className="font-medium">Resource</h2>
-        {project.resources.map((resource) => (
-          <button
-            key={resource.name}
-            type="button"
-            onClick={() => update((current) => ({ ...current, activeResource: resource.name }))}
-            className={`flex min-h-14 w-full flex-col rounded-lg border p-3 text-left ${
-              configuration.activeResource === resource.name
-                ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface-raised))]"
-                : "border-[var(--border)] bg-[var(--surface-raised)]"
-            }`}
-          >
-            <span className="font-medium">{resource.label}</span>
-            <span className="text-sm text-[var(--text-muted)]">{resource.paths.join(", ")}</span>
-          </button>
-        ))}
+        <div className="flex min-h-14 w-full flex-col rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-left">
+          <span className="font-medium">{resource?.label ?? "Unavailable"}</span>
+          <span className="text-sm text-[var(--text-muted)]">
+            {resource?.paths.join(", ") ?? "No resources are declared."}
+          </span>
+        </div>
       </section>
       <ScopedOptions
         title="Global"
@@ -67,15 +59,15 @@ export function SetupPage() {
       />
       <ScopedOptions
         title="Resource options"
-        names={project.resources.find((item) => item.name === configuration.activeResource)?.options ?? []}
-        values={configuration.resourceOptionValues[configuration.activeResource ?? ""] ?? {}}
+        names={resource?.options ?? []}
+        values={configuration.resourceOptionValues[resource?.name ?? ""] ?? {}}
         onChange={(name, value) =>
           update((current) => ({
             ...current,
             resourceOptionValues: {
               ...current.resourceOptionValues,
-              [current.activeResource ?? ""]: {
-                ...(current.resourceOptionValues[current.activeResource ?? ""] ?? {}),
+              [resource?.name ?? ""]: {
+                ...(current.resourceOptionValues[resource?.name ?? ""] ?? {}),
                 [name]: value,
               },
             },

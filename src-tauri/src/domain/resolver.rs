@@ -12,8 +12,6 @@ pub enum ResolverError {
     NoResource,
     #[error("unknown controller: {0}")]
     UnknownController(String),
-    #[error("unknown resource: {0}")]
-    UnknownResource(String),
     #[error("unknown run configuration: {0}")]
     UnknownRunConfiguration(String),
     #[error("unknown option: {0}")]
@@ -46,10 +44,6 @@ pub fn resolve_run(
         .active_controller
         .as_ref()
         .ok_or(ResolverError::NoController)?;
-    let resource_name = configuration
-        .active_resource
-        .as_ref()
-        .ok_or(ResolverError::NoResource)?;
     let controller = project
         .controllers
         .iter()
@@ -58,8 +52,9 @@ pub fn resolve_run(
     let resource = project
         .resources
         .iter()
-        .find(|item| &item.name == resource_name)
-        .ok_or_else(|| ResolverError::UnknownResource(resource_name.clone()))?;
+        .find(|item| Some(&item.name) == configuration.active_resource.as_ref())
+        .or_else(|| project.resources.first())
+        .ok_or(ResolverError::NoResource)?;
     let configured_tasks = configuration
         .run_configurations
         .iter()
@@ -674,6 +669,36 @@ mod tests {
             resolved.pipeline_override.get("AutoBattle"),
             Some(&json!({ "enabled": true }))
         );
+    }
+
+    #[test]
+    fn resolves_missing_resource_to_first_resource() {
+        let project = fixture_project();
+        let mut config = configuration(&project, "normal", None, "Yes");
+        config.active_resource = None;
+
+        let resolved = resolve_run(&project, &config).expect("resource should resolve");
+        assert_eq!(resolved.resource.name, project.resources[0].name);
+    }
+
+    #[test]
+    fn resolves_unknown_resource_to_first_resource() {
+        let project = fixture_project();
+        let mut config = configuration(&project, "normal", None, "Yes");
+        config.active_resource = Some("removed-resource".to_string());
+
+        let resolved = resolve_run(&project, &config).expect("resource should resolve");
+        assert_eq!(resolved.resource.name, project.resources[0].name);
+    }
+
+    #[test]
+    fn fails_when_no_resources_are_declared() {
+        let mut project = fixture_project();
+        let config = configuration(&project, "normal", None, "Yes");
+        project.resources.clear();
+
+        let error = resolve_run(&project, &config).expect_err("no resource should fail");
+        assert!(matches!(error, ResolverError::NoResource));
     }
 
     #[test]

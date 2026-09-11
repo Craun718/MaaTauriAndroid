@@ -63,6 +63,16 @@ export function activeRun(configuration: UserConfiguration) {
   );
 }
 
+export function activeResource(
+  project: Project,
+  configuration: UserConfiguration,
+): ResourceDefinition | undefined {
+  return (
+    project.resources.find((resource) => resource.name === configuration.activeResource) ??
+    project.resources[0]
+  );
+}
+
 export function projectOption(project: Project | undefined, name: string) {
   return project?.options[name];
 }

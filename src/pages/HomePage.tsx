@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
 import { getPrivilegedStatus, resolveCurrent } from "../lib/api";
 import type { ResolvedRun } from "../lib/types";
-import { activeRun, configuredTask } from "../lib/options";
+import { activeResource, activeRun, configuredTask } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 
 export function HomePage() {
@@ -37,6 +37,7 @@ export function HomePage() {
   }
 
   const { project, configuration } = snapshot;
+  const resource = activeResource(project, configuration);
   const runConfig = activeRun(configuration);
   const enabled = project.tasks.filter((task) => configuredTask(configuration, task).enabled);
 
@@ -66,7 +67,7 @@ export function HomePage() {
           </div>
           <div>
             <dt className="text-[var(--text-muted)]">Resource</dt>
-            <dd>{run?.resource.label ?? configuration.activeResource}</dd>
+            <dd>{run?.resource.label ?? resource?.label ?? "Unavailable"}</dd>
           </div>
           <div>
             <dt className="text-[var(--text-muted)]">Preset</dt>

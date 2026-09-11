@@ -1,6 +1,6 @@
 import { OptionEditor } from "../components/OptionEditor";
 import { EmptyProject } from "./SetupPage";
-import { defaultOptionValue } from "../lib/options";
+import { activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 import type { ConfiguredTask, OptionDefinition, OptionValue } from "../lib/types";
 
@@ -10,6 +10,7 @@ export function TasksPage() {
   const applyPreset = useAppStore((state) => state.applyPreset);
   if (!snapshot?.project) return <EmptyProject />;
   const { project, configuration } = snapshot;
+  const resource = activeResource(project, configuration);
   const activeRun = configuration.runConfigurations.find(
     (run) => run.id === configuration.activeRunConfigurationId,
   );
@@ -70,7 +71,7 @@ export function TasksPage() {
             (task.controllers.length > 0 &&
               !task.controllers.includes(configuration.activeController ?? "")) ||
             (task.resources.length > 0 &&
-              !task.resources.includes(configuration.activeResource ?? ""));
+              !task.resources.includes(resource?.name ?? ""));
           return (
             <article
               key={task.name}

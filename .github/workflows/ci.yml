@@ -140,6 +140,15 @@ jobs:
         with:
           path: .cache
           key: m9a-agent-core-3.13.15-maafw5.12.3
+      # Pin the debug keystore. Without this every run generates a fresh one, so
+      # each APK is signed with a different key: `adb install -r` then fails with
+      # INSTALL_FAILED_UPDATE_INCOMPATIBLE and verifying a build on a device
+      # requires uninstalling first, which wipes the app data.
+      - name: Cache the Android debug keystore
+        uses: actions/cache@v6
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
 
       - name: Point the Android build at the M9A profile
         run: |

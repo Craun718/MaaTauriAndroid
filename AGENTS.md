@@ -54,6 +54,11 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
    在 GitHub Actions 的 run 页面直接下载，或 `gh run download <run-id> -n m9a-apk-debug`。
 3. 报告真机结论时写明对应的 CI run 编号/链接与 artifact 名，便于复核。
 
+两条装机注意事项：
+
+- **签名**：`m9a-android` 会把 `~/.android/debug.keystore` 放进 `actions/cache` 固定下来。如果这个 cache 被清掉（或 key 换了），CI 会重新生成密钥，新旧 APK 签名不一致，`adb install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，只能卸载重装，此时 app 私有数据（`configuration.json` 里的运行配置、Keystore 里的密码）会丢。
+- **HyperOS**：HyperOS 2 / Android 16 上 `adb install` 会在手机端弹确认框，**息屏时该确认会被自动取消**，表现为 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`。装机前先 `adb shell input keyevent KEYCODE_WAKEUP` 唤醒屏幕（锁屏则需先解锁），再执行安装。
+
 ## 代码风格
 
 TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 camelCase 变量；React 组件与类型使用 PascalCase。Rust 提交前运行 `cargo fmt`；错误类型使用 `thiserror`，公共 IPC 数据使用 `serde` 的 camelCase 表示。Tailwind class 应保持语义清晰，避免为一次性样式引入自定义 CSS。

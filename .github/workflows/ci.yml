@@ -20,9 +20,15 @@ jobs:
             m9a:
               - 'resource/m9a/**'
               - 'resource/m9a.toml'
+              - 'src/**'
               - 'src-tauri/profiles/**'
+              - 'src-tauri/src/**'
+              - 'src-tauri/Cargo.toml'
+              - 'src-tauri/Cargo.lock'
               - 'src-tauri/gen/android/**'
               - 'vendor/maa/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci.yml'
 
   frontend:
@@ -92,12 +98,7 @@ jobs:
 
   m9a-android:
     needs: changes
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        needs.changes.result == 'skipped' ||
-        needs.changes.outputs.m9a == 'true'
-      }}
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.m9a == 'true')
     runs-on: ubuntu-latest
     env:
       # Pinned commit of Aliothmoon/MaaFwApp whose scripts/build_agent_bundle.py

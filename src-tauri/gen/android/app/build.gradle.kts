@@ -205,8 +205,13 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
                 val target = packedAgentRoot.resolve("runtime-$index.zip")
                 runtime.bundle.copyTo(target, overwrite = true)
                 val actualBundleHash = sha256(target)
-                require(actualBundleHash == runtime.bundleSha256) {
-                    "agent runtime $index digest changed while packing: ${runtime.bundle}"
+                // bundle_sha256 is an optional pin. When the profile omits it the digest of the
+                // archive just packaged is recorded instead, and that recorded value is what the
+                // on-device runtime verifies against.
+                val expectedBundleHash = runtime.bundleSha256
+                require(expectedBundleHash == null || actualBundleHash == expectedBundleHash) {
+                    "agent runtime $index does not match bundle_sha256: expected " +
+                        "$expectedBundleHash but packaged $actualBundleHash (${runtime.bundle})"
                 }
                 linkedMapOf<String, Any?>(
                     "args" to runtime.args,

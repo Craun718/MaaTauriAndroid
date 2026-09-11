@@ -13,7 +13,8 @@ them:
 
 It also copies `libMaaAgentClient.so` and `libMaaAgentServer.so` into
 `lib/<abi>/` inside the bundle, which `validateAgentBundle` requires, and prints
-the SHA-256 to record as `bundle_sha256` in the profile.
+the resulting SHA-256. Recording it as `bundle_sha256` in the profile is optional:
+without a pin the build records the digest itself.
 
 Usage:
     python3 pack_agent_bundle.py <bundle_dir> <agent_lib_dir> <out_zip>

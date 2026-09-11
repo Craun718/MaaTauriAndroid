@@ -6,6 +6,9 @@
 #
 # 由 M9A `feat/support-android-app` 分支的 Android/profile.yaml 翻译而来，
 # 差别是与子模块同仓后改用相对路径，且占位符 {nativeLibs} 对应本项目的 {nativeLib}。
+#
+# 这里刻意不写 bundle_sha256：agent runtime 由 CI 每次重新构建，其字节不可复现。
+# 构建会把打包后的实际摘要写进 descriptor（runtime.json），设备侧仍按该摘要校验。
 
 pi_assets = "m9a"
 
@@ -42,7 +45,6 @@ timeout_ms = 15000
 
 [[agent.runtimes]]
 bundle = "m9a-agent-runtime-arm64-v8a.zip"
-bundle_sha256 = "5ffb891c3ee8c607d572a3e514a5ca53c2a47dfe5f2634e65dcd9883c5eb6cfa"
 exec = "bin/python3"
 executables = ["bin/python3"]
 args = ["-u", "agent/main.py"]

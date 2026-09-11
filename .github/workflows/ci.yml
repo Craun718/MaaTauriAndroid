@@ -3,8 +3,28 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
+  changes:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      m9a: ${{ steps.filter.outputs.m9a }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            m9a:
+              - 'resource/m9a/**'
+              - 'resource/m9a.toml'
+              - 'src-tauri/profiles/**'
+              - 'src-tauri/gen/android/**'
+              - 'vendor/maa/**'
+              - '.github/workflows/ci.yml'
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -69,3 +89,112 @@ jobs:
           echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$toolchain/aarch64-linux-android35-clang" >> "$GITHUB_ENV"
       - run: cargo check --manifest-path src-tauri/Cargo.toml --target aarch64-linux-android --features tauri/custom-protocol --lib
+
+  m9a-android:
+    needs: changes
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        needs.changes.result == 'skipped' ||
+        needs.changes.outputs.m9a == 'true'
+      }}
+    runs-on: ubuntu-latest
+    env:
+      # Pinned commit of Aliothmoon/MaaFwApp whose scripts/build_agent_bundle.py
+      # builds the Python agent runtime (verified byte-identical to the local
+      # reference clone; refresh the pin when updating the bundle).
+      MAAFW_SCRIPT_REF: f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7
+      # Keep in sync with the MaaFramework binaries vendored in vendor/maa/.
+      MAAFW_VERSION: v5.13.0-beta.5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android-aarch64-apk
+      - uses: actions/cache@v4
+        with:
+          path: .ci-cache
+          key: m9a-agent-core-3.13.15-maafw5.12.3
+
+      - name: Point the Android build at the M9A profile
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "pi.profile=$GITHUB_WORKSPACE/resource/m9a.toml"
+          } > src-tauri/gen/android/local.properties
+          {
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the arm64-v8a Python agent runtime
+        run: |
+          curl -fsSL -o /tmp/build_agent_bundle.py \
+            "https://raw.githubusercontent.com/Aliothmoon/MaaFwApp/$MAAFW_SCRIPT_REF/scripts/build_agent_bundle.py"
+          python3 /tmp/build_agent_bundle.py \
+            --out resource/m9a-agent-dist \
+            --abi arm64-v8a \
+            --requirements resource/m9a/requirements.txt \
+            --exclude pillow --require pillow==11.0.0 \
+            --extra-index-url https://chaquo.com/pypi-13.1/ \
+            --work .ci-cache/maafw
+
+      - name: Extract MaaFW agent libraries
+        run: |
+          mkdir -p /tmp/m9a-agent-libs
+          curl -fsSL -o /tmp/maafw-android.zip \
+            "https://github.com/MaaXYZ/MaaFramework/releases/download/$MAAFW_VERSION/MAA-android-aarch64-$MAAFW_VERSION.zip"
+          unzip -j /tmp/maafw-android.zip "bin/libMaaAgentClient.so" "bin/libMaaAgentServer.so" -d /tmp/m9a-agent-libs
+
+      - name: Pack the agent runtime archive
+        run: |
+          python3 src-tauri/profiles/pack_agent_bundle.py \
+            resource/m9a-agent-dist/arm64-v8a/bundle \
+            /tmp/m9a-agent-libs \
+            resource/m9a-agent-runtime-arm64-v8a.zip
+
+      - name: Generate M9A OCR models
+        working-directory: resource/m9a
+        run: python3 tools/configure.py
+
+      - name: Build the arm64 APK
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm tauri android build --target aarch64 --apk
+
+      - name: Upload the agent runtime archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: m9a-agent-runtime-arm64-v8a
+          path: resource/m9a-agent-runtime-arm64-v8a.zip
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: m9a-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error

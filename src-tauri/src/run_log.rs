@@ -83,10 +83,6 @@ impl RunLogger {
         &self.execution_id
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
     pub fn run_dir(&self) -> &Path {
         self.path.parent().unwrap_or_else(|| Path::new("."))
     }

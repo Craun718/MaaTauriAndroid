@@ -34,17 +34,8 @@ pub enum ProjectError {
     UnsupportedController(String),
 }
 
-pub struct ProjectLoader {
-    pub preferred_language: String,
-}
-
-impl Default for ProjectLoader {
-    fn default() -> Self {
-        Self {
-            preferred_language: "zh_cn".to_string(),
-        }
-    }
-}
+#[derive(Default)]
+pub struct ProjectLoader;
 
 impl ProjectLoader {
     pub fn load(

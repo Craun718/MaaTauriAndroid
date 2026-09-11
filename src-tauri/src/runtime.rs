@@ -320,6 +320,7 @@ static CONTROL_STATE: AtomicI64 = AtomicI64::new(0);
 static CONTROL_MESSAGE: Mutex<Option<String>> = Mutex::new(None);
 static RUN_RESULT: Mutex<Option<RunResult>> = Mutex::new(None);
 
+#[cfg(any(target_os = "android", test))]
 pub fn configure_screen(width: i32, height: i32) {
     if width <= 0 || height <= 0 {
         return;
@@ -328,6 +329,7 @@ pub fn configure_screen(width: i32, height: i32) {
     SCREEN_SIZE.store(packed, Ordering::SeqCst);
 }
 
+#[cfg(target_os = "android")]
 pub fn set_control_state(state: i64, message: String) {
     CONTROL_STATE.store(state, Ordering::SeqCst);
     *CONTROL_MESSAGE
@@ -342,10 +344,6 @@ pub fn control_state() -> (i64, String) {
         .clone()
         .unwrap_or_else(|| "The privileged control unit is starting".to_string());
     (CONTROL_STATE.load(Ordering::SeqCst), message)
-}
-
-pub fn set_run_result(state: RunState, message: String) {
-    set_execution_result(None, state, message)
 }
 
 pub fn clear_run_result() {

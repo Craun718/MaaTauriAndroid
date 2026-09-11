@@ -6,8 +6,6 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolverError {
-    #[error("project has not been loaded")]
-    NoProject,
     #[error("controller is not selected")]
     NoController,
     #[error("resource is not selected")]
@@ -254,7 +252,7 @@ impl<'a> PipelineMerger<'a> {
                         case: selected,
                     })?;
                 self.merge_override(Some(&case.pipeline_override));
-                self.merge_child_options(&case.options, configured)
+                self.merge_child_options(&case.options)
             }
             OptionDefinition::Checkbox {
                 cases,
@@ -311,7 +309,7 @@ impl<'a> PipelineMerger<'a> {
                         }
                     }
                 }
-                self.merge_child_options(&child_options, configured)
+                self.merge_child_options(&child_options)
             }
             OptionDefinition::Input {
                 inputs,
@@ -369,11 +367,7 @@ impl<'a> PipelineMerger<'a> {
         }
     }
 
-    fn merge_child_options(
-        &mut self,
-        names: &[String],
-        configured: Option<&OptionValue>,
-    ) -> Result<(), ResolverError> {
+    fn merge_child_options(&mut self, names: &[String]) -> Result<(), ResolverError> {
         for name in names {
             let value: Option<&OptionValue> = None;
             let value = value.or_else(|| {
@@ -586,11 +580,9 @@ mod tests {
     }
 
     fn fixture_project() -> Project {
-        ProjectLoader {
-            preferred_language: "en_us".to_string(),
-        }
-        .load("fixtures/pi/minimal/interface.json", "en_us")
-        .expect("fixture should load")
+        ProjectLoader::default()
+            .load("fixtures/pi/minimal/interface.json", "en_us")
+            .expect("fixture should load")
     }
 
     fn configuration(

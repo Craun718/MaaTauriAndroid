@@ -223,23 +223,6 @@ fn default_run_configuration(project: &Project, name: &str) -> RunConfiguration 
     }
 }
 
-fn snapshot(state: &AppState) -> AppStateSnapshot {
-    AppStateSnapshot {
-        project: state.project.read().expect("project lock poisoned").clone(),
-        configuration: state
-            .configuration
-            .read()
-            .expect("configuration lock poisoned")
-            .clone(),
-        project_path: state
-            .project_path
-            .read()
-            .expect("project path lock poisoned")
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned()),
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 enum PrivilegedStatus {
@@ -272,13 +255,6 @@ struct StartRunStatus {
     task_count: usize,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RunStatus {
-    state: runtime::RunState,
-    message: String,
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ManualScreenshot {
@@ -302,10 +278,9 @@ fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnaps
         .join("configuration.json");
     let bundled_root = bootstrap_project_root();
     let project = match bundled_root {
-        Some(root) => ProjectLoader {
-            preferred_language: "zh_cn".to_string(),
+        Some(root) => {
+            ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), "zh_cn")?
         }
-        .load(PathBuf::from(root).join("interface.json"), "zh_cn")?,
         None => {
             let fixture =
                 serde_json::from_str(include_str!("../fixtures/pi/minimal/interface.json"))
@@ -332,10 +307,7 @@ fn load_project(
     language: Option<String>,
 ) -> Result<AppStateSnapshot, AppError> {
     let preferred_language = language.unwrap_or_else(|| "zh_cn".to_string());
-    let project = ProjectLoader {
-        preferred_language: preferred_language.clone(),
-    }
-    .load(&path, &preferred_language)?;
+    let project = ProjectLoader::default().load(&path, &preferred_language)?;
     let stored = state.configuration()?;
     let config_path = state
         .store
@@ -859,8 +831,6 @@ enum AppError {
     Persistence(#[from] PersistenceError),
     #[error("{0}")]
     Path(String),
-    #[error("configuration is not valid JSON: {0}")]
-    Serialization(String),
     #[error("{0}")]
     Runtime(#[from] runtime::RuntimeError),
     #[error("{0}")]

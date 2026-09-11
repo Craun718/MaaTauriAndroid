@@ -139,46 +139,6 @@ pub enum OptionDefinition {
 }
 
 impl OptionDefinition {
-    pub fn name(&self) -> &str {
-        match self {
-            Self::Select { name, .. }
-            | Self::Switch { name, .. }
-            | Self::Checkbox { name, .. }
-            | Self::Input { name, .. }
-            | Self::Hotkey { name, .. } => name,
-        }
-    }
-
-    pub fn label(&self) -> &str {
-        match self {
-            Self::Select { label, .. }
-            | Self::Switch { label, .. }
-            | Self::Checkbox { label, .. }
-            | Self::Input { label, .. }
-            | Self::Hotkey { label, .. } => label,
-        }
-    }
-
-    pub fn description(&self) -> Option<&str> {
-        match self {
-            Self::Select { description, .. }
-            | Self::Switch { description, .. }
-            | Self::Checkbox { description, .. }
-            | Self::Input { description, .. }
-            | Self::Hotkey { description, .. } => description.as_deref(),
-        }
-    }
-
-    pub fn icon(&self) -> Option<&str> {
-        match self {
-            Self::Select { icon, .. }
-            | Self::Switch { icon, .. }
-            | Self::Checkbox { icon, .. }
-            | Self::Input { icon, .. }
-            | Self::Hotkey { icon, .. } => icon.as_deref(),
-        }
-    }
-
     pub fn applicability(&self) -> &OptionApplicability {
         match self {
             Self::Select { applicability, .. }

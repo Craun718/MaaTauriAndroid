@@ -1,12 +1,16 @@
-use crate::domain::types::{OptionValue, Project, UserConfiguration};
+#[cfg(any(target_os = "android", test))]
+use crate::domain::types::OptionValue;
+use crate::domain::types::{Project, UserConfiguration};
 use std::collections::BTreeMap;
 
+#[cfg(any(target_os = "android", test))]
 pub const ENVELOPE_PREFIX: &str = "enc:v1:";
 
 #[derive(Debug, thiserror::Error)]
 pub enum SecretError {
     #[error("Android secret bridge is not initialized")]
     BridgeUnavailable,
+    #[cfg(target_os = "android")]
     #[error("secret operation failed: {0}")]
     Jni(String),
 }
@@ -16,10 +20,12 @@ pub enum SecretError {
 pub struct SecretManifest(BTreeMap<String, ()>);
 
 impl SecretManifest {
+    #[cfg(any(target_os = "android", test))]
     pub(crate) fn insert(&mut self, key: String) {
         self.0.insert(key, ());
     }
 
+    #[cfg(any(target_os = "android", test))]
     pub(crate) fn contains(&self, key: &str) -> bool {
         self.0.contains_key(key)
     }
@@ -49,6 +55,7 @@ pub fn encrypt_configuration_with_manifest(
 
     #[cfg(not(target_os = "android"))]
     {
+        let _ = (project, configuration);
         Ok(SecretManifest::default())
     }
 }
@@ -82,14 +89,15 @@ pub fn decrypt_configuration_with_manifest(
 
     #[cfg(not(target_os = "android"))]
     {
-        let _ = configuration;
-        let _ = manifest;
+        let _ = (project, configuration, manifest);
         Ok(())
     }
 }
 
+#[cfg(any(target_os = "android", test))]
 type ScopedTransform<'a> = dyn FnMut(&str, &str) -> Result<String, SecretError> + 'a;
 
+#[cfg(any(target_os = "android", test))]
 fn transform_configuration(
     configuration: &mut UserConfiguration,
     transform: &mut ScopedTransform,
@@ -118,6 +126,7 @@ fn transform_configuration(
     Ok(())
 }
 
+#[cfg(any(target_os = "android", test))]
 fn is_password_key(key: &str, password_fields: &BTreeMap<&str, BTreeMap<&str, ()>>) -> bool {
     let Ok(parts) = serde_json::from_str::<Vec<String>>(key) else {
         return false;
@@ -130,6 +139,7 @@ fn is_password_key(key: &str, password_fields: &BTreeMap<&str, BTreeMap<&str, ()
     }
 }
 
+#[cfg(any(target_os = "android", test))]
 fn manifest_key(scope: &[&str], option: &str, field: &str) -> String {
     let mut parts = scope.to_vec();
     parts.push(option);
@@ -137,6 +147,7 @@ fn manifest_key(scope: &[&str], option: &str, field: &str) -> String {
     serde_json::to_string(&parts).expect("manifest key must be JSON serializable")
 }
 
+#[cfg(any(target_os = "android", test))]
 fn password_fields(project: &Project) -> BTreeMap<&str, BTreeMap<&str, ()>> {
     let mut fields = BTreeMap::new();
     for option in project.options.values() {
@@ -155,6 +166,7 @@ fn password_fields(project: &Project) -> BTreeMap<&str, BTreeMap<&str, ()>> {
     fields
 }
 
+#[cfg(any(target_os = "android", test))]
 fn transform_option_values(
     values: &mut BTreeMap<String, OptionValue>,
     scope: &[&str],

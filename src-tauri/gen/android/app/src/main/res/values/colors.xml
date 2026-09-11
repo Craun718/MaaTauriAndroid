@@ -7,4 +7,8 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- Matches the surface colour in src/index.css, so the strips left visible
+         by the system bar insets blend into the web background instead of
+         flashing the Material window background. Keep both in sync. -->
+    <color name="surface">#FFF5F7FB</color>
 </resources>

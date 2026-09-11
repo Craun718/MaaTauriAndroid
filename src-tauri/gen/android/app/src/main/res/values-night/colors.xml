@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark counterpart of @color/surface; must match the dark surface colour in
+         src/index.css. -->
+    <color name="surface">#FF101418</color>
+</resources>

@@ -1,6 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.maa_tauri_android" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Painted behind the system bars, which the app is inset from (see
+             MainActivity.insetContainerOf). @color/surface resolves per configuration,
+             so light and dark are covered by this one entry. -->
+        <item name="android:windowBackground">@color/surface</item>
     </style>
 </resources>

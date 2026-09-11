@@ -9,6 +9,17 @@
 - `src-tauri/fixtures/`：嵌入式测试项目数据。
 - `vendor/maa/`：vendored MaaFramework 二进制与许可文件；不要修改二进制内容。
 
+## 系统栏适配（edge-to-edge）
+
+`android:targetSdkVersion` 是 36，从 Android 15 起平台强制 edge-to-edge，而在 Android 16 上 `R.attr#windowOptOutEdgeToEdgeEnforcement` 已废弃停用，**应用无法退出 edge-to-edge**，因此必须自己处理 window insets。
+
+分工是明确的：**insets 由原生负责，前端不要碰。**
+
+- 原生：`MainActivity.insetContainerOf` 把 `systemBars() | displayCutout()` 作为 padding 施加到 WebView 的**父容器**上。监听器刻意不挂在 WebView 自身——`ViewCompat.setOnApplyWindowInsetsListener` 会顶掉该 view 自己的 `onApplyWindowInsets`，而 Chromium 依赖它跟踪软键盘和计算 `env(safe-area-inset-*)`；insets 也原样返回不消费，避免影响输入法。`values/themes.xml` 的 `windowBackground` 取 `@color/surface`（`values-night` 为深色对应值），让系统栏后面的那条留白与 Web 的 `--surface` 同色。
+- 前端：**不要**再用 `env(safe-area-inset-*)` 加 padding。原生已经按 inset 收窄过 WebView 视口，再加一次就是双重叠加（`fixed bottom-0` 的底部导航会整体抬高）。同理，新增页面不要自己补状态栏留白。
+
+改 `--surface` 颜色时记得同步 `res/values{,-night}/colors.xml` 与 `src/index.css` 三处。
+
 ## 构建、测试与开发
 
 **编译与测试一律通过 CI 进行，不要在本地运行。** 本地工具链（JDK、NDK、MaaFramework 版本）与 CI 不一致，本地跑出来的结果既慢又不可作为验收依据。本地只做写代码、`pnpm dev` 热更新和 `cargo fmt` 这类轻量操作。

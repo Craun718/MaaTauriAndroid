@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ark-ui/react": "^5.39.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "lucide-react": "^0.539.0",
@@ -23,16 +24,16 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.6.7",
+    "@testing-library/react": "^16.3.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
-    "@testing-library/jest-dom": "^6.6.7",
-    "@testing-library/react": "^16.3.0",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.11",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
-    "@tauri-apps/cli": "^2",
     "vitest": "^3.2.4"
   }
 }

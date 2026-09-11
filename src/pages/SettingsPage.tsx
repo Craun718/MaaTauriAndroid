@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, FolderInput, Trash2 } from "lucide-react";
+import { Checkbox } from "../components/ui/Checkbox";
+import { TextField } from "../components/ui/TextField";
 import { clearDiagnosticData, getPrivilegedStatus } from "../lib/api";
 import { useAppStore } from "../store/appStore";
 
@@ -25,11 +27,12 @@ export function SettingsPage() {
       <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <h2 className="font-medium">Project directory</h2>
         <div className="flex gap-2">
-          <input
+          <TextField
+            className="min-w-0 flex-1"
+            ariaLabel="Project directory"
             value={path}
-            onChange={(event) => setPath(event.target.value)}
+            onValueChange={setPath}
             placeholder="/storage/emulated/0/MaaTauriAndroid"
-            className="h-11 min-w-0 flex-1 rounded-md border border-[var(--border)] px-3"
           />
           <button
             type="button"
@@ -49,21 +52,19 @@ export function SettingsPage() {
       </section>
       <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <h2 className="font-medium">Run behavior</h2>
-        <label className="flex min-h-12 items-center gap-3">
-          <input
-            type="checkbox"
-            checked={snapshot?.configuration.forceStopTargetApp ?? false}
-            disabled={busy || !snapshot}
-            onChange={(event) => {
-              if (!snapshot) return;
-              const next = structuredClone(snapshot.configuration);
-              next.forceStopTargetApp = event.target.checked;
-              void saveConfiguration(next);
-            }}
-            className="h-5 w-5 accent-[var(--accent)]"
-          />
+        <Checkbox
+          className="min-h-12 gap-3"
+          checked={snapshot?.configuration.forceStopTargetApp ?? false}
+          disabled={busy || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.forceStopTargetApp = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
           <span className="font-medium">Force stop target app</span>
-        </label>
+        </Checkbox>
       </section>
       <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <h2 className="font-medium">Diagnostics</h2>

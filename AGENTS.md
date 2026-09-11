@@ -3,6 +3,7 @@
 ## 项目结构
 
 - `src/`：React 前端源码。`pages/` 存放页面，`components/` 存放可复用 UI，`lib/` 存放 Tauri IPC 与工具函数，`store/` 存放 Zustand 状态。
+- `src/components/ui/`：Ark UI（`@ark-ui/react`）封装层。Ark UI 是无样式组件库，只输出 `data-scope` / `data-part` / `data-state` 等数据属性；外观统一定义在 `src/index.css` 的 `@layer components` 里，页面/组件只写布局 class。
 - `src-tauri/src/`：Rust 后端。领域加载/解析逻辑在 `domain/`，Maa 运行时在 `runtime.rs`，配置持久化在 `persistence.rs`，敏感数据处理在 `secrets.rs`。
 - `src-tauri/gen/android/`：Android Shell、JNI 桥接、Shizuku 控制服务与 Gradle 工程。
 - `src-tauri/fixtures/`：嵌入式测试项目数据。
@@ -15,7 +16,7 @@
 本地可用（仅用于开发与格式化，不作为验证手段）：
 
 - `scripts/setup.sh`：初始化子模块、下载 MaaFramework 二进制并构建 agent runtime ZIP。
-- `pnpm install`：安装 Node 依赖。
+- `pnpm install`：安装 Node 依赖。包管理器统一用 **pnpm 11**（与 CI 一致，`corepack pnpm@11`）；本机 node_modules 由 pnpm 11 的 store 链接，用 pnpm 10 会报 `ERR_PNPM_UNEXPECTED_STORE`。
 - `pnpm dev`：启动 Vite 前端开发服务器。
 - `cargo fmt --manifest-path src-tauri/Cargo.toml`：格式化 Rust 代码。
 
@@ -56,6 +57,8 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 ## 代码风格
 
 TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 camelCase 变量；React 组件与类型使用 PascalCase。Rust 提交前运行 `cargo fmt`；错误类型使用 `thiserror`，公共 IPC 数据使用 `serde` 的 camelCase 表示。Tailwind class 应保持语义清晰，避免为一次性样式引入自定义 CSS。
+
+新增表单控件时优先复用 `src/components/ui/` 里的封装（`Checkbox` / `RadioGroup` / `SegmentGroup` / `TextField`），不要在页面里手写原生 `<input>`，也不要绕过封装直接用 `@ark-ui/react`：状态样式集中在 `index.css`，散落各处会失去统一主题。
 
 ## 测试指南
 

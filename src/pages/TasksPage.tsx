@@ -1,4 +1,5 @@
 import { OptionEditor } from "../components/OptionEditor";
+import { Checkbox } from "../components/ui/Checkbox";
 import { EmptyProject } from "./SetupPage";
 import { activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
@@ -88,18 +89,16 @@ export function TasksPage() {
                     <p className="text-sm text-[var(--text-muted)]">{task.description}</p>
                   )}
                 </div>
-                <label className="flex h-11 items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-[var(--accent)]"
-                    checked={configured.enabled}
-                    disabled={unavailable}
-                    onChange={(event) =>
-                      setTask(task.name, (item) => ({ ...item, enabled: event.target.checked }))
-                    }
-                  />
+                <Checkbox
+                  className="h-11 gap-2 text-sm"
+                  checked={configured.enabled}
+                  disabled={unavailable}
+                  onCheckedChange={(next) =>
+                    setTask(task.name, (item) => ({ ...item, enabled: next }))
+                  }
+                >
                   On
-                </label>
+                </Checkbox>
               </div>
               {unavailable && (
                 <p className="mt-2 text-sm text-[var(--text-muted)]">

@@ -1,4 +1,6 @@
+import { useId } from "react";
 import { OptionEditor } from "../components/OptionEditor";
+import { RadioGroup } from "../components/ui/RadioGroup";
 import { activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 import type { UserConfiguration } from "../lib/types";
@@ -6,6 +8,7 @@ import type { UserConfiguration } from "../lib/types";
 export function SetupPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
+  const controllerLabelId = useId();
   if (!snapshot?.project) return <EmptyProject />;
   const { project, configuration } = snapshot;
   const resource = activeResource(project, configuration);
@@ -18,24 +21,28 @@ export function SetupPage() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">Setup</h1>
       <section className="space-y-3">
-        <h2 className="font-medium">Controller</h2>
-        {project.controllers.map((controller) => (
-          <button
-            key={controller.name}
-            type="button"
-            onClick={() =>
-              update((current) => ({ ...current, activeController: controller.name }))
-            }
-            className={`flex min-h-14 w-full items-center justify-between rounded-lg border p-3 text-left ${
-              configuration.activeController === controller.name
-                ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface-raised))]"
-                : "border-[var(--border)] bg-[var(--surface-raised)]"
-            }`}
-          >
-            <span className="font-medium">{controller.label}</span>
-            <span className="text-sm text-[var(--text-muted)]">{controller.controllerType}</span>
-          </button>
-        ))}
+        <h2 className="font-medium" id={controllerLabelId}>
+          Controller
+        </h2>
+        <RadioGroup
+          className="space-y-3"
+          labelledBy={controllerLabelId}
+          value={configuration.activeController}
+          onValueChange={(name) =>
+            update((current) => ({ ...current, activeController: name }))
+          }
+          items={project.controllers.map((controller) => ({
+            value: controller.name,
+            content: (
+              <>
+                <span className="font-medium">{controller.label}</span>
+                <span className="text-sm text-[var(--text-muted)]">
+                  {controller.controllerType}
+                </span>
+              </>
+            ),
+          }))}
+        />
       </section>
       <section className="space-y-3">
         <h2 className="font-medium">Resource</h2>

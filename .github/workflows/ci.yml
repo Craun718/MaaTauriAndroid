@@ -160,10 +160,10 @@ jobs:
         working-directory: resource/m9a
         run: python3 tools/configure.py
 
-      - name: Build the arm64 APK
+      - name: Build the arm64 debug APK
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android build --target aarch64 --apk
+          pnpm tauri android build --target aarch64 --apk --debug
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
@@ -171,9 +171,9 @@ jobs:
           name: m9a-agent-runtime-arm64-v8a
           path: resource/m9a-agent-runtime-arm64-v8a.zip
 
-      - name: Upload the APK
+      - name: Upload the debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: m9a-apk
+          name: m9a-apk-debug
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error

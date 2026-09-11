@@ -259,14 +259,14 @@ tasks.named("preBuild") {
 }
 
 android {
-    compileSdk = 37
+    compileSdk = 36
     ndkVersion = "28.2.13676358"
     namespace = "top.natsuu.maa.tauri.android"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "top.natsuu.maa.tauri.android.$maaTauriAndroidResourceId"
         minSdk = 28
-        targetSdk = 37
+        targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
 

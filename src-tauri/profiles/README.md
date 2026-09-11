@@ -26,33 +26,21 @@ Point a checkout at it with `pi.profile=<repo>/resource/m9a.toml`.
 
 ### Agent runtime
 
-The runtime ZIP is produced by `build_agent_bundle.py` from [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp), which layers M9A's dependencies onto a prebuilt Android CPython core from [MaaAgentCoreAndroid](https://github.com/Aliothmoon/MaaAgentCoreAndroid):
+The runtime ZIP is produced by `scripts/build-agent-runtime.sh`, which wraps
+`build_agent_bundle.py` from [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp).
+Run the full setup with:
 
 ```bash
-# 1. lay out the PI: submodule + OCR models
-git submodule update --init --recursive
-python3 resource/m9a/tools/configure.py
+scripts/setup.sh
+```
 
-# 2. build the agent runtime
-cd /path/to/MaaFwApp
-python3 scripts/build_agent_bundle.py \
-  --out <repo>/resource/m9a-agent-dist \
-  --abi arm64-v8a \
-  --requirements <repo>/resource/m9a/requirements.txt \
-  --exclude pillow --require pillow==11.0.0 \
-  --extra-index-url https://chaquo.com/pypi-13.1/
+Or run the individual steps:
 
-# 3. copy libMaaAgentClient.so and libMaaAgentServer.so out of the MaaFramework
-#    Android release, then pack the bundle (no symlinks, no ZIP64)
-unzip -j MAA-android-aarch64-<tag>.zip \
-  'bin/libMaaAgentClient.so' 'bin/libMaaAgentServer.so' -d /tmp/maafw-agent-libs
-python3 src-tauri/profiles/pack_agent_bundle.py \
-  resource/m9a-agent-dist/arm64-v8a/bundle \
-  /tmp/maafw-agent-libs \
-  resource/m9a-agent-runtime-arm64-v8a.zip
-
-# 4. optional: pin the archive with bundle_sha256 in resource/m9a.toml
-shasum -a 256 resource/m9a-agent-runtime-arm64-v8a.zip
+```bash
+scripts/fetch-submodules.sh     # M9A + MaaCommonAssets
+scripts/fetch-maafw.sh          # MaaFramework Android binaries → vendor/maa/android/
+scripts/build-agent-runtime.sh  # Python agent runtime ZIP
+python3 resource/m9a/tools/configure.py  # generate OCR model symlinks
 ```
 
 `pack_agent_bundle.py` is the only supported way to build the archive: it dereferences symlinks, keeps the result below the ZIP64 threshold, verifies that `lib/arm64-v8a/libMaaAgentClient.so` and `libMaaAgentServer.so` are present, and prints the digest.

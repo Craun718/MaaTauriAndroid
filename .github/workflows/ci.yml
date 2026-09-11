@@ -137,7 +137,7 @@ jobs:
           key: android-aarch64-apk
       - uses: actions/cache@v6
         with:
-          path: .ci-cache
+          path: .cache
           key: m9a-agent-core-3.13.15-maafw5.12.3
 
       - name: Point the Android build at the M9A profile
@@ -151,31 +151,10 @@ jobs:
             echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
           } >> "$GITHUB_ENV"
 
-      - name: Build the arm64-v8a Python agent runtime
+      - name: Download MaaFramework and build the agent runtime
         run: |
-          curl -fsSL -o /tmp/build_agent_bundle.py \
-            "https://raw.githubusercontent.com/Aliothmoon/MaaFwApp/$MAAFW_SCRIPT_REF/scripts/build_agent_bundle.py"
-          python3 /tmp/build_agent_bundle.py \
-            --out resource/m9a-agent-dist \
-            --abi arm64-v8a \
-            --requirements resource/m9a/requirements.txt \
-            --exclude pillow --require pillow==11.0.0 \
-            --extra-index-url https://chaquo.com/pypi-13.1/ \
-            --work .ci-cache/maafw
-
-      - name: Extract MaaFW agent libraries
-        run: |
-          mkdir -p /tmp/m9a-agent-libs
-          curl -fsSL -o /tmp/maafw-android.zip \
-            "https://github.com/MaaXYZ/MaaFramework/releases/download/$MAAFW_VERSION/MAA-android-aarch64-$MAAFW_VERSION.zip"
-          unzip -j /tmp/maafw-android.zip "bin/libMaaAgentClient.so" "bin/libMaaAgentServer.so" -d /tmp/m9a-agent-libs
-
-      - name: Pack the agent runtime archive
-        run: |
-          python3 src-tauri/profiles/pack_agent_bundle.py \
-            resource/m9a-agent-dist/arm64-v8a/bundle \
-            /tmp/m9a-agent-libs \
-            resource/m9a-agent-runtime-arm64-v8a.zip
+          scripts/fetch-maafw.sh
+          scripts/build-agent-runtime.sh
 
       - name: Generate M9A OCR models
         working-directory: resource/m9a

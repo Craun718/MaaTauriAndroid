@@ -10,6 +10,8 @@
 
 ## 构建、测试与开发
 
+- `scripts/setup.sh`：初始化子模块、下载 MaaFramework 二进制并构建 agent runtime ZIP。
+- `pnpm install`：安装 Node 依赖。
 - `pnpm install`：安装 Node 依赖。
 - `pnpm dev`：启动 Vite 前端开发服务器。
 - `pnpm build`：运行 TypeScript 检查并生成生产前端。

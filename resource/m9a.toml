@@ -1,0 +1,55 @@
+# M9A 的 Project Interface profile。
+#
+# 相对路径解析规则（见 src-tauri/profiles/README.md）：
+#   - pi_assets / agent.runtimes[].bundle 相对【本文件所在目录】，即 resource/
+#   - maa_dir 相对【仓库根】
+#
+# 由 M9A `feat/support-android-app` 分支的 Android/profile.yaml 翻译而来，
+# 差别是与子模块同仓后改用相对路径，且占位符 {nativeLibs} 对应本项目的 {nativeLib}。
+
+pi_assets = "m9a"
+
+resource_id = "m9a"
+
+maa_dir = "vendor/maa/android"
+
+pi_include = [
+  "interface.json",
+  "i18n/**",
+  "tasks/**",
+  "resource/**",
+  "data/**",
+  "agent/**",
+  "config/**",
+  "logo.ico",
+  "CONTACT",
+  "LICENSE",
+]
+
+# images/ 不能整目录挖：银行等 option 的 icon 指在这里
+pi_exclude = [
+  "resource/announcement/*.md",
+  "resource/announcement/images/CCMain.png",
+  "resource/announcement/images/mojing_tjb.jpg",
+  "resource/announcement/images/uttu.png",
+  "resource/announcement/images/SOSMain.png",
+  "resource/announcement/images/newbie-main-interface.png",
+]
+
+# interface.json 声明 1 个 agent，因此这里必须恰好配置 1 个 runtime。
+[agent]
+timeout_ms = 15000
+
+[[agent.runtimes]]
+bundle = "m9a-agent-runtime-arm64-v8a.zip"
+bundle_sha256 = "5ffb891c3ee8c607d572a3e514a5ca53c2a47dfe5f2634e65dcd9883c5eb6cfa"
+exec = "bin/python3"
+executables = ["bin/python3"]
+args = ["-u", "agent/main.py"]
+working_dir = "{pi}"
+
+[agent.runtimes.env]
+PYTHONHOME = "{bundle}/prefix"
+PYTHONPATH = "{bundle}/site-packages/pure.zip:{bundle}/site-packages"
+LD_LIBRARY_PATH = "{bundle}/prefix/lib:{bundle}/site-packages/chaquopy/lib:{bundle}/lib/arm64-v8a:{nativeLib}"
+MAAFW_BINARY_PATH = "{nativeLib}"

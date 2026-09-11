@@ -9,12 +9,16 @@ import {
   startRun,
   stopRun,
 } from "../lib/api";
-import { EmptyProject } from "./SetupPage";
+import { canAcceptRunEvent } from "../lib/runEvents";
 import { useAppStore } from "../store/appStore";
 import type { DiagnosticExport, ResolvedRun, RunEvent } from "../lib/types";
-import { canAcceptRunEvent } from "../lib/runEvents";
 
-export function RunPage() {
+/**
+ * Run controls for the active run configuration. Rendered inside the Tasks panel
+ * rather than on a page of its own: the queue it drives is the task list below it,
+ * and keeping them apart meant showing the same tasks twice.
+ */
+export function RunPanel() {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
   const [run, setRun] = useState<ResolvedRun>();
@@ -29,7 +33,7 @@ export function RunPage() {
 
   useEffect(() => {
     if (!snapshot) return;
-      resolveCurrent()
+    resolveCurrent()
       .then(setRun)
       .catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
     getRunStatus()
@@ -75,7 +79,7 @@ export function RunPage() {
     };
   }, []);
 
-  if (!snapshot?.project) return <EmptyProject />;
+  if (!snapshot?.project) return null;
   const enabled = run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
 
   async function start() {
@@ -132,10 +136,14 @@ export function RunPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-semibold">Run</h1>
+    <>
       <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-        <p className="text-sm text-[var(--text-muted)]">{run?.resource.label ?? "Resource"}</p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm text-[var(--text-muted)]">
+            {run?.resource.label ?? "Resource"}
+          </p>
+          <p className="text-sm text-[var(--text-muted)]">{runState}</p>
+        </div>
         <h2 className="mt-1 text-xl font-semibold">{enabled.length} tasks ready</h2>
         <button
           type="button"
@@ -186,20 +194,6 @@ export function RunPage() {
       {screenshotPath && (
         <p className="break-all text-xs text-[var(--text-muted)]">{screenshotPath}</p>
       )}
-      <section className="space-y-2">
-        <h2 className="font-medium">Queue</h2>
-        {run?.tasks.map((item) => (
-          <div
-            key={item.configured?.instanceId ?? item.task.name}
-            className="flex min-h-12 items-center justify-between rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-3"
-          >
-            <span>{item.task.label}</span>
-            <span className="text-sm text-[var(--text-muted)]">
-              {item.unavailableReason ?? (item.enabled ? "Enabled" : "Disabled")}
-            </span>
-          </div>
-        ))}
-      </section>
-    </div>
+    </>
   );
 }

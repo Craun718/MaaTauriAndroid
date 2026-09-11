@@ -6,15 +6,24 @@ import type { AppStateSnapshot } from "../src/lib/types";
 const bootstrap = vi.fn();
 const resolveCurrent = vi.fn();
 const getPrivilegedStatus = vi.fn();
+const getRunStatus = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
   bootstrapApp: () => bootstrap(),
   resolveCurrent: () => resolveCurrent(),
   getPrivilegedStatus: () => getPrivilegedStatus(),
+  getRunStatus: () => getRunStatus(),
   loadProject: vi.fn(),
   saveConfiguration: vi.fn(),
   applyPreset: vi.fn(),
   startRun: vi.fn(),
+  stopRun: vi.fn(),
+  exportDiagnostics: vi.fn(),
+  captureManualScreenshot: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => undefined),
 }));
 
 const snapshot: AppStateSnapshot = {
@@ -64,6 +73,7 @@ describe("App", () => {
       pipelineOverride: {},
     });
     getPrivilegedStatus.mockResolvedValue({ message: "Not connected", setupRequired: [] });
+    getRunStatus.mockResolvedValue({ executionId: undefined, state: "Idle", message: "Idle" });
   });
 
   it("bootstraps the project and renders navigation", async () => {
@@ -71,5 +81,17 @@ describe("App", () => {
     expect(await screen.findByText("MaaTauriAndroid Fixture")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Tasks" }));
     expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+  });
+
+  it("shows the run controls and the task list in the same panel", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Tasks" }));
+
+    // Run controls, formerly on their own /run page.
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    // Tasks belonging to the active run configuration, on the same panel.
+    expect(screen.getByRole("heading", { name: "Default" })).toBeInTheDocument();
+    // The old /run tab is gone.
+    expect(screen.queryByRole("link", { name: "Run" })).not.toBeInTheDocument();
   });
 });

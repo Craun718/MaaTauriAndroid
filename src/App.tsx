@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { HomePage } from "./pages/HomePage";
-import { RunPage } from "./pages/RunPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SetupPage } from "./pages/SetupPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -25,7 +24,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/run" element={<RunPage />} />
+          <Route path="/run" element={<Navigate to="/tasks" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

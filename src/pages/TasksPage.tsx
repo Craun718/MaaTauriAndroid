@@ -1,4 +1,5 @@
 import { OptionEditor } from "../components/OptionEditor";
+import { RunPanel } from "../components/RunPanel";
 import { Checkbox } from "../components/ui/Checkbox";
 import { EmptyProject } from "./SetupPage";
 import { activeResource, defaultOptionValue } from "../lib/options";
@@ -47,6 +48,7 @@ export function TasksPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">Tasks</h1>
+      <RunPanel />
       {project.presets.length > 0 && (
         <section className="space-y-2">
           <h2 className="font-medium">Presets</h2>
@@ -65,7 +67,7 @@ export function TasksPage() {
         </section>
       )}
       <section className="space-y-3">
-        <h2 className="font-medium">{activeRun?.name ?? "Run"}</h2>
+        <h2 className="font-medium">{activeRun?.name ?? "Default"}</h2>
         {project.tasks.map((task) => {
           const configured = ensureTask(task.name);
           const unavailable =

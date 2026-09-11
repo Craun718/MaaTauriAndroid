@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { RunPage } from "../src/pages/RunPage";
+import { RunPanel } from "../src/components/RunPanel";
 import { SettingsPage } from "../src/pages/SettingsPage";
 import { useAppStore } from "../src/store/appStore";
 import type { AppStateSnapshot, ResolvedRun } from "../src/lib/types";
@@ -110,7 +110,7 @@ describe("diagnostic controls", () => {
       executionId: "run-1",
       path: "/runs/run-1/screens/manual-1.png",
     });
-    render(<RunPage />);
+    render(<RunPanel />);
     const capture = await screen.findByRole("button", { name: "Shot" });
     await waitFor(() => expect(capture).toBeEnabled());
 

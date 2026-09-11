@@ -62,7 +62,7 @@ val maaTauriAndroidMaaDir = piProfile?.maaDir ?: "vendor/maa/android"
 val maaTauriAndroidMaaDirPath = if (File(maaTauriAndroidMaaDir).isAbsolute) {
     File(maaTauriAndroidMaaDir).normalize()
 } else {
-    rootProject.file("../../../..")
+    rootProject.file("../../..")
         .resolve(maaTauriAndroidMaaDir)
         .normalize()
 }

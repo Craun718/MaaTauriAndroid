@@ -630,12 +630,13 @@ fn merge_fragment(mut base: Value, imported: Value) -> Value {
             }
         }
     }
-    if let (Some(existing), Some(incoming)) = (
-        base.get_mut("option").and_then(Value::as_object_mut),
-        imported.get("option").and_then(Value::as_object),
-    ) {
-        for (key, value) in incoming {
-            existing.insert(key.clone(), value.clone());
+    if let Some(incoming) = imported.get("option").and_then(Value::as_object) {
+        if let Some(existing) = base.get_mut("option").and_then(Value::as_object_mut) {
+            for (key, value) in incoming {
+                existing.insert(key.clone(), value.clone());
+            }
+        } else if let Some(object) = base.as_object_mut() {
+            object.insert("option".to_string(), Value::Object(incoming.clone()));
         }
     }
     base
@@ -760,5 +761,25 @@ mod tests {
         );
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn loads_imported_options_from_pinned_m9a_project() {
+        let interface = Path::new("../resource/m9a/interface.json");
+        if !interface.is_file() {
+            return;
+        }
+
+        let project = ProjectLoader::default()
+            .load(interface, "zh_cn")
+            .expect("pinned M9A project should load");
+
+        assert_eq!(project.name, "m9a");
+        assert!(project
+            .resources
+            .iter()
+            .any(|resource| resource.name == "官服"));
+        assert!(project.tasks.iter().any(|task| task.name == "收取荒原"));
+        assert!(project.options.contains_key("好梦井"));
     }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
 import { getPrivilegedStatus, resolveCurrent } from "../lib/api";
+import { useTranslation } from "../lib/i18n";
 import type { ResolvedRun } from "../lib/types";
 import { activeResource, activeRun, configuredTask } from "../lib/options";
 import { useAppStore } from "../store/appStore";
@@ -11,6 +12,7 @@ export function HomePage() {
   const [run, setRun] = useState<ResolvedRun>();
   const [privileged, setPrivileged] = useState<string>();
   const [error, setError] = useState<string>();
+  const { t } = useTranslation();
 
   async function refresh() {
     try {
@@ -30,8 +32,8 @@ export function HomePage() {
   if (!snapshot?.project) {
     return (
       <div className="space-y-3">
-        <h1 className="text-2xl font-semibold">Project</h1>
-        <p className="text-[var(--text-muted)]">No project is loaded.</p>
+        <h1 className="text-2xl font-semibold">{t("project")}</h1>
+        <p className="text-[var(--text-muted)]">{t("noProject")}</p>
       </div>
     );
   }
@@ -50,32 +52,32 @@ export function HomePage() {
 
       <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-medium">Current selection</h2>
+          <h2 className="font-medium">{t("currentSelection")}</h2>
           <button
             type="button"
             onClick={refresh}
             className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)]"
-            aria-label="Refresh status"
+            aria-label={t("refreshStatus")}
           >
             <RefreshCw size={16} />
           </button>
         </div>
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
           <div>
-            <dt className="text-[var(--text-muted)]">Controller</dt>
+            <dt className="text-[var(--text-muted)]">{t("controller")}</dt>
             <dd>{run?.controller.label ?? configuration.activeController}</dd>
           </div>
           <div>
-            <dt className="text-[var(--text-muted)]">Resource</dt>
-            <dd>{run?.resource.label ?? resource?.label ?? "Unavailable"}</dd>
+            <dt className="text-[var(--text-muted)]">{t("resource")}</dt>
+            <dd>{run?.resource.label ?? resource?.label ?? t("unavailable")}</dd>
           </div>
           <div>
-            <dt className="text-[var(--text-muted)]">Preset</dt>
-            <dd>{runConfig?.name ?? "Default"}</dd>
+            <dt className="text-[var(--text-muted)]">{t("preset")}</dt>
+            <dd>{runConfig?.name ?? t("defaultRunName")}</dd>
           </div>
           <div>
-            <dt className="text-[var(--text-muted)]">Enabled</dt>
-            <dd>{enabled.length} tasks</dd>
+            <dt className="text-[var(--text-muted)]">{t("enabled")}</dt>
+            <dd>{t("enabledTasks", { count: enabled.length })}</dd>
           </div>
         </dl>
       </section>
@@ -83,9 +85,9 @@ export function HomePage() {
       <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <div className="flex items-center gap-2">
           <ShieldAlert size={18} className="text-amber-500" />
-          <h2 className="font-medium">Privileged host</h2>
+          <h2 className="font-medium">{t("privilegedHost")}</h2>
         </div>
-        <p className="mt-2 text-sm text-[var(--text-muted)]">{privileged ?? "Checking"}</p>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">{privileged ?? t("checking")}</p>
       </section>
 
       {error && (
@@ -94,7 +96,7 @@ export function HomePage() {
           <span>{error}</span>
         </section>
       )}
-      {busy && <p className="text-sm text-[var(--text-muted)]">Saving</p>}
+      {busy && <p className="text-sm text-[var(--text-muted)]">{t("saving")}</p>}
     </div>
   );
 }

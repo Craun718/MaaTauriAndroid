@@ -10,6 +10,7 @@ import {
   stopRun,
 } from "../lib/api";
 import { canAcceptRunEvent } from "../lib/runEvents";
+import { useTranslation } from "../lib/i18n";
 import { useAppStore } from "../store/appStore";
 import type { DiagnosticExport, ResolvedRun, RunEvent } from "../lib/types";
 
@@ -21,6 +22,7 @@ import type { DiagnosticExport, ResolvedRun, RunEvent } from "../lib/types";
 export function RunPanel() {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
+  const { t } = useTranslation();
   const [run, setRun] = useState<ResolvedRun>();
   const [status, setStatus] = useState<string>();
   const [executionId, setExecutionId] = useState<string>();
@@ -102,9 +104,7 @@ export function RunPanel() {
   }
 
   async function exportBundle() {
-    const confirmed = window.confirm(
-      "Export a full diagnostic package? It includes screenshots, device logs and a complete bug report.",
-    );
+    const confirmed = window.confirm(t("exportConfirm"));
     if (!confirmed) return;
     setExporting(true);
     try {
@@ -112,8 +112,10 @@ export function RunPanel() {
       setDiagnostic(result);
       setStatus(
         result.manifest.status === "complete"
-          ? `Diagnostics exported: ${result.path}`
-          : `Diagnostics exported with gaps: ${result.manifest.partialReasons.join("; ")}`,
+          ? t("diagnosticsExported", { path: result.path })
+          : t("diagnosticsExportedWithGaps", {
+              reasons: result.manifest.partialReasons.join("; "),
+            }),
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -127,7 +129,7 @@ export function RunPanel() {
     try {
       const result = await captureManualScreenshot(executionId);
       setScreenshotPath(result.path);
-      setStatus(`Screenshot saved: ${result.path}`);
+      setStatus(t("screenshotSaved", { path: result.path }));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -140,11 +142,13 @@ export function RunPanel() {
       <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <div className="flex items-baseline justify-between gap-2">
           <p className="text-sm text-[var(--text-muted)]">
-            {run?.resource.label ?? "Resource"}
+            {run?.resource.label ?? t("resource")}
           </p>
           <p className="text-sm text-[var(--text-muted)]">{runState}</p>
         </div>
-        <h2 className="mt-1 text-xl font-semibold">{enabled.length} tasks ready</h2>
+        <h2 className="mt-1 text-xl font-semibold">
+          {t("tasksReady", { count: enabled.length })}
+        </h2>
         <button
           type="button"
           disabled={enabled.length === 0 || busy}
@@ -152,7 +156,7 @@ export function RunPanel() {
           className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[var(--accent)] font-semibold text-white disabled:opacity-50"
         >
           <Play size={18} />
-          Start
+          {t("start")}
         </button>
         <div className="mt-2 grid grid-cols-3 gap-2">
           <button
@@ -162,7 +166,7 @@ export function RunPanel() {
             className="flex h-12 items-center justify-center gap-2 rounded-md border border-[var(--border)] font-semibold disabled:opacity-50"
           >
             <Square size={18} />
-            Stop
+            {t("stop")}
           </button>
           <button
             type="button"
@@ -171,7 +175,7 @@ export function RunPanel() {
             className="flex h-12 items-center justify-center gap-2 rounded-md border border-[var(--border)] font-semibold disabled:opacity-50"
           >
             <Download size={18} />
-            Export
+            {t("exportDiagnostics")}
           </button>
           <button
             type="button"
@@ -180,13 +184,20 @@ export function RunPanel() {
             className="flex h-12 items-center justify-center gap-2 rounded-md border border-[var(--border)] font-semibold disabled:opacity-50"
           >
             <Camera size={18} />
-            Shot
+            {t("captureScreenshot")}
           </button>
         </div>
       </section>
       {diagnostic && (
         <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4 text-sm">
-          <p className="font-medium">Diagnostics: {diagnostic.manifest.status}</p>
+          <p className="font-medium">
+            {t("diagnosticsStatus", {
+              status:
+                diagnostic.manifest.status === "complete"
+                  ? t("diagnosticsComplete")
+                  : t("diagnosticsPartial"),
+            })}
+          </p>
           <p className="mt-1 break-all text-[var(--text-muted)]">{diagnostic.path}</p>
         </section>
       )}

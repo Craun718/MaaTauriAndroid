@@ -253,6 +253,17 @@ pub enum OptionValue {
     },
 }
 
+/// Language the app interface is rendered in. `System` follows the device locale,
+/// which resolves to Chinese for `zh*` tags and English for everything else.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UiLanguage {
+    #[default]
+    System,
+    Zh,
+    En,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserConfiguration {
@@ -260,6 +271,8 @@ pub struct UserConfiguration {
     pub initialized: bool,
     #[serde(default)]
     pub force_stop_target_app: bool,
+    #[serde(default)]
+    pub ui_language: UiLanguage,
     pub active_controller: Option<String>,
     pub active_resource: Option<String>,
     pub global_option_values: BTreeMap<String, OptionValue>,
@@ -276,6 +289,7 @@ impl Default for UserConfiguration {
             schema_version: 1,
             initialized: false,
             force_stop_target_app: false,
+            ui_language: UiLanguage::System,
             active_controller: None,
             active_resource: None,
             global_option_values: BTreeMap::new(),
@@ -301,6 +315,29 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(!parsed.force_stop_target_app);
+    }
+
+    #[test]
+    fn legacy_configuration_follows_the_system_language() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy.as_object_mut().unwrap().remove("uiLanguage");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert_eq!(parsed.ui_language, UiLanguage::System);
+    }
+
+    #[test]
+    fn ui_language_round_trips_through_the_configuration() {
+        let mut configuration = UserConfiguration::default();
+        configuration.ui_language = UiLanguage::Zh;
+
+        let encoded = serde_json::to_value(&configuration).unwrap();
+        assert_eq!(encoded["uiLanguage"], serde_json::json!("zh"));
+
+        let decoded: UserConfiguration = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded.ui_language, UiLanguage::Zh);
     }
 }
 

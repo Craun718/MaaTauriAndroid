@@ -76,6 +76,10 @@ TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 ca
 
 新增表单控件时优先复用 `src/components/ui/` 里的封装（`Checkbox` / `RadioGroup` / `SegmentGroup` / `TextField`），不要在页面里手写原生 `<input>`，也不要绕过封装直接用 `@ark-ui/react`：状态样式集中在 `index.css`，散落各处会失去统一主题。
 
+界面文案一律走 `src/lib/i18n.ts`：所有字符串写在 `en` / `zh` 两份目录里（`zh` 用 `Record<MessageKey, string>` 约束，漏 key 会编译失败），组件内用 `useTranslation()` 取 `t`，不要在 JSX 里写死文字，也不要给 `t` 传运行时拼出来的 key。语言存于 `UserConfiguration.uiLanguage`（`system` 跟随设备语言，`zh*` 判为中文，其余英文）；`resolveLanguage` 负责把设置解析成实际语言，`projectLanguage` 负责映射成项目 locale（`zh_cn` / `en_us`）。
+
+新增用户可见的文案时，必须同时补上 `en` 与 `zh` 两份；只有后端（Rust）产出的诊断/运行消息仍是英文原文。
+
 ## 测试指南
 
 前端测试放在被测代码旁，命名为 `*.test.tsx` 或 `*.test.ts`，使用 Vitest 与 Testing Library。Rust 单元测试放在同一源文件的 `#[cfg(test)]` 模块中。修改 IPC、任务解析、持久化或密码加密时，必须补充覆盖正常与失败路径的测试。

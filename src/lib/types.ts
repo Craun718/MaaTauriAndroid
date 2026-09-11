@@ -164,10 +164,17 @@ export interface RunConfiguration {
   tasks: ConfiguredTask[];
 }
 
+/**
+ * Language the app interface is rendered in. "system" follows the device locale:
+ * Chinese for `zh*` tags, English for everything else.
+ */
+export type UiLanguage = "system" | "zh" | "en";
+
 export interface UserConfiguration {
   schemaVersion: number;
   initialized: boolean;
   forceStopTargetApp: boolean;
+  uiLanguage?: UiLanguage;
   activeController?: string;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;

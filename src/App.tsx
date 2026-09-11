@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { useTranslation } from "./lib/i18n";
 import { HomePage } from "./pages/HomePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SetupPage } from "./pages/SetupPage";
@@ -11,6 +12,7 @@ function App() {
   const bootstrap = useAppStore((state) => state.bootstrap);
   const busy = useAppStore((state) => state.busy);
   const error = useAppStore((state) => state.error);
+  const { t } = useTranslation();
 
   useEffect(() => {
     void bootstrap();
@@ -27,7 +29,7 @@ function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        {busy && <p className="mt-4 text-sm text-[var(--text-muted)]">Working</p>}
+        {busy && <p className="mt-4 text-sm text-[var(--text-muted)]">{t("working")}</p>}
       </AppShell>
     </HashRouter>
   );

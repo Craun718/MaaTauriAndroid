@@ -2,6 +2,7 @@ import { OptionEditor } from "../components/OptionEditor";
 import { RunPanel } from "../components/RunPanel";
 import { Checkbox } from "../components/ui/Checkbox";
 import { EmptyProject } from "./SetupPage";
+import { useTranslation } from "../lib/i18n";
 import { activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 import type { ConfiguredTask, OptionDefinition, OptionValue } from "../lib/types";
@@ -10,6 +11,7 @@ export function TasksPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const applyPreset = useAppStore((state) => state.applyPreset);
+  const { t } = useTranslation();
   if (!snapshot?.project) return <EmptyProject />;
   const { project, configuration } = snapshot;
   const resource = activeResource(project, configuration);
@@ -47,11 +49,11 @@ export function TasksPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-semibold">Tasks &amp; Run</h1>
+      <h1 className="text-2xl font-semibold">{t("tasksAndRun")}</h1>
       <RunPanel />
       {project.presets.length > 0 && (
         <section className="space-y-2">
-          <h2 className="font-medium">Presets</h2>
+          <h2 className="font-medium">{t("presets")}</h2>
           <div className="flex flex-wrap gap-2">
             {project.presets.map((preset) => (
               <button
@@ -67,7 +69,7 @@ export function TasksPage() {
         </section>
       )}
       <section className="space-y-3">
-        <h2 className="font-medium">{activeRun?.name ?? "Default"}</h2>
+        <h2 className="font-medium">{activeRun?.name ?? t("defaultRunName")}</h2>
         {project.tasks.map((task) => {
           const configured = ensureTask(task.name);
           const unavailable =
@@ -99,12 +101,12 @@ export function TasksPage() {
                     setTask(task.name, (item) => ({ ...item, enabled: next }))
                   }
                 >
-                  On
+                  {t("toggleOn")}
                 </Checkbox>
               </div>
               {unavailable && (
                 <p className="mt-2 text-sm text-[var(--text-muted)]">
-                  Requires a different controller or resource.
+                  {t("requiresOtherController")}
                 </p>
               )}
               {!unavailable && task.options.length > 0 && (

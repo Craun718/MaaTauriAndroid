@@ -319,6 +319,7 @@ mod tests {
             schema_version: 1,
             initialized: true,
             force_stop_target_app: false,
+            ui_language: Default::default(),
             active_controller: None,
             active_resource: None,
             global_option_values: BTreeMap::new(),

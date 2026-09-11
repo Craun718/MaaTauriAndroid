@@ -1,15 +1,17 @@
 import { NavLink } from "react-router-dom";
 import { FolderOpen, Home, ListChecks, Settings } from "lucide-react";
+import { useTranslation } from "../lib/i18n";
 import type { ReactNode } from "react";
 
-const navigation = [
-  { to: "/", label: "Home", icon: Home },
-  { to: "/setup", label: "Setup", icon: FolderOpen },
-  { to: "/tasks", label: "Tasks", icon: ListChecks },
-  { to: "/settings", label: "More", icon: Settings },
-];
-
 export function AppShell({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  const navigation = [
+    { to: "/", label: t("navHome"), icon: Home },
+    { to: "/setup", label: t("navSetup"), icon: FolderOpen },
+    { to: "/tasks", label: t("navTasks"), icon: ListChecks },
+    { to: "/settings", label: t("navMore"), icon: Settings },
+  ];
+
   return (
     <div className="mx-auto flex h-full w-full max-w-md flex-col">
       <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5">{children}</main>

@@ -1,13 +1,16 @@
 import { useId } from "react";
 import { OptionEditor } from "../components/OptionEditor";
 import { RadioGroup } from "../components/ui/RadioGroup";
+import { useTranslation } from "../lib/i18n";
 import { activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
+import type { MessageKey } from "../lib/i18n";
 import type { UserConfiguration } from "../lib/types";
 
 export function SetupPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
+  const { t } = useTranslation();
   const controllerLabelId = useId();
   if (!snapshot?.project) return <EmptyProject />;
   const { project, configuration } = snapshot;
@@ -19,10 +22,10 @@ export function SetupPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-semibold">Setup</h1>
+      <h1 className="text-2xl font-semibold">{t("setup")}</h1>
       <section className="space-y-3">
         <h2 className="font-medium" id={controllerLabelId}>
-          Controller
+          {t("controller")}
         </h2>
         <RadioGroup
           className="space-y-3"
@@ -45,16 +48,16 @@ export function SetupPage() {
         />
       </section>
       <section className="space-y-3">
-        <h2 className="font-medium">Resource</h2>
+        <h2 className="font-medium">{t("resource")}</h2>
         <div className="flex min-h-14 w-full flex-col rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-left">
-          <span className="font-medium">{resource?.label ?? "Unavailable"}</span>
+          <span className="font-medium">{resource?.label ?? t("unavailable")}</span>
           <span className="text-sm text-[var(--text-muted)]">
-            {resource?.paths.join(", ") ?? "No resources are declared."}
+            {resource?.paths.join(", ") ?? t("noResources")}
           </span>
         </div>
       </section>
       <ScopedOptions
-        title="Global"
+        title="globalOptions"
         names={project.globalOptions}
         values={configuration.globalOptionValues}
         onChange={(name, value) =>
@@ -65,7 +68,7 @@ export function SetupPage() {
         }
       />
       <ScopedOptions
-        title="Resource options"
+        title="resourceOptions"
         names={resource?.options ?? []}
         values={configuration.resourceOptionValues[resource?.name ?? ""] ?? {}}
         onChange={(name, value) =>
@@ -91,16 +94,17 @@ function ScopedOptions({
   values,
   onChange,
 }: {
-  title: string;
+  title: MessageKey;
   names: string[];
   values: Record<string, import("../lib/types").OptionValue>;
   onChange: (name: string, value: import("../lib/types").OptionValue) => void;
 }) {
   const project = useAppStore((state) => state.snapshot?.project);
+  const { t } = useTranslation();
   if (names.length === 0) return null;
   return (
     <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-      <h2 className="font-medium">{title}</h2>
+      <h2 className="font-medium">{t(title)}</h2>
       {names.map((name) => {
         const option = project?.options[name];
         if (!option) return null;
@@ -118,10 +122,11 @@ function ScopedOptions({
 }
 
 export function EmptyProject() {
+  const { t } = useTranslation();
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Project</h1>
-      <p className="mt-2 text-[var(--text-muted)]">Load a project from Settings.</p>
+      <h1 className="text-2xl font-semibold">{t("project")}</h1>
+      <p className="mt-2 text-[var(--text-muted)]">{t("loadProjectHint")}</p>
     </div>
   );
 }

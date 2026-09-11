@@ -24,7 +24,6 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/run" element={<Navigate to="/tasks" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -47,7 +47,7 @@ export function TasksPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-semibold">Tasks</h1>
+      <h1 className="text-2xl font-semibold">Tasks &amp; Run</h1>
       <RunPanel />
       {project.presets.length > 0 && (
         <section className="space-y-2">

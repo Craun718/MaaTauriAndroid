@@ -80,7 +80,7 @@ describe("App", () => {
     render(<App />);
     expect(await screen.findByText("MaaTauriAndroid Fixture")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Tasks" }));
-    expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tasks & Run" })).toBeInTheDocument();
   });
 
   it("shows the run controls and the task list in the same panel", async () => {

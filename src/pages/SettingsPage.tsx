@@ -6,7 +6,7 @@ import { SegmentGroup } from "../components/ui/SegmentGroup";
 import { TextField } from "../components/ui/TextField";
 import { clearDiagnosticData, getPrivilegedStatus } from "../lib/api";
 import { projectLanguage, useTranslation } from "../lib/i18n";
-import { activeResource, defaultOptionValue } from "../lib/options";
+import { activeResource, defaultOptionValue, visibleOptions } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 import type { MessageKey } from "../lib/i18n";
 import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
@@ -199,19 +199,24 @@ function ScopedOptions({
   const project = useAppStore((state) => state.snapshot?.project);
   const { t } = useTranslation();
   if (names.length === 0) return null;
+  const definitions = project?.options ?? {};
   return (
     <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
       <h2 className="font-medium">{t(title)}</h2>
-      {names.map((name) => {
-        const option = project?.options[name];
+      {visibleOptions(definitions, names, values).map(({ name, depth }) => {
+        const option = definitions[name];
         if (!option) return null;
         return (
-          <OptionEditor
+          <div
             key={name}
-            option={option}
-            value={defaultOptionValue(option, values[name])}
-            onChange={(value) => onChange(name, value)}
-          />
+            className={depth > 0 ? "border-l-2 border-[var(--border)] pl-3" : undefined}
+          >
+            <OptionEditor
+              option={option}
+              value={defaultOptionValue(option, values[name])}
+              onChange={(value) => onChange(name, value)}
+            />
+          </div>
         );
       })}
     </section>

@@ -27,7 +27,7 @@
 本地可用（仅用于开发与格式化，不作为验证手段）：
 
 - `scripts/setup.sh`：初始化子模块、下载 MaaFramework 二进制并构建 agent runtime ZIP。
-- `pnpm install`：安装 Node 依赖。包管理器统一用 **pnpm 11**（与 CI 一致，`corepack pnpm@11`）；本机 node_modules 由 pnpm 11 的 store 链接，用 pnpm 10 会报 `ERR_PNPM_UNEXPECTED_STORE`。
+- `pnpm install`：安装 Node 依赖。包管理器统一用 **pnpm 11**（与 CI 一致，`corepack pnpm@11`）。
 - `pnpm dev`：启动 Vite 前端开发服务器。
 - `cargo fmt --manifest-path src-tauri/Cargo.toml`：格式化 Rust 代码。
 
@@ -65,10 +65,7 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
    在 GitHub Actions 的 run 页面直接下载，或 `gh run download <run-id> -n m9a-apk-debug`。
 3. 报告真机结论时写明对应的 CI run 编号/链接与 artifact 名，便于复核。
 
-两条装机注意事项：
-
-- **签名**：`m9a-android` 里有一个 `android-debug-keystore-v1` 的 `actions/cache` 步骤，但它**一次都没生效过**。job 结束时 `~/.android/debug.keystore` 并不存在，Post 步骤报 `Path Validation Error: Path(s) specified in the action for caching do(es) not exist, hence no cache is being saved.`（见 run `34658808395` 的 `m9a-android` 日志），Actions 的缓存列表里也确实查不到这个 key。结果是 AGP 每次运行都重新生成密钥，**每个 CI 产物的签名都不同**：`adb install -r` 必然报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，只能先 `adb uninstall` 再装，此时 app 私有数据（`configuration.json` 里的运行配置、Keystore 里的密码）会丢。装机前先看一眼 `secretManifest` 是否为空，别把密码一起卸掉。
-- **HyperOS**：HyperOS 2 / Android 16 上 `adb install` 会在手机端弹确认框，**息屏时该确认会被自动取消**，表现为 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`。装机前先 `adb shell input keyevent KEYCODE_WAKEUP` 唤醒屏幕（锁屏则需先解锁），再执行安装。
+装机注意：`m9a-android` 目前每次构建都会重新生成 debug 密钥（`android-debug-keystore-v1` 缓存步骤不生效），所以**不同 CI 产物的签名互不相同**。`adb install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，只能先 `adb uninstall` 再装；卸载会清掉 app 私有数据（`configuration.json` 里的运行配置、Keystore 里的密码），动手前先确认 `secretManifest` 是否为空。
 
 ## 代码风格
 

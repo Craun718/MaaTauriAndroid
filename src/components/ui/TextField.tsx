@@ -6,10 +6,13 @@ interface TextFieldProps {
   onValueChange: (value: string) => void;
   label?: ReactNode;
   type?: "text" | "password";
+  inputMode?: "text" | "numeric";
   placeholder?: string;
   disabled?: boolean;
   ariaLabel?: string;
   className?: string;
+  error?: ReactNode;
+  description?: ReactNode;
 }
 
 /**
@@ -21,21 +24,27 @@ export function TextField({
   onValueChange,
   label,
   type = "text",
+  inputMode,
   placeholder,
   disabled,
   ariaLabel,
   className,
+  error,
+  description,
 }: TextFieldProps) {
   return (
     <Field.Root className={className} disabled={disabled}>
       {label && <Field.Label>{label}</Field.Label>}
       <Field.Input
         type={type}
+        inputMode={inputMode}
         value={value}
         placeholder={placeholder}
         aria-label={ariaLabel}
         onChange={(event) => onValueChange(event.target.value)}
       />
+      {error && <Field.ErrorText>{error}</Field.ErrorText>}
+      {description && <Field.HelperText>{description}</Field.HelperText>}
     </Field.Root>
   );
 }

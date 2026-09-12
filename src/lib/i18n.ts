@@ -35,10 +35,12 @@ const en = {
   noResources: "No resources are declared.",
   globalOptions: "Global options",
   resourceOptions: "Resource options",
+  invalidInput: "Invalid value",
 
   // Tasks
   tasksAndRun: "Tasks & Run",
   presets: "Presets",
+  ungroupedTasks: "Ungrouped",
   toggleOn: "On",
   requiresOtherController: "Requires a different controller or resource.",
 
@@ -106,9 +108,11 @@ const zh: Record<MessageKey, string> = {
   noResources: "未声明资源。",
   globalOptions: "全局选项",
   resourceOptions: "资源选项",
+  invalidInput: "输入不合法",
 
   tasksAndRun: "任务与运行",
   presets: "预设",
+  ungroupedTasks: "未分组",
   toggleOn: "启用",
   requiresOtherController: "需要其他控制器或资源。",
 

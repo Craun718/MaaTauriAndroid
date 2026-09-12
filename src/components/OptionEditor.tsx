@@ -1,6 +1,9 @@
 import type { OptionDefinition, OptionValue } from "../lib/types";
 import { defaultOptionValue, switchCases } from "../lib/options";
+import { useTranslation } from "../lib/i18n";
+import { RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
+import { RadioGroup } from "./ui/RadioGroup";
 import { SegmentGroup } from "./ui/SegmentGroup";
 import { TextField } from "./ui/TextField";
 
@@ -11,6 +14,8 @@ interface OptionEditorProps {
 }
 
 export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
+  const { t } = useTranslation();
+
   if (option.kind === "switch") {
     // A switch is one boolean, not a choice of two labels: the protocol fixes
     // it at two cases, one named Yes and one No. So it renders as a single
@@ -32,26 +37,59 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
           >
             {option.label}
           </Checkbox>
-          {option.description && (
-            <p className="text-sm text-[var(--text-muted)]">{option.description}</p>
-          )}
+          <RichDescription text={option.description} />
         </div>
       );
     }
   }
 
-  if (option.kind === "select" || option.kind === "switch") {
-    // `select`, plus the switch that is not a Yes/No pair — a malformed one, or
-    // a project that named its cases itself. Listing them is all we can do: we
-    // have no way to say which one is the "on" position.
+  if (option.kind === "select") {
+    // PI protocol calls this a "下拉选项框" (dropdown): the user picks exactly
+    // one case. A vertical radio list reads better than a horizontal pill row
+    // when the project declares many cases.
+    const selected = value?.type === "single" ? value.case : option.defaultCase;
+    return (
+      <div className="space-y-3">
+        <div>
+          <p id={`option-label-${option.name}`} className="font-medium">{option.label}</p>
+          <RichDescription text={option.description} />
+        </div>
+        <RadioGroup
+          labelledBy={`option-label-${option.name}`}
+          value={selected}
+          items={option.cases.map((item) => ({
+            value: item.name,
+            content: (
+              <div className="min-w-0">
+                <p className="font-medium">{item.label}</p>
+                <RichDescription text={item.description} />
+              </div>
+            ),
+          }))}
+          onValueChange={(caseName) => onChange({ type: "single", case: caseName })}
+        />
+      </div>
+    );
+  }
+
+  if (option.kind === "switch") {
+    // A switch that is not a Yes/No pair — a malformed one, or a project that
+    // named its cases itself. Listing them is all we can do: we have no way to
+    // say which one is the "on" position.
     const selected = value?.type === "single" ? value.case : option.defaultCase;
     return (
       <SegmentGroup
         label={option.label}
-        description={option.description}
+        description={option.description ? <RichDescription text={option.description} /> : undefined}
         value={selected}
         columns={Math.min(option.cases.length, 3)}
-        items={option.cases.map((item) => ({ value: item.name, label: item.label }))}
+        items={option.cases.map((item) => ({
+          value: item.name,
+          label: item.label,
+          description: item.description ? (
+            <RichDescription text={item.description} className="text-xs" />
+          ) : undefined,
+        }))}
         onValueChange={(caseName) => onChange({ type: "single", case: caseName })}
       />
     );
@@ -63,9 +101,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
       <div className="space-y-3">
         <div>
           <p className="font-medium">{option.label}</p>
-          {option.description && (
-            <p className="text-sm text-[var(--text-muted)]">{option.description}</p>
-          )}
+          <RichDescription text={option.description} />
         </div>
         <div className="space-y-2">
           {option.cases.map((item) => {
@@ -84,7 +120,10 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
                   });
                 }}
               >
-                {item.label}
+                <span className="flex flex-col items-start gap-0.5 text-left">
+                  <span className="font-medium">{item.label}</span>
+                  <RichDescription text={item.description} className="text-xs" />
+                </span>
               </Checkbox>
             );
           })}
@@ -99,30 +138,74 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
     description?: string;
     default?: string;
     password?: boolean;
+    pipelineType?: "string" | "int" | "bool";
+    verify?: string;
+    patternMessage?: string;
   }> = option.kind === "input" ? option.inputs : option.hotkeys;
   const values = value?.type === "inputs" ? value.values : {};
   return (
     <div className="space-y-3">
       <div>
         <p className="font-medium">{option.label}</p>
-        {option.description && (
-          <p className="text-sm text-[var(--text-muted)]">{option.description}</p>
-        )}
+        <RichDescription text={option.description} />
       </div>
-      {fields.map((field) => (
-        <TextField
-          key={field.name}
-          label={field.label}
-          type={option.kind === "input" && field.password ? "password" : "text"}
-          value={values[field.name] ?? field.default ?? ""}
-          onValueChange={(next) =>
-            onChange({
-              type: "inputs",
-              values: { ...values, [field.name]: next },
-            })
-          }
-        />
-      ))}
+      {fields.map((field) => {
+        if (option.kind === "input" && field.pipelineType === "bool") {
+          const checked = (values[field.name] ?? field.default) === "true";
+          return (
+            <Checkbox
+              key={field.name}
+              className="min-h-11 gap-3 rounded-md border border-[var(--border)] px-3"
+              checked={checked}
+              onCheckedChange={(next) =>
+                onChange({
+                  type: "inputs",
+                  values: { ...values, [field.name]: next ? "true" : "false" },
+                })
+              }
+            >
+              <span className="flex flex-col items-start gap-0.5 text-left">
+                <span>{field.label}</span>
+                <RichDescription text={field.description} className="text-xs" />
+              </span>
+            </Checkbox>
+          );
+        }
+        const current = values[field.name] ?? field.default ?? "";
+        const patternError =
+          option.kind === "input" && field.verify && current.length > 0
+            ? matchesPattern(current, field.verify)
+              ? undefined
+              : field.patternMessage ?? t("invalidInput")
+            : undefined;
+        return (
+          <TextField
+            key={field.name}
+            label={field.label}
+            type={option.kind === "input" && field.password ? "password" : "text"}
+            inputMode={option.kind === "input" && field.pipelineType === "int" ? "numeric" : undefined}
+            value={current}
+            error={patternError}
+            description={
+              field.description ? <RichDescription text={field.description} /> : undefined
+            }
+            onValueChange={(next) =>
+              onChange({
+                type: "inputs",
+                values: { ...values, [field.name]: next },
+              })
+            }
+          />
+        );
+      })}
     </div>
   );
+}
+
+function matchesPattern(value: string, pattern: string): boolean {
+  try {
+    return new RegExp(pattern).test(value);
+  } catch {
+    return true;
+  }
 }

@@ -577,7 +577,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
             runtime::set_execution_result(
                 Some(logger.execution_id()),
                 runtime::RunState::Idle,
-                message,
+                message.clone(),
             );
             telemetry::run_event("failed", &message, None);
             telemetry::run_finished("failed");

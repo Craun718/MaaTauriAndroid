@@ -61,7 +61,9 @@ describe("VirtualDisplayCard", () => {
 
     render(<VirtualDisplayCard />);
     expect(await screen.findByText("1280 x 720")).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    const start = await screen.findByRole("button", { name: "Start" });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
 
     expect(await screen.findByText("Display ID: 12")).toBeInTheDocument();
     await waitFor(() =>
@@ -75,7 +77,9 @@ describe("VirtualDisplayCard", () => {
 
     render(<VirtualDisplayCard />);
     expect(await screen.findByText("1280 x 720")).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    const start = await screen.findByRole("button", { name: "Start" });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
 
     expect(await screen.findByText("Start failed")).toBeInTheDocument();
   });

@@ -100,6 +100,8 @@ describe("App", () => {
 
   it("keeps project-level settings in one tab", async () => {
     render(<App />);
+    expect(await screen.findByText("MaaTauriAndroid Fixture")).toBeInTheDocument();
+
     // The setup page is gone: nothing to configure separately from Settings.
     expect(screen.queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "More" })).not.toBeInTheDocument();
@@ -107,7 +109,9 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("link", { name: "Settings" }));
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
-    // The resource section moved here from the removed setup page.
+    fireEvent.click(screen.getByRole("link", { name: "Home" }));
+
+    // The resource summary moved from the removed setup page to Home.
     expect(screen.getByRole("heading", { name: "Resource" })).toBeInTheDocument();
     expect(screen.getByText("resource/base")).toBeInTheDocument();
   });

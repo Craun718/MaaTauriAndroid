@@ -32,11 +32,13 @@ class MainActivity : TauriActivity() {
         resources.displayMetrics.heightPixels,
     )
     controlClient = ControlServiceClient(this)
+    RuntimeBridge.attachControlClient(controlClient)
     controlClient.connect()
     super.onCreate(savedInstanceState)
   }
 
   override fun onDestroy() {
+    RuntimeBridge.detachControlClient(controlClient)
     controlClient.disconnect()
     super.onDestroy()
   }

@@ -1,24 +1,24 @@
 import { useEffect, useState } from "react";
-import { CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
-import { getPrivilegedStatus, resolveCurrent } from "../lib/api";
+import { CircleAlert, RefreshCw } from "lucide-react";
+import { RichDescription } from "../components/RichDescription";
+import { resolveCurrent } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { ResolvedRun } from "../lib/types";
 import { activeController, activeResource, activeRun, configuredTask } from "../lib/options";
+import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
 import { useAppStore } from "../store/appStore";
 
 export function HomePage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
   const [run, setRun] = useState<ResolvedRun>();
-  const [privileged, setPrivileged] = useState<string>();
   const [error, setError] = useState<string>();
   const { t } = useTranslation();
 
   async function refresh() {
     try {
-      const [nextRun, status] = await Promise.all([resolveCurrent(), getPrivilegedStatus()]);
+      const nextRun = await resolveCurrent();
       setRun(nextRun);
-      setPrivileged(status.message);
       setError(undefined);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -86,13 +86,18 @@ export function HomePage() {
         </dl>
       </section>
 
-      <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-        <div className="flex items-center gap-2">
-          <ShieldAlert size={18} className="text-amber-500" />
-          <h2 className="font-medium">{t("privilegedHost")}</h2>
+      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+        <h2 className="font-medium">{t("resource")}</h2>
+        <div className="flex min-h-14 w-full flex-col rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-left">
+          <span className="font-medium">{resource?.label ?? t("unavailable")}</span>
+          <RichDescription text={resource?.description} />
+          <span className="break-all text-sm text-[var(--text-muted)]">
+            {resource?.paths.join(", ") ?? t("noResources")}
+          </span>
         </div>
-        <p className="mt-2 text-sm text-[var(--text-muted)]">{privileged ?? t("checking")}</p>
       </section>
+
+      <PrivilegeStatusCard title="privilegedHost" />
 
       {error && (
         <section className="flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">

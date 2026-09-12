@@ -1,7 +1,11 @@
 package top.natsuu.mta
 
 import android.content.Context
+import android.content.Intent
+import android.os.Handler
 import android.os.ParcelFileDescriptor
+import android.os.Looper
+import top.natsuu.mta.control.ControlServiceClient
 
 object RuntimeBridge {
     init {
@@ -11,6 +15,11 @@ object RuntimeBridge {
     @Volatile
     private var agentContext: Context? = null
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile
+    private var controlClient: ControlServiceClient? = null
+
     @JvmStatic
     fun attachContext(context: Context) {
         agentContext = context.applicationContext
@@ -18,6 +27,37 @@ object RuntimeBridge {
 
     @JvmStatic
     fun agentBridgeContext(): Any? = agentContext
+
+    @JvmStatic
+    fun attachControlClient(client: ControlServiceClient) {
+        controlClient = client
+    }
+
+    @JvmStatic
+    fun detachControlClient(client: ControlServiceClient) {
+        if (controlClient === client) {
+            controlClient = null
+        }
+    }
+
+    @JvmStatic
+    fun requestPrivilegedAccess(): Boolean {
+        val client = controlClient ?: return false
+        mainHandler.post { client.connect() }
+        return true
+    }
+
+    @JvmStatic
+    fun openShizuku(): Boolean {
+        val context = agentContext ?: return false
+        val intent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
+            ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching {
+            context.startActivity(intent)
+            true
+        }.getOrDefault(false)
+    }
 
     @JvmStatic
     fun agentDescriptor(): String? {
@@ -59,4 +99,6 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun setBootstrapProjectRoot(projectRoot: String)
+
+    private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 }

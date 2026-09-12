@@ -205,6 +205,15 @@ export interface AppStateSnapshot {
   projectPath?: string;
 }
 
+export type PrivilegedStatus =
+  | { status: "starting"; message: string; setupRequired: string[] }
+  | { status: "connected"; message: string }
+  | {
+      status: "permissionRequired" | "notInstalled" | "disconnected" | "error";
+      message: string;
+      setupRequired: string[];
+    };
+
 export interface ResolvedTask {
   task: TaskDefinition;
   configured?: ConfiguredTask;

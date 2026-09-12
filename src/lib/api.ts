@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppStateSnapshot,
   DiagnosticExport,
+  PrivilegedStatus,
   ResolvedRun,
   RunState,
   UserConfiguration,
@@ -28,7 +29,15 @@ export async function resolveCurrent() {
 }
 
 export async function getPrivilegedStatus() {
-  return invoke<{ message: string; setupRequired: string[] }>("privileged_status");
+  return invoke<PrivilegedStatus>("privileged_status");
+}
+
+export async function requestPrivilegedAccess() {
+  return invoke<void>("request_privileged_access");
+}
+
+export async function openShizuku() {
+  return invoke<void>("open_shizuku");
 }
 
 export async function getRunStatus() {

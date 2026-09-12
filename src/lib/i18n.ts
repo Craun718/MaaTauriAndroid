@@ -30,6 +30,28 @@ const en = {
   refreshStatus: "Refresh status",
   enabledTasks: "{count} tasks",
   privilegedHost: "Privileged host",
+  permissionGranted: "Granted",
+  permissionRequiredStatus: "Required",
+  shizuku: "Shizuku",
+  shizukuOffline: "Offline",
+  privilegedStarting: "Connecting",
+  privilegedDisconnected: "Disconnected",
+  privilegedError: "Error",
+  privilegedConnectedDescription:
+    "The privileged control unit is connected and ready to run tasks.",
+  shizukuPermissionDescription:
+    "Shizuku is running, but this app still needs authorization. Request access, then approve it in the Shizuku prompt.",
+  shizukuNotInstalledDescription:
+    "Shizuku is not running. Install or open Shizuku, start its service, then return here to retry.",
+  privilegedStartingDescription:
+    "Connecting to the privileged control unit through Shizuku.",
+  privilegedDisconnectedDescription:
+    "The privileged control unit is no longer connected. Restart Shizuku if needed, then retry.",
+  privilegedErrorDescription:
+    "The privileged control unit failed to start. Check Shizuku and the Android service logs, then retry.",
+  requestPermission: "Request",
+  openShizuku: "Open Shizuku",
+  retryConnection: "Retry",
 
   // Settings, project scope
   noResources: "No resources are declared.",
@@ -155,6 +177,24 @@ const zh: Record<MessageKey, string> = {
   deleteRunsConfirm: "要删除全部运行目录吗？其中的诊断导出也会一并删除。",
   deletedRuns: "已删除 {count} 个运行目录",
   privileges: "权限",
+  permissionGranted: "已授权",
+  permissionRequiredStatus: "未授权",
+  shizuku: "Shizuku",
+  shizukuOffline: "未运行",
+  privilegedStarting: "连接中",
+  privilegedDisconnected: "已断开",
+  privilegedError: "错误",
+  privilegedConnectedDescription: "特权控制单元已连接，可以运行任务。",
+  shizukuPermissionDescription:
+    "Shizuku 正在运行，但尚未授权本应用。请先请求权限，并在 Shizuku 弹窗中完成授权。",
+  shizukuNotInstalledDescription:
+    "Shizuku 未运行。请安装或打开 Shizuku 并启动服务，然后回到这里重试。",
+  privilegedStartingDescription: "正在通过 Shizuku 连接特权控制单元。",
+  privilegedDisconnectedDescription: "特权控制单元已断开。如需要请重启 Shizuku，然后重试。",
+  privilegedErrorDescription: "特权控制单元启动失败。请检查 Shizuku 和 Android 服务日志，然后重试。",
+  requestPermission: "请求权限",
+  openShizuku: "打开 Shizuku",
+  retryConnection: "重试",
 };
 
 const catalog: Record<AppLanguage, Record<MessageKey, string>> = { en, zh };

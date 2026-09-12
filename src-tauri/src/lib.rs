@@ -239,6 +239,10 @@ fn default_run_configuration(project: &Project, name: &str) -> RunConfiguration 
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 enum PrivilegedStatus {
+    Starting {
+        message: String,
+        setup_required: Vec<String>,
+    },
     Connected {
         message: String,
     },
@@ -461,11 +465,70 @@ fn privileged_status() -> Result<PrivilegedStatus, AppError> {
             message,
             setup_required: vec!["Check Shizuku and the Android service logs".to_string()],
         }),
-        _ => Ok(PrivilegedStatus::Disconnected {
+        _ => Ok(PrivilegedStatus::Starting {
             message,
             setup_required: vec!["Wait for the control unit to connect".to_string()],
         }),
     }
+}
+
+#[tauri::command]
+fn request_privileged_access() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        if call_runtime_bridge_boolean("requestPrivilegedAccess")? {
+            Ok(())
+        } else {
+            Err(AppError::Message(
+                "The Android control client is not initialized".to_string(),
+            ))
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Err(AppError::Message(
+            "Privileged access can only be requested on Android".to_string(),
+        ))
+    }
+}
+
+#[tauri::command]
+fn open_shizuku() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        if call_runtime_bridge_boolean("openShizuku")? {
+            Ok(())
+        } else {
+            Err(AppError::Message(
+                "Shizuku is not installed or cannot be opened".to_string(),
+            ))
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Err(AppError::Message(
+            "Shizuku can only be opened on Android".to_string(),
+        ))
+    }
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method("top/natsuu/mta/RuntimeBridge", method, "()Z", &[])
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    result
+        .z()
+        .map_err(|error| AppError::Message(error.to_string()))
 }
 
 #[tauri::command]
@@ -960,6 +1023,19 @@ mod tests {
         normalize_configuration(&project, &mut persisted);
         assert!(!persisted.telemetry_enabled);
     }
+
+    #[test]
+    #[cfg(not(target_os = "android"))]
+    fn privileged_actions_are_unsupported_off_android() {
+        assert!(matches!(
+            request_privileged_access(),
+            Err(AppError::Message(message)) if message.contains("only be requested on Android")
+        ));
+        assert!(matches!(
+            open_shizuku(),
+            Err(AppError::Message(message)) if message.contains("only be opened on Android")
+        ));
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -1041,6 +1117,8 @@ pub fn run() {
             resolve_current,
             reset_task_parameters,
             privileged_status,
+            request_privileged_access,
+            open_shizuku,
             start_run,
             run_status,
             stop_run,

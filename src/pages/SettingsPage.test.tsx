@@ -9,6 +9,8 @@ const saveConfiguration = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getPrivilegedStatus: () => getPrivilegedStatus(),
+  requestPrivilegedAccess: vi.fn(),
+  openShizuku: vi.fn(),
   saveConfiguration: (configuration: unknown) => saveConfiguration(configuration),
   loadProject: vi.fn(),
   clearDiagnosticData: vi.fn(),
@@ -58,7 +60,15 @@ const project: Project = {
   },
   globalOptions: [],
   presets: [],
-  metadata: { welcome: [] },
+  metadata: {
+    welcome: [],
+    telemetry: {
+      dsn: "https://key@sentry.test/1",
+      tracing: true,
+      tracesSampleRate: 1,
+      failureAttachmentsSampleRate: 1,
+    },
+  },
 };
 
 const configuration: UserConfiguration = {
@@ -73,6 +83,11 @@ const configuration: UserConfiguration = {
   runConfigurations: [],
 };
 
+const projectWithoutTelemetry: Project = {
+  ...project,
+  metadata: { ...project.metadata, telemetry: undefined },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   const snapshot: AppStateSnapshot = { project, configuration };
@@ -82,14 +97,13 @@ beforeEach(() => {
 });
 
 describe("project scope in settings", () => {
-  it("shows the resource the project resolves to, and nothing to pick", () => {
+  it("keeps resource options without the directory and resource summary cards", () => {
     render(<SettingsPage />);
 
-    expect(screen.getByRole("heading", { name: "Resource" })).toBeInTheDocument();
-    expect(screen.getByText("Resource A")).toBeInTheDocument();
-    expect(screen.getByText("resource/base")).toBeInTheDocument();
-    // The second resource is not offered as a choice, so clicking it is a no-op.
-    expect(screen.queryByText("Resource B")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Resource options" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Resource" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Project directory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Project directory" })).not.toBeInTheDocument();
   });
 
   it("saves a resource option change", async () => {
@@ -108,10 +122,23 @@ describe("project scope in settings", () => {
   it("renders resource, option and case descriptions as rich text", () => {
     render(<SettingsPage />);
 
-    expect(screen.getByText("resource").tagName).toBe("STRONG");
     expect(screen.getByText("分辨率").tagName).toBe("STRONG");
     expect(screen.getByText("720").tagName).toBe("STRONG");
     expect(screen.getByRole("radio", { name: /720p/ })).toBeInTheDocument();
+  });
+
+  it("hides telemetry consent when the interface does not declare it", () => {
+    useAppStore.setState({
+      snapshot: { project: projectWithoutTelemetry, configuration },
+    });
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByRole("heading", { name: "Anonymous telemetry" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: /allow anonymous telemetry/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("persists the telemetry consent choice", async () => {

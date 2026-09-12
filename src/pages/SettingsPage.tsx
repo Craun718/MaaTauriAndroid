@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
-import { CircleAlert, FolderInput, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { OptionEditor } from "../components/OptionEditor";
-import { RichDescription } from "../components/RichDescription";
 import { Checkbox } from "../components/ui/Checkbox";
 import { SegmentGroup } from "../components/ui/SegmentGroup";
-import { TextField } from "../components/ui/TextField";
-import { clearDiagnosticData, getPrivilegedStatus } from "../lib/api";
-import { projectLanguage, useTranslation } from "../lib/i18n";
+import { clearDiagnosticData } from "../lib/api";
+import { useTranslation } from "../lib/i18n";
 import { activeResource, defaultOptionValue, visibleOptions } from "../lib/options";
+import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
 import { useAppStore } from "../store/appStore";
 import type { MessageKey } from "../lib/i18n";
 import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
@@ -18,20 +17,11 @@ function isUiLanguage(value: string): value is UiLanguage {
 
 export function SettingsPage() {
   const snapshot = useAppStore((state) => state.snapshot);
-  const load = useAppStore((state) => state.loadProject);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const busy = useAppStore((state) => state.busy);
-  const { language, t } = useTranslation();
-  const [path, setPath] = useState(snapshot?.projectPath ?? "");
-  const [status, setStatus] = useState<string>();
+  const { t } = useTranslation();
   const [cleanupStatus, setCleanupStatus] = useState<string>();
   const [cleaning, setCleaning] = useState(false);
-
-  useEffect(() => {
-    getPrivilegedStatus()
-      .then((result) => setStatus(result.message))
-      .catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
-  }, []);
 
   const project = snapshot?.project;
   const resource = project && snapshot ? activeResource(project, snapshot.configuration) : undefined;
@@ -62,44 +52,8 @@ export function SettingsPage() {
           }}
         />
       </section>
-      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-        <h2 className="font-medium">{t("projectDirectory")}</h2>
-        <div className="flex gap-2">
-          <TextField
-            className="min-w-0 flex-1"
-            ariaLabel={t("projectDirectory")}
-            value={path}
-            onValueChange={setPath}
-            placeholder="/storage/emulated/0/MaaTauriAndroid"
-          />
-          <button
-            type="button"
-            disabled={!path || busy}
-            onClick={() => void load(path, projectLanguage(language))}
-            className="flex h-11 w-11 items-center justify-center rounded-md bg-[var(--accent)] text-white disabled:opacity-50"
-            aria-label={t("loadProject")}
-          >
-            <FolderInput size={18} />
-          </button>
-        </div>
-        {project && (
-          <p className="text-sm text-[var(--text-muted)]">
-            {project.name} {project.version ?? ""}
-          </p>
-        )}
-      </section>
       {project && snapshot && (
         <>
-          <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-            <h2 className="font-medium">{t("resource")}</h2>
-            <div className="flex min-h-14 w-full flex-col rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-left">
-              <span className="font-medium">{resource?.label ?? t("unavailable")}</span>
-              <RichDescription text={resource?.description} />
-              <span className="break-all text-sm text-[var(--text-muted)]">
-                {resource?.paths.join(", ") ?? t("noResources")}
-              </span>
-            </div>
-          </section>
           <ScopedOptions
             title="globalOptions"
             names={project.globalOptions}
@@ -146,23 +100,25 @@ export function SettingsPage() {
           <span className="font-medium">{t("forceStopTargetApp")}</span>
         </Checkbox>
       </section>
-      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-        <h2 className="font-medium">{t("telemetry")}</h2>
-        <p className="text-sm text-[var(--text-muted)]">{t("telemetryDescription")}</p>
-        <Checkbox
-          className="min-h-12 gap-3"
-          checked={snapshot?.configuration.telemetryEnabled ?? false}
-          disabled={busy || !snapshot}
-          onCheckedChange={(next) => {
-            if (!snapshot) return;
-            const nextConfiguration = structuredClone(snapshot.configuration);
-            nextConfiguration.telemetryEnabled = next;
-            void saveConfiguration(nextConfiguration);
-          }}
-        >
-          <span className="font-medium">{t("telemetryEnabled")}</span>
-        </Checkbox>
-      </section>
+      {project?.metadata.telemetry?.dsn && (
+        <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+          <h2 className="font-medium">{t("telemetry")}</h2>
+          <p className="text-sm text-[var(--text-muted)]">{t("telemetryDescription")}</p>
+          <Checkbox
+            className="min-h-12 gap-3"
+            checked={snapshot?.configuration.telemetryEnabled ?? false}
+            disabled={busy || !snapshot}
+            onCheckedChange={(next) => {
+              if (!snapshot) return;
+              const nextConfiguration = structuredClone(snapshot.configuration);
+              nextConfiguration.telemetryEnabled = next;
+              void saveConfiguration(nextConfiguration);
+            }}
+          >
+            <span className="font-medium">{t("telemetryEnabled")}</span>
+          </Checkbox>
+        </section>
+      )}
       <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <h2 className="font-medium">{t("diagnostics")}</h2>
         <button
@@ -191,13 +147,7 @@ export function SettingsPage() {
         </button>
         {cleanupStatus && <p className="text-sm text-[var(--text-muted)]">{cleanupStatus}</p>}
       </section>
-      <section className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-        <div className="flex items-center gap-2">
-          <CircleAlert size={18} className="text-amber-500" />
-          <h2 className="font-medium">{t("privileges")}</h2>
-        </div>
-        <p className="text-sm text-[var(--text-muted)]">{status ?? t("checking")}</p>
-      </section>
+      <PrivilegeStatusCard title="privileges" />
     </div>
   );
 }

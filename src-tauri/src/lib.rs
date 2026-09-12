@@ -551,7 +551,7 @@ fn request_privileged_access() -> Result<(), AppError> {
             Ok(())
         } else {
             Err(AppError::Message(
-                "The Android control client is not initialized".to_string(),
+                "The Shizuku permission request failed, was denied, or timed out".to_string(),
             ))
         }
     }

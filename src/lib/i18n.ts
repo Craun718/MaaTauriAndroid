@@ -54,7 +54,7 @@ const en = {
     "The privileged control unit is no longer connected. Restart Shizuku if needed, then retry.",
   privilegedErrorDescription:
     "The privileged control unit failed to start. Check Shizuku and the Android service logs, then retry.",
-  requestPermission: "Request",
+  requestPermission: "Request Shizuku permission",
   openShizuku: "Open Shizuku",
   retryConnection: "Retry",
 
@@ -202,7 +202,7 @@ const zh: Record<MessageKey, string> = {
   privilegedStartingDescription: "正在通过 Shizuku 连接特权控制单元。",
   privilegedDisconnectedDescription: "特权控制单元已断开。如需要请重启 Shizuku，然后重试。",
   privilegedErrorDescription: "特权控制单元启动失败。请检查 Shizuku 和 Android 服务日志，然后重试。",
-  requestPermission: "请求权限",
+  requestPermission: "申请 Shizuku 权限",
   openShizuku: "打开 Shizuku",
   retryConnection: "重试",
 };

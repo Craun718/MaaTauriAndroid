@@ -5,6 +5,9 @@ import android.content.Intent
 import android.os.Handler
 import android.os.ParcelFileDescriptor
 import android.os.Looper
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
 
@@ -68,8 +71,15 @@ object RuntimeBridge {
     @JvmStatic
     fun requestPrivilegedAccess(): Boolean {
         val client = controlClient ?: return false
-        mainHandler.post { client.connect() }
-        return true
+        val latch = CountDownLatch(1)
+        val granted = AtomicBoolean(false)
+        mainHandler.post {
+            client.requestPrivilegedAccess { result ->
+                granted.set(result)
+                latch.countDown()
+            }
+        }
+        return latch.await(15, TimeUnit.SECONDS) && granted.get()
     }
 
     @JvmStatic

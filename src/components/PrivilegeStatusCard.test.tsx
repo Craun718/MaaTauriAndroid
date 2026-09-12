@@ -81,7 +81,9 @@ describe("PrivilegeStatusCard", () => {
     expect(
       screen.getByText("The privileged control unit is connected and ready to run tasks."),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Request" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Request Shizuku permission" }),
+    ).not.toBeInTheDocument();
   });
 
   it("requests Shizuku access and refreshes the status", async () => {
@@ -96,7 +98,9 @@ describe("PrivilegeStatusCard", () => {
 
     render(<PrivilegeStatusCard title="privileges" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Request" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Request Shizuku permission" }),
+    );
 
     await waitFor(() => expect(requestPrivilegedAccess).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Granted")).toBeInTheDocument();

@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.os.Handler
+import android.util.Log
 import java.util.UUID
 import rikka.shizuku.Shizuku
 import top.natsuu.mta.IMaaTauriAndroidControlService
@@ -12,7 +14,9 @@ import top.natsuu.mta.RuntimeBridge
 
 class ControlServiceClient(private val context: Context) : ServiceConnection {
     private var bound = false
-    private var started = false
+    private val mainHandler = Handler(context.mainLooper)
+    private var permissionListener: Shizuku.OnRequestPermissionResultListener? = null
+    private var permissionResultCallback: ((Boolean) -> Unit)? = null
     private val serviceArgs = Shizuku.UserServiceArgs(
         ComponentName(context, PrivilegedControlServiceImpl::class.java),
     )
@@ -25,31 +29,22 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         connect()
     }
 
-    private val permissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, _ ->
-        if (requestCode == REQUEST_CODE) {
-            started = false
-            connect()
-        }
-    }
-
     init {
         Shizuku.addBinderReceivedListenerSticky(
             binderReceivedListener,
-            android.os.Handler(context.mainLooper),
-        )
-        Shizuku.addRequestPermissionResultListener(
-            permissionListener,
-            android.os.Handler(context.mainLooper),
+            mainHandler,
         )
     }
 
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
         if (binder == null) {
             RuntimeBridge.setControlState(STATE_ERROR)
+            completePermissionRequest(false)
             return
         }
         ControlHost.attach(IMaaTauriAndroidControlService.Stub.asInterface(binder))
         RuntimeBridge.setControlState(STATE_CONNECTED)
+        completePermissionRequest(true)
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
@@ -57,6 +52,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         stopVirtualDisplaySafely()
         ControlHost.detach()
         RuntimeBridge.setControlState(STATE_DISCONNECTED)
+        completePermissionRequest(false)
     }
 
     fun connect() {
@@ -67,7 +63,6 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         }
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
             RuntimeBridge.setControlState(STATE_PERMISSION_REQUIRED)
-            requestPermission()
             return
         }
         bindService()
@@ -79,10 +74,10 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             Shizuku.unbindUserService(serviceArgs, this, true)
             bound = false
         }
-        started = false
+        removePermissionListener()
+        completePermissionRequest(false)
         ControlHost.detach()
         Shizuku.removeBinderReceivedListener(binderReceivedListener)
-        Shizuku.removeRequestPermissionResultListener(permissionListener)
     }
 
     private fun stopVirtualDisplaySafely() {
@@ -97,20 +92,55 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         }
     }
 
-    private fun requestPermission() {
-        if (started) return
-        started = true
+    fun requestPrivilegedAccess(onResult: (Boolean) -> Unit) {
+        if (!Shizuku.pingBinder()) {
+            RuntimeBridge.setControlState(STATE_SHIZUKU_UNAVAILABLE)
+            onResult(false)
+            return
+        }
+        val permissionGranted =
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        if (permissionGranted || Shizuku.isPreV11()) {
+            permissionResultCallback = onResult
+            bindService()
+            return
+        }
+
+        removePermissionListener()
+        val listener = Shizuku.OnRequestPermissionResultListener { requestCode, result ->
+            if (requestCode == REQUEST_CODE) {
+                removePermissionListener()
+                if (result == PackageManager.PERMISSION_GRANTED) {
+                    permissionResultCallback = onResult
+                    bindService()
+                } else {
+                    RuntimeBridge.setControlState(STATE_PERMISSION_REQUIRED)
+                    onResult(false)
+                }
+            }
+        }
+        permissionListener = listener
+        Shizuku.addRequestPermissionResultListener(listener, mainHandler)
+
         try {
             Shizuku.requestPermission(REQUEST_CODE)
-        } catch (error: IllegalStateException) {
-            started = false
+        } catch (error: Throwable) {
+            Log.w(
+                "MaaTauriAndroidControl",
+                "Could not request Shizuku permission",
+                error,
+            )
+            removePermissionListener()
             RuntimeBridge.setControlState(STATE_ERROR)
-            android.util.Log.w("MaaTauriAndroidControl", "Could not request Shizuku permission", error)
+            onResult(false)
         }
     }
 
     private fun bindService() {
-        if (bound) return
+        if (bound) {
+            completePermissionRequest(true)
+            return
+        }
         RuntimeBridge.setControlState(STATE_STARTING)
         try {
             Shizuku.bindUserService(serviceArgs, this)
@@ -118,8 +148,19 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         } catch (error: Throwable) {
             bound = false
             RuntimeBridge.setControlState(STATE_ERROR)
-            android.util.Log.w("MaaTauriAndroidControl", "Could not bind Shizuku user service", error)
+            Log.w("MaaTauriAndroidControl", "Could not bind Shizuku user service", error)
+            completePermissionRequest(false)
         }
+    }
+
+    private fun removePermissionListener() {
+        permissionListener?.let(Shizuku::removeRequestPermissionResultListener)
+        permissionListener = null
+    }
+
+    private fun completePermissionRequest(result: Boolean) {
+        permissionResultCallback?.invoke(result)
+        permissionResultCallback = null
     }
 
     companion object {

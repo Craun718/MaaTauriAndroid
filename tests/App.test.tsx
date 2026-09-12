@@ -112,9 +112,9 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Home" }));
 
-    // The resource summary moved from the removed setup page to Home.
-    expect(screen.getByRole("heading", { name: "Resource" })).toBeInTheDocument();
-    expect(screen.getByText("resource/base")).toBeInTheDocument();
+    // Resource setup is intentionally separate from project settings.
+    expect(screen.queryByRole("heading", { name: "Resource" })).not.toBeInTheDocument();
+    expect(screen.queryByText("resource/base")).not.toBeInTheDocument();
   });
 
   it("shows the run controls and the task list in the same panel", async () => {
@@ -122,7 +122,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("link", { name: "Tasks" }));
 
     // Run controls, formerly on their own /run page.
-    expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(1);
     // Tasks belonging to the active run configuration, on the same panel.
     expect(screen.getByRole("heading", { name: "Default" })).toBeInTheDocument();
     // The old /run tab is gone.

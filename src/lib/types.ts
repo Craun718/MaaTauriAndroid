@@ -170,12 +170,16 @@ export interface RunConfiguration {
  */
 export type UiLanguage = "system" | "zh" | "en";
 
+/**
+ * What the user configured. There is no controller field: Android can only drive
+ * its own native control unit, so the controller is a property of the platform
+ * (see `activeController` in `lib/options.ts`), not a per-user choice.
+ */
 export interface UserConfiguration {
   schemaVersion: number;
   initialized: boolean;
   forceStopTargetApp: boolean;
   uiLanguage?: UiLanguage;
-  activeController?: string;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;
   controllerOptionValues: Record<string, Record<string, OptionValue>>;

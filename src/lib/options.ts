@@ -73,6 +73,17 @@ export function activeResource(
   );
 }
 
+/**
+ * The controller the app runs. Android only ever drives its native control unit,
+ * so the platform — not the user — decides this, and the loader reports exactly
+ * one entry. Tasks and options still reference it by the name the project
+ * declared, which is why the name lives on the project rather than in the
+ * configuration.
+ */
+export function activeController(project: Project): ControllerDefinition | undefined {
+  return project.controllers[0];
+}
+
 export function projectOption(project: Project | undefined, name: string) {
   return project?.options[name];
 }

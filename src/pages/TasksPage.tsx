@@ -1,9 +1,9 @@
 import { OptionEditor } from "../components/OptionEditor";
 import { RunPanel } from "../components/RunPanel";
+import { EmptyProject } from "../components/EmptyProject";
 import { Checkbox } from "../components/ui/Checkbox";
-import { EmptyProject } from "./SetupPage";
 import { useTranslation } from "../lib/i18n";
-import { activeResource, defaultOptionValue } from "../lib/options";
+import { activeController, activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 import type { ConfiguredTask, OptionDefinition, OptionValue } from "../lib/types";
 
@@ -15,6 +15,7 @@ export function TasksPage() {
   if (!snapshot?.project) return <EmptyProject />;
   const { project, configuration } = snapshot;
   const resource = activeResource(project, configuration);
+  const controller = activeController(project);
   const activeRun = configuration.runConfigurations.find(
     (run) => run.id === configuration.activeRunConfigurationId,
   );
@@ -74,7 +75,7 @@ export function TasksPage() {
           const configured = ensureTask(task.name);
           const unavailable =
             (task.controllers.length > 0 &&
-              !task.controllers.includes(configuration.activeController ?? "")) ||
+              !task.controllers.includes(controller?.name ?? "")) ||
             (task.resources.length > 0 &&
               !task.resources.includes(resource?.name ?? ""));
           return (

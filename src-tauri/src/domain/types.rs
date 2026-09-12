@@ -272,6 +272,11 @@ pub enum UiLanguage {
     En,
 }
 
+/// What the user configured, as opposed to what the project declared.
+///
+/// There is no controller field: Android can only drive its own native control
+/// unit, so the controller is a property of the platform (see
+/// `loader::android_controller`), not something to remember per user.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserConfiguration {
@@ -281,7 +286,6 @@ pub struct UserConfiguration {
     pub force_stop_target_app: bool,
     #[serde(default)]
     pub ui_language: UiLanguage,
-    pub active_controller: Option<String>,
     pub active_resource: Option<String>,
     pub global_option_values: BTreeMap<String, OptionValue>,
     pub controller_option_values: BTreeMap<String, BTreeMap<String, OptionValue>>,
@@ -298,7 +302,6 @@ impl Default for UserConfiguration {
             initialized: false,
             force_stop_target_app: false,
             ui_language: UiLanguage::System,
-            active_controller: None,
             active_resource: None,
             global_option_values: BTreeMap::new(),
             controller_option_values: BTreeMap::new(),

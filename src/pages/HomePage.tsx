@@ -3,7 +3,7 @@ import { CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
 import { getPrivilegedStatus, resolveCurrent } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { ResolvedRun } from "../lib/types";
-import { activeResource, activeRun, configuredTask } from "../lib/options";
+import { activeController, activeResource, activeRun, configuredTask } from "../lib/options";
 import { useAppStore } from "../store/appStore";
 
 export function HomePage() {
@@ -65,7 +65,11 @@ export function HomePage() {
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
           <div>
             <dt className="text-[var(--text-muted)]">{t("controller")}</dt>
-            <dd>{run?.controller.label ?? configuration.activeController}</dd>
+            <dd>
+              {run?.controller.label ??
+                activeController(project)?.label ??
+                t("unavailable")}
+            </dd>
           </div>
           <div>
             <dt className="text-[var(--text-muted)]">{t("resource")}</dt>
@@ -92,8 +96,8 @@ export function HomePage() {
 
       {error && (
         <section className="flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">
-          <CircleAlert size={18} />
-          <span>{error}</span>
+          <CircleAlert size={18} className="shrink-0" />
+          <span className="min-w-0 break-all">{error}</span>
         </section>
       )}
       {busy && <p className="text-sm text-[var(--text-muted)]">{t("saving")}</p>}

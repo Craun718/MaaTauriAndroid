@@ -34,7 +34,9 @@ const snapshot: AppStateSnapshot = {
     label: "MaaTauriAndroid Fixture",
     language: "en_us",
     languages: ["en_us"],
-    controllers: [{ name: "Android", label: "Android", controllerType: "Adb" }],
+    controllers: [
+      { name: "Android", label: "Android", controllerType: "AndroidNative" },
+    ],
     resources: [
       {
         name: "base",
@@ -81,6 +83,20 @@ describe("App", () => {
     expect(await screen.findByText("MaaTauriAndroid Fixture")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Tasks" }));
     expect(screen.getByRole("heading", { name: "Tasks & Run" })).toBeInTheDocument();
+  });
+
+  it("keeps project-level settings in one tab", async () => {
+    render(<App />);
+    // The setup page is gone: nothing to configure separately from Settings.
+    expect(screen.queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "More" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    // The resource section moved here from the removed setup page.
+    expect(screen.getByRole("heading", { name: "Resource" })).toBeInTheDocument();
+    expect(screen.getByText("resource/base")).toBeInTheDocument();
   });
 
   it("shows the run controls and the task list in the same panel", async () => {

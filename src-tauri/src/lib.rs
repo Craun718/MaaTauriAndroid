@@ -173,13 +173,6 @@ impl AppState {
 
 fn normalize_configuration(project: &Project, configuration: &mut UserConfiguration) {
     if !project
-        .controllers
-        .iter()
-        .any(|controller| Some(&controller.name) == configuration.active_controller.as_ref())
-    {
-        configuration.active_controller = project.controllers.first().map(|item| item.name.clone());
-    }
-    if !project
         .resources
         .iter()
         .any(|resource| Some(&resource.name) == configuration.active_resource.as_ref())

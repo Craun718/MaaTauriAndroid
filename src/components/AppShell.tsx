@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { FolderOpen, Home, ListChecks, Settings } from "lucide-react";
+import { Home, ListChecks, Settings } from "lucide-react";
 import { useTranslation } from "../lib/i18n";
 import type { ReactNode } from "react";
 
@@ -7,14 +7,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const navigation = [
     { to: "/", label: t("navHome"), icon: Home },
-    { to: "/setup", label: t("navSetup"), icon: FolderOpen },
     { to: "/tasks", label: t("navTasks"), icon: ListChecks },
-    { to: "/settings", label: t("navMore"), icon: Settings },
+    { to: "/settings", label: t("navSettings"), icon: Settings },
   ];
 
   return (
     <div className="mx-auto flex h-full w-full max-w-md flex-col">
-      <main className="flex-1 overflow-y-auto px-4 pb-28 pt-5">{children}</main>
+      {/* The only scroll container in the app: html/body are locked in index.css so
+          the fixed nav below can never be dragged around with the page. */}
+      <main className="flex-1 overscroll-contain overflow-y-auto overflow-x-hidden px-4 pb-28 pt-5">
+        {children}
+      </main>
       {/* No safe-area padding here: the system bar insets are applied natively to the
           webview container (MainActivity.insetContainerOf), so the viewport this nav is
           pinned to already ends above the gesture bar. Adding env(safe-area-inset-bottom)

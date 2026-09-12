@@ -201,7 +201,11 @@ export function RunPanel() {
           <p className="mt-1 break-all text-[var(--text-muted)]">{diagnostic.path}</p>
         </section>
       )}
-      {status && <p className="text-sm text-[var(--text-muted)]">{status}</p>}
+      {/* Rust reports absolute paths back; without break-all a long one widens the
+          page and the fixed bottom nav drifts sideways when the page is panned. */}
+      {status && (
+        <p className="break-all text-sm text-[var(--text-muted)]">{status}</p>
+      )}
       {screenshotPath && (
         <p className="break-all text-xs text-[var(--text-muted)]">{screenshotPath}</p>
       )}

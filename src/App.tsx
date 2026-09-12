@@ -4,7 +4,6 @@ import { AppShell } from "./components/AppShell";
 import { useTranslation } from "./lib/i18n";
 import { HomePage } from "./pages/HomePage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { SetupPage } from "./pages/SetupPage";
 import { TasksPage } from "./pages/TasksPage";
 import { useAppStore } from "./store/appStore";
 
@@ -21,10 +20,11 @@ function App() {
   return (
     <HashRouter>
       <AppShell>
-        {error && <p className="mb-4 text-sm text-red-600 dark:text-red-300">{error}</p>}
+        {error && (
+          <p className="mb-4 break-all text-sm text-red-600 dark:text-red-300">{error}</p>
+        )}
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/setup" element={<SetupPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

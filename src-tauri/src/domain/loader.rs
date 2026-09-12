@@ -120,29 +120,15 @@ impl ProjectLoader {
             .ok_or(ProjectError::MissingField("name"))?
             .to_string();
         let label = text(document.get("label")).unwrap_or_else(|| name.clone());
-        let controllers = document
-            .get("controller")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| {
-                        let controller_type = item.get("type")?.as_str()?.to_string();
-                        if !controller_type.eq_ignore_ascii_case("adb") {
-                            return None;
-                        }
-                        let name = item.get("name")?.as_str()?.to_string();
-                        let label = text(item.get("label")).unwrap_or_else(|| name.clone());
-                        Some(ControllerDefinition {
-                            name,
-                            label,
-                            controller_type: "Adb".to_string(),
-                            raw: item.clone(),
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        // Android drives exactly one controller: the native control unit reached
+        // through the privileged service. interface.json still describes it as an
+        // "Adb" entry, and every `controller` reference in the project (task /
+        // resource / option applicability) spells out *that* entry's name, so the
+        // name is kept as the identity key while the rest of the entry is ignored
+        // — what actually runs is never adb. Everything the interface says about
+        // the controller (label, type, transport options) is dropped, because the
+        // user never gets to pick one.
+        let controllers = vec![android_controller(&document)];
 
         let resources = array(&document, "resource")
             .into_iter()
@@ -333,6 +319,43 @@ impl ProjectLoader {
                     .unwrap_or(false),
             },
         })
+    }
+}
+
+/// Label of the controller the app always runs. Shown as-is (it is a proper noun),
+/// and reused as the identity when a project declares no Adb controller at all.
+const ANDROID_CONTROLLER: &str = "Android";
+
+/// The `type` literal interface.json uses for the Android transport.
+const ADB_CONTROLLER_TYPE: &str = "Adb";
+
+/// The only controller Android can run, described the way the app actually uses it.
+///
+/// The declared name is preserved because it is the key the project's own
+/// applicability lists are written against (`task`/`resource`/`option` all use
+/// `"controller": [...]`); renaming it would silently mark every such entry
+/// unavailable. Projects that declare no Adb controller get the synthetic
+/// fallback instead of an empty list, so the rest of the pipeline still resolves.
+fn android_controller(document: &Value) -> ControllerDefinition {
+    let declared = document
+        .get("controller")
+        .and_then(Value::as_array)
+        .and_then(|items| {
+            items.iter().find(|item| {
+                item.get("type")
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| value.eq_ignore_ascii_case(ADB_CONTROLLER_TYPE))
+            })
+        });
+    ControllerDefinition {
+        name: declared
+            .and_then(|item| item.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or(ANDROID_CONTROLLER)
+            .to_string(),
+        label: ANDROID_CONTROLLER.to_string(),
+        controller_type: "AndroidNative".to_string(),
+        raw: declared.cloned().unwrap_or(Value::Null),
     }
 }
 
@@ -761,6 +784,63 @@ mod tests {
         );
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    /// The interface's own controller list is never surfaced: Android always runs
+    /// the native controller, and the declared Adb entry is only kept for its name.
+    #[test]
+    fn exposes_a_single_android_controller_whatever_the_interface_declares() {
+        let project = ProjectLoader::default()
+            .load_value(
+                "/tmp",
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [
+                        {"name": "PC", "type": "Win32"},
+                        {"name": "ADB", "label": "$Controller.Adb", "type": "Adb"},
+                        {"name": "PlayCover", "type": "PlayCover"}
+                    ],
+                    "resource": [{
+                        "name": "base",
+                        "path": ["resource/base"],
+                        "controller": ["ADB"]
+                    }],
+                    "task": [{
+                        "name": "Start",
+                        "entry": "Start",
+                        "controller": ["ADB"]
+                    }]
+                }),
+                "en_us",
+            )
+            .expect("an interface with an Adb controller should load");
+
+        assert_eq!(project.controllers.len(), 1);
+        let controller = &project.controllers[0];
+        assert_eq!(controller.name, "ADB");
+        assert_eq!(controller.label, "Android");
+        assert_eq!(controller.controller_type, "AndroidNative");
+    }
+
+    #[test]
+    fn falls_back_to_a_synthetic_controller_without_an_adb_entry() {
+        let project = ProjectLoader::default()
+            .load_value(
+                "/tmp",
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "PC", "type": "Win32"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}]
+                }),
+                "en_us",
+            )
+            .expect("an interface without an Adb controller should still load");
+
+        assert_eq!(project.controllers.len(), 1);
+        assert_eq!(project.controllers[0].name, "Android");
+        assert_eq!(project.controllers[0].controller_type, "AndroidNative");
     }
 
     #[test]

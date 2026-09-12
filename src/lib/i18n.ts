@@ -8,9 +8,8 @@ export type AppLanguage = "zh" | "en";
 const en = {
   // Bottom navigation
   navHome: "Home",
-  navSetup: "Setup",
   navTasks: "Tasks",
-  navMore: "More",
+  navSettings: "Settings",
 
   // Shared
   working: "Working",
@@ -32,10 +31,9 @@ const en = {
   enabledTasks: "{count} tasks",
   privilegedHost: "Privileged host",
 
-  // Setup
-  setup: "Setup",
+  // Settings, project scope
   noResources: "No resources are declared.",
-  globalOptions: "Global",
+  globalOptions: "Global options",
   resourceOptions: "Resource options",
 
   // Tasks
@@ -84,9 +82,8 @@ export type MessageKey = keyof typeof en;
 
 const zh: Record<MessageKey, string> = {
   navHome: "首页",
-  navSetup: "配置",
   navTasks: "任务",
-  navMore: "更多",
+  navSettings: "设置",
 
   working: "处理中",
   saving: "保存中",
@@ -100,15 +97,14 @@ const zh: Record<MessageKey, string> = {
 
   project: "项目",
   noProject: "尚未加载项目。",
-  loadProjectHint: "请在「更多」页加载项目。",
+  loadProjectHint: "请在设置页加载项目。",
   currentSelection: "当前选择",
   refreshStatus: "刷新状态",
   enabledTasks: "{count} 个任务",
   privilegedHost: "特权宿主",
 
-  setup: "配置",
   noResources: "未声明资源。",
-  globalOptions: "全局",
+  globalOptions: "全局选项",
   resourceOptions: "资源选项",
 
   tasksAndRun: "任务与运行",

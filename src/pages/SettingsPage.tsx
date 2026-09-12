@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, FolderInput, Trash2 } from "lucide-react";
+import { OptionEditor } from "../components/OptionEditor";
 import { Checkbox } from "../components/ui/Checkbox";
 import { SegmentGroup } from "../components/ui/SegmentGroup";
 import { TextField } from "../components/ui/TextField";
 import { clearDiagnosticData, getPrivilegedStatus } from "../lib/api";
 import { projectLanguage, useTranslation } from "../lib/i18n";
+import { activeResource, defaultOptionValue } from "../lib/options";
 import { useAppStore } from "../store/appStore";
-import type { UiLanguage } from "../lib/types";
+import type { MessageKey } from "../lib/i18n";
+import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
 
 function isUiLanguage(value: string): value is UiLanguage {
   return value === "system" || value === "zh" || value === "en";
@@ -28,6 +31,14 @@ export function SettingsPage() {
       .then((result) => setStatus(result.message))
       .catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
   }, []);
+
+  const project = snapshot?.project;
+  const resource = project && snapshot ? activeResource(project, snapshot.configuration) : undefined;
+
+  function update(mutate: (configuration: UserConfiguration) => UserConfiguration) {
+    if (!snapshot) return;
+    void saveConfiguration(mutate(structuredClone(snapshot.configuration)));
+  }
 
   return (
     <div className="space-y-5">
@@ -70,12 +81,53 @@ export function SettingsPage() {
             <FolderInput size={18} />
           </button>
         </div>
-        {snapshot?.project && (
+        {project && (
           <p className="text-sm text-[var(--text-muted)]">
-            {snapshot.project.name} {snapshot.project.version ?? ""}
+            {project.name} {project.version ?? ""}
           </p>
         )}
       </section>
+      {project && snapshot && (
+        <>
+          <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+            <h2 className="font-medium">{t("resource")}</h2>
+            <div className="flex min-h-14 w-full flex-col rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-left">
+              <span className="font-medium">{resource?.label ?? t("unavailable")}</span>
+              <span className="break-all text-sm text-[var(--text-muted)]">
+                {resource?.paths.join(", ") ?? t("noResources")}
+              </span>
+            </div>
+          </section>
+          <ScopedOptions
+            title="globalOptions"
+            names={project.globalOptions}
+            values={snapshot.configuration.globalOptionValues}
+            onChange={(name, value) =>
+              update((current) => ({
+                ...current,
+                globalOptionValues: { ...current.globalOptionValues, [name]: value },
+              }))
+            }
+          />
+          <ScopedOptions
+            title="resourceOptions"
+            names={resource?.options ?? []}
+            values={snapshot.configuration.resourceOptionValues[resource?.name ?? ""] ?? {}}
+            onChange={(name, value) =>
+              update((current) => ({
+                ...current,
+                resourceOptionValues: {
+                  ...current.resourceOptionValues,
+                  [resource?.name ?? ""]: {
+                    ...(current.resourceOptionValues[resource?.name ?? ""] ?? {}),
+                    [name]: value,
+                  },
+                },
+              }))
+            }
+          />
+        </>
+      )}
       <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
         <h2 className="font-medium">{t("runBehavior")}</h2>
         <Checkbox
@@ -128,5 +180,40 @@ export function SettingsPage() {
         <p className="text-sm text-[var(--text-muted)]">{status ?? t("checking")}</p>
       </section>
     </div>
+  );
+}
+
+/** The project-scoped option blocks (global and per-resource), moved here from
+ * the setup page so every project-level knob lives in one place. */
+function ScopedOptions({
+  title,
+  names,
+  values,
+  onChange,
+}: {
+  title: MessageKey;
+  names: string[];
+  values: Record<string, OptionValue>;
+  onChange: (name: string, value: OptionValue) => void;
+}) {
+  const project = useAppStore((state) => state.snapshot?.project);
+  const { t } = useTranslation();
+  if (names.length === 0) return null;
+  return (
+    <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+      <h2 className="font-medium">{t(title)}</h2>
+      {names.map((name) => {
+        const option = project?.options[name];
+        if (!option) return null;
+        return (
+          <OptionEditor
+            key={name}
+            option={option}
+            value={defaultOptionValue(option, values[name])}
+            onChange={(value) => onChange(name, value)}
+          />
+        );
+      })}
+    </section>
   );
 }

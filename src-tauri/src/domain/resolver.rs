@@ -6,12 +6,10 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolverError {
-    #[error("controller is not selected")]
+    #[error("the project declares no controller")]
     NoController,
     #[error("resource is not selected")]
     NoResource,
-    #[error("unknown controller: {0}")]
-    UnknownController(String),
     #[error("unknown run configuration: {0}")]
     UnknownRunConfiguration(String),
     #[error("unknown option: {0}")]
@@ -40,15 +38,12 @@ pub fn resolve_run(
     project: &Project,
     configuration: &UserConfiguration,
 ) -> Result<ResolvedRun, ResolverError> {
-    let controller_name = configuration
-        .active_controller
-        .as_ref()
-        .ok_or(ResolverError::NoController)?;
+    // Android runs exactly one controller — the native one — and the loader always
+    // synthesises it, so there is nothing to select and nothing to validate here.
     let controller = project
         .controllers
-        .iter()
-        .find(|item| &item.name == controller_name)
-        .ok_or_else(|| ResolverError::UnknownController(controller_name.clone()))?;
+        .first()
+        .ok_or(ResolverError::NoController)?;
     let resource = project
         .resources
         .iter()
@@ -587,7 +582,6 @@ mod tests {
         auto_battle: &str,
     ) -> UserConfiguration {
         let mut run = UserConfiguration::default();
-        run.active_controller = Some(project.controllers[0].name.clone());
         run.active_resource = Some(project.resources[0].name.clone());
         run.global_option_values.insert(
             "logging".to_string(),

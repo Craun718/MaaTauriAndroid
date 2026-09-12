@@ -7,12 +7,17 @@ const bootstrap = vi.fn();
 const resolveCurrent = vi.fn();
 const getPrivilegedStatus = vi.fn();
 const getRunStatus = vi.fn();
+const getVirtualDisplayStatus = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
   bootstrapApp: () => bootstrap(),
   resolveCurrent: () => resolveCurrent(),
   getPrivilegedStatus: () => getPrivilegedStatus(),
   getRunStatus: () => getRunStatus(),
+  startVirtualDisplay: vi.fn(),
+  stopVirtualDisplay: vi.fn(),
+  getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
+  updateVirtualDisplayBounds: vi.fn(),
   loadProject: vi.fn(),
   saveConfiguration: vi.fn(),
   applyPreset: vi.fn(),
@@ -77,6 +82,13 @@ describe("App", () => {
     });
     getPrivilegedStatus.mockResolvedValue({ message: "Not connected", setupRequired: [] });
     getRunStatus.mockResolvedValue({ executionId: undefined, state: "Idle", message: "Idle" });
+    getVirtualDisplayStatus.mockResolvedValue({
+      active: false,
+      displayId: -1,
+      width: 1280,
+      height: 720,
+      frameCount: 0,
+    });
   });
 
   it("bootstraps the project and renders navigation", async () => {

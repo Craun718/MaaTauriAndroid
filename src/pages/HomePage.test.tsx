@@ -91,11 +91,11 @@ beforeEach(() => {
 });
 
 describe("home resource details", () => {
-  it("shows the resolved resource with its description and paths", () => {
+  it("shows the resolved resource with its description and paths", async () => {
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Virtual display" })).toBeInTheDocument();
-    expect(await screen.findByText("Stopped")).toBeInTheDocument();
+    expect(await screen.findAllByText("Stopped")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Resource" })).toBeInTheDocument();
     expect(screen.getAllByText("Resource A").length).toBe(2);
     expect(screen.getByText("resource").tagName).toBe("STRONG");

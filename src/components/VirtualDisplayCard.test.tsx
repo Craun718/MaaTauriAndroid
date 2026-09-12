@@ -46,7 +46,7 @@ describe("VirtualDisplayCard", () => {
     render(<VirtualDisplayCard />);
 
     expect(await screen.findByRole("heading", { name: "Virtual display" })).toBeInTheDocument();
-    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.getAllByText("Stopped")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
   });
 
@@ -60,6 +60,7 @@ describe("VirtualDisplayCard", () => {
     } as DOMRect);
 
     render(<VirtualDisplayCard />);
+    expect(await screen.findByText("1280 x 720")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
 
     expect(await screen.findByText("Display ID: 12")).toBeInTheDocument();
@@ -73,6 +74,7 @@ describe("VirtualDisplayCard", () => {
     getVirtualDisplayStatus.mockResolvedValue(inactive);
 
     render(<VirtualDisplayCard />);
+    expect(await screen.findByText("1280 x 720")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
 
     expect(await screen.findByText("Start failed")).toBeInTheDocument();

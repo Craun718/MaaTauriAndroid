@@ -621,14 +621,17 @@ fn update_virtual_display_bounds(
             "Virtual display bounds are invalid".to_string(),
         ));
     }
-    let left = i32::try_from(left.trunc())
-        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
-    let top = i32::try_from(top.trunc())
-        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
-    let width = i32::try_from(width.trunc())
-        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
-    let height = i32::try_from(height.trunc())
-        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
+    let (left, top, width, height) = (left.trunc(), top.trunc(), width.trunc(), height.trunc());
+    if ![left, top, width, height]
+        .into_iter()
+        .all(|value| (0.0..=i32::MAX as f64).contains(&value))
+    {
+        return Err(AppError::Message(
+            "Virtual display bounds are out of range".to_string(),
+        ));
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let (left, top, width, height) = (left as i32, top as i32, width as i32, height as i32);
 
     #[cfg(target_os = "android")]
     {

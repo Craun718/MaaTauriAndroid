@@ -122,7 +122,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("link", { name: "Tasks" }));
 
     // Run controls, formerly on their own /run page.
-    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(2);
     // Tasks belonging to the active run configuration, on the same panel.
     expect(screen.getByRole("heading", { name: "Default" })).toBeInTheDocument();
     // The old /run tab is gone.

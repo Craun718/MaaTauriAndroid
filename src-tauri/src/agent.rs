@@ -320,10 +320,6 @@ pub fn pi_environment(
         "PI_CLIENT_LANGUAGE".to_string(),
         client_language.to_string(),
     );
-    environment.insert(
-        "PI_CLIENT_MAAFW_VERSION".to_string(),
-        maa_framework::maa_version().to_string(),
-    );
     if let Some(version) = project_version {
         environment.insert("PI_VERSION".to_string(), version.to_string());
     }
@@ -368,6 +364,12 @@ pub fn pi_environment(
         environment.insert("PI_RESOURCE".to_string(), resource);
     }
     environment
+}
+
+/// The framework version is only known after the dynamic library has been
+/// loaded, so the runtime injects it immediately before launching an agent.
+pub fn set_maa_framework_version(environment: &mut BTreeMap<String, String>, version: &str) {
+    environment.insert("PI_CLIENT_MAAFW_VERSION".to_string(), version.to_string());
 }
 
 fn localize_selection_fields(
@@ -892,8 +894,9 @@ mod tests {
         assert_eq!(environment["PI_CLIENT_NAME"], "TTFlow");
         assert_eq!(environment["PI_CLIENT_VERSION"], env!("CARGO_PKG_VERSION"));
         assert_eq!(environment["PI_CLIENT_LANGUAGE"], "zh_cn");
-        assert!(environment.contains_key("PI_CLIENT_MAAFW_VERSION"));
         assert_eq!(environment["PI_VERSION"], "0.1.0");
+        set_maa_framework_version(&mut environment, "1.23.0");
+        assert_eq!(environment["PI_CLIENT_MAAFW_VERSION"], "1.23.0");
 
         let controller: serde_json::Value =
             serde_json::from_str(&environment["PI_CONTROLLER"]).unwrap();

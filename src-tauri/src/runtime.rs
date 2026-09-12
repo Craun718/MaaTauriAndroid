@@ -401,6 +401,7 @@ pub fn create_session(
 ) -> Result<CreatedSession, RuntimeError> {
     let maa_library = library_path()?;
     maa_framework::load_library(&maa_library).map_err(set_error)?;
+    let mut pi_environment = pi_env.cloned().unwrap_or_default();
 
     let config = android_controller_config(display_id, force_stop)?;
     let controller = Controller::new_android_native(&config)?;
@@ -411,16 +412,22 @@ pub fn create_session(
     let resource = Resource::new()?;
 
     let agent_session = match agent {
-        Some(prepared) if !prepared.descriptor.runtimes.is_empty() => Some(
-            crate::agent::start_session(
-                execution_id,
-                &resource,
-                &prepared.descriptor,
-                prepared.host.clone(),
-                pi_env.unwrap_or(&std::collections::BTreeMap::new()),
+        Some(prepared) if !prepared.descriptor.runtimes.is_empty() => {
+            crate::agent::set_maa_framework_version(
+                &mut pi_environment,
+                maa_framework::maa_version(),
+            );
+            Some(
+                crate::agent::start_session(
+                    execution_id,
+                    &resource,
+                    &prepared.descriptor,
+                    prepared.host.clone(),
+                    &pi_environment,
+                )
+                .map_err(|error| RuntimeError::Maa(error.to_string()))?,
             )
-            .map_err(|error| RuntimeError::Maa(error.to_string()))?,
-        ),
+        }
         _ => None,
     };
 

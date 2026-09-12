@@ -1,13 +1,20 @@
 package top.natsuu.mta.control
 
 import android.content.Context
+import android.app.ActivityOptions
+import android.content.ComponentName
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.Surface
 import top.natsuu.mta.AgentLaunch
 import top.natsuu.mta.InputResult
 import java.util.concurrent.Executors
@@ -24,11 +31,44 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     private val contacts = LinkedHashMap<Int, TouchPointer>()
     private val bugreportProcess = AtomicReference<Process?>(null)
     private val bugreportProgress = AtomicReference("idle|0")
+    private val virtualDisplay = AtomicReference<VirtualDisplay?>(null)
     private val agentRuntimeManager = AgentRuntimeManager(
         File("/data/local/tmp/maa-tauri-android"),
     )
 
     private val binder = this
+
+    override fun startVirtualDisplay(width: Int, height: Int, dpi: Int, surface: Surface): Int {
+        require(width > 0 && height > 0 && dpi > 0) { "invalid virtual display geometry" }
+        val displayContext = context ?: return DISPLAY_NONE
+        stopVirtualDisplay()
+
+        // Several DisplayManager flags are hidden from the public SDK. Their numeric
+        // values are stable, but post-API-33 bits must not be passed on older devices.
+        var flags = (1 shl 0) or (1 shl 1) or (1 shl 3) or (1 shl 6) or (1 shl 8)
+        if (Build.VERSION.SDK_INT >= 33) {
+            flags = flags or (1 shl 10) or (1 shl 11) or (1 shl 12) or (1 shl 13)
+            if (Build.VERSION.SDK_INT >= 34) {
+                flags = flags or (1 shl 14) or (1 shl 15) or (1 shl 16)
+            }
+        }
+        val display = displayContext
+            .getSystemService(DisplayManager::class.java)
+            ?.createVirtualDisplay(
+                "TTFlowVirtualDisplay",
+                width,
+                height,
+                dpi,
+                surface,
+                flags,
+            ) ?: return DISPLAY_NONE
+        virtualDisplay.set(display)
+        return display.display.displayId
+    }
+
+    override fun stopVirtualDisplay() {
+        virtualDisplay.getAndSet(null)?.release()
+    }
 
     override fun captureFrame(displayId: Int): ParcelFileDescriptor {
         val frame = capture(displayId)
@@ -248,18 +288,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                 val target = packageName.orEmpty()
                 if (target.isNotEmpty()) {
                     if (forceStop) {
-                        val stopped = shell("am", "force-stop", target)
+                        val stopped = shell("am", "force-stop", packageNameOf(target))
                         if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
                     }
-                    val launched = shell(
-                        "monkey",
-                        "-p",
-                        target,
-                        "-c",
-                        "android.intent.category.LAUNCHER",
-                        "1",
-                    )
-                    if (launched != RESULT_OK) return RESULT_COMMAND_FAILED
+                    return startGameOnDisplay(target, displayId)
                 }
             }
             METHOD_STOP_GAME -> {
@@ -401,6 +433,79 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return ProcessBuilder(*args).start().waitFor()
     }
 
+    private fun startGameOnDisplay(spec: String, displayId: Int): Int {
+        val displayContext = context ?: return RESULT_COMMAND_FAILED
+        val component = componentOf(spec)
+        val intent = if (component != null) {
+            Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .setComponent(component)
+        } else {
+            displayContext.packageManager.getLaunchIntentForPackage(spec)
+                ?: displayContext.packageManager.getLeanbackLaunchIntentForPackage(spec)
+        } ?: return startGameWithAm(spec, displayId)
+
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val options = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
+        return try {
+            displayContext.startActivity(intent, options.toBundle())
+            RESULT_OK
+        } catch (error: Throwable) {
+            android.util.Log.w(
+                "MaaTauriAndroidControl",
+                "Could not launch $spec on displayId=$displayId, falling back to am",
+                error,
+            )
+            startGameWithAm(spec, displayId)
+        }
+    }
+
+    private fun startGameWithAm(spec: String, displayId: Int): Int {
+        val component = componentOf(spec)
+        val intent = if (component != null) {
+            Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .setComponent(component)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        } else {
+            null
+        }
+
+        val command = if (intent != null) {
+            arrayOf(
+                "am",
+                "start",
+                "--display",
+                displayId.toString(),
+                intent.toUri(Intent.URI_INTENT_SCHEME),
+            )
+        } else {
+            return if (displayId == 0) {
+                shell(
+                    "monkey",
+                    "-p",
+                    spec,
+                    "-c",
+                    "android.intent.category.LAUNCHER",
+                    "1",
+                )
+            } else {
+                RESULT_COMMAND_FAILED
+            }
+        }
+        val status = shell(*command)
+        return if (status == RESULT_OK) RESULT_OK else RESULT_COMMAND_FAILED
+    }
+
+    private fun componentOf(spec: String): ComponentName? {
+        if (!spec.contains('/')) return null
+        return ComponentName.unflattenFromString(spec)
+    }
+
+    private fun packageNameOf(spec: String): String {
+        return componentOf(spec)?.packageName ?: spec
+    }
+
     private fun runCommand(output: OutputStream, vararg args: String) {
         val process = ProcessBuilder(*args).start()
         process.inputStream.use { input -> input.copyTo(output) }
@@ -421,7 +526,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     companion object {
-        const val PROTOCOL_VERSION = 3
+        const val PROTOCOL_VERSION = 4
         const val METHOD_START_GAME = 1
         const val METHOD_STOP_GAME = 2
         const val METHOD_INPUT_TEXT = 4
@@ -438,6 +543,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         const val RESULT_INJECTION_FAILED = -4
         const val RESULT_UNSUPPORTED_METHOD = -5
         const val RESULT_COMMAND_FAILED = -6
+        private const val DISPLAY_NONE = -1
     }
 
     private class TouchPointer(

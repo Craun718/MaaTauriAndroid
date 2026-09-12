@@ -6,6 +6,7 @@ import type {
   ResolvedRun,
   RunState,
   UserConfiguration,
+  VirtualDisplayStatus,
 } from "./types";
 
 export async function bootstrapApp() {
@@ -38,6 +39,32 @@ export async function requestPrivilegedAccess() {
 
 export async function openShizuku() {
   return invoke<void>("open_shizuku");
+}
+
+export async function startVirtualDisplay() {
+  return invoke<VirtualDisplayStatus>("start_virtual_display");
+}
+
+export async function stopVirtualDisplay() {
+  return invoke<VirtualDisplayStatus>("stop_virtual_display");
+}
+
+export async function getVirtualDisplayStatus() {
+  return invoke<VirtualDisplayStatus>("virtual_display_status");
+}
+
+export async function updateVirtualDisplayBounds(
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+) {
+  return invoke<void>("update_virtual_display_bounds", {
+    left,
+    top,
+    width,
+    height,
+  });
 }
 
 export async function getRunStatus() {

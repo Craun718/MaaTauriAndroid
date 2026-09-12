@@ -4,9 +4,12 @@ import top.natsuu.mta.InputResult;
 import top.natsuu.mta.AgentLaunch;
 
 import android.os.ParcelFileDescriptor;
+import android.view.Surface;
 
 interface IMaaTauriAndroidControlService {
     ParcelFileDescriptor captureFrame(int displayId);
+    int startVirtualDisplay(int width, int height, int dpi, in Surface surface);
+    void stopVirtualDisplay();
     int dispatchInput(int displayId, int method, int x, int y, int contact, int keyCode,
             in @nullable String text, in @nullable String packageName, boolean forceStop);
     InputResult dispatchInputDetailed(int displayId, int method, int x, int y, int contact,

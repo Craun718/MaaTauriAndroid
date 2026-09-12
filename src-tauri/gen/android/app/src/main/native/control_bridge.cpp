@@ -1,7 +1,10 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include "virtual_display.hpp"
+
 #include <cerrno>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -15,15 +18,6 @@
 namespace {
 
 constexpr auto kLogTag = "MaaTauriAndroidControl";
-
-struct FrameInfo {
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint32_t stride = 0;
-    uint32_t length = 0;
-    void* data = nullptr;
-    void* frame_ref = nullptr;
-};
 
 enum MethodType : int {
     START_GAME = 1,
@@ -98,6 +92,8 @@ private:
 JavaVM* g_vm = nullptr;
 jobject g_service = nullptr;
 jmethodID g_capture_method = nullptr;
+jmethodID g_start_virtual_display_method = nullptr;
+jmethodID g_stop_virtual_display_method = nullptr;
 jmethodID g_detach_fd_method = nullptr;
 jmethodID g_dispatch_method = nullptr;
 jmethodID g_dispatch_detailed_method = nullptr;
@@ -181,6 +177,8 @@ void close_service_locked(JNIEnv& env) {
         g_service = nullptr;
     }
     g_capture_method = nullptr;
+    g_start_virtual_display_method = nullptr;
+    g_stop_virtual_display_method = nullptr;
     g_detach_fd_method = nullptr;
     g_dispatch_method = nullptr;
     g_dispatch_detailed_method = nullptr;
@@ -223,6 +221,10 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
 }
 
 extern "C" FrameInfo GetLockedPixels() {
+    if (virtual_display::active()) {
+        return virtual_display::lock_frame();
+    }
+
     AttachedEnv attached;
     JNIEnv* env_ptr = attached.get();
     if (env_ptr == nullptr) {
@@ -303,6 +305,10 @@ extern "C" FrameInfo GetLockedPixels() {
 }
 
 extern "C" int UnlockPixels(FrameInfo frame) {
+    if (virtual_display::is_frame(frame.frame_ref)) {
+        return virtual_display::unlock_frame(frame);
+    }
+
     std::lock_guard<std::mutex> frame_lock(g_frame_mutex);
     if (!g_frame_locked || frame.data == nullptr || frame.data != frame.frame_ref ||
         frame.data != g_frame_buffer.data()) {
@@ -313,6 +319,86 @@ extern "C" int UnlockPixels(FrameInfo frame) {
     g_frame_buffer.shrink_to_fit();
     g_frame_locked = false;
     return 0;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_top_natsuu_mta_control_ControlHost_startVirtualDisplay(
+    JNIEnv* env,
+    jclass /*clazz*/,
+    jint width,
+    jint height,
+    jint dpi
+) {
+    if (env == nullptr) {
+        return -1;
+    }
+    std::lock_guard<std::mutex> state_lock(g_state_mutex);
+    if (g_service == nullptr || g_start_virtual_display_method == nullptr) {
+        return -1;
+    }
+    return virtual_display::start(
+        *env, g_service, g_start_virtual_display_method, width, height, dpi
+    );
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_top_natsuu_mta_control_ControlHost_stopVirtualDisplay(JNIEnv* env, jclass /*clazz*/) {
+    if (env == nullptr) {
+        return;
+    }
+    jobject service = nullptr;
+    jmethodID stop_method = nullptr;
+    {
+        std::lock_guard<std::mutex> state_lock(g_state_mutex);
+        service = g_service;
+        stop_method = g_stop_virtual_display_method;
+    }
+    virtual_display::stop(env, service, stop_method);
+}
+
+extern "C" JNIEXPORT jintArray JNICALL
+Java_top_natsuu_mta_control_ControlHost_virtualDisplayStatus(JNIEnv* env, jclass /*clazz*/) {
+    if (env == nullptr) {
+        return nullptr;
+    }
+
+    int32_t display_id = -1;
+    int32_t width = 0;
+    int32_t height = 0;
+    virtual_display::geometry(display_id, width, height);
+    const jint status[] = {
+        virtual_display::active() ? 1 : 0,
+        display_id,
+        width,
+        height,
+        std::min<int64_t>(
+            virtual_display::frame_count(),
+            std::numeric_limits<jint>::max()
+        ),
+    };
+    constexpr jsize status_length = static_cast<jsize>(sizeof(status) / sizeof(status[0]));
+    jintArray result = env->NewIntArray(status_length);
+    if (clear_exception(*env) || result == nullptr) {
+        return nullptr;
+    }
+    env->SetIntArrayRegion(result, 0, status_length, status);
+    if (clear_exception(*env)) {
+        env.DeleteLocalRef(result);
+        return nullptr;
+    }
+    return result;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_top_natsuu_mta_control_ControlHost_attachPreviewSurface(
+    JNIEnv* env,
+    jclass /*clazz*/,
+    jobject surface
+) {
+    if (env == nullptr) {
+        return;
+    }
+    virtual_display::attach_preview(*env, surface);
 }
 
 extern "C" int DispatchInputMessage(MethodParam param) {
@@ -540,6 +626,7 @@ Java_top_natsuu_mta_control_ControlHost_attachNative(JNIEnv* env, jclass /*clazz
         return;
     }
 
+    virtual_display::release_local();
     std::lock_guard<std::mutex> state_lock(g_state_mutex);
     close_service_locked(*env);
     if (service == nullptr) {
@@ -557,6 +644,16 @@ Java_top_natsuu_mta_control_ControlHost_attachNative(JNIEnv* env, jclass /*clazz
             service_class,
             "captureFrame",
             "(I)Landroid/os/ParcelFileDescriptor;");
+        clear_exception(*env);
+        g_start_virtual_display_method = env->GetMethodID(
+            service_class,
+            "startVirtualDisplay",
+            "(IIILandroid/view/Surface;)I");
+        clear_exception(*env);
+        g_stop_virtual_display_method = env->GetMethodID(
+            service_class,
+            "stopVirtualDisplay",
+            "()V");
         clear_exception(*env);
         g_dispatch_method = env->GetMethodID(
             service_class,
@@ -594,6 +691,7 @@ Java_top_natsuu_mta_control_ControlHost_detachNative(JNIEnv* env, jclass /*clazz
     if (env == nullptr) {
         return;
     }
+    virtual_display::release_local();
     std::lock_guard<std::mutex> state_lock(g_state_mutex);
     close_service_locked(*env);
 }

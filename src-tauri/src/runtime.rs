@@ -7,7 +7,7 @@ use maa_framework::{
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, thiserror::Error)]
@@ -316,6 +316,7 @@ fn screen_size() -> Option<(i32, i32)> {
 }
 
 static SCREEN_SIZE: AtomicI64 = AtomicI64::new(0);
+static ACTIVE_DISPLAY_ID: AtomicI32 = AtomicI32::new(0);
 static CONTROL_STATE: AtomicI64 = AtomicI64::new(0);
 static CONTROL_MESSAGE: Mutex<Option<String>> = Mutex::new(None);
 static RUN_RESULT: Mutex<Option<RunResult>> = Mutex::new(None);
@@ -327,6 +328,17 @@ pub fn configure_screen(width: i32, height: i32) {
     }
     let packed = (height as i64) << 32 | (width as i64 & 0xffff_ffff);
     SCREEN_SIZE.store(packed, Ordering::SeqCst);
+}
+
+pub fn set_active_display(display_id: i32) {
+    if display_id < 0 {
+        return;
+    }
+    ACTIVE_DISPLAY_ID.store(display_id, Ordering::SeqCst);
+}
+
+pub fn active_display_id() -> u32 {
+    ACTIVE_DISPLAY_ID.load(Ordering::SeqCst).max(0) as u32
 }
 
 #[cfg(target_os = "android")]
@@ -619,6 +631,16 @@ mod tests {
         assert!(screen_size().is_some());
         configure_screen(1080, 2400);
         assert_eq!(screen_size(), Some((1080, 2400)));
+    }
+
+    #[test]
+    fn active_display_id_rejects_negative_values() {
+        set_active_display(17);
+        assert_eq!(active_display_id(), 17);
+        set_active_display(-1);
+        assert_eq!(active_display_id(), 17);
+        set_active_display(0);
+        assert_eq!(active_display_id(), 0);
     }
 
     #[test]

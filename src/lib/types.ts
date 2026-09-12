@@ -205,6 +205,14 @@ export interface AppStateSnapshot {
   projectPath?: string;
 }
 
+export interface VirtualDisplayStatus {
+  active: boolean;
+  displayId: number;
+  width: number;
+  height: number;
+  frameCount: number;
+}
+
 export type PrivilegedStatus =
   | { status: "starting"; message: string; setupRequired: string[] }
   | { status: "connected"; message: string }

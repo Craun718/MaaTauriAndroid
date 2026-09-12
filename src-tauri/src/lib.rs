@@ -286,6 +286,16 @@ struct ClearedDiagnostics {
     runs_dir: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VirtualDisplayStatus {
+    active: bool,
+    display_id: i32,
+    width: i32,
+    height: i32,
+    frame_count: i64,
+}
+
 #[tauri::command]
 fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnapshot, AppError> {
     let config_path = app
@@ -514,6 +524,125 @@ fn open_shizuku() -> Result<(), AppError> {
     }
 }
 
+#[tauri::command]
+fn start_virtual_display(
+    width: Option<i32>,
+    height: Option<i32>,
+    dpi: Option<i32>,
+) -> Result<VirtualDisplayStatus, AppError> {
+    let width = width.unwrap_or(1280);
+    let height = height.unwrap_or(720);
+    let dpi = dpi.unwrap_or(160);
+    if width <= 0 || height <= 0 || dpi <= 0 {
+        return Err(AppError::Message(
+            "Virtual display dimensions and density must be positive".to_string(),
+        ));
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_start_virtual_display(width, height, dpi)?;
+        virtual_display_status()
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (width, height, dpi);
+        Err(AppError::Message(
+            "The virtual display can only be started on Android".to_string(),
+        ))
+    }
+}
+
+#[tauri::command]
+fn stop_virtual_display() -> Result<VirtualDisplayStatus, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("stopVirtualDisplay")?;
+        virtual_display_status()
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Err(AppError::Message(
+            "The virtual display can only be stopped on Android".to_string(),
+        ))
+    }
+}
+
+#[tauri::command]
+fn virtual_display_status() -> Result<VirtualDisplayStatus, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        let values = call_runtime_bridge_int_array("virtualDisplayStatus")?;
+        if values.len() < 5 {
+            return Err(AppError::Message(
+                "The virtual display status is incomplete".to_string(),
+            ));
+        }
+        Ok(VirtualDisplayStatus {
+            active: values[0] != 0,
+            display_id: values[1],
+            width: values[2],
+            height: values[3],
+            frame_count: i64::from(values[4]),
+        })
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(VirtualDisplayStatus {
+            active: false,
+            display_id: -1,
+            width: 0,
+            height: 0,
+            frame_count: 0,
+        })
+    }
+}
+
+#[tauri::command]
+fn update_virtual_display_bounds(
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), AppError> {
+    if !left.is_finite()
+        || !top.is_finite()
+        || !width.is_finite()
+        || !height.is_finite()
+        || left < 0.0
+        || top < 0.0
+        || width <= 0.0
+        || height <= 0.0
+    {
+        return Err(AppError::Message(
+            "Virtual display bounds are invalid".to_string(),
+        ));
+    }
+    let left = i32::try_from(left.trunc())
+        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
+    let top = i32::try_from(top.trunc())
+        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
+    let width = i32::try_from(width.trunc())
+        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
+    let height = i32::try_from(height.trunc())
+        .map_err(|_| AppError::Message("Virtual display bounds are out of range".to_string()))?;
+
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_update_bounds(left, top, width, height)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (left, top, width, height);
+        Ok(())
+    }
+}
+
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
     let vm = crate::runtime::java_vm().ok_or_else(|| {
@@ -529,6 +658,109 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
     result
         .z()
         .map_err(|error| AppError::Message(error.to_string()))
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_start_virtual_display(
+    width: i32,
+    height: i32,
+    dpi: i32,
+) -> Result<(), AppError> {
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(
+            "top/natsuu/mta/RuntimeBridge",
+            "startVirtualDisplay",
+            "(III)Z",
+            &[
+                jni::objects::JValue::Int(width),
+                jni::objects::JValue::Int(height),
+                jni::objects::JValue::Int(dpi),
+            ],
+        )
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let started = result
+        .z()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    if started {
+        Ok(())
+    } else {
+        Err(AppError::Message(
+            "The privileged control service rejected the virtual display".to_string(),
+        ))
+    }
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_int_array(method: &'static str) -> Result<Vec<i32>, AppError> {
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method("top/natsuu/mta/RuntimeBridge", method, "()[I", &[])
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let object = result
+        .l()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let array: &jni::objects::JIntArray = (&object).into();
+    let length = env
+        .get_array_length(array)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let mut values = vec![0_i32; length as usize];
+    env.get_int_array_region(array, 0, &mut values)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    Ok(values)
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_update_bounds(
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+) -> Result<(), AppError> {
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(
+            "top/natsuu/mta/RuntimeBridge",
+            "updateVirtualDisplayBounds",
+            "(IIII)Z",
+            &[
+                jni::objects::JValue::Int(left),
+                jni::objects::JValue::Int(top),
+                jni::objects::JValue::Int(width),
+                jni::objects::JValue::Int(height),
+            ],
+        )
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    result
+        .z()
+        .map_err(|error| AppError::Message(error.to_string()))
+        .and_then(|updated| {
+            if updated {
+                Ok(())
+            } else {
+                Err(AppError::Message(
+                    "The Android preview host is not initialized".to_string(),
+                ))
+            }
+        })
 }
 
 #[tauri::command]
@@ -614,6 +846,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let agent_interface_path =
         std::path::PathBuf::from(project.root.clone()).join("interface.json");
     let creation_execution_id = run_execution_id.clone();
+    let controller_display_id = runtime::active_display_id();
     let resolved_for_run = resolved.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     let force_stop_target_app = configuration.force_stop_target_app;
@@ -652,7 +885,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 &creation_execution_id,
                 &project_root,
                 &resolved_for_run,
-                0,
+                controller_display_id,
                 force_stop_target_app,
                 agent.as_ref(),
                 pi_env.as_ref(),
@@ -1036,6 +1269,41 @@ mod tests {
             Err(AppError::Message(message)) if message.contains("only be opened on Android")
         ));
     }
+
+    #[test]
+    #[cfg(not(target_os = "android"))]
+    fn virtual_display_actions_are_unsupported_off_android() {
+        assert!(matches!(
+            start_virtual_display(None, None, None),
+            Err(AppError::Message(message)) if message.contains("only be started on Android")
+        ));
+        assert!(matches!(
+            stop_virtual_display(),
+            Err(AppError::Message(message)) if message.contains("only be stopped on Android")
+        ));
+    }
+
+    #[test]
+    #[cfg(not(target_os = "android"))]
+    fn virtual_display_status_is_inactive_off_android() {
+        let status = virtual_display_status().expect("the desktop status is available");
+        assert!(!status.active);
+        assert_eq!(status.display_id, -1);
+        assert_eq!(status.width, 0);
+        assert_eq!(status.height, 0);
+        assert_eq!(status.frame_count, 0);
+    }
+
+    #[test]
+    fn virtual_display_bounds_validate_geometry() {
+        assert!(update_virtual_display_bounds(1.0, 2.0, 320.0, 180.0).is_ok());
+        assert!(update_virtual_display_bounds(-1.0, 2.0, 320.0, 180.0).is_err());
+        assert!(update_virtual_display_bounds(1.0, 2.0, 0.0, 180.0).is_err());
+        assert!(
+            update_virtual_display_bounds(f64::from(i32::MAX) + 1.0, 2.0, 320.0, 180.0).is_err()
+        );
+        assert!(update_virtual_display_bounds(f64::NAN, 2.0, 320.0, 180.0).is_err());
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -1088,6 +1356,16 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_configureScreen(
 
 #[cfg(target_os = "android")]
 #[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setActiveDisplay(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    display_id: std::os::raw::c_int,
+) {
+    runtime::set_active_display(display_id);
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
 pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setControlState(
     _env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
@@ -1119,6 +1397,10 @@ pub fn run() {
             privileged_status,
             request_privileged_access,
             open_shizuku,
+            start_virtual_display,
+            stop_virtual_display,
+            virtual_display_status,
+            update_virtual_display_bounds,
             start_run,
             run_status,
             stop_run,

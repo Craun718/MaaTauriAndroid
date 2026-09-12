@@ -6,6 +6,7 @@ import { useTranslation } from "../lib/i18n";
 import type { ResolvedRun } from "../lib/types";
 import { activeController, activeResource, activeRun, configuredTask } from "../lib/options";
 import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
+import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
 import { useAppStore } from "../store/appStore";
 
 export function HomePage() {
@@ -98,6 +99,7 @@ export function HomePage() {
       </section>
 
       <PrivilegeStatusCard title="privilegedHost" />
+      <VirtualDisplayCard />
 
       {error && (
         <section className="flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">

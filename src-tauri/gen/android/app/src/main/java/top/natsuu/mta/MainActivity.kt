@@ -1,7 +1,11 @@
 package top.natsuu.mta
 
 import android.os.Bundle
+import android.graphics.PixelFormat
 import android.view.View
+import android.view.SurfaceHolder
+import android.view.SurfaceView
+import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
@@ -13,11 +17,17 @@ import top.natsuu.mta.RuntimeBridge
 
 class MainActivity : TauriActivity() {
   private lateinit var controlClient: ControlServiceClient
+  private var webView: WebView? = null
+  private var previewSurface: SurfaceView? = null
+  private val virtualDisplayHost = RuntimeBridge.VirtualDisplayHost { left, top, width, height ->
+    updateVirtualDisplayBounds(left, top, width, height)
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     MaaRuntime.load()
     RuntimeBridge.attachContext(applicationContext)
+    RuntimeBridge.attachVirtualDisplayHost(virtualDisplayHost)
     RuntimeBridge.initializeSecretBridge()
     PiInstaller.install(this)?.let { projectRoot ->
         RuntimeBridge.setBootstrapProjectRoot(projectRoot.absolutePath)
@@ -38,6 +48,9 @@ class MainActivity : TauriActivity() {
   }
 
   override fun onDestroy() {
+    RuntimeBridge.stopVirtualDisplay()
+    clearVirtualDisplayPreview()
+    RuntimeBridge.detachVirtualDisplayHost(virtualDisplayHost)
     RuntimeBridge.detachControlClient(controlClient)
     controlClient.disconnect()
     super.onDestroy()
@@ -56,6 +69,7 @@ class MainActivity : TauriActivity() {
    * are also returned unconsumed.
    */
   override fun onWebViewCreate(webView: WebView) {
+    this.webView = webView
     if (webView.isAttachedToWindow) {
       insetContainerOf(webView)
     } else {
@@ -70,6 +84,58 @@ class MainActivity : TauriActivity() {
           }
       )
     }
+  }
+
+  private fun updateVirtualDisplayBounds(left: Int, top: Int, width: Int, height: Int) {
+    if (width <= 0 || height <= 0) {
+      clearVirtualDisplayPreview()
+      return
+    }
+    val view = webView ?: return
+    val parent = view.parent as? ViewGroup ?: return
+    val scale = if (view.scale > 0F) view.scale else 1F
+    val physicalWidth = (width * scale).toInt().coerceAtLeast(1)
+    val physicalHeight = (height * scale).toInt().coerceAtLeast(1)
+    val physicalLeft = view.left + (left * scale).toInt().coerceAtLeast(0)
+    val physicalTop = view.top + (top * scale).toInt().coerceAtLeast(0)
+
+    val surface = previewSurface ?: SurfaceView(this).apply {
+      setZOrderMediaOverlay(true)
+      isClickable = false
+      isFocusable = false
+      holder.setFormat(PixelFormat.RGBA_8888)
+      holder.addCallback(object : SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) {
+          ControlHost.attachPreviewSurface(holder.surface)
+        }
+
+        override fun surfaceChanged(
+          holder: SurfaceHolder,
+          format: Int,
+          width: Int,
+          height: Int,
+        ) = Unit
+
+        override fun surfaceDestroyed(holder: SurfaceHolder) {
+          ControlHost.attachPreviewSurface(null)
+        }
+      })
+      previewSurface = this
+      parent.addView(this)
+    }
+
+    surface.translationX = physicalLeft.toFloat()
+    surface.translationY = physicalTop.toFloat()
+    surface.layoutParams.width = physicalWidth
+    surface.layoutParams.height = physicalHeight
+    surface.requestLayout()
+  }
+
+  private fun clearVirtualDisplayPreview() {
+    val surface = previewSurface ?: return
+    previewSurface = null
+    (surface.parent as? ViewGroup)?.removeView(surface)
+    ControlHost.attachPreviewSurface(null)
   }
 
   private fun insetContainerOf(webView: View) {

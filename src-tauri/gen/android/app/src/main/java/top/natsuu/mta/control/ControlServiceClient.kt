@@ -54,6 +54,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     override fun onServiceDisconnected(name: ComponentName?) {
         bound = false
+        stopVirtualDisplaySafely()
         ControlHost.detach()
         RuntimeBridge.setControlState(STATE_DISCONNECTED)
     }
@@ -73,6 +74,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     }
 
     fun disconnect() {
+        stopVirtualDisplaySafely()
         if (bound) {
             Shizuku.unbindUserService(serviceArgs, this, true)
             bound = false
@@ -81,6 +83,18 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         ControlHost.detach()
         Shizuku.removeBinderReceivedListener(binderReceivedListener)
         Shizuku.removeRequestPermissionResultListener(permissionListener)
+    }
+
+    private fun stopVirtualDisplaySafely() {
+        runCatching {
+            RuntimeBridge.stopVirtualDisplay()
+        }.onFailure { error ->
+            android.util.Log.w(
+                "MaaTauriAndroidControl",
+                "Could not stop the virtual display before detaching",
+                error,
+            )
+        }
     }
 
     private fun requestPermission() {
@@ -110,7 +124,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     companion object {
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 3
+        private const val SERVICE_VERSION = 4
 
         const val STATE_SHIZUKU_UNAVAILABLE = 1
         const val STATE_PERMISSION_REQUIRED = 2

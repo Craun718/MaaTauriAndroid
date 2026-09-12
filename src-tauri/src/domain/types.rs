@@ -87,7 +87,15 @@ impl OptionApplicability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all_fields = "camelCase")]
+// `rename_all` renames the variants, which is what the `kind` tag carries;
+// `rename_all_fields` only renames the fields inside them. Both are needed: the
+// interface compares `option.kind` against "select" / "switch" / "checkbox" /
+// "input" / "hotkey", the same spelling loader.rs parses out of interface.json.
+#[serde(
+    tag = "kind",
+    rename_all = "lowercase",
+    rename_all_fields = "camelCase"
+)]
 pub enum OptionDefinition {
     Select {
         name: String,
@@ -338,6 +346,104 @@ mod tests {
 
         let decoded: UserConfiguration = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded.ui_language, UiLanguage::Zh);
+    }
+
+    /// The interface switches on the `kind` tag, so the variant names have to reach
+    /// the webview lowercased — the same spelling `loader.rs` reads out of
+    /// interface.json. Tagging with `rename_all_fields` alone left them as
+    /// "Select" / "Input", every `option.kind === "…"` comparison missed, and
+    /// `defaultOptionValue` fell through to `cases[0]` on an input option, which
+    /// carries no `cases` at all. That threw during render and blanked the page.
+    #[test]
+    fn option_definition_kinds_are_tagged_in_lowercase() {
+        let applicability = || OptionApplicability {
+            controllers: Vec::new(),
+            resources: Vec::new(),
+        };
+        let case = || OptionCase {
+            name: "case".into(),
+            label: "Case".into(),
+            description: None,
+            icon: None,
+            options: Vec::new(),
+            pipeline_override: Value::Null,
+        };
+        let named = |kind: &str| (kind.to_string(), kind.to_string());
+
+        let options = [
+            {
+                let (name, label) = named("select");
+                OptionDefinition::Select {
+                    name,
+                    label,
+                    description: None,
+                    cases: vec![case()],
+                    default_case: None,
+                    icon: None,
+                    applicability: applicability(),
+                }
+            },
+            {
+                let (name, label) = named("switch");
+                OptionDefinition::Switch {
+                    name,
+                    label,
+                    description: None,
+                    cases: vec![case()],
+                    default_case: None,
+                    icon: None,
+                    applicability: applicability(),
+                }
+            },
+            {
+                let (name, label) = named("checkbox");
+                OptionDefinition::Checkbox {
+                    name,
+                    label,
+                    description: None,
+                    cases: vec![case()],
+                    default_cases: Vec::new(),
+                    min_count: None,
+                    max_count: None,
+                    icon: None,
+                    applicability: applicability(),
+                }
+            },
+            {
+                let (name, label) = named("input");
+                OptionDefinition::Input {
+                    name,
+                    label,
+                    description: None,
+                    inputs: Vec::new(),
+                    pipeline_override: Value::Null,
+                    icon: None,
+                    applicability: applicability(),
+                }
+            },
+            {
+                let (name, label) = named("hotkey");
+                OptionDefinition::Hotkey {
+                    name,
+                    label,
+                    description: None,
+                    hotkeys: Vec::new(),
+                    pipeline_override: Value::Null,
+                    icon: None,
+                    applicability: applicability(),
+                }
+            },
+        ];
+
+        let kinds: Vec<String> = options
+            .iter()
+            .map(|option| {
+                let encoded = serde_json::to_value(option).unwrap();
+                encoded["kind"].as_str().unwrap().to_owned()
+            })
+            .collect();
+
+        assert_eq!(kinds, ["select", "switch", "checkbox", "input", "hotkey"]);
     }
 }
 

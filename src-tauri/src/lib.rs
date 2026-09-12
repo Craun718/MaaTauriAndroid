@@ -509,7 +509,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let stopped_before_start = state.maa.begin_preparing(&execution_id)?;
     state.set_latest_log(logger.clone());
     run_log::set_latest_global(logger.clone());
-    telemetry::run_started(&run_execution_id);
+    telemetry::run_started(&execution_id);
     if stopped_before_start {
         let cancelled = logger.append(
             run_log::RunEventKind::Cancelled,

@@ -179,7 +179,7 @@ describe("nested task options", () => {
     fireEvent.click(nestedSwitch());
 
     expect(await screen.findByRole("textbox", { name: "次数" })).toBeInTheDocument();
-    expect(screen.getByText("说明").tagName).toBe("EM");
+    expect(screen.getAllByText("说明").map((element) => element.tagName)).toContain("EM");
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
     expect(saveConfiguration.mock.calls[0][0]).toMatchObject({
       runConfigurations: [

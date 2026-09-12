@@ -57,6 +57,7 @@ const snapshot: AppStateSnapshot = {
     schemaVersion: 1,
     initialized: true,
     forceStopTargetApp: false,
+    telemetryEnabled: false,
     globalOptionValues: {},
     controllerOptionValues: {},
     resourceOptionValues: {},

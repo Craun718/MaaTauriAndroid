@@ -3,9 +3,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import type { Schema } from "rehype-sanitize";
 
-const sanitizeSchema: Schema = {
+const sanitizeSchema = {
   ...defaultSchema,
   protocols: {
     ...defaultSchema.protocols,

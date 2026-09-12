@@ -41,6 +41,40 @@ export function defaultOptionValue(
   return { type: "single", case: option.defaultCase ?? fallback };
 }
 
+/**
+ * The case spellings the PI protocol defines for a switch: "Yes"/"yes"/"Y"/"y"
+ * and "No"/"no"/"N"/"n". The longer forms are what the other clients accept on
+ * top of that, and cost nothing here.
+ */
+const SWITCH_ON_NAMES = new Set(["yes", "y", "on", "true", "enable"]);
+const SWITCH_OFF_NAMES = new Set(["no", "n", "off", "false", "disable"]);
+
+export interface SwitchCases {
+  on: string;
+  off: string;
+}
+
+/**
+ * The on/off case *names* of a switch, or undefined when this is not a
+ * two-state switch.
+ *
+ * The protocol defines `switch` as exactly two cases, one recognised as Yes and
+ * one as No, which is what lets it render as a single boolean control rather
+ * than a two-item menu. A project declaring a third case, or names that cannot
+ * be placed on either side, gives no way to tell which way round it goes, so
+ * callers fall back to listing the cases instead of guessing.
+ *
+ * Which case is "on" comes from its name and never from its position: M9A
+ * declares No first in 13 of its 35 switches.
+ */
+export function switchCases(option: OptionDefinition): SwitchCases | undefined {
+  if (option.kind !== "switch" || option.cases.length !== 2) return undefined;
+  const on = option.cases.find((item) => SWITCH_ON_NAMES.has(item.name.toLowerCase()));
+  const off = option.cases.find((item) => SWITCH_OFF_NAMES.has(item.name.toLowerCase()));
+  if (!on || !off) return undefined;
+  return { on: on.name, off: off.name };
+}
+
 function caseOptions(option: OptionDefinition, caseName: string): string[] {
   if (option.kind === "input" || option.kind === "hotkey") return [];
   return option.cases.find((item) => item.name === caseName)?.options ?? [];

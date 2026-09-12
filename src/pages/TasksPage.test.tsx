@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksPage } from "./TasksPage";
 import { useAppStore } from "../store/appStore";
@@ -119,8 +119,8 @@ beforeEach(() => {
   getRunStatus.mockResolvedValue({ executionId: undefined, state: "Idle", message: "Idle" });
 });
 
-function nestedOptionGroup() {
-  return screen.getByRole("radiogroup", { name: "自定义吃糖次数" });
+function nestedSwitch() {
+  return screen.getByRole("checkbox", { name: "自定义吃糖次数" });
 }
 
 describe("nested task options", () => {
@@ -128,8 +128,11 @@ describe("nested task options", () => {
     render(<TasksPage />);
 
     // 吃糖 defaults to Yes, so the option that case owns is reachable — even
-    // though the task only declares 吃糖 itself.
-    expect(nestedOptionGroup()).toBeInTheDocument();
+    // though the task only declares 吃糖 itself. Both switches are one
+    // checkbox each, ticked from the case names rather than from their order.
+    expect(screen.getByRole("checkbox", { name: "吃糖" })).toBeChecked();
+    expect(nestedSwitch()).toBeInTheDocument();
+    expect(nestedSwitch()).not.toBeChecked();
     // Nothing selects 自定义吃糖次数's Yes case yet, so its own child is not.
     expect(screen.queryByRole("textbox", { name: "次数" })).not.toBeInTheDocument();
   });
@@ -137,7 +140,7 @@ describe("nested task options", () => {
   it("reveals the deeper option once its case is selected, and saves it", async () => {
     render(<TasksPage />);
 
-    fireEvent.click(within(nestedOptionGroup()).getByRole("radio", { name: "Yes" }));
+    fireEvent.click(nestedSwitch());
 
     expect(await screen.findByRole("textbox", { name: "次数" })).toBeInTheDocument();
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
@@ -158,10 +161,10 @@ describe("nested task options", () => {
 
   it("hides the deeper option again when the case is switched off", async () => {
     render(<TasksPage />);
-    fireEvent.click(within(nestedOptionGroup()).getByRole("radio", { name: "Yes" }));
+    fireEvent.click(nestedSwitch());
     expect(await screen.findByRole("textbox", { name: "次数" })).toBeInTheDocument();
 
-    fireEvent.click(within(nestedOptionGroup()).getByRole("radio", { name: "No" }));
+    fireEvent.click(nestedSwitch());
 
     await waitFor(() =>
       expect(screen.queryByRole("textbox", { name: "次数" })).not.toBeInTheDocument(),
@@ -170,7 +173,7 @@ describe("nested task options", () => {
 
   it("keeps the value typed into a nested option", async () => {
     render(<TasksPage />);
-    fireEvent.click(within(nestedOptionGroup()).getByRole("radio", { name: "Yes" }));
+    fireEvent.click(nestedSwitch());
     const field = await screen.findByRole("textbox", { name: "次数" });
 
     fireEvent.change(field, { target: { value: "6" } });

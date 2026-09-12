@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectedCaseNames, visibleOptions } from "./options";
+import { selectedCaseNames, switchCases, visibleOptions } from "./options";
 import type { OptionDefinition, OptionValue } from "./types";
 
 const applicability = { controllers: [], resources: [] };
@@ -176,5 +176,43 @@ describe("selectedCaseNames", () => {
 
   it("reports nothing for an option with no cases", () => {
     expect(selectedCaseNames(count)).toEqual([]);
+  });
+});
+
+describe("switchCases", () => {
+  const twoCases = (names: string[]): OptionDefinition => ({
+    kind: "switch",
+    name: "s",
+    label: "s",
+    cases: names.map((name) => ({ name, label: name, options: [] })),
+    applicability,
+  });
+
+  it("reads Yes/No no matter which one is declared first", () => {
+    expect(switchCases(twoCases(["Yes", "No"]))).toEqual({ on: "Yes", off: "No" });
+    expect(switchCases(twoCases(["No", "Yes"]))).toEqual({ on: "Yes", off: "No" });
+    expect(switchCases(sugar)).toEqual({ on: "Yes", off: "No" });
+  });
+
+  it("accepts the short spellings the protocol lists", () => {
+    expect(switchCases(twoCases(["Y", "n"]))).toEqual({ on: "Y", off: "n" });
+  });
+
+  it("accepts the on/off spellings other clients treat as boolean", () => {
+    expect(switchCases(twoCases(["Enable", "Disable"]))).toEqual({
+      on: "Enable",
+      off: "Disable",
+    });
+  });
+
+  it("gives up when the names do not say which side is on", () => {
+    expect(switchCases(twoCases(["开", "关"]))).toBeUndefined();
+    expect(switchCases(twoCases(["Yes", "Whatever"]))).toBeUndefined();
+  });
+
+  it("gives up on anything that is not a two-case switch", () => {
+    expect(switchCases(twoCases(["Yes", "No", "Maybe"]))).toBeUndefined();
+    expect(switchCases(twoCases(["Yes"]))).toBeUndefined();
+    expect(switchCases(count)).toBeUndefined();
   });
 });

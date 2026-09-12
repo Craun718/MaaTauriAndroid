@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, FolderInput, Trash2 } from "lucide-react";
 import { OptionEditor } from "../components/OptionEditor";
+import { RichDescription } from "../components/RichDescription";
 import { Checkbox } from "../components/ui/Checkbox";
 import { SegmentGroup } from "../components/ui/SegmentGroup";
 import { TextField } from "../components/ui/TextField";
@@ -93,6 +94,7 @@ export function SettingsPage() {
             <h2 className="font-medium">{t("resource")}</h2>
             <div className="flex min-h-14 w-full flex-col rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-left">
               <span className="font-medium">{resource?.label ?? t("unavailable")}</span>
+              <RichDescription text={resource?.description} />
               <span className="break-all text-sm text-[var(--text-muted)]">
                 {resource?.paths.join(", ") ?? t("noResources")}
               </span>
@@ -142,6 +144,23 @@ export function SettingsPage() {
           }}
         >
           <span className="font-medium">{t("forceStopTargetApp")}</span>
+        </Checkbox>
+      </section>
+      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+        <h2 className="font-medium">{t("telemetry")}</h2>
+        <p className="text-sm text-[var(--text-muted)]">{t("telemetryDescription")}</p>
+        <Checkbox
+          className="min-h-12 gap-3"
+          checked={snapshot?.configuration.telemetryEnabled ?? false}
+          disabled={busy || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.telemetryEnabled = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
+          <span className="font-medium">{t("telemetryEnabled")}</span>
         </Checkbox>
       </section>
       <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">

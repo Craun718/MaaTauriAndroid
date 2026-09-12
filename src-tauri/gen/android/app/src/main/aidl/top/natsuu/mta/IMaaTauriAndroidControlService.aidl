@@ -23,7 +23,7 @@ interface IMaaTauriAndroidControlService {
     void prepareAgentRuntime(String descriptorJson, String fingerprint, int runtimeIndex,
             in ParcelFileDescriptor piArchive, in ParcelFileDescriptor runtimeBundle);
     AgentLaunch startAgent(String fingerprint, int runtimeIndex, int port,
-            String nativeLibraryDir, String executionId);
+            String nativeLibraryDir, String executionId, String piEnvironment);
     void stopAgent(String executionId);
     void stopAllAgents();
     int protocolVersion();

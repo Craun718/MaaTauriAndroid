@@ -71,6 +71,11 @@ const en = {
   loadProject: "Load project",
   runBehavior: "Run behavior",
   forceStopTargetApp: "Force stop target app",
+  telemetry: "Anonymous telemetry",
+  telemetryDescription:
+    "Share crash and task statistics with the resource author. Debug builds never upload anything, and you can turn this off at any time.",
+  telemetryEnabled: "Allow anonymous telemetry",
+  focusDismiss: "OK",
   diagnostics: "Diagnostics",
   deleteRuns: "Delete runs",
   deleting: "Deleting",
@@ -139,6 +144,11 @@ const zh: Record<MessageKey, string> = {
   loadProject: "加载项目",
   runBehavior: "运行行为",
   forceStopTargetApp: "运行前强制停止目标应用",
+  telemetry: "匿名遥测",
+  telemetryDescription:
+    "向资源作者共享崩溃与任务统计数据。调试构建不会上传任何内容，你也可以随时关闭。",
+  telemetryEnabled: "允许匿名遥测",
+  focusDismiss: "知道了",
   diagnostics: "诊断",
   deleteRuns: "删除运行记录",
   deleting: "删除中",

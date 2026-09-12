@@ -230,6 +230,30 @@ pub struct AgentDefinition {
     pub identifier: Option<String>,
 }
 
+/// Anonymous telemetry declared by the resource project (`telemetry.sentry`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryConfig {
+    #[serde(default)]
+    pub dsn: Option<String>,
+    #[serde(default = "default_true")]
+    pub tracing: bool,
+    #[serde(default = "default_one")]
+    pub traces_sample_rate: f64,
+    #[serde(default = "default_one")]
+    pub failure_attachments_sample_rate: f64,
+    #[serde(default)]
+    pub environment: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_one() -> f64 {
+    1.0
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
@@ -243,6 +267,9 @@ pub struct ProjectMetadata {
     pub welcome_errors: Vec<String>,
     pub mirrorchyan_rid: Option<String>,
     pub mirrorchyan_multiplatform: bool,
+    pub telemetry: Option<TelemetryConfig>,
+    #[serde(skip_serializing, default)]
+    pub translations: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -285,6 +312,8 @@ pub struct UserConfiguration {
     #[serde(default)]
     pub force_stop_target_app: bool,
     #[serde(default)]
+    pub telemetry_enabled: bool,
+    #[serde(default)]
     pub ui_language: UiLanguage,
     pub active_resource: Option<String>,
     pub global_option_values: BTreeMap<String, OptionValue>,
@@ -301,6 +330,7 @@ impl Default for UserConfiguration {
             schema_version: 1,
             initialized: false,
             force_stop_target_app: false,
+            telemetry_enabled: false,
             ui_language: UiLanguage::System,
             active_resource: None,
             global_option_values: BTreeMap::new(),

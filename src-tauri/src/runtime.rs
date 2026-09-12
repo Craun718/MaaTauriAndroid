@@ -381,10 +381,11 @@ pub fn run_result() -> Option<RunResult> {
 pub fn create_session(
     execution_id: &str,
     project_root: &str,
-    resource_paths: &[String],
+    resolved: &crate::domain::types::ResolvedRun,
     display_id: u32,
     force_stop: bool,
     agent: Option<&crate::agent::PreparedAgent>,
+    pi_env: Option<&std::collections::BTreeMap<String, String>>,
 ) -> Result<CreatedSession, RuntimeError> {
     let maa_library = library_path()?;
     maa_framework::load_library(&maa_library).map_err(set_error)?;
@@ -404,13 +405,14 @@ pub fn create_session(
                 &resource,
                 &prepared.descriptor,
                 prepared.host.clone(),
+                pi_env.unwrap_or(&std::collections::BTreeMap::new()),
             )
             .map_err(|error| RuntimeError::Maa(error.to_string()))?,
         ),
         _ => None,
     };
 
-    for relative in resource_paths {
+    for relative in &resolved.resource.paths {
         let path = resource_path(project_root, relative);
         if !path.is_dir() {
             return Err(RuntimeError::LibraryNotLoaded(format!(
@@ -427,6 +429,59 @@ pub fn create_session(
         return Err(RuntimeError::Maa("resource loading failed".to_string()));
     }
 
+    if let Some(declared_hash) = &resolved.resource.hash {
+        match resource.hash() {
+            Ok(actual_hash) => {
+                if actual_hash != *declared_hash {
+                    if let Some(logger) = crate::run_log::latest_global() {
+                        let _ = logger.append(
+                            crate::run_log::RunEventKind::Warning,
+                            RunState::Preparing,
+                            format!(
+                                "resource hash does not match its declaration; the resource may be incomplete or outdated. Expected {declared_hash}, got {actual_hash}; the run will continue"
+                            ),
+                            None,
+                            Some(serde_json::json!({
+                                "expected": declared_hash,
+                                "actual": actual_hash
+                            })),
+                        );
+                    }
+                }
+            }
+            Err(error) => {
+                if let Some(logger) = crate::run_log::latest_global() {
+                    let _ = logger.append(
+                        crate::run_log::RunEventKind::Warning,
+                        RunState::Preparing,
+                        format!("resource hash could not be verified: {error}"),
+                        None,
+                        Some(serde_json::json!({ "expected": declared_hash })),
+                    );
+                }
+            }
+        }
+    }
+
+    for relative in attach_resource_paths(resolved) {
+        let path = resource_path(project_root, &relative);
+        if !path.is_dir() {
+            return Err(RuntimeError::LibraryNotLoaded(format!(
+                "attached resource bundle does not exist: {}",
+                path.display()
+            )));
+        }
+        resource
+            .post_bundle(&path.to_string_lossy())
+            .map_err(RuntimeError::from)?
+            .wait();
+    }
+    if !resource.loaded() {
+        return Err(RuntimeError::Maa(
+            "attached resource loading failed".to_string(),
+        ));
+    }
+
     let tasker = Tasker::new()?;
     tasker.bind_resource(&resource)?;
     tasker.bind_controller(&controller)?;
@@ -440,6 +495,24 @@ pub fn create_session(
         tasker,
         agent: agent_session,
     })
+}
+
+/// `controller.attach_resource_path` extras loaded after the selected resource's
+/// own paths (and after the resource hash check, matching the Project Interface).
+fn attach_resource_paths(resolved: &crate::domain::types::ResolvedRun) -> Vec<String> {
+    resolved
+        .controller
+        .raw
+        .get("attach_resource_path")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub struct CreatedSession {
@@ -503,7 +576,8 @@ pub fn run_tasks(
 mod tests {
     use super::*;
     use crate::domain::types::{
-        ConfiguredTask, ControllerDefinition, ResolvedTask, ResourceDefinition, TaskDefinition,
+        ConfiguredTask, ControllerDefinition, ResolvedRun, ResolvedTask, ResourceDefinition,
+        TaskDefinition,
     };
     use std::collections::BTreeMap;
 
@@ -545,6 +619,38 @@ mod tests {
         assert!(screen_size().is_some());
         configure_screen(1080, 2400);
         assert_eq!(screen_size(), Some((1080, 2400)));
+    }
+
+    #[test]
+    fn attach_resource_paths_come_from_the_controller() {
+        let resolved = ResolvedRun {
+            controller: ControllerDefinition {
+                name: "ADB".to_string(),
+                label: "Android".to_string(),
+                controller_type: "AndroidNative".to_string(),
+                raw: serde_json::json!({
+                    "attach_resource_path": ["resource/extra", "resource/shared"]
+                }),
+            },
+            resource: ResourceDefinition {
+                name: "base".to_string(),
+                label: "Base".to_string(),
+                description: None,
+                paths: vec!["resource/base".to_string()],
+                controllers: Vec::new(),
+                options: Vec::new(),
+                hash: None,
+                raw: serde_json::Value::Null,
+            },
+            tasks: Vec::new(),
+            base_pipeline: serde_json::Value::Null,
+            pipeline_override: serde_json::Value::Null,
+        };
+
+        assert_eq!(
+            attach_resource_paths(&resolved),
+            vec!["resource/extra".to_string(), "resource/shared".to_string()]
+        );
     }
 
     #[test]

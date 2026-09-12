@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 export interface SegmentGroupItem {
   value: string;
   label: string;
+  description?: ReactNode;
 }
 
 interface SegmentGroupProps {
@@ -44,7 +45,7 @@ export function SegmentGroup({
               </ArkSegmentGroup.Label>
             )}
             {description && (
-              <p className="text-sm text-[var(--text-muted)]">{description}</p>
+              <div className="text-sm text-[var(--text-muted)]">{description}</div>
             )}
           </div>
         </div>
@@ -57,9 +58,16 @@ export function SegmentGroup({
           <ArkSegmentGroup.Item
             key={item.value}
             value={item.value}
-            className="h-10 rounded-md px-3 text-sm font-medium"
+            className={
+              item.description
+                ? "min-h-10 flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left text-sm font-medium"
+                : "h-10 rounded-md px-3 text-sm font-medium"
+            }
           >
             <ArkSegmentGroup.ItemText>{item.label}</ArkSegmentGroup.ItemText>
+            {item.description && (
+              <div className="w-full text-xs font-normal">{item.description}</div>
+            )}
             <ArkSegmentGroup.ItemControl />
             <ArkSegmentGroup.ItemHiddenInput />
           </ArkSegmentGroup.Item>

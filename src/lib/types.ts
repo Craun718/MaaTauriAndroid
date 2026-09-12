@@ -111,6 +111,15 @@ export interface ProjectMetadata {
   welcome: string[];
   welcomeFingerprint?: string;
   welcomeErrors?: string[];
+  telemetry?: TelemetryConfig;
+}
+
+export interface TelemetryConfig {
+  dsn?: string;
+  tracing: boolean;
+  tracesSampleRate: number;
+  failureAttachmentsSampleRate: number;
+  environment?: string;
 }
 
 export interface Project {
@@ -179,6 +188,7 @@ export interface UserConfiguration {
   schemaVersion: number;
   initialized: boolean;
   forceStopTargetApp: boolean;
+  telemetryEnabled: boolean;
   uiLanguage?: UiLanguage;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;
@@ -219,6 +229,8 @@ export type RunEventKind =
   | "task"
   | "stopping"
   | "failure"
+  | "warning"
+  | "focus"
   | "completed"
   | "cancelled"
   | "screenshot";

@@ -1,10 +1,12 @@
 mod agent;
 mod diagnostics;
 mod domain;
+mod focus;
 mod persistence;
 mod run_log;
 mod runtime;
 mod secrets;
+mod telemetry;
 
 use domain::loader::ProjectLoader;
 use domain::resolver::{resolve_run, ResolverError};
@@ -167,11 +169,24 @@ impl AppState {
             .write()
             .expect("configuration lock poisoned") = configuration.clone();
         self.persist_configuration()?;
+        let project = self.project().expect("the project was just installed");
+        configure_telemetry(&project, &configuration);
         Ok(configuration)
     }
 }
 
+/// Applies the project's telemetry declaration and the user's consent whenever a
+/// project is installed or a configuration is saved.
+fn configure_telemetry(project: &Project, configuration: &UserConfiguration) {
+    telemetry::configure(
+        project.metadata.telemetry.as_ref(),
+        configuration.telemetry_enabled,
+    );
+    telemetry::tag_project(Some(&project.name), project.version.as_deref());
+}
+
 fn normalize_configuration(project: &Project, configuration: &mut UserConfiguration) {
+    let first_install = !configuration.initialized;
     if !project
         .resources
         .iter()
@@ -191,6 +206,11 @@ fn normalize_configuration(project: &Project, configuration: &mut UserConfigurat
         configuration.run_configurations.insert(0, default_run);
     }
     configuration.initialized = true;
+    // Telemetry ships opted-in for the first install (Project Interface v2.9
+    // recommends default-on, revocable); persisted choices always win afterwards.
+    if first_install {
+        configuration.telemetry_enabled = true;
+    }
 
     let next_fingerprint = project.metadata.welcome_fingerprint.clone();
     if configuration.welcome_fingerprint.as_ref() != next_fingerprint.as_ref() {
@@ -331,6 +351,7 @@ fn save_configuration(
     let mut configuration = configuration;
     normalize_configuration(&project, &mut configuration);
     state.set_configuration(configuration.clone())?;
+    configure_telemetry(&project, &configuration);
     Ok(configuration)
 }
 
@@ -488,6 +509,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let stopped_before_start = state.maa.begin_preparing(&execution_id)?;
     state.set_latest_log(logger.clone());
     run_log::set_latest_global(logger.clone());
+    telemetry::run_started(&run_execution_id);
     if stopped_before_start {
         let cancelled = logger.append(
             run_log::RunEventKind::Cancelled,
@@ -503,6 +525,8 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
             "The run was cancelled".to_string(),
         );
         state.maa.finish(&execution_id);
+        telemetry::run_event("stopped", "The run was cancelled before Maa started", None);
+        telemetry::run_finished("stopped");
         return Ok(StartRunStatus {
             execution_id,
             message: "The run was cancelled".to_string(),
@@ -514,13 +538,32 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let run_execution_id = execution_id.clone();
     let logger_for_run = logger.clone();
     let project_root = project.root.clone();
+    let client_language = agent::resolved_locale(configuration.ui_language, &project.language);
+    let project_version = project.version.clone();
+    let attachment_rate = project
+        .metadata
+        .telemetry
+        .as_ref()
+        .map(|item| item.failure_attachments_sample_rate)
+        .unwrap_or(1.0);
+    let focus_translations = project.metadata.translations.clone();
     let agent_count = project.agents.len();
     let agent_interface_path =
         std::path::PathBuf::from(project.root.clone()).join("interface.json");
     let creation_execution_id = run_execution_id.clone();
-    let resource_paths = resolved.resource.paths.clone();
+    let resolved_for_run = resolved.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     let force_stop_target_app = configuration.force_stop_target_app;
+    let pi_env = if agent_count > 0 {
+        Some(agent::pi_environment(
+            &resolved,
+            &client_language,
+            project_version.as_deref(),
+            &focus_translations,
+        ))
+    } else {
+        None
+    };
     drop(_lifecycle_guard);
     tokio::spawn(async move {
         let fail = |logger: &run_log::RunLogger, message: String| {
@@ -536,6 +579,8 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 runtime::RunState::Idle,
                 message,
             );
+            telemetry::run_event("failed", &message, None);
+            telemetry::run_finished("failed");
         };
         let creation = tokio::task::spawn_blocking(move || {
             let agent = agent::prepare_android(&agent_interface_path, agent_count)
@@ -543,10 +588,11 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
             runtime::create_session(
                 &creation_execution_id,
                 &project_root,
-                &resource_paths,
+                &resolved_for_run,
                 0,
                 force_stop_target_app,
                 agent.as_ref(),
+                pi_env.as_ref(),
             )
         })
         .await;
@@ -562,6 +608,18 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         return;
                     }
                 };
+                if let Err(error) = tasker.add_event_sink(Box::new(focus::FocusSink::new(
+                    app.clone(),
+                    focus_translations.clone(),
+                ))) {
+                    let _ = logger_for_run.append(
+                        run_log::RunEventKind::Warning,
+                        runtime::RunState::Running,
+                        format!("focus notifications could not be registered: {error}"),
+                        None,
+                        None,
+                    );
+                }
                 if let Ok(event) = logger_for_run.append(
                     run_log::RunEventKind::Started,
                     runtime::RunState::Running,
@@ -595,40 +653,62 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         return;
                     }
                 };
-                let (kind, state, message) = match outcome {
+                let (kind, state, message, outcome_label, attachment_path) = match outcome {
                     runtime::RunOutcome::Completed => (
                         run_log::RunEventKind::Completed,
                         runtime::RunState::Idle,
                         "The run completed".to_string(),
+                        "completed",
+                        None,
                     ),
                     runtime::RunOutcome::Stopped => (
                         run_log::RunEventKind::Cancelled,
                         runtime::RunState::Idle,
                         "The run was stopped".to_string(),
+                        "stopped",
+                        None,
                     ),
                     runtime::RunOutcome::Failed { entry } => {
-                        if let Err(error) = diagnostics::capture_failure_screenshot(
+                        let mut attachment_path = None;
+                        match diagnostics::capture_failure_screenshot(
                             logger_for_run.run_dir(),
                             &entry,
                         ) {
-                            let _ = logger_for_run.append(
-                                run_log::RunEventKind::Failure,
-                                runtime::RunState::Running,
-                                format!("failure screenshot could not be captured: {error}"),
-                                None,
-                                Some(serde_json::json!({ "taskEntry": entry })),
-                            );
+                            Err(error) => {
+                                let _ = logger_for_run.append(
+                                    run_log::RunEventKind::Failure,
+                                    runtime::RunState::Running,
+                                    format!("failure screenshot could not be captured: {error}"),
+                                    None,
+                                    Some(serde_json::json!({ "taskEntry": entry })),
+                                );
+                            }
+                            Ok(path) => {
+                                if telemetry::sample(attachment_rate) {
+                                    attachment_path = Some(path);
+                                }
+                            }
                         }
                         (
                             run_log::RunEventKind::Failure,
                             runtime::RunState::Idle,
                             format!("Maa task {entry} failed"),
+                            "failed",
+                            attachment_path,
                         )
                     }
                 };
                 if let Ok(event) = logger_for_run.append(kind, state, message.clone(), None, None) {
                     let _ = app.emit("run-event", &event);
                 }
+                telemetry::run_event(
+                    outcome_label,
+                    &message,
+                    attachment_path
+                        .and_then(|path| path.to_str().map(str::to_string))
+                        .as_deref(),
+                );
+                telemetry::run_finished(outcome_label);
                 runtime::set_execution_result(Some(logger_for_run.execution_id()), state, message);
                 sessions.finish(&run_execution_id);
             }
@@ -838,6 +918,47 @@ impl serde::Serialize for AppError {
         S: serde::Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::types::ProjectMetadata;
+
+    fn project() -> Project {
+        Project {
+            root: "/fixtures".to_string(),
+            interface_version: 2,
+            name: "fixture".to_string(),
+            label: "Fixture".to_string(),
+            version: None,
+            language: "zh_cn".to_string(),
+            languages: Vec::new(),
+            controllers: Vec::new(),
+            resources: Vec::new(),
+            groups: Vec::new(),
+            tasks: Vec::new(),
+            options: BTreeMap::new(),
+            global_options: Vec::new(),
+            presets: Vec::new(),
+            agents: Vec::new(),
+            metadata: ProjectMetadata::default(),
+        }
+    }
+
+    #[test]
+    fn telemetry_defaults_on_for_first_install_only() {
+        let project = project();
+        let mut first_install = UserConfiguration::default();
+        normalize_configuration(&project, &mut first_install);
+        assert!(first_install.telemetry_enabled);
+
+        let mut persisted = UserConfiguration::default();
+        persisted.initialized = true;
+        persisted.telemetry_enabled = false;
+        normalize_configuration(&project, &mut persisted);
+        assert!(!persisted.telemetry_enabled);
     }
 }
 

@@ -28,6 +28,7 @@ const project: Project = {
     {
       name: "resource-a",
       label: "Resource A",
+      description: "Base **resource**",
       paths: ["resource/base"],
       controllers: [],
       options: ["resolution"],
@@ -47,8 +48,9 @@ const project: Project = {
       kind: "select",
       name: "resolution",
       label: "Resolution",
+      description: "**分辨率**说明",
       cases: [
-        { name: "720p", label: "720p", options: [] },
+        { name: "720p", label: "720p", description: "**720** 说明", options: [] },
         { name: "1080p", label: "1080p", options: [] },
       ],
       applicability: { controllers: [], resources: [] },
@@ -63,6 +65,7 @@ const configuration: UserConfiguration = {
   schemaVersion: 1,
   initialized: true,
   forceStopTargetApp: false,
+  telemetryEnabled: false,
   activeResource: undefined,
   globalOptionValues: {},
   controllerOptionValues: {},
@@ -100,5 +103,23 @@ describe("project scope in settings", () => {
         "resource-a": { resolution: { type: "single", case: "1080p" } },
       },
     });
+  });
+
+  it("renders resource, option and case descriptions as rich text", () => {
+    render(<SettingsPage />);
+
+    expect(screen.getByText("resource").tagName).toBe("STRONG");
+    expect(screen.getByText("分辨率").tagName).toBe("STRONG");
+    expect(screen.getByText("720").tagName).toBe("STRONG");
+    expect(screen.getByRole("radio", { name: /720p/ })).toBeInTheDocument();
+  });
+
+  it("persists the telemetry consent choice", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /allow anonymous telemetry/i }));
+
+    await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
+    expect(saveConfiguration.mock.calls[0][0]).toMatchObject({ telemetryEnabled: true });
   });
 });

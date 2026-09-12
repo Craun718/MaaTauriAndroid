@@ -317,9 +317,39 @@ impl ProjectLoader {
                     .get("mirrorchyan_multiplatform")
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
+                telemetry: parse_telemetry(document.get("telemetry")),
+                translations: translations.clone(),
             },
         })
     }
+}
+
+/// Anonymous telemetry the resource owner can opt into (`telemetry.sentry`).
+fn parse_telemetry(value: Option<&Value>) -> Option<crate::domain::types::TelemetryConfig> {
+    let sentry = value?.as_object()?.get("sentry")?.as_object()?;
+    let telemetry = crate::domain::types::TelemetryConfig {
+        dsn: sentry
+            .get("dsn")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        tracing: sentry
+            .get("tracing")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        traces_sample_rate: sentry
+            .get("traces_sample_rate")
+            .and_then(Value::as_f64)
+            .unwrap_or(1.0),
+        failure_attachments_sample_rate: sentry
+            .get("failure_attachments_sample_rate")
+            .and_then(Value::as_f64)
+            .unwrap_or(1.0),
+        environment: sentry
+            .get("environment")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+    };
+    Some(telemetry)
 }
 
 /// Label of the controller the app always runs. Shown as-is (it is a proper noun),
@@ -861,5 +891,60 @@ mod tests {
             .any(|resource| resource.name == "官服"));
         assert!(project.tasks.iter().any(|task| task.name == "收取荒原"));
         assert!(project.options.contains_key("好梦井"));
+    }
+
+    #[test]
+    fn preserves_controller_attach_resource_path() {
+        let project = ProjectLoader::default()
+            .load_value(
+                "/tmp",
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{
+                        "name": "ADB",
+                        "type": "Adb",
+                        "attach_resource_path": ["resource/extra"]
+                    }],
+                    "resource": [{"name": "base", "path": ["resource/base"]}]
+                }),
+                "en_us",
+            )
+            .expect("an interface with attached resources should load");
+
+        let controller = &project.controllers[0];
+        assert_eq!(
+            controller.raw["attach_resource_path"],
+            json!(["resource/extra"])
+        );
+    }
+
+    #[test]
+    fn parses_telemetry_with_protocol_defaults() {
+        let project = ProjectLoader::default()
+            .load_value(
+                "/tmp",
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "telemetry": {
+                        "sentry": { "dsn": "https://key@sentry.test/1" }
+                    },
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}]
+                }),
+                "en_us",
+            )
+            .expect("an interface with telemetry should load");
+
+        let telemetry = project
+            .metadata
+            .telemetry
+            .expect("telemetry should be parsed");
+        assert_eq!(telemetry.dsn.as_deref(), Some("https://key@sentry.test/1"));
+        assert!(telemetry.tracing);
+        assert_eq!(telemetry.traces_sample_rate, 1.0);
+        assert_eq!(telemetry.failure_attachments_sample_rate, 1.0);
+        assert!(telemetry.environment.is_none());
     }
 }

@@ -20,8 +20,15 @@ vi.mock("../lib/api", () => ({
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(() => undefined),
+  listen: vi.fn((event: string, handler: (notification: { payload: unknown }) => void) => {
+    (eventHandlers.handlers[event] ??= []).push(handler);
+    return Promise.resolve(() => undefined);
+  }),
 }));
+
+const eventHandlers = vi.hoisted(
+  () => ({ handlers: {} as Record<string, Array<(event: { payload: unknown }) => void>> }),
+);
 
 const applicability = { controllers: [], resources: [] };
 
@@ -42,16 +49,35 @@ const project: Project = {
   resources: [
     { name: "base", label: "Base", paths: ["resource/base"], controllers: [], options: [] },
   ],
-  groups: [],
+  groups: [
+    {
+      name: "daily",
+      label: "日常",
+      description: "<b>组说明</b>",
+      defaultExpand: true,
+    },
+    { name: "event", label: "活动", defaultExpand: false },
+  ],
   tasks: [
     {
       name: "糖果",
       label: "糖果",
       entry: "Sugar",
-      groups: [],
+      description: "**任务**说明",
+      groups: ["daily", "event"],
       controllers: [],
       resources: [],
       options: ["吃糖"],
+      defaultCheck: false,
+    },
+    {
+      name: "整理",
+      label: "整理",
+      entry: "Cleanup",
+      groups: [],
+      controllers: [],
+      resources: [],
+      options: [],
       defaultCheck: false,
     },
   ],
@@ -83,13 +109,21 @@ const project: Project = {
       name: "吃糖次数",
       label: "吃糖次数",
       inputs: [
-        { name: "count", label: "次数", pipelineType: "int", password: false },
+        {
+          name: "count",
+          label: "次数",
+          description: "次数 *说明*",
+          pipelineType: "int",
+          password: false,
+        },
       ],
       applicability,
     },
   },
   globalOptions: [],
-  presets: [],
+  presets: [
+    { name: "daily", label: "日常预设", description: "预设 *重点*", tasks: [] },
+  ],
   metadata: { welcome: [] },
 };
 
@@ -97,6 +131,7 @@ const configuration: UserConfiguration = {
   schemaVersion: 1,
   initialized: true,
   forceStopTargetApp: false,
+  telemetryEnabled: false,
   globalOptionValues: {},
   controllerOptionValues: {},
   resourceOptionValues: {},
@@ -106,6 +141,7 @@ const configuration: UserConfiguration = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  eventHandlers.handlers = {};
   const snapshot: AppStateSnapshot = { project, configuration };
   useAppStore.setState({ snapshot, busy: false, error: undefined });
   saveConfiguration.mockImplementation(async (next: unknown) => next);
@@ -143,6 +179,7 @@ describe("nested task options", () => {
     fireEvent.click(nestedSwitch());
 
     expect(await screen.findByRole("textbox", { name: "次数" })).toBeInTheDocument();
+    expect(screen.getByText("说明").tagName).toBe("EM");
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
     expect(saveConfiguration.mock.calls[0][0]).toMatchObject({
       runConfigurations: [
@@ -192,5 +229,70 @@ describe("nested task options", () => {
         },
       ],
     });
+  });
+});
+
+describe("task groups and rich descriptions", () => {
+  it("groups tasks in interface order and renders group descriptions", () => {
+    render(<TasksPage />);
+
+    expect(screen.getByRole("button", { name: "日常" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByText("组说明").tagName).toBe("B");
+    expect(screen.getByText("任务").tagName).toBe("STRONG");
+    expect(screen.getAllByRole("heading", { name: "糖果" })).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "整理" })).toBeInTheDocument();
+    expect(screen.getByText("重点").tagName).toBe("EM");
+  });
+
+  it("keeps a default-collapsed group hidden until it is toggled", () => {
+    render(<TasksPage />);
+    const eventHeader = screen.getByRole("button", { name: "活动" });
+
+    expect(eventHeader).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByRole("heading", { name: "糖果" })).toHaveLength(1);
+
+    fireEvent.click(eventHeader);
+
+    expect(eventHeader).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByRole("heading", { name: "糖果" })).toHaveLength(2);
+  });
+});
+
+describe("focus notifications", () => {
+  it("shows focus toasts while a run is active", async () => {
+    render(<TasksPage />);
+
+    eventHandlers.handlers["focus-toast"][0]({
+      payload: {
+        channel: "toast",
+        messageType: "Node.Action.Starting",
+        name: "NodeA",
+        message: "NodeA started",
+      },
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent("NodeA: NodeA started");
+  });
+
+  it("shows focus notices with a dismiss control", async () => {
+    render(<TasksPage />);
+
+    eventHandlers.handlers["focus-notify"][0]({
+      payload: {
+        channel: "modal",
+        messageType: "Node.Action.Failed",
+        name: "NodeA",
+        message: "NodeA failed",
+      },
+    });
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("NodeA failed");
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
   });
 });

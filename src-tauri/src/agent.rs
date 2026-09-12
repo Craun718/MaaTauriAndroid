@@ -1,8 +1,10 @@
+use crate::domain::types::{ResolvedRun, UiLanguage};
 use crate::run_log::RunEventKind;
 use crate::runtime::RunState;
 use maa_framework::agent_client::AgentClient;
 use maa_framework::resource::Resource;
 use serde::Deserialize;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -88,6 +90,7 @@ pub trait AgentHost: Send + Sync {
         execution_id: &str,
         index: usize,
         port: u16,
+        pi_env: &BTreeMap<String, String>,
     ) -> Result<LaunchedAgent, AgentError>;
     fn stop(&self, execution_id: &str) -> Result<(), AgentError>;
 }
@@ -104,6 +107,7 @@ impl AgentSession {
         resource: &Resource,
         descriptor: &AgentDescriptor,
         host: Arc<dyn AgentHost>,
+        pi_env: &BTreeMap<String, String>,
     ) -> Result<Self, AgentError> {
         if descriptor.runtimes.is_empty() {
             return Err(AgentError::InvalidDescriptor(
@@ -121,7 +125,7 @@ impl AgentSession {
             })?;
             client.bind(resource.clone())?;
 
-            let launch = match host.launch(descriptor, execution_id, index, port) {
+            let launch = match host.launch(descriptor, execution_id, index, port, pi_env) {
                 Ok(launch) => launch,
                 Err(error) => {
                     let _ = host.stop(execution_id);
@@ -241,6 +245,11 @@ pub fn validate_descriptor(
                 "runtime {index} may not override LD_PRELOAD"
             )));
         }
+        if runtime.env.keys().any(|key| key.starts_with("PI_")) {
+            return Err(AgentError::InvalidDescriptor(format!(
+                "runtime {index} may not set reserved PI_* environment variables"
+            )));
+        }
         indexes.push(runtime.interface_index);
     }
     if indexes.windows(2).any(|pair| pair[0] >= pair[1]) {
@@ -270,8 +279,112 @@ pub fn start_session(
     resource: &Resource,
     descriptor: &AgentDescriptor,
     host: Arc<dyn AgentHost>,
+    pi_env: &BTreeMap<String, String>,
 ) -> Result<AgentSession, AgentError> {
-    AgentSession::start(execution_id, resource, descriptor, host)
+    AgentSession::start(execution_id, resource, descriptor, host, pi_env)
+}
+
+const PI_INTERFACE_VERSION: &str = "v2.6.0";
+const PI_CLIENT_NAME: &str = "TTFlow";
+
+/// Maps the UI setting to the Project Interface locale. System follows the
+/// language the project was loaded in, which the frontend derives from the OS.
+pub fn resolved_locale(ui_language: UiLanguage, fallback: &str) -> String {
+    match ui_language {
+        UiLanguage::System => fallback.to_string(),
+        UiLanguage::Zh => "zh_cn".to_string(),
+        UiLanguage::En => "en_us".to_string(),
+    }
+}
+
+/// Values the Project Interface v2.5.0 convention asks the Client to inject into
+/// the agent child process. The controller and resource are single-line JSON with
+/// their i18n-resolved labels, matching what the GUI currently shows.
+pub fn pi_environment(
+    resolved: &ResolvedRun,
+    client_language: &str,
+    project_version: Option<&str>,
+    translations: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut environment = BTreeMap::new();
+    environment.insert(
+        "PI_INTERFACE_VERSION".to_string(),
+        PI_INTERFACE_VERSION.to_string(),
+    );
+    environment.insert("PI_CLIENT_NAME".to_string(), PI_CLIENT_NAME.to_string());
+    environment.insert(
+        "PI_CLIENT_VERSION".to_string(),
+        env!("CARGO_PKG_VERSION").to_string(),
+    );
+    environment.insert(
+        "PI_CLIENT_LANGUAGE".to_string(),
+        client_language.to_string(),
+    );
+    environment.insert(
+        "PI_CLIENT_MAAFW_VERSION".to_string(),
+        maa_framework::maa_version().to_string(),
+    );
+    if let Some(version) = project_version {
+        environment.insert("PI_VERSION".to_string(), version.to_string());
+    }
+    let mut controller = resolved.controller.raw.clone();
+    if !controller.is_object() {
+        controller = serde_json::json!({
+        "name": resolved.controller.name,
+        "label": resolved.controller.label,
+        "type": resolved.controller.controller_type,
+        });
+    }
+    if let Some(object) = controller.as_object_mut() {
+        localize_selection_fields(object, translations);
+        object.insert(
+            "label".to_string(),
+            serde_json::json!(resolved.controller.label),
+        );
+    }
+    if let Ok(controller) = serde_json::to_string(&controller) {
+        environment.insert("PI_CONTROLLER".to_string(), controller);
+    }
+    let mut resource = resolved.resource.raw.clone();
+    if let Some(object) = resource.as_object_mut() {
+        localize_selection_fields(object, translations);
+        object.insert(
+            "label".to_string(),
+            serde_json::json!(resolved.resource.label),
+        );
+        if let Some(description) = &resolved.resource.description {
+            object.insert("description".to_string(), serde_json::json!(description));
+        } else {
+            if object
+                .get("description")
+                .and_then(Value::as_str)
+                .is_some_and(|description| description.starts_with('$'))
+            {
+                object.remove("description");
+            }
+        }
+    }
+    if let Ok(resource) = serde_json::to_string(&resource) {
+        environment.insert("PI_RESOURCE".to_string(), resource);
+    }
+    environment
+}
+
+fn localize_selection_fields(
+    object: &mut serde_json::Map<String, Value>,
+    translations: &BTreeMap<String, String>,
+) {
+    for field in ["label", "description", "icon"] {
+        let Some(value) = object.get(field).and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(key) = value.strip_prefix('$') else {
+            continue;
+        };
+        if let Some(text) = translations.get(key) {
+            object.insert(field.to_string(), Value::String(text.clone()));
+        }
+    }
 }
 
 pub fn prepare_android(
@@ -312,6 +425,7 @@ pub fn android_host() -> Result<Arc<dyn AgentHost>, AgentError> {
 mod android {
     use super::{AgentDescriptor, AgentError, AgentHost, LaunchedAgent};
     use jni::objects::JValue;
+    use std::collections::BTreeMap;
     use std::fs::File;
     use std::os::fd::FromRawFd;
 
@@ -350,6 +464,7 @@ mod android {
             execution_id: &str,
             index: usize,
             port: u16,
+            pi_env: &BTreeMap<String, String>,
         ) -> Result<LaunchedAgent, AgentError> {
             super::android_bridge(|env, _bridge, service| {
                 let fingerprint = env.new_string(&descriptor.fingerprint)?;
@@ -370,17 +485,22 @@ mod android {
                     .to_string_lossy()
                     .into_owned();
                 let native_library_dir = env.new_string(native_library_dir_text)?;
+                let pi_env_json = env.new_string(
+                    serde_json::to_string(pi_env)
+                        .map_err(|error| AgentError::InvalidDescriptor(error.to_string()))?,
+                )?;
                 let launch = env
                     .call_method(
                         service,
                         "startAgent",
-                        "(Ljava/lang/String;IILjava/lang/String;Ljava/lang/String;)Ltop/natsuu/mta/AgentLaunch;",
+                        "(Ljava/lang/String;IILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ltop/natsuu/mta/AgentLaunch;",
                         &[
                             JValue::Object(&fingerprint),
                             JValue::Int(index as i32),
                             JValue::Int(port as i32),
                             JValue::Object(&native_library_dir),
                             JValue::Object(&execution),
+                            JValue::Object(&pi_env_json),
                         ],
                     )
                     .and_then(|value| value.l())
@@ -690,6 +810,7 @@ mod tests {
             _execution_id: &str,
             _index: usize,
             _port: u16,
+            _pi_env: &BTreeMap<String, String>,
         ) -> Result<LaunchedAgent, AgentError> {
             Err(AgentError::Host("not connected in unit test".to_string()))
         }
@@ -705,5 +826,94 @@ mod tests {
         let host = Arc::new(FakeHost::default());
         assert!(host.stop("run").is_ok());
         assert_eq!(host.stopped.lock().unwrap().as_slice(), ["run"]);
+    }
+
+    #[test]
+    fn rejects_reserved_pi_environment_keys() {
+        let mut descriptor = descriptor();
+        descriptor.runtimes[0]
+            .env
+            .insert("PI_CLIENT_NAME".to_string(), "spoofed".to_string());
+        let interface =
+            std::env::temp_dir().join(format!("ttflow-agent-pi-{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&interface, b"{}").unwrap();
+        descriptor.interface_sha256 = sha256_file(&interface);
+        assert!(matches!(
+            validate_descriptor(&descriptor, &interface),
+            Err(AgentError::InvalidDescriptor(_))
+        ));
+        let _ = std::fs::remove_file(interface);
+    }
+
+    #[test]
+    fn pi_environment_exposes_client_and_selection() {
+        use crate::domain::types::{ControllerDefinition, ResourceDefinition};
+
+        let resolved = crate::domain::types::ResolvedRun {
+            controller: ControllerDefinition {
+                name: "ADB".to_string(),
+                label: "Android".to_string(),
+                controller_type: "AndroidNative".to_string(),
+                raw: serde_json::json!({
+                    "name": "ADB",
+                    "label": "$controller",
+                    "type": "Adb",
+                    "adb": { "serial": "emulator-5554" },
+                }),
+            },
+            resource: ResourceDefinition {
+                name: "official".to_string(),
+                label: "官服".to_string(),
+                description: None,
+                paths: vec!["resource/base".to_string()],
+                controllers: Vec::new(),
+                options: Vec::new(),
+                hash: None,
+                raw: serde_json::json!({
+                    "name": "official",
+                    "label": "$resource",
+                    "description": "$resource-description",
+                    "path": ["resource/base"],
+                    "hash": "abc123",
+                }),
+            },
+            tasks: Vec::new(),
+            base_pipeline: serde_json::Value::Null,
+            pipeline_override: serde_json::Value::Null,
+        };
+
+        let environment = pi_environment(
+            &resolved,
+            "zh_cn",
+            Some("0.1.0"),
+            &BTreeMap::from([("resource-description".to_string(), "官方资源".to_string())]),
+        );
+        assert_eq!(environment["PI_INTERFACE_VERSION"], "v2.6.0");
+        assert_eq!(environment["PI_CLIENT_NAME"], "TTFlow");
+        assert_eq!(environment["PI_CLIENT_VERSION"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(environment["PI_CLIENT_LANGUAGE"], "zh_cn");
+        assert!(environment.contains_key("PI_CLIENT_MAAFW_VERSION"));
+        assert_eq!(environment["PI_VERSION"], "0.1.0");
+
+        let controller: serde_json::Value =
+            serde_json::from_str(&environment["PI_CONTROLLER"]).unwrap();
+        assert_eq!(controller["label"], "Android");
+        assert_eq!(controller["type"], "Adb");
+        assert_eq!(controller["adb"]["serial"], "emulator-5554");
+
+        let resource: serde_json::Value =
+            serde_json::from_str(&environment["PI_RESOURCE"]).unwrap();
+        assert_eq!(resource["name"], "official");
+        assert_eq!(resource["path"], serde_json::json!(["resource/base"]));
+        assert_eq!(resource["hash"], "abc123");
+        assert_eq!(resource["description"], "官方资源");
+    }
+
+    #[test]
+    fn resolves_ui_locale() {
+        use crate::domain::types::UiLanguage;
+
+        assert_eq!(resolved_locale(UiLanguage::System, "zh_cn"), "zh_cn");
+        assert_eq!(resolved_locale(UiLanguage::En, "zh_cn"), "en_us");
     }
 }

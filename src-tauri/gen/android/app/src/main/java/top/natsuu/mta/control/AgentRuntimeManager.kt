@@ -90,6 +90,7 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         port: Int,
         nativeLibraryDir: String,
         executionId: String,
+        piEnvironment: String,
     ): AgentLaunch {
         requireFingerprint(fingerprint, "fingerprint")
         require(port in 1024..65535) { "agent port $port is outside the allowed range" }
@@ -153,7 +154,20 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
                 while (keys.hasNext()) {
                     val key = keys.next()
                     require(key != "LD_PRELOAD") { "the descriptor may not override LD_PRELOAD" }
+                    require(!key.startsWith("PI_")) {
+                        "the descriptor may not set reserved PI_* environment variables"
+                    }
                     environment[key] = substitute(values.getString(key), root, port, nativeLibraryDir)
+                }
+            }
+            JSONObject(piEnvironment).let { overrides ->
+                val keys = overrides.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    require(key.startsWith("PI_")) {
+                        "the Project Interface environment may only set PI_* variables"
+                    }
+                    environment[key] = overrides.getString(key)
                 }
             }
             environment["HOME"] = root.resolve("home").absolutePath

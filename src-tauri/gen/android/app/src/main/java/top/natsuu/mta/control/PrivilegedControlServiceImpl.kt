@@ -192,6 +192,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         port: Int,
         nativeLibraryDir: String?,
         executionId: String?,
+        piEnvironment: String?,
     ): AgentLaunch {
         return agentRuntimeManager.start(
             fingerprint,
@@ -199,6 +200,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             port,
             requireNotNull(nativeLibraryDir) { "the native library directory is missing" },
             requireNotNull(executionId) { "the execution id is missing" },
+            requireNotNull(piEnvironment) { "the Project Interface environment is missing" },
         )
     }
 

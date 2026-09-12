@@ -23,6 +23,8 @@ pub enum RunEventKind {
     Task,
     Stopping,
     Failure,
+    Warning,
+    Focus,
     Completed,
     Cancelled,
     Screenshot,

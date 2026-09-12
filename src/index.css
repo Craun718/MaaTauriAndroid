@@ -76,6 +76,82 @@ textarea {
  * 具体页面只负责布局（用 Tailwind class 覆盖尺寸、间距等），不重复定义状态样式。
  */
 @layer components {
+  /* ---------- 富文本 description（interface 提供的 Markdown / 白名单 HTML） ---------- */
+  .rich-description {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .rich-description > :first-child {
+    margin-top: 0;
+  }
+
+  .rich-description > :last-child {
+    margin-bottom: 0;
+  }
+
+  .rich-description h1,
+  .rich-description h2,
+  .rich-description h3,
+  .rich-description h4,
+  .rich-description h5,
+  .rich-description h6 {
+    margin: 0.5rem 0 0.25rem;
+    font-size: inherit;
+    font-weight: 600;
+  }
+
+  .rich-description p {
+    margin: 0.25rem 0;
+  }
+
+  .rich-description ul,
+  .rich-description ol {
+    margin: 0.25rem 0;
+    padding-left: 1.25rem;
+  }
+
+  .rich-description li {
+    margin: 0.125rem 0;
+  }
+
+  .rich-description a {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  .rich-description blockquote {
+    margin: 0.25rem 0;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--border);
+  }
+
+  .rich-description code {
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+    background: var(--surface-muted);
+    font-size: 0.8125rem;
+  }
+
+  .rich-description pre {
+    margin: 0.25rem 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    background: var(--surface-muted);
+    overflow-x: auto;
+  }
+
+  .rich-description pre code {
+    padding: 0;
+    background: transparent;
+  }
+
+  .rich-description img {
+    max-width: 100%;
+  }
+
   /* ---------- Checkbox ---------- */
   [data-scope="checkbox"][data-part="root"] {
     display: flex;
@@ -159,6 +235,12 @@ textarea {
 
   [data-scope="field"][data-part="input"]::placeholder {
     color: var(--text-muted);
+  }
+
+  [data-scope="field"][data-part="helper-text"] {
+    display: block;
+    margin-top: 0.375rem;
+    font-size: 0.8125rem;
   }
 
   /* ---------- 禁用与键盘焦点 ---------- */

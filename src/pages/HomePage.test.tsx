@@ -6,17 +6,12 @@ import type { AppStateSnapshot, Project, UserConfiguration } from "../lib/types"
 
 const getPrivilegedStatus = vi.fn();
 const resolveCurrent = vi.fn();
-const getVirtualDisplayStatus = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getPrivilegedStatus: () => getPrivilegedStatus(),
   openShizuku: vi.fn(),
   requestPrivilegedAccess: vi.fn(),
   resolveCurrent: () => resolveCurrent(),
-  startVirtualDisplay: vi.fn(),
-  stopVirtualDisplay: vi.fn(),
-  getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
-  updateVirtualDisplayBounds: vi.fn(),
 }));
 
 const project: Project = {
@@ -81,21 +76,13 @@ beforeEach(() => {
     basePipeline: {},
     pipelineOverride: {},
   });
-  getVirtualDisplayStatus.mockResolvedValue({
-    active: false,
-    displayId: -1,
-    width: 1280,
-    height: 720,
-    frameCount: 0,
-  });
 });
 
 describe("home resource details", () => {
   it("shows the resolved resource with its description and paths", async () => {
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Virtual display" })).toBeInTheDocument();
-    expect(await screen.findAllByText("Stopped")).toHaveLength(2);
+    await screen.findByText("resource/base");
     expect(screen.getByRole("heading", { name: "Resource" })).toBeInTheDocument();
     expect(screen.getAllByText("Resource A").length).toBe(2);
     expect(screen.getByText("resource").tagName).toBe("STRONG");

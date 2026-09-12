@@ -7,6 +7,7 @@ import type { AppStateSnapshot, Project, UserConfiguration } from "../lib/types"
 const saveConfiguration = vi.fn();
 const resolveCurrent = vi.fn();
 const getRunStatus = vi.fn();
+const getVirtualDisplayStatus = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
@@ -17,6 +18,10 @@ vi.mock("../lib/api", () => ({
   saveConfiguration: (configuration: unknown) => saveConfiguration(configuration),
   startRun: vi.fn(),
   stopRun: vi.fn(),
+  startVirtualDisplay: vi.fn(),
+  stopVirtualDisplay: vi.fn(),
+  getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
+  updateVirtualDisplayBounds: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -153,6 +158,13 @@ beforeEach(() => {
     pipelineOverride: {},
   });
   getRunStatus.mockResolvedValue({ executionId: undefined, state: "Idle", message: "Idle" });
+  getVirtualDisplayStatus.mockResolvedValue({
+    active: false,
+    displayId: -1,
+    width: 1280,
+    height: 720,
+    frameCount: 0,
+  });
 });
 
 function nestedSwitch() {
@@ -233,6 +245,20 @@ describe("nested task options", () => {
 });
 
 describe("task groups and rich descriptions", () => {
+  it("places the virtual display above the run queue", async () => {
+    render(<TasksPage />);
+
+    const virtualDisplay = await screen.findByRole("heading", {
+      name: "Virtual display",
+    });
+    const runQueue = screen.getByRole("heading", { name: "0 tasks ready" });
+    expect(virtualDisplay.compareDocumentPosition(runQueue)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(screen.queryByText("Base")).not.toBeInTheDocument();
+    expect(screen.queryByText("Idle")).not.toBeInTheDocument();
+  });
+
   it("groups tasks in interface order and renders group descriptions", () => {
     render(<TasksPage />);
 

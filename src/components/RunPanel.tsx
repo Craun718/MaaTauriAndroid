@@ -140,13 +140,7 @@ export function RunPanel() {
   return (
     <>
       <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-sm text-[var(--text-muted)]">
-            {run?.resource.label ?? t("resource")}
-          </p>
-          <p className="text-sm text-[var(--text-muted)]">{runState}</p>
-        </div>
-        <h2 className="mt-1 text-xl font-semibold">
+        <h2 className="text-xl font-semibold">
           {t("tasksReady", { count: enabled.length })}
         </h2>
         <button

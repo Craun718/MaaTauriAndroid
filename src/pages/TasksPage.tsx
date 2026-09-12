@@ -6,6 +6,7 @@ import { OptionEditor } from "../components/OptionEditor";
 import { RunPanel } from "../components/RunPanel";
 import { EmptyProject } from "../components/EmptyProject";
 import { RichDescription } from "../components/RichDescription";
+import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { useTranslation } from "../lib/i18n";
 import {
@@ -174,6 +175,7 @@ export function TasksPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">{t("tasksAndRun")}</h1>
+      <VirtualDisplayCard />
       <RunPanel />
       {project.presets.length > 0 && (
         <section className="space-y-2">

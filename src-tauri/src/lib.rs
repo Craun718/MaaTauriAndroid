@@ -1270,6 +1270,7 @@ enum AppError {
     RunLog(#[from] run_log::RunLogError),
     #[error("{0}")]
     Diagnostic(#[from] diagnostics::DiagnosticError),
+    #[error("{0}")]
     Io(#[from] std::io::Error),
 }
 

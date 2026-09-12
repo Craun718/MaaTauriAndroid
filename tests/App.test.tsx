@@ -73,6 +73,7 @@ const snapshot: AppStateSnapshot = {
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.location.hash = "#/";
     bootstrap.mockResolvedValue(snapshot);
     resolveCurrent.mockResolvedValue({
       controller: snapshot.project?.controllers[0],

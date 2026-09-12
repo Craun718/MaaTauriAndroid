@@ -884,7 +884,7 @@ mod tests {
             pipeline_override: serde_json::Value::Null,
         };
 
-        let environment = pi_environment(
+        let mut environment = pi_environment(
             &resolved,
             "zh_cn",
             Some("0.1.0"),

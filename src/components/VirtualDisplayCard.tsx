@@ -126,8 +126,8 @@ export function VirtualDisplayCard() {
         status?.active ? await stopVirtualDisplay() : await startVirtualDisplay(),
       );
     } catch (error) {
-      setStatusError(error instanceof Error ? error.message : String(error));
       await refreshStatus();
+      setStatusError(error instanceof Error ? error.message : String(error));
     } finally {
       setActionPending(false);
     }

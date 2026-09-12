@@ -5,7 +5,7 @@ import { RichDescription } from "./RichDescription";
 const mocks = vi.hoisted(() => ({
   openUrl: vi.fn(),
   readProjectImage: vi.fn(),
-  createObjectURL: vi.fn(() => "blob:project-image"),
+  createObjectURL: vi.fn<(blob: Blob) => string>(() => "blob:project-image"),
   revokeObjectURL: vi.fn(),
 }));
 

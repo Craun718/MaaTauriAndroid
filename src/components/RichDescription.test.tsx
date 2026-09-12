@@ -1,15 +1,38 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RichDescription } from "./RichDescription";
 
-const openUrl = vi.fn();
+const mocks = vi.hoisted(() => ({
+  openUrl: vi.fn(),
+  readProjectImage: vi.fn(),
+  createObjectURL: vi.fn(() => "blob:project-image"),
+  revokeObjectURL: vi.fn(),
+}));
+
+const { createObjectURL, openUrl, readProjectImage, revokeObjectURL } = mocks;
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
-  openUrl: (url: string) => openUrl(url),
+  openUrl: (url: string) => mocks.openUrl(url),
+}));
+
+vi.mock("../lib/api", () => ({
+  readProjectImage: (path: string) => mocks.readProjectImage(path),
 }));
 
 beforeEach(() => {
   openUrl.mockReset();
+  readProjectImage.mockReset();
+  createObjectURL.mockClear();
+  revokeObjectURL.mockClear();
+  URL.createObjectURL = createObjectURL;
+  URL.revokeObjectURL = revokeObjectURL;
+});
+
+afterEach(() => {
+  URL.createObjectURL = originalCreateObjectURL;
+  URL.revokeObjectURL = originalRevokeObjectURL;
 });
 
 describe("RichDescription", () => {
@@ -71,5 +94,25 @@ describe("RichDescription", () => {
 
     expect(fireEvent.click(screen.getByRole("link", { name: "site" }))).toBe(false);
     await waitFor(() => expect(openUrl).toHaveBeenCalledWith("https://example.com"));
+  });
+
+  it("loads project-relative images through the backend", async () => {
+    readProjectImage.mockResolvedValue(new ArrayBuffer(4));
+    const { unmount } = render(
+      <RichDescription text="![CCMain](resource/announcement/images/CCMain.png)" />,
+    );
+
+    const image = screen.getByAltText("CCMain");
+    expect(readProjectImage).toHaveBeenCalledWith(
+      "resource/announcement/images/CCMain.png",
+    );
+
+    await waitFor(() => expect(image).toHaveAttribute("src", "blob:project-image"));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
+    expect((createObjectURL.mock.calls[0][0] as Blob).type).toBe("image/png");
+
+    unmount();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:project-image");
   });
 });

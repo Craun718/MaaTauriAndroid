@@ -14,7 +14,7 @@ use domain::types::{ConfiguredTask, Project, RunConfiguration, UserConfiguration
 use persistence::{PersistenceError, UserConfigurationStore};
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
@@ -325,6 +325,67 @@ fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnaps
         configuration,
         project_path: bundled_root.map(str::to_string),
     })
+}
+
+#[tauri::command]
+fn read_project_image(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<tauri::ipc::Response, AppError> {
+    let project = state.project()?;
+    let asset = project_asset_path(Path::new(&project.root), &path)?;
+    if std::fs::metadata(&asset)?.len() > MAX_PROJECT_IMAGE_BYTES as u64 {
+        return Err(AppError::Message(
+            "The Project Interface image exceeds the size limit".to_string(),
+        ));
+    }
+
+    let bytes = std::fs::read(asset)?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+const MAX_PROJECT_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+
+fn project_asset_path(root: &Path, relative: &str) -> Result<PathBuf, AppError> {
+    if image_mime(relative).is_none() {
+        return Err(AppError::Message(
+            "Only image assets can be loaded from the Project Interface".to_string(),
+        ));
+    }
+
+    let relative_path = Path::new(relative);
+    if relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(AppError::Message(
+            "Project Interface assets must use a safe relative path".to_string(),
+        ));
+    }
+
+    let root = root.canonicalize()?;
+    let asset = root.join(relative_path).canonicalize()?;
+    if !asset.starts_with(&root) {
+        return Err(AppError::Message(
+            "Project Interface assets must stay inside the project".to_string(),
+        ));
+    }
+    Ok(asset)
+}
+
+fn image_mime(path: &str) -> Option<&'static str> {
+    let extension = path.rsplit_once('.')?.1.to_ascii_lowercase();
+    match extension.as_str() {
+        "avif" => Some("image/avif"),
+        "bmp" => Some("image/bmp"),
+        "gif" => Some("image/gif"),
+        "ico" => Some("image/x-icon"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "png" => Some("image/png"),
+        "webp" => Some("image/webp"),
+        _ => None,
+    }
 }
 
 #[tauri::command]
@@ -1209,6 +1270,7 @@ enum AppError {
     RunLog(#[from] run_log::RunLogError),
     #[error("{0}")]
     Diagnostic(#[from] diagnostics::DiagnosticError),
+    Io(#[from] std::io::Error),
 }
 
 impl serde::Serialize for AppError {
@@ -1244,6 +1306,31 @@ mod tests {
             agents: Vec::new(),
             metadata: ProjectMetadata::default(),
         }
+    }
+
+    #[test]
+    fn project_asset_path_allows_images_inside_the_project() {
+        let root = std::env::temp_dir().join(format!("ttflow-asset-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("images")).unwrap();
+        std::fs::write(root.join("images/example.png"), b"png").unwrap();
+
+        let asset = project_asset_path(&root, "images/example.png").unwrap();
+        assert!(asset.ends_with("images/example.png"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_asset_path_rejects_unsafe_and_non_image_paths() {
+        let root = std::env::temp_dir().join(format!("ttflow-asset-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("images")).unwrap();
+        std::fs::write(root.join("images/example.png"), b"png").unwrap();
+
+        assert!(project_asset_path(&root, "images/example.txt").is_err());
+        assert!(project_asset_path(&root, "/images/example.png").is_err());
+        assert!(project_asset_path(&root, "../images/example.png").is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -1393,6 +1480,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bootstrap,
             load_project,
+            read_project_image,
             save_configuration,
             apply_preset,
             resolve_current,

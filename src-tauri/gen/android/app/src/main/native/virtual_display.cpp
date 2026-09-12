@@ -116,7 +116,7 @@ void copy_hardware_frame(AImage* image) {
     int32_t image_stride = 0;
     if (AImage_getWidth(image, &image_width) != AMEDIA_OK ||
         AImage_getHeight(image, &image_height) != AMEDIA_OK ||
-        AImage_getPlaneRowStride(image, &image_stride) != AMEDIA_OK) {
+        AImage_getPlaneRowStride(image, 0, &image_stride) != AMEDIA_OK) {
         return;
     }
 
@@ -700,13 +700,12 @@ void stop_preview() {
 namespace virtual_display {
 
 void attach_preview(JNIEnv& env, jobject surface) {
-    std::lock_guard<std::mutex> lock(g_preview_mutex);
     if (surface == nullptr) {
-        lock.unlock();
         stop_preview();
         return;
     }
 
+    std::lock_guard<std::mutex> lock(g_preview_mutex);
     ANativeWindow* window = ANativeWindow_fromSurface(&env, surface);
     if (env.ExceptionCheck() == JNI_TRUE || window == nullptr) {
         env.ExceptionDescribe();

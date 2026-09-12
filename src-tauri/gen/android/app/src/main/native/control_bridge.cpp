@@ -353,7 +353,7 @@ Java_top_natsuu_mta_control_ControlHost_stopVirtualDisplay(JNIEnv* env, jclass /
         service = g_service;
         stop_method = g_stop_virtual_display_method;
     }
-    virtual_display::stop(env, service, stop_method);
+    virtual_display::stop(*env, service, stop_method);
 }
 
 extern "C" JNIEXPORT jintArray JNICALL
@@ -366,15 +366,16 @@ Java_top_natsuu_mta_control_ControlHost_virtualDisplayStatus(JNIEnv* env, jclass
     int32_t width = 0;
     int32_t height = 0;
     virtual_display::geometry(display_id, width, height);
+    const jint frame_count = static_cast<jint>(std::min<int64_t>(
+        virtual_display::frame_count(),
+        std::numeric_limits<jint>::max()
+    ));
     const jint status[] = {
         virtual_display::active() ? 1 : 0,
         display_id,
         width,
         height,
-        std::min<int64_t>(
-            virtual_display::frame_count(),
-            std::numeric_limits<jint>::max()
-        ),
+        frame_count,
     };
     constexpr jsize status_length = static_cast<jsize>(sizeof(status) / sizeof(status[0]));
     jintArray result = env->NewIntArray(status_length);
@@ -383,7 +384,7 @@ Java_top_natsuu_mta_control_ControlHost_virtualDisplayStatus(JNIEnv* env, jclass
     }
     env->SetIntArrayRegion(result, 0, status_length, status);
     if (clear_exception(*env)) {
-        env.DeleteLocalRef(result);
+        env->DeleteLocalRef(result);
         return nullptr;
     }
     return result;

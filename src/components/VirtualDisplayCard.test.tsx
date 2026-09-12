@@ -4,13 +4,11 @@ import { VirtualDisplayCard } from "./VirtualDisplayCard";
 import type { VirtualDisplayStatus } from "../lib/types";
 
 const getVirtualDisplayStatus = vi.fn();
-const startVirtualDisplay = vi.fn();
 const stopVirtualDisplay = vi.fn();
 const updateVirtualDisplayBounds = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
-  startVirtualDisplay: () => startVirtualDisplay(),
   stopVirtualDisplay: () => stopVirtualDisplay(),
   updateVirtualDisplayBounds: (...args: unknown[]) => updateVirtualDisplayBounds(...args),
 }));
@@ -47,11 +45,11 @@ describe("VirtualDisplayCard", () => {
 
     expect(await screen.findByRole("heading", { name: "Virtual display" })).toBeInTheDocument();
     expect(screen.getAllByText("Stopped")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
   });
 
-  it("starts the display and reports the preview bounds", async () => {
-    startVirtualDisplay.mockResolvedValue(active);
+  it("reports the preview bounds while the display is active", async () => {
+    getVirtualDisplayStatus.mockResolvedValue(active);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       left: 16,
       top: 120,
@@ -60,10 +58,6 @@ describe("VirtualDisplayCard", () => {
     } as DOMRect);
 
     render(<VirtualDisplayCard />);
-    expect(await screen.findByText("1280 x 720")).toBeInTheDocument();
-    const start = await screen.findByRole("button", { name: "Start" });
-    await waitFor(() => expect(start).toBeEnabled());
-    fireEvent.click(start);
 
     expect(await screen.findByText("Display ID: 12")).toBeInTheDocument();
     await waitFor(() =>
@@ -71,16 +65,27 @@ describe("VirtualDisplayCard", () => {
     );
   });
 
-  it("shows action failures", async () => {
-    startVirtualDisplay.mockRejectedValue(new Error("Start failed"));
-    getVirtualDisplayStatus.mockResolvedValue(inactive);
+  it("stops the display", async () => {
+    getVirtualDisplayStatus.mockResolvedValueOnce(active);
+    stopVirtualDisplay.mockResolvedValue(inactive);
 
     render(<VirtualDisplayCard />);
-    expect(await screen.findByText("1280 x 720")).toBeInTheDocument();
-    const start = await screen.findByRole("button", { name: "Start" });
-    await waitFor(() => expect(start).toBeEnabled());
-    fireEvent.click(start);
+    const stop = await screen.findByRole("button", { name: "Stop" });
+    fireEvent.click(stop);
 
-    expect(await screen.findByText("Start failed")).toBeInTheDocument();
+    expect(stopVirtualDisplay).toHaveBeenCalledTimes(1);
+    expect(await screen.findAllByText("Stopped")).toHaveLength(2);
+  });
+
+  it("shows stop failures", async () => {
+    getVirtualDisplayStatus.mockResolvedValue(active);
+    stopVirtualDisplay.mockRejectedValue(new Error("Stop failed"));
+
+    render(<VirtualDisplayCard />);
+    const stop = await screen.findByRole("button", { name: "Stop" });
+    await waitFor(() => expect(stop).toBeEnabled());
+    fireEvent.click(stop);
+
+    expect(await screen.findByText("Stop failed")).toBeInTheDocument();
   });
 });

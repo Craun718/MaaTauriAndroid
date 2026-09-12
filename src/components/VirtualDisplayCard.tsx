@@ -3,13 +3,11 @@ import {
   CircleAlert,
   LoaderCircle,
   MonitorPlay,
-  Play,
   RefreshCw,
   Square,
 } from "lucide-react";
 import {
   getVirtualDisplayStatus,
-  startVirtualDisplay,
   stopVirtualDisplay,
   updateVirtualDisplayBounds,
 } from "../lib/api";
@@ -117,14 +115,12 @@ export function VirtualDisplayCard() {
     }
   }, []);
 
-  async function toggleDisplay() {
+  async function stopDisplay() {
     if (actionPending) return;
     setActionPending(true);
     setStatusError(undefined);
     try {
-      setStatus(
-        status?.active ? await stopVirtualDisplay() : await startVirtualDisplay(),
-      );
+      setStatus(await stopVirtualDisplay());
     } catch (error) {
       await refreshStatus();
       setStatusError(error instanceof Error ? error.message : String(error));
@@ -174,25 +170,21 @@ export function VirtualDisplayCard() {
               : t("virtualDisplayStopped")}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void toggleDisplay()}
-          disabled={actionPending || refreshing || status === undefined}
-          className={`flex h-10 flex-none items-center justify-center gap-2 rounded-md px-4 font-medium disabled:opacity-50 ${
-            active
-              ? "border border-red-500/50 text-red-600 dark:text-red-300"
-              : "border border-[var(--accent)] text-[var(--accent)]"
-          }`}
-        >
-          {actionPending ? (
-            <LoaderCircle size={16} className="animate-spin" />
-          ) : active ? (
-            <Square size={16} />
-          ) : (
-            <Play size={16} />
-          )}
-          {active ? t("stop") : t("start")}
-        </button>
+        {active && (
+          <button
+            type="button"
+            onClick={() => void stopDisplay()}
+            disabled={actionPending || refreshing || status === undefined}
+            className="flex h-10 flex-none items-center justify-center gap-2 rounded-md border border-red-500/50 px-4 font-medium text-red-600 disabled:opacity-50 dark:text-red-300"
+          >
+            {actionPending ? (
+              <LoaderCircle size={16} className="animate-spin" />
+            ) : (
+              <Square size={16} />
+            )}
+            {t("stop")}
+          </button>
+        )}
       </div>
 
       {statusError && (

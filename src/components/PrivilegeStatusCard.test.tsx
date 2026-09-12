@@ -69,7 +69,7 @@ describe("PrivilegeStatusCard", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 
-  it("renders the granted state without an action", async () => {
+  it("keeps the manual permission action in the granted state", async () => {
     getPrivilegedStatus.mockResolvedValue({
       status: "connected",
       message: "connected",
@@ -82,8 +82,8 @@ describe("PrivilegeStatusCard", () => {
       screen.getByText("The privileged control unit is connected and ready to run tasks."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Request Shizuku permission" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Request Shizuku permission" }),
+    ).toBeInTheDocument();
   });
 
   it("requests Shizuku access and refreshes the status", async () => {
@@ -105,6 +105,9 @@ describe("PrivilegeStatusCard", () => {
     await waitFor(() => expect(requestPrivilegedAccess).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Granted")).toBeInTheDocument();
     expect(getPrivilegedStatus).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getAllByRole("button", { name: "Request Shizuku permission" }),
+    ).toHaveLength(1);
   });
 
   it("offers the Shizuku shortcut when the service is unavailable", async () => {

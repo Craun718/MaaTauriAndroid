@@ -78,16 +78,16 @@ beforeEach(() => {
   });
 });
 
-describe("home resource details", () => {
-  it("shows the resolved resource with its description and paths", async () => {
+describe("home layout", () => {
+  it("omits resource and current selection cards", async () => {
     render(<HomePage />);
 
-    await screen.findByText("resource/base");
-    expect(screen.getByRole("heading", { name: "Resource" })).toBeInTheDocument();
-    expect(screen.getAllByText("Resource A").length).toBe(2);
-    expect(screen.getByText("resource").tagName).toBe("STRONG");
-    expect(screen.getByText("resource/base")).toBeInTheDocument();
-    // The resource is resolved automatically and is not offered as a choice.
-    expect(screen.queryByText("Resource B")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Privileged host" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Current selection" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Resource" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Resource A")).not.toBeInTheDocument();
+    expect(screen.queryByText("resource/base")).not.toBeInTheDocument();
   });
 });

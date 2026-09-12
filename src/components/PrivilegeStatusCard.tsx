@@ -177,7 +177,7 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         <p className="break-all text-xs text-[var(--text-muted)]">{status.message}</p>
       )}
 
-      {action && (
+      {action && action !== "request" && (
         <button
           type="button"
           onClick={() => void runPrivilegeAction(action)}
@@ -192,6 +192,20 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
           {t(actionCopy[action])}
         </button>
       )}
+
+      <button
+        type="button"
+        onClick={() => void runPrivilegeAction("request")}
+        disabled={actionPending || refreshing}
+        className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--accent)] font-medium text-[var(--accent)] disabled:opacity-50"
+      >
+        {actionPending ? (
+          <LoaderCircle size={16} className="animate-spin" />
+        ) : (
+          <ShieldCheck size={16} />
+        )}
+        {t("requestPermission")}
+      </button>
 
       {statusError && (
         <p className="flex items-start gap-2 break-all text-sm text-red-600 dark:text-red-300">

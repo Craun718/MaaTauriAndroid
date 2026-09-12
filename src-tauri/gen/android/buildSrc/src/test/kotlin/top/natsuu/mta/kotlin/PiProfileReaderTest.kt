@@ -1,4 +1,4 @@
-package top.natsuu.maa.tauri.android.kotlin
+package top.natsuu.mta.kotlin
 
 import java.io.File
 import org.junit.Assert.assertEquals

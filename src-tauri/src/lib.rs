@@ -843,7 +843,7 @@ impl serde::Serialize for AppError {
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_initializeSecretBridge(
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_initializeSecretBridge(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
 ) {
@@ -856,7 +856,7 @@ pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_initializ
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_setBootstrapProjectRoot(
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setBootstrapProjectRoot(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     project_root: *mut std::ffi::c_void,
@@ -880,7 +880,7 @@ pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_setBootst
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_configureScreen(
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_configureScreen(
     _env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     width: std::os::raw::c_int,
@@ -891,7 +891,7 @@ pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_configure
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_maa_tauri_android_RuntimeBridge_setControlState(
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setControlState(
     _env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     state: std::os::raw::c_int,

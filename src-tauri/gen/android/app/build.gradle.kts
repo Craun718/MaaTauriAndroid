@@ -6,7 +6,7 @@ import java.util.zip.ZipFile
 import java.util.Properties
 import java.util.TreeMap
 
-import top.natsuu.maa.tauri.android.kotlin.PiProfileReader
+import top.natsuu.mta.kotlin.PiProfileReader
 
 plugins {
     id("com.android.application")
@@ -261,10 +261,10 @@ tasks.named("preBuild") {
 android {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
-    namespace = "top.natsuu.maa.tauri.android"
+    namespace = "top.natsuu.mta"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "top.natsuu.maa.tauri.android.$maaTauriAndroidResourceId"
+        applicationId = "top.natsuu.mta.$maaTauriAndroidResourceId"
         minSdk = 28
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

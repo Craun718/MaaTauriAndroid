@@ -1,4 +1,4 @@
-package top.natsuu.maa.tauri.android.control
+package top.natsuu.mta.control
 
 import android.content.ComponentName
 import android.content.Context
@@ -7,8 +7,8 @@ import android.content.pm.PackageManager
 import android.os.IBinder
 import java.util.UUID
 import rikka.shizuku.Shizuku
-import top.natsuu.maa.tauri.android.IMaaTauriAndroidControlService
-import top.natsuu.maa.tauri.android.RuntimeBridge
+import top.natsuu.mta.IMaaTauriAndroidControlService
+import top.natsuu.mta.RuntimeBridge
 
 class ControlServiceClient(private val context: Context) : ServiceConnection {
     private var bound = false

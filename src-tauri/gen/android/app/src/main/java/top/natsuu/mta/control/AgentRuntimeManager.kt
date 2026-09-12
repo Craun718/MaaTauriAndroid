@@ -1,9 +1,9 @@
-package top.natsuu.maa.tauri.android.control
+package top.natsuu.mta.control
 
 import android.os.Binder
 import android.os.ParcelFileDescriptor
-import top.natsuu.maa.tauri.android.AgentLaunch
-import top.natsuu.maa.tauri.android.ZipSafety
+import top.natsuu.mta.AgentLaunch
+import top.natsuu.mta.ZipSafety
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

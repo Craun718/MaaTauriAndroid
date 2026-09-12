@@ -1,6 +1,6 @@
-package top.natsuu.maa.tauri.android.control
+package top.natsuu.mta.control
 
-import top.natsuu.maa.tauri.android.IMaaTauriAndroidControlService
+import top.natsuu.mta.IMaaTauriAndroidControlService
 
 object ControlHost {
     @Volatile

@@ -1,4 +1,4 @@
-package top.natsuu.maa.tauri.android
+package top.natsuu.mta
 
 import android.os.Parcel
 import android.os.ParcelFileDescriptor

@@ -1,4 +1,4 @@
-package top.natsuu.maa.tauri.android
+package top.natsuu.mta
 
 import android.os.Bundle
 import android.view.View
@@ -6,10 +6,10 @@ import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import top.natsuu.maa.tauri.android.MaaRuntime
-import top.natsuu.maa.tauri.android.control.ControlHost
-import top.natsuu.maa.tauri.android.control.ControlServiceClient
-import top.natsuu.maa.tauri.android.RuntimeBridge
+import top.natsuu.mta.MaaRuntime
+import top.natsuu.mta.control.ControlHost
+import top.natsuu.mta.control.ControlServiceClient
+import top.natsuu.mta.RuntimeBridge
 
 class MainActivity : TauriActivity() {
   private lateinit var controlClient: ControlServiceClient

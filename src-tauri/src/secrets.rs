@@ -193,7 +193,7 @@ pub(crate) mod android {
     };
     use std::sync::OnceLock;
 
-    const BRIDGE_CLASS: &str = "top/natsuu/maa/tauri/android/SecretBridge";
+    const BRIDGE_CLASS: &str = "top/natsuu/mta/SecretBridge";
     const METHOD_SIGNATURE: &str = "(Ljava/lang/String;)Ljava/lang/String;";
 
     struct SecretBridge {

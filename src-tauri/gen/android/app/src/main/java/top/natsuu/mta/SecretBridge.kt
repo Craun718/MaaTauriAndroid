@@ -1,4 +1,4 @@
-package top.natsuu.maa.tauri.android
+package top.natsuu.mta
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties

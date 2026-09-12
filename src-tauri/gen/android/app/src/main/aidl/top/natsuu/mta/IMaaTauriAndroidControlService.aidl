@@ -1,7 +1,7 @@
-package top.natsuu.maa.tauri.android;
+package top.natsuu.mta;
 
-import top.natsuu.maa.tauri.android.InputResult;
-import top.natsuu.maa.tauri.android.AgentLaunch;
+import top.natsuu.mta.InputResult;
+import top.natsuu.mta.AgentLaunch;
 
 import android.os.ParcelFileDescriptor;
 

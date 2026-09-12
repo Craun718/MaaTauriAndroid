@@ -1,4 +1,4 @@
-package top.natsuu.maa.tauri.android.control
+package top.natsuu.mta.control
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -8,8 +8,8 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
-import top.natsuu.maa.tauri.android.AgentLaunch
-import top.natsuu.maa.tauri.android.InputResult
+import top.natsuu.mta.AgentLaunch
+import top.natsuu.mta.InputResult
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 import java.io.BufferedReader
@@ -17,7 +17,7 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStream
 import kotlin.concurrent.thread
-import top.natsuu.maa.tauri.android.IMaaTauriAndroidControlService
+import top.natsuu.mta.IMaaTauriAndroidControlService
 
 class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAndroidControlService.Stub() {
     private val executor = Executors.newSingleThreadExecutor()

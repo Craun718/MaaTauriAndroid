@@ -702,9 +702,9 @@ fn with_service<T>(
         .map_err(|error| io::Error::other(error.to_string()))?;
     let service = env
         .call_static_method(
-            "top/natsuu/maa/tauri/android/control/ControlHost",
+            "top/natsuu/mta/control/ControlHost",
             "current",
-            "()Ltop/natsuu/maa/tauri/android/IMaaTauriAndroidControlService;",
+            "()Ltop/natsuu/mta/IMaaTauriAndroidControlService;",
             &[],
         )
         .and_then(|value| value.l())

@@ -518,7 +518,7 @@ extern "C" int DispatchInputMessage(MethodParam param) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_maa_tauri_android_control_ControlHost_configure(
+Java_top_natsuu_mta_control_ControlHost_configure(
     JNIEnv* env,
     jclass /*clazz*/,
     jint display_id,
@@ -535,7 +535,7 @@ Java_top_natsuu_maa_tauri_android_control_ControlHost_configure(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_maa_tauri_android_control_ControlHost_attachNative(JNIEnv* env, jclass /*clazz*/, jobject service) {
+Java_top_natsuu_mta_control_ControlHost_attachNative(JNIEnv* env, jclass /*clazz*/, jobject service) {
     if (env == nullptr) {
         return;
     }
@@ -566,7 +566,7 @@ Java_top_natsuu_maa_tauri_android_control_ControlHost_attachNative(JNIEnv* env, 
         g_dispatch_detailed_method = env->GetMethodID(
             service_class,
             "dispatchInputDetailed",
-            "(IIIIIILjava/lang/String;Ljava/lang/String;Z)Ltop/natsuu/maa/tauri/android/InputResult;");
+            "(IIIIIILjava/lang/String;Ljava/lang/String;Z)Ltop/natsuu/mta/InputResult;");
         clear_exception(*env);
         env->DeleteLocalRef(service_class);
     }
@@ -590,7 +590,7 @@ Java_top_natsuu_maa_tauri_android_control_ControlHost_attachNative(JNIEnv* env, 
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_top_natsuu_maa_tauri_android_control_ControlHost_detachNative(JNIEnv* env, jclass /*clazz*/) {
+Java_top_natsuu_mta_control_ControlHost_detachNative(JNIEnv* env, jclass /*clazz*/) {
     if (env == nullptr) {
         return;
     }

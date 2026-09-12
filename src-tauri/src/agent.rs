@@ -356,7 +356,7 @@ mod android {
                 let execution = env.new_string(execution_id)?;
                 let native_library_dir = env
                     .call_static_method(
-                        "top/natsuu/maa/tauri/android/RuntimeBridge",
+                        "top/natsuu/mta/RuntimeBridge",
                         "agentNativeLibraryDir",
                         "()Ljava/lang/String;",
                         &[],
@@ -374,7 +374,7 @@ mod android {
                     .call_method(
                         service,
                         "startAgent",
-                        "(Ljava/lang/String;IILjava/lang/String;Ljava/lang/String;)Ltop/natsuu/maa/tauri/android/AgentLaunch;",
+                        "(Ljava/lang/String;IILjava/lang/String;Ljava/lang/String;)Ltop/natsuu/mta/AgentLaunch;",
                         &[
                             JValue::Object(&fingerprint),
                             JValue::Int(index as i32),
@@ -412,7 +412,7 @@ mod android {
     ) -> Result<jni::objects::JObject<'local>, AgentError> {
         let name = env.new_string(name)?;
         env.call_static_method(
-            "top/natsuu/maa/tauri/android/RuntimeBridge",
+            "top/natsuu/mta/RuntimeBridge",
             "openAgentAsset",
             "(Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;",
             &[JValue::Object(&name)],
@@ -463,7 +463,7 @@ fn android_bridge<T>(
     let _ = env.exception_clear();
     let bridge = env
         .call_static_method(
-            "top/natsuu/maa/tauri/android/RuntimeBridge",
+            "top/natsuu/mta/RuntimeBridge",
             "agentBridgeContext",
             "()Ljava/lang/Object;",
             &[],
@@ -477,9 +477,9 @@ fn android_bridge<T>(
     }
     let service = env
         .call_static_method(
-            "top/natsuu/maa/tauri/android/control/ControlHost",
+            "top/natsuu/mta/control/ControlHost",
             "current",
-            "()Ltop/natsuu/maa/tauri/android/IMaaTauriAndroidControlService;",
+            "()Ltop/natsuu/mta/IMaaTauriAndroidControlService;",
             &[],
         )
         .and_then(|value| value.l())
@@ -498,7 +498,7 @@ pub fn load_android_descriptor() -> Result<AgentDescriptor, AgentError> {
         android_bridge(|env, _bridge, _service| {
             let descriptor = env
                 .call_static_method(
-                    "top/natsuu/maa/tauri/android/RuntimeBridge",
+                    "top/natsuu/mta/RuntimeBridge",
                     "agentDescriptor",
                     "()Ljava/lang/String;",
                     &[],
@@ -507,7 +507,7 @@ pub fn load_android_descriptor() -> Result<AgentDescriptor, AgentError> {
                 .map_err(android::jni_error)?;
             let fingerprint = env
                 .call_static_method(
-                    "top/natsuu/maa/tauri/android/RuntimeBridge",
+                    "top/natsuu/mta/RuntimeBridge",
                     "agentFingerprint",
                     "()Ljava/lang/String;",
                     &[],

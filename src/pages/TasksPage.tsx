@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronDown } from "lucide-react";
 import { OptionEditor } from "../components/OptionEditor";
@@ -8,6 +7,8 @@ import { EmptyProject } from "../components/EmptyProject";
 import { RichDescription } from "../components/RichDescription";
 import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
 import { Checkbox } from "../components/ui/Checkbox";
+import { Select } from "../components/ui/Select";
+import { Tabs } from "../components/ui/Tabs";
 import { useTranslation } from "../lib/i18n";
 import {
   activeController,
@@ -16,7 +17,13 @@ import {
   visibleOptions,
 } from "../lib/options";
 import { useAppStore } from "../store/appStore";
-import type { ConfiguredTask, TaskDefinition } from "../lib/types";
+import type {
+  ConfiguredTask,
+  ConfigurationTemplate,
+  OptionValue,
+  Project,
+  TaskDefinition,
+} from "../lib/types";
 
 interface FocusNotice {
   channel: string;
@@ -25,6 +32,9 @@ interface FocusNotice {
   message: string;
 }
 
+/** 未分组任务的固定标签值，避免与 interface 声明的分组名冲突。 */
+const UNGROUPED_TAB = "__ungrouped__";
+
 export function TasksPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
@@ -32,6 +42,7 @@ export function TasksPage() {
   const { t } = useTranslation();
   const [focusToast, setFocusToast] = useState<FocusNotice>();
   const [focusNotice, setFocusNotice] = useState<FocusNotice>();
+  const [selectedPreset, setSelectedPreset] = useState<string>();
 
   useEffect(() => {
     let disposed = false;
@@ -104,73 +115,47 @@ export function TasksPage() {
 
   function renderTask(task: TaskDefinition) {
     const configured = ensureTask(task.name);
-    const unavailable =
-      (task.controllers.length > 0 &&
-        !task.controllers.includes(controller?.name ?? "")) ||
-      (task.resources.length > 0 &&
-        !task.resources.includes(resource?.name ?? ""));
     return (
-      <article
+      <TaskItem
         key={task.name}
-        className={`rounded-lg border p-4 ${
-          unavailable
-            ? "border-[var(--border)] bg-[var(--surface-muted)] opacity-60"
-            : "border-[var(--border)] bg-[var(--surface-raised)]"
-        }`}
-      >
-        <div className="flex min-h-11 items-start justify-between gap-3">
-          <div>
-            <h3 className="font-medium">{configured.customLabel ?? task.label}</h3>
-            <RichDescription text={task.description} />
-          </div>
-          <Checkbox
-            className="h-11 gap-2 text-sm"
-            checked={configured.enabled}
-            disabled={unavailable}
-            onCheckedChange={(next) =>
-              setTask(task.name, (item) => ({ ...item, enabled: next }))
-            }
-          >
-            {t("toggleOn")}
-          </Checkbox>
-        </div>
-        {unavailable && (
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            {t("requiresOtherController")}
-          </p>
-        )}
-        {!unavailable && task.options.length > 0 && (
-          <div className="mt-4 space-y-4 border-t border-[var(--border)] pt-4">
-            {visibleOptions(project.options, task.options, configured.optionValues).map(
-              ({ name, depth }) => {
-                const option = project.options[name];
-                if (!option) return null;
-                return (
-                  <div
-                    key={name}
-                    className={
-                      depth > 0 ? "border-l-2 border-[var(--border)] pl-3" : undefined
-                    }
-                  >
-                    <OptionEditor
-                      option={option}
-                      value={defaultOptionValue(option, configured.optionValues[name])}
-                      onChange={(value) =>
-                        setTask(task.name, (item) => ({
-                          ...item,
-                          optionValues: { ...item.optionValues, [name]: value },
-                        }))
-                      }
-                    />
-                  </div>
-                );
-              },
-            )}
-          </div>
-        )}
-      </article>
+        task={task}
+        project={project}
+        controllerName={controller?.name ?? ""}
+        resourceName={resource?.name ?? ""}
+        configured={configured}
+        onEnabledChange={(next) =>
+          setTask(task.name, (item) => ({ ...item, enabled: next }))
+        }
+        onOptionValueChange={(name, value) =>
+          setTask(task.name, (item) => ({
+            ...item,
+            optionValues: { ...item.optionValues, [name]: value },
+          }))
+        }
+      />
     );
   }
+
+  /** 任务分类标签页：声明的分组各占一页，未分组的任务归入最后一页。 */
+  const tabItems = [
+    ...declaredGroups.map(({ group, tasks }) => ({
+      value: group.name,
+      label: group.label,
+      content: (
+        <div className="space-y-3">
+          <RichDescription text={group.description} />
+          {tasks.map(renderTask)}
+        </div>
+      ),
+    })),
+    ...(ungroupedTasks.length > 0
+      ? [{
+          value: UNGROUPED_TAB,
+          label: t("ungroupedTasks"),
+          content: <div className="space-y-3">{ungroupedTasks.map(renderTask)}</div>,
+        }]
+      : []),
+  ];
 
   return (
     <div className="space-y-5">
@@ -180,44 +165,21 @@ export function TasksPage() {
       {project.presets.length > 0 && (
         <section className="space-y-2">
           <h2 className="font-medium">{t("presets")}</h2>
-          <div className="flex flex-wrap gap-3">
-            {project.presets.map((preset) => (
-              <div key={preset.name} className="flex w-56 flex-col items-start gap-1">
-                <button
-                  type="button"
-                  onClick={() => void applyPreset(preset.name)}
-                  className="h-10 rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-medium"
-                >
-                  {preset.label}
-                </button>
-                <RichDescription text={preset.description} />
-              </div>
-            ))}
-          </div>
+          <PresetPicker
+            presets={project.presets}
+            value={selectedPreset}
+            onValueChange={setSelectedPreset}
+            onApply={(name) => void applyPreset(name)}
+            applyLabel={t("applyPreset")}
+          />
         </section>
       )}
       <section className="space-y-3">
         <h2 className="font-medium">{activeRun?.name ?? t("defaultRunName")}</h2>
         {hasGroups ? (
-          <div className="space-y-2">
-            {declaredGroups.map(({ group, tasks }) => (
-              <TaskGroupSection
-                key={group.name}
-                label={group.label}
-                description={group.description}
-                defaultExpand={group.defaultExpand}
-              >
-                {tasks.map(renderTask)}
-              </TaskGroupSection>
-            ))}
-            {ungroupedTasks.length > 0 && (
-              <TaskGroupSection label={t("ungroupedTasks")} defaultExpand>
-                {ungroupedTasks.map(renderTask)}
-              </TaskGroupSection>
-            )}
-          </div>
+          <Tabs items={tabItems} ariaLabel={t("taskCategories")} />
         ) : (
-          project.tasks.map(renderTask)
+          <div className="space-y-3">{project.tasks.map(renderTask)}</div>
         )}
       </section>
       {focusToast && (
@@ -254,38 +216,147 @@ export function TasksPage() {
   );
 }
 
-function TaskGroupSection({
-  label,
-  description,
-  defaultExpand,
-  children,
+/**
+ * 预设选择器：下拉框选预设，右侧「启用」按钮套用。选中项的描述随选择切换。
+ * `value` 不匹配任何预设（如项目刚加载）时回落到第一个预设。
+ */
+function PresetPicker({
+  presets,
+  value,
+  onValueChange,
+  onApply,
+  applyLabel,
 }: {
-  label: string;
-  description?: string;
-  defaultExpand: boolean;
-  children: ReactNode;
+  presets: ConfigurationTemplate[];
+  value?: string;
+  onValueChange: (name: string) => void;
+  onApply: (name: string) => void;
+  applyLabel: string;
 }) {
-  const [expanded, setExpanded] = useState(defaultExpand);
+  const active = presets.find((preset) => preset.name === value) ?? presets[0];
   return (
-    <div className="space-y-3">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-4 text-left font-medium"
-      >
-        {label}
-        <ChevronDown
-          size={18}
-          className={`shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`}
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Select
+          className="min-w-0 flex-1"
+          labelledBy="preset-select-label"
+          items={presets.map((preset) => ({ value: preset.name, label: preset.label }))}
+          value={active.name}
+          onValueChange={onValueChange}
         />
-      </button>
-      {expanded && (
-        <div className="space-y-3">
-          <RichDescription text={description} />
-          {children}
+        <button
+          type="button"
+          onClick={() => onApply(active.name)}
+          className="h-11 shrink-0 rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-white"
+        >
+          {applyLabel}
+        </button>
+      </div>
+      <RichDescription text={active.description} />
+    </div>
+  );
+}
+
+interface TaskItemProps {
+  task: TaskDefinition;
+  project: Project;
+  controllerName: string;
+  resourceName: string;
+  configured: ConfiguredTask;
+  onEnabledChange: (next: boolean) => void;
+  onOptionValueChange: (name: string, value: OptionValue) => void;
+}
+
+/**
+ * 单个任务卡片：标题与启用开关常驻，详情（说明与选项）收进下拉，
+ * 点击标题展开。没有说明也没有选项的任务不渲染下拉箭头。
+ */
+function TaskItem({
+  task,
+  project,
+  controllerName,
+  resourceName,
+  configured,
+  onEnabledChange,
+  onOptionValueChange,
+}: TaskItemProps) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const unavailable =
+    (task.controllers.length > 0 && !task.controllers.includes(controllerName)) ||
+    (task.resources.length > 0 && !task.resources.includes(resourceName));
+  const options = unavailable
+    ? []
+    : visibleOptions(project.options, task.options, configured.optionValues);
+  const hasDetails = Boolean(task.description) || options.length > 0;
+  const label = configured.customLabel ?? task.label;
+
+  return (
+    <article
+      className={`rounded-lg border p-4 ${
+        unavailable
+          ? "border-[var(--border)] bg-[var(--surface-muted)] opacity-60"
+          : "border-[var(--border)] bg-[var(--surface-raised)]"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        {hasDetails ? (
+          <h3 className="flex min-h-11 flex-1 items-center font-medium">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((value) => !value)}
+              className="flex min-h-11 flex-1 items-center gap-2 text-left"
+            >
+              {label}
+              <ChevronDown
+                size={18}
+                className={`shrink-0 text-[var(--text-muted)] transition-transform ${
+                  expanded ? "" : "-rotate-90"
+                }`}
+              />
+            </button>
+          </h3>
+        ) : (
+          <h3 className="font-medium">{label}</h3>
+        )}
+        <Checkbox
+          className="h-11 gap-2 text-sm"
+          checked={configured.enabled}
+          disabled={unavailable}
+          onCheckedChange={onEnabledChange}
+        >
+          {t("toggleOn")}
+        </Checkbox>
+      </div>
+      {unavailable && (
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          {t("requiresOtherController")}
+        </p>
+      )}
+      {expanded && hasDetails && (
+        <div className="mt-3 space-y-4 border-t border-[var(--border)] pt-4">
+          <RichDescription text={task.description} />
+          {options.map(({ name, depth }) => {
+            const option = project.options[name];
+            if (!option) return null;
+            return (
+              <div
+                key={name}
+                className={
+                  depth > 0 ? "border-l-2 border-[var(--border)] pl-3" : undefined
+                }
+              >
+                <OptionEditor
+                  option={option}
+                  value={defaultOptionValue(option, configured.optionValues[name])}
+                  onChange={(value) => onOptionValueChange(name, value)}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
-    </div>
+    </article>
   );
 }

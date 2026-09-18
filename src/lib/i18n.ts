@@ -66,7 +66,9 @@ const en = {
 
   // Tasks
   tasksAndRun: "Tasks & Run",
+  taskCategories: "Task categories",
   presets: "Presets",
+  applyPreset: "Apply",
   ungroupedTasks: "Ungrouped",
   toggleOn: "On",
   requiresOtherController: "Requires a different controller or resource.",
@@ -148,7 +150,9 @@ const zh: Record<MessageKey, string> = {
   invalidInput: "输入不合法",
 
   tasksAndRun: "任务与运行",
+  taskCategories: "任务分类",
   presets: "预设",
+  applyPreset: "启用",
   ungroupedTasks: "未分组",
   toggleOn: "启用",
   requiresOtherController: "需要其他控制器或资源。",

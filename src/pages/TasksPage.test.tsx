@@ -171,9 +171,15 @@ function nestedSwitch() {
   return screen.getByRole("checkbox", { name: "自定义吃糖次数" });
 }
 
+/** 任务详情收进了下拉，先展开才能摸到选项。 */
+function expandTaskDetails(label: string) {
+  fireEvent.click(screen.getByRole("button", { name: label }));
+}
+
 describe("nested task options", () => {
   it("renders the option owned by a case that is selected by default", () => {
     render(<TasksPage />);
+    expandTaskDetails("糖果");
 
     // 吃糖 defaults to Yes, so the option that case owns is reachable — even
     // though the task only declares 吃糖 itself. Both switches are one
@@ -187,6 +193,7 @@ describe("nested task options", () => {
 
   it("reveals the deeper option once its case is selected, and saves it", async () => {
     render(<TasksPage />);
+    expandTaskDetails("糖果");
 
     fireEvent.click(nestedSwitch());
 
@@ -210,6 +217,7 @@ describe("nested task options", () => {
 
   it("hides the deeper option again when the case is switched off", async () => {
     render(<TasksPage />);
+    expandTaskDetails("糖果");
     fireEvent.click(nestedSwitch());
     expect(await screen.findByRole("textbox", { name: "次数" })).toBeInTheDocument();
 
@@ -222,6 +230,7 @@ describe("nested task options", () => {
 
   it("keeps the value typed into a nested option", async () => {
     render(<TasksPage />);
+    expandTaskDetails("糖果");
     fireEvent.click(nestedSwitch());
     const field = await screen.findByRole("textbox", { name: "次数" });
 
@@ -259,31 +268,41 @@ describe("task groups and rich descriptions", () => {
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
   });
 
-  it("groups tasks in interface order and renders group descriptions", () => {
+  it("renders task categories as tabs and shows the first group by default", () => {
     render(<TasksPage />);
 
-    expect(screen.getByRole("button", { name: "日常" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "日常" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "活动" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByRole("tab", { name: "未分组" })).toBeInTheDocument();
+    // 分组说明与任务标题可见；任务详情收进下拉，任务说明暂不渲染。
+    expect(screen.getByText("组说明").tagName).toBe("B");
+    expect(screen.getByRole("heading", { name: "糖果" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "整理" })).not.toBeInTheDocument();
+    expect(screen.getByText("重点").tagName).toBe("EM");
+
+    expandTaskDetails("糖果");
+    expect(screen.getByRole("button", { name: "糖果" })).toHaveAttribute(
       "aria-expanded",
       "true",
     );
-    expect(screen.getByText("组说明").tagName).toBe("B");
     expect(screen.getByText("任务").tagName).toBe("STRONG");
-    expect(screen.getAllByRole("heading", { name: "糖果" })).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "整理" })).toBeInTheDocument();
-    expect(screen.getByText("重点").tagName).toBe("EM");
   });
 
-  it("keeps a default-collapsed group hidden until it is toggled", () => {
+  it("switches task categories between tabs", () => {
     render(<TasksPage />);
-    const eventHeader = screen.getByRole("button", { name: "活动" });
 
-    expect(eventHeader).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getAllByRole("heading", { name: "糖果" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("tab", { name: "活动" }));
+    expect(screen.getByRole("heading", { name: "糖果" })).toBeInTheDocument();
 
-    fireEvent.click(eventHeader);
-
-    expect(eventHeader).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getAllByRole("heading", { name: "糖果" })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("tab", { name: "未分组" }));
+    expect(screen.getByRole("heading", { name: "整理" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "糖果" })).not.toBeInTheDocument();
   });
 });
 

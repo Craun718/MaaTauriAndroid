@@ -6,6 +6,7 @@ import type { AppStateSnapshot, Project, UserConfiguration } from "../lib/types"
 
 const getPrivilegedStatus = vi.fn();
 const saveConfiguration = vi.fn();
+const exportLogs = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getPrivilegedStatus: () => getPrivilegedStatus(),
@@ -14,6 +15,7 @@ vi.mock("../lib/api", () => ({
   saveConfiguration: (configuration: unknown) => saveConfiguration(configuration),
   loadProject: vi.fn(),
   clearDiagnosticData: vi.fn(),
+  exportLogs: () => exportLogs(),
 }));
 
 const project: Project = {
@@ -125,6 +127,17 @@ describe("project scope in settings", () => {
     expect(screen.getByText("分辨率").tagName).toBe("STRONG");
     expect(screen.getByText("720").tagName).toBe("STRONG");
     expect(screen.getByRole("radio", { name: /720p/ })).toBeInTheDocument();
+  });
+
+  it("exports logs from the diagnostics card", async () => {
+    exportLogs.mockResolvedValue({ path: "/cache/maa_tauri_android-logs-1.zip", fileName: "maa_tauri_android-logs-1.zip" });
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Logs exported to Downloads: maa_tauri_android-logs-1.zip")).toBeInTheDocument(),
+    );
   });
 
   it("hides telemetry consent when the interface does not declare it", () => {

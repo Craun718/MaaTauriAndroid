@@ -1,10 +1,18 @@
 package top.natsuu.mta
 
+import android.content.ClipData
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.ParcelFileDescriptor
 import android.os.Looper
+import android.provider.MediaStore
+import java.io.File
+import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -92,6 +100,70 @@ object RuntimeBridge {
             context.startActivity(intent)
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * Copies the log archive into the system Downloads collection and opens the
+     * share sheet for it. Returns the display name of the saved copy, or null
+     * when the export could not be completed. On API < 29 MediaStore.Downloads
+     * does not exist, so the archive is copied into the app external files dir
+     * instead; no share sheet is opened there.
+     */
+    @JvmStatic
+    fun exportLogs(archivePath: String): String? {
+        val context = agentContext ?: return null
+        val source = File(archivePath)
+        if (!source.isFile) return null
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val uri = copyToDownloads(context, source)
+                startShare(context, uri, source.name)
+                source.name
+            } else {
+                val fallback = File(
+                    requireNotNull(context.getExternalFilesDir(null)) {
+                        "external files directory is unavailable"
+                    },
+                    source.name,
+                )
+                source.copyTo(fallback, overwrite = true)
+                source.name
+            }
+        }.getOrNull()
+    }
+
+    private fun copyToDownloads(context: Context, source: File): Uri {
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, source.name)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = requireNotNull(
+            resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values),
+        ) { "MediaStore rejected the download entry" }
+        resolver.openOutputStream(uri)?.use { output ->
+            source.inputStream().use { input -> input.copyTo(output) }
+        } ?: throw IOException("could not open output stream for $uri")
+        values.clear()
+        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        return uri
+    }
+
+    private fun startShare(context: Context, uri: Uri, title: String) {
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            // Chooser targets read the stream through ClipData on some versions,
+            // so grant read access on both surfaces.
+            clipData = ClipData.newRawUri(title, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(
+            Intent.createChooser(share, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 
     @JvmStatic

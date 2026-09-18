@@ -1188,6 +1188,90 @@ async fn export_diagnostics(
     Ok(export)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LogExport {
+    path: String,
+    /// Display name of the copy the Android shell saved into the Downloads
+    /// folder; absent when only a local archive path is available (desktop).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_name: Option<String>,
+}
+
+/// The Android shell copies the archive into the system Downloads collection
+/// (no storage permission needed on API 29+) and opens the system share sheet,
+/// mirroring the MaaFwApp log export: save locally or share, one tap each.
+#[cfg(target_os = "android")]
+fn export_log_archive_via_bridge(path: &str) -> Result<String, AppError> {
+    let vm = runtime::java_vm()
+        .ok_or_else(|| AppError::Message("Java runtime is not initialized".to_string()))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let java_path = env
+        .new_string(path)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let java_object: jni::objects::JObject = java_path.into();
+    let name = env
+        .call_static_method(
+            "top/natsuu/mta/RuntimeBridge",
+            "exportLogs",
+            "(Ljava/lang/String;)Ljava/lang/String;",
+            &[jni::objects::JValue::Object(&java_object)],
+        )
+        .map_err(|error| {
+            let _ = env.exception_clear();
+            AppError::Message(error.to_string())
+        })?
+        .l()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    if name.is_null() {
+        return Err(AppError::Message(
+            "could not export the log archive on this device".to_string(),
+        ));
+    }
+    let name = jni::objects::JString::from(name);
+    let name = env
+        .get_string(&name)
+        .map_err(|error| AppError::Message(error.to_string()))?
+        .to_string_lossy()
+        .into_owned();
+    Ok(name)
+}
+
+#[tauri::command]
+async fn export_logs(app: AppHandle) -> Result<LogExport, AppError> {
+    let cache_dir = app
+        .path()
+        .cache_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    let exports_dir = cache_dir.join("log-exports");
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let output = exports_dir.join(format!("maa_tauri_android-logs-{timestamp}.zip"));
+    let archive = tokio::task::spawn_blocking(move || {
+        let source = diagnostics::platform_source();
+        diagnostics::export_log_archive(&source, output)
+    })
+    .await
+    .map_err(|error| AppError::Message(error.to_string()))??;
+    let path = archive.to_string_lossy().into_owned();
+    #[cfg(target_os = "android")]
+    let file_name = {
+        let bridge_path = path.clone();
+        Some(
+            tokio::task::spawn_blocking(move || export_log_archive_via_bridge(&bridge_path))
+                .await
+                .map_err(|error| AppError::Message(error.to_string()))??,
+        )
+    };
+    #[cfg(not(target_os = "android"))]
+    let file_name: Option<String> = None;
+    Ok(LogExport { path, file_name })
+}
+
 #[tauri::command]
 async fn capture_manual_screenshot(
     app: AppHandle,
@@ -1497,6 +1581,7 @@ pub fn run() {
             run_status,
             stop_run,
             export_diagnostics,
+            export_logs,
             capture_manual_screenshot,
             clear_diagnostic_data
         ])

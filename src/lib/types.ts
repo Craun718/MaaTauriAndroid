@@ -285,3 +285,9 @@ export interface DiagnosticExport {
   path: string;
   manifest: DiagnosticManifest;
 }
+
+export interface LogExport {
+  path: string;
+  /** Display name of the copy saved into the Downloads folder (Android). */
+  fileName?: string;
+}

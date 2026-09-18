@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import { OptionEditor } from "../components/OptionEditor";
 import { Checkbox } from "../components/ui/Checkbox";
 import { SegmentGroup } from "../components/ui/SegmentGroup";
-import { clearDiagnosticData } from "../lib/api";
+import { clearDiagnosticData, exportLogs } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import { activeResource, defaultOptionValue, visibleOptions } from "../lib/options";
 import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
@@ -22,6 +22,7 @@ export function SettingsPage() {
   const { t } = useTranslation();
   const [cleanupStatus, setCleanupStatus] = useState<string>();
   const [cleaning, setCleaning] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const project = snapshot?.project;
   const resource = project && snapshot ? activeResource(project, snapshot.configuration) : undefined;
@@ -34,7 +35,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">{t("settings")}</h1>
-      <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+      <section className="rounded-lg border border-line bg-raised p-4">
         <SegmentGroup
           label={t("language")}
           description={t("languageDescription")}
@@ -84,7 +85,7 @@ export function SettingsPage() {
           />
         </>
       )}
-      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+      <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
         <h2 className="font-medium">{t("runBehavior")}</h2>
         <Checkbox
           className="min-h-12 gap-3"
@@ -101,9 +102,9 @@ export function SettingsPage() {
         </Checkbox>
       </section>
       {project?.metadata.telemetry?.dsn && (
-        <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+        <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
           <h2 className="font-medium">{t("telemetry")}</h2>
-          <p className="text-sm text-[var(--text-muted)]">{t("telemetryDescription")}</p>
+          <p className="text-sm text-ink-muted">{t("telemetryDescription")}</p>
           <Checkbox
             className="min-h-12 gap-3"
             checked={snapshot?.configuration.telemetryEnabled ?? false}
@@ -119,8 +120,34 @@ export function SettingsPage() {
           </Checkbox>
         </section>
       )}
-      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+      <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
         <h2 className="font-medium">{t("diagnostics")}</h2>
+        <button
+          type="button"
+          disabled={exporting}
+          onClick={async () => {
+            setExporting(true);
+            setCleanupStatus(undefined);
+            try {
+              const result = await exportLogs();
+              setCleanupStatus(
+                result.fileName
+                  ? t("logsExported", { name: result.fileName })
+                  : t("logsExportedPath", { path: result.path }),
+              );
+            } catch (error) {
+              setCleanupStatus(
+                error instanceof Error ? error.message : String(error),
+              );
+            } finally {
+              setExporting(false);
+            }
+          }}
+          className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
+        >
+          <Download size={18} />
+          {exporting ? t("exportingLogs") : t("exportLogs")}
+        </button>
         <button
           type="button"
           disabled={busy || cleaning || !snapshot}
@@ -145,7 +172,7 @@ export function SettingsPage() {
           <Trash2 size={18} />
           {cleaning ? t("deleting") : t("deleteRuns")}
         </button>
-        {cleanupStatus && <p className="text-sm text-[var(--text-muted)]">{cleanupStatus}</p>}
+        {cleanupStatus && <p className="text-sm text-ink-muted">{cleanupStatus}</p>}
       </section>
       <PrivilegeStatusCard title="privileges" />
     </div>
@@ -170,7 +197,7 @@ function ScopedOptions({
   if (names.length === 0) return null;
   const definitions = project?.options ?? {};
   return (
-    <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
       <h2 className="font-medium">{t(title)}</h2>
       {visibleOptions(definitions, names, values).map(({ name, depth }) => {
         const option = definitions[name];
@@ -178,7 +205,7 @@ function ScopedOptions({
         return (
           <div
             key={name}
-            className={depth > 0 ? "border-l-2 border-[var(--border)] pl-3" : undefined}
+            className={depth > 0 ? "border-l-2 border-line pl-3" : undefined}
           >
             <OptionEditor
               option={option}

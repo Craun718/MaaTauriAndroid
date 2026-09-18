@@ -180,6 +180,65 @@ pub fn capture_manual_screenshot(
     Ok(path)
 }
 
+/// Collects the device logs (full logcat plus the app-filtered log) into a ZIP
+/// archive. This is a standalone export: unlike the diagnostic bundle it does
+/// not require a run and skips screenshots, bugreport and manifest bookkeeping.
+pub fn export_log_archive(
+    source: &dyn DiagnosticSource,
+    output_path: PathBuf,
+) -> Result<PathBuf, DiagnosticError> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).map_err(|source| DiagnosticError::CreateDirectory {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+    let staging_dir = output_path.with_extension("logs.staging");
+    let _ = fs::remove_dir_all(&staging_dir);
+    let logs_dir = staging_dir.join("logs");
+    fs::create_dir_all(&logs_dir).map_err(|source| DiagnosticError::CreateDirectory {
+        path: logs_dir.clone(),
+        source,
+    })?;
+    let failure = |source: io::Error| DiagnosticError::Read {
+        path: logs_dir.join("logcat-full.txt"),
+        source,
+    };
+    let logcat = source.logcat().map_err(failure)?;
+    if logcat.is_empty() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err(failure(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "logcat capture was empty",
+        )));
+    }
+    write_file(&logs_dir.join("logcat-full.txt"), &logcat)?;
+    let full_log = fs::read_to_string(logs_dir.join("logcat-full.txt")).map_err(failure)?;
+    let filtered = filtered_maa_tauri_android_log(&full_log);
+    if !filtered.trim().is_empty() {
+        write_file(
+            &logs_dir.join("maa_tauri_android-filtered.log"),
+            filtered.as_bytes(),
+        )?;
+    }
+
+    let staging_zip = output_path.with_extension("zip.partial");
+    let mut archive = ZipWriter::create(staging_zip.clone())?;
+    for name in walk_files(&staging_dir)? {
+        archive.add(staging_dir.join(&name), &name)?;
+    }
+    archive.finish()?;
+    fs::remove_dir_all(&staging_dir).map_err(|source| DiagnosticError::Remove {
+        path: staging_dir,
+        source,
+    })?;
+    fs::rename(&staging_zip, &output_path).map_err(|source| DiagnosticError::Write {
+        path: output_path.clone(),
+        source,
+    })?;
+    Ok(output_path)
+}
+
 pub fn clear_run_directories(runs_dir: &Path) -> Result<usize, DiagnosticError> {
     let entries = match fs::read_dir(runs_dir) {
         Ok(entries) => entries,
@@ -997,6 +1056,64 @@ mod tests {
         assert_eq!(&zip[zip.len() - 22..zip.len() - 18], b"PK\x05\x06");
         fs::remove_dir_all(temp).unwrap();
         fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn log_archive_contains_logcat_and_filtered_log() {
+        let source = FakeSource {
+            capture_failures: Mutex::new(Vec::new()),
+            capture_bytes: [0x89, b'P', b'N', b'G'].to_vec(),
+        };
+        let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
+
+        let path = export_log_archive(&source, output.clone()).unwrap();
+
+        assert_eq!(path, output);
+        let zip = fs::read(&output).unwrap();
+        assert_eq!(&zip[..4], b"PK\x03\x04");
+        assert!(zip.windows(15).any(|window| window == b"logcat-full.txt"));
+        assert!(zip
+            .windows(30)
+            .any(|window| window == b"maa_tauri_android-filtered.log"));
+        fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn log_archive_rejects_empty_logcat() {
+        struct EmptySource;
+
+        impl DiagnosticSource for EmptySource {
+            fn capture_png(&self, _display_id: u32) -> io::Result<Vec<u8>> {
+                Ok(Vec::new())
+            }
+
+            fn device_info(&self) -> io::Result<Vec<u8>> {
+                Ok(Vec::new())
+            }
+
+            fn display_state(&self) -> io::Result<Vec<u8>> {
+                Ok(Vec::new())
+            }
+
+            fn logcat(&self) -> io::Result<Vec<u8>> {
+                Ok(Vec::new())
+            }
+
+            fn dumpsys(&self) -> io::Result<Vec<u8>> {
+                Ok(Vec::new())
+            }
+
+            fn bugreport(&self, _destination: &Path) -> io::Result<Vec<String>> {
+                Ok(Vec::new())
+            }
+        }
+
+        let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
+
+        let error = export_log_archive(&EmptySource, output.clone()).unwrap_err();
+
+        assert!(error.to_string().contains("logcat capture was empty"));
+        assert!(!output.exists());
     }
 
     struct FakeSource {

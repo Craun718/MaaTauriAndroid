@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppStateSnapshot,
   DiagnosticExport,
+  LogExport,
   PrivilegedStatus,
   ResolvedRun,
   RunState,
@@ -85,6 +86,10 @@ export async function startRun() {
 
 export async function exportDiagnostics(executionId?: string) {
   return invoke<DiagnosticExport>("export_diagnostics", { executionId });
+}
+
+export async function exportLogs() {
+  return invoke<LogExport>("export_logs");
 }
 
 export async function captureManualScreenshot(executionId?: string) {

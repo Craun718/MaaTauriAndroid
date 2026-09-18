@@ -22,7 +22,7 @@
 
 ## 构建、测试与开发
 
-**编译与测试一律通过 CI 进行，不要在本地运行。** 本地工具链（JDK、NDK、MaaFramework 版本）与 CI 不一致，本地跑出来的结果既慢又不可作为验收依据。本地只做写代码、`pnpm dev` 热更新和 `cargo fmt` 这类轻量操作。
+**默认通过 CI 编译与测试；只有用户明确要求本地编译或测试时，才在本地运行。** 本地工具链（JDK、NDK、MaaFramework 版本）与 CI 不一致，本地跑出来的结果既慢又不可作为验收依据。默认本地只做写代码、`pnpm dev` 热更新和 `cargo fmt` 这类轻量操作。
 
 本地可用（仅用于开发与格式化，不作为验证手段）：
 
@@ -31,7 +31,7 @@
 - `pnpm dev`：启动 Vite 前端开发服务器。
 - `cargo fmt --manifest-path src-tauri/Cargo.toml`：格式化 Rust 代码。
 
-以下命令**只在 CI 中执行**，不要为了验证在本地跑：
+以下命令**默认只在 CI 中执行**，除非用户明确要求在本地运行：
 
 - `pnpm test` / `pnpm build`
 - `cargo test --manifest-path src-tauri/Cargo.toml`
@@ -81,7 +81,7 @@ TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 ca
 
 前端测试放在被测代码旁，命名为 `*.test.tsx` 或 `*.test.ts`，使用 Vitest 与 Testing Library。Rust 单元测试放在同一源文件的 `#[cfg(test)]` 模块中。修改 IPC、任务解析、持久化或密码加密时，必须补充覆盖正常与失败路径的测试。
 
-**写好测试后交给 CI 跑**（`frontend` 与 `rust` job），不要为了图快在本地执行 `pnpm test` / `cargo test`；本地只做 `cargo fmt`。涉及 Android 的改动以 `android-rust` 的 `cargo check` 结果为准。
+**写好测试后交给 CI 跑**（`frontend` 与 `rust` job）；除非用户明确要求本地测试，不要在本地执行 `pnpm test` / `cargo test`。涉及 Android 的改动以 `android-rust` 的 `cargo check` 结果为准。
 
 ## 提交与 PR
 

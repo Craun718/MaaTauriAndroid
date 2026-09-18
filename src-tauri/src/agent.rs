@@ -471,9 +471,11 @@ mod android {
             super::android_bridge(|env, _bridge, service| {
                 let fingerprint = env.new_string(&descriptor.fingerprint)?;
                 let execution = env.new_string(execution_id)?;
+                let runtime_bridge_class = crate::runtime::runtime_bridge_class()
+                    .map_err(|error| AgentError::Host(error.to_string()))?;
                 let native_library_dir = env
                     .call_static_method(
-                        "top/natsuu/mta/RuntimeBridge",
+                        runtime_bridge_class,
                         "agentNativeLibraryDir",
                         "()Ljava/lang/String;",
                         &[],
@@ -533,8 +535,10 @@ mod android {
         name: &str,
     ) -> Result<jni::objects::JObject<'local>, AgentError> {
         let name = env.new_string(name)?;
+        let runtime_bridge_class = crate::runtime::runtime_bridge_class()
+            .map_err(|error| AgentError::Host(error.to_string()))?;
         env.call_static_method(
-            "top/natsuu/mta/RuntimeBridge",
+            runtime_bridge_class,
             "openAgentAsset",
             "(Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;",
             &[JValue::Object(&name)],
@@ -583,9 +587,11 @@ fn android_bridge<T>(
         .attach_current_thread()
         .map_err(|error| AgentError::Host(error.to_string()))?;
     let _ = env.exception_clear();
+    let runtime_bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AgentError::Host(error.to_string()))?;
     let bridge = env
         .call_static_method(
-            "top/natsuu/mta/RuntimeBridge",
+            runtime_bridge_class,
             "agentBridgeContext",
             "()Ljava/lang/Object;",
             &[],
@@ -599,7 +605,8 @@ fn android_bridge<T>(
     }
     let service = env
         .call_static_method(
-            "top/natsuu/mta/control/ControlHost",
+            crate::runtime::control_host_class()
+                .map_err(|error| AgentError::Host(error.to_string()))?,
             "current",
             "()Ltop/natsuu/mta/IMaaTauriAndroidControlService;",
             &[],
@@ -618,9 +625,11 @@ pub fn load_android_descriptor() -> Result<AgentDescriptor, AgentError> {
     #[cfg(target_os = "android")]
     {
         android_bridge(|env, _bridge, _service| {
+            let runtime_bridge_class = crate::runtime::runtime_bridge_class()
+                .map_err(|error| AgentError::Host(error.to_string()))?;
             let descriptor = env
                 .call_static_method(
-                    "top/natsuu/mta/RuntimeBridge",
+                    runtime_bridge_class,
                     "agentDescriptor",
                     "()Ljava/lang/String;",
                     &[],
@@ -629,7 +638,7 @@ pub fn load_android_descriptor() -> Result<AgentDescriptor, AgentError> {
                 .map_err(android::jni_error)?;
             let fingerprint = env
                 .call_static_method(
-                    "top/natsuu/mta/RuntimeBridge",
+                    runtime_bridge_class,
                     "agentFingerprint",
                     "()Ljava/lang/String;",
                     &[],

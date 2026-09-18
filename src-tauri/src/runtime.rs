@@ -1,5 +1,7 @@
 use crate::agent::AgentSession;
 use crate::domain::types::ResolvedTask;
+#[cfg(target_os = "android")]
+use jni::objects::{GlobalRef, JClass};
 use maa_framework::{
     controller::Controller, resource::Resource, tasker::Tasker, AndroidNativeControllerConfig,
     AndroidScreenResolution,
@@ -14,6 +16,8 @@ use std::sync::{Arc, Mutex};
 pub enum RuntimeError {
     #[error("MaaFramework is unavailable: {0}")]
     LibraryNotLoaded(String),
+    #[error("Android JNI bridge is unavailable: {0}")]
+    JniBridge(String),
     #[error("the control unit is not connected")]
     ControlDisconnected,
     #[error("screen dimensions are unavailable")]
@@ -371,20 +375,76 @@ pub fn set_execution_result(execution_id: Option<&str>, state: RunState, message
 }
 
 #[cfg(target_os = "android")]
-pub fn initialize_secret_bridge(env: &mut jni::JNIEnv) -> Result<(), crate::secrets::SecretError> {
-    if let Ok(vm) = env.get_java_vm() {
-        let _ = DIAGNOSTIC_VM.set(vm);
+pub fn initialize_secret_bridge(
+    env: &mut jni::JNIEnv,
+    runtime_bridge_class: &JClass,
+) -> Result<(), crate::secrets::SecretError> {
+    if let Err(error) = initialize_jni_bridge(env, runtime_bridge_class) {
+        return Err(crate::secrets::SecretError::Jni(error.to_string()));
     }
     crate::secrets::android::initialize(env)
 }
 
 #[cfg(target_os = "android")]
-pub fn java_vm() -> Option<&'static jni::JavaVM> {
-    DIAGNOSTIC_VM.get()
+fn initialize_jni_bridge(
+    env: &mut jni::JNIEnv,
+    runtime_bridge_class: &JClass,
+) -> Result<(), RuntimeError> {
+    let map_error = |error: jni::errors::Error| RuntimeError::JniBridge(error.to_string());
+    let vm = env.get_java_vm().map_err(map_error)?;
+    let runtime_bridge_class = env
+        .new_global_ref(runtime_bridge_class)
+        .map_err(map_error)?;
+    let control_host_class = env
+        .find_class("top/natsuu/mta/control/ControlHost")
+        .map_err(map_error)?;
+    let control_host_class = env.new_global_ref(control_host_class).map_err(map_error)?;
+    if ANDROID_JNI.get().is_some() {
+        return Ok(());
+    }
+    if ANDROID_JNI
+        .set(AndroidJni {
+            vm,
+            runtime_bridge_class,
+            control_host_class,
+        })
+        .is_err()
+    {
+        return Ok(());
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "android")]
-static DIAGNOSTIC_VM: std::sync::OnceLock<jni::JavaVM> = std::sync::OnceLock::new();
+pub fn java_vm() -> Option<&'static jni::JavaVM> {
+    ANDROID_JNI.get().map(|jni| &jni.vm)
+}
+
+#[cfg(target_os = "android")]
+pub fn runtime_bridge_class() -> Result<&'static GlobalRef, RuntimeError> {
+    ANDROID_JNI
+        .get()
+        .map(|jni| &jni.runtime_bridge_class)
+        .ok_or_else(|| RuntimeError::JniBridge("not initialized".to_string()))
+}
+
+#[cfg(target_os = "android")]
+pub fn control_host_class() -> Result<&'static GlobalRef, RuntimeError> {
+    ANDROID_JNI
+        .get()
+        .map(|jni| &jni.control_host_class)
+        .ok_or_else(|| RuntimeError::JniBridge("not initialized".to_string()))
+}
+
+#[cfg(target_os = "android")]
+struct AndroidJni {
+    vm: jni::JavaVM,
+    runtime_bridge_class: GlobalRef,
+    control_host_class: GlobalRef,
+}
+
+#[cfg(target_os = "android")]
+static ANDROID_JNI: std::sync::OnceLock<AndroidJni> = std::sync::OnceLock::new();
 
 pub fn run_result() -> Option<RunResult> {
     RUN_RESULT.lock().expect("run result lock poisoned").clone()

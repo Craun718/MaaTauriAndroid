@@ -709,6 +709,8 @@ fn update_virtual_display_bounds(
 
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
     let vm = crate::runtime::java_vm().ok_or_else(|| {
         AppError::Message("the Java runtime has not been initialized".to_string())
     })?;
@@ -717,7 +719,7 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
         .map_err(|error| AppError::Message(error.to_string()))?;
     let _ = env.exception_clear();
     let result = env
-        .call_static_method("top/natsuu/mta/RuntimeBridge", method, "()Z", &[])
+        .call_static_method(bridge_class, method, "()Z", &[])
         .map_err(|error| AppError::Message(error.to_string()))?;
     result
         .z()
@@ -730,6 +732,8 @@ fn call_runtime_bridge_start_virtual_display(
     height: i32,
     dpi: i32,
 ) -> Result<(), AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
     let vm = crate::runtime::java_vm().ok_or_else(|| {
         AppError::Message("the Java runtime has not been initialized".to_string())
     })?;
@@ -739,7 +743,7 @@ fn call_runtime_bridge_start_virtual_display(
     let _ = env.exception_clear();
     let result = env
         .call_static_method(
-            "top/natsuu/mta/RuntimeBridge",
+            bridge_class,
             "startVirtualDisplay",
             "(III)Z",
             &[
@@ -763,6 +767,8 @@ fn call_runtime_bridge_start_virtual_display(
 
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_int_array(method: &'static str) -> Result<Vec<i32>, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
     let vm = crate::runtime::java_vm().ok_or_else(|| {
         AppError::Message("the Java runtime has not been initialized".to_string())
     })?;
@@ -771,7 +777,7 @@ fn call_runtime_bridge_int_array(method: &'static str) -> Result<Vec<i32>, AppEr
         .map_err(|error| AppError::Message(error.to_string()))?;
     let _ = env.exception_clear();
     let result = env
-        .call_static_method("top/natsuu/mta/RuntimeBridge", method, "()[I", &[])
+        .call_static_method(bridge_class, method, "()[I", &[])
         .map_err(|error| AppError::Message(error.to_string()))?;
     let object = result
         .l()
@@ -793,6 +799,8 @@ fn call_runtime_bridge_update_bounds(
     width: i32,
     height: i32,
 ) -> Result<(), AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
     let vm = crate::runtime::java_vm().ok_or_else(|| {
         AppError::Message("the Java runtime has not been initialized".to_string())
     })?;
@@ -802,7 +810,7 @@ fn call_runtime_bridge_update_bounds(
     let _ = env.exception_clear();
     let result = env
         .call_static_method(
-            "top/natsuu/mta/RuntimeBridge",
+            bridge_class,
             "updateVirtualDisplayBounds",
             "(IIII)Z",
             &[
@@ -1203,6 +1211,8 @@ struct LogExport {
 /// mirroring the MaaFwApp log export: save locally or share, one tap each.
 #[cfg(target_os = "android")]
 fn export_log_archive_via_bridge(path: &str) -> Result<String, AppError> {
+    let bridge_class =
+        runtime::runtime_bridge_class().map_err(|error| AppError::Message(error.to_string()))?;
     let vm = runtime::java_vm()
         .ok_or_else(|| AppError::Message("Java runtime is not initialized".to_string()))?;
     let mut env = vm
@@ -1214,7 +1224,7 @@ fn export_log_archive_via_bridge(path: &str) -> Result<String, AppError> {
     let java_object: jni::objects::JObject = java_path.into();
     let name = env
         .call_static_method(
-            "top/natsuu/mta/RuntimeBridge",
+            bridge_class,
             "exportLogs",
             "(Ljava/lang/String;)Ljava/lang/String;",
             &[jni::objects::JValue::Object(&java_object)],
@@ -1485,10 +1495,11 @@ mod tests {
 #[no_mangle]
 pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_initializeSecretBridge(
     env: *mut std::ffi::c_void,
-    _class: *mut std::ffi::c_void,
+    class: *mut std::ffi::c_void,
 ) {
     if let Ok(mut env) = unsafe { jni::JNIEnv::from_raw(env.cast()) } {
-        if let Err(error) = runtime::initialize_secret_bridge(&mut env) {
+        let runtime_bridge_class = unsafe { jni::objects::JClass::from_raw(class.cast()) };
+        if let Err(error) = runtime::initialize_secret_bridge(&mut env, &runtime_bridge_class) {
             eprintln!("Failed to initialize the secret bridge: {error}");
         }
     }

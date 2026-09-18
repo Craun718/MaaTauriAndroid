@@ -761,7 +761,8 @@ fn with_service<T>(
         .map_err(|error| io::Error::other(error.to_string()))?;
     let service = env
         .call_static_method(
-            "top/natsuu/mta/control/ControlHost",
+            crate::runtime::control_host_class()
+                .map_err(|error| io::Error::other(error.to_string()))?,
             "current",
             "()Ltop/natsuu/mta/IMaaTauriAndroidControlService;",
             &[],

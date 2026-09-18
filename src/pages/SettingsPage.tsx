@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { OptionEditor } from "../components/OptionEditor";
 import { Checkbox } from "../components/ui/Checkbox";
-import { SegmentGroup } from "../components/ui/SegmentGroup";
+import { Select } from "../components/ui/Select";
 import { clearDiagnosticData, exportLogs } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import { activeResource, defaultOptionValue, visibleOptions } from "../lib/options";
@@ -23,6 +23,7 @@ export function SettingsPage() {
   const [cleanupStatus, setCleanupStatus] = useState<string>();
   const [cleaning, setCleaning] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
 
   const project = snapshot?.project;
   const resource = project && snapshot ? activeResource(project, snapshot.configuration) : undefined;
@@ -35,23 +36,45 @@ export function SettingsPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">{t("settings")}</h1>
-      <section className="rounded-lg border border-line bg-raised p-4">
-        <SegmentGroup
-          label={t("language")}
-          description={t("languageDescription")}
-          value={snapshot?.configuration.uiLanguage ?? "system"}
-          items={[
-            { value: "system", label: t("languageSystem") },
-            { value: "zh", label: t("languageChinese") },
-            { value: "en", label: t("languageEnglish") },
-          ]}
-          onValueChange={(value) => {
-            if (!snapshot || !isUiLanguage(value)) return;
-            const next = structuredClone(snapshot.configuration);
-            next.uiLanguage = value;
-            void saveConfiguration(next);
-          }}
-        />
+      <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+        <div>
+          <h2 id="language-select-label" className="font-medium">{t("language")}</h2>
+          <p className="text-sm text-ink-muted">{t("languageDescription")}</p>
+        </div>
+        <div className="flex gap-2">
+          <Select
+            className="min-w-0 flex-1"
+            labelledBy="language-select-label"
+            items={[
+              { value: "system", label: t("languageSystem") },
+              { value: "zh", label: t("languageChinese") },
+              { value: "en", label: t("languageEnglish") },
+            ]}
+            value={languageDraft ?? snapshot?.configuration.uiLanguage ?? "system"}
+            onValueChange={(value) => {
+              if (isUiLanguage(value)) setLanguageDraft(value);
+            }}
+          />
+          <button
+            type="button"
+            disabled={
+              busy ||
+              !snapshot ||
+              languageDraft === undefined ||
+              languageDraft === snapshot.configuration.uiLanguage
+            }
+            onClick={async () => {
+              if (!snapshot || languageDraft === undefined) return;
+              const next = structuredClone(snapshot.configuration);
+              next.uiLanguage = languageDraft;
+              await saveConfiguration(next);
+              setLanguageDraft(undefined);
+            }}
+            className="h-11 shrink-0 rounded-md bg-accent px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {t("apply")}
+          </button>
+        </div>
       </section>
       {project && snapshot && (
         <>
@@ -143,7 +166,7 @@ export function SettingsPage() {
               setExporting(false);
             }
           }}
-          className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
+          className="flex h-11 items-center justify-center gap-2 rounded-md border border-line px-4 font-semibold disabled:opacity-50"
         >
           <Download size={18} />
           {exporting ? t("exportingLogs") : t("exportLogs")}
@@ -167,7 +190,7 @@ export function SettingsPage() {
               setCleaning(false);
             }
           }}
-          className="flex h-11 items-center justify-center gap-2 rounded-md border border-red-300 font-semibold text-red-600 disabled:opacity-50"
+          className="flex h-11 items-center justify-center gap-2 rounded-md border border-red-300 px-4 font-semibold text-red-600 disabled:opacity-50"
         >
           <Trash2 size={18} />
           {cleaning ? t("deleting") : t("deleteRuns")}

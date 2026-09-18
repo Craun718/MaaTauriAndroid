@@ -90,6 +90,7 @@ const en = {
 
   // Settings
   settings: "Settings",
+  apply: "Apply",
   language: "Language",
   languageDescription:
     "Defaults to the device language: Chinese for Chinese locales, English otherwise.",
@@ -175,6 +176,7 @@ const zh: Record<MessageKey, string> = {
   screenshotSaved: "截图已保存：{path}",
 
   settings: "设置",
+  apply: "应用",
   language: "语言",
   languageDescription: "默认跟随设备语言：系统语言为中文时使用中文，否则使用英文。",
   languageSystem: "跟随系统",

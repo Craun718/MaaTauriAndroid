@@ -1,6 +1,21 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { OptionEditor } from "../components/OptionEditor";
 import { RunPanel } from "../components/RunPanel";
 import { EmptyProject } from "../components/EmptyProject";
@@ -22,6 +37,7 @@ import type {
   ConfigurationTemplate,
   OptionValue,
   Project,
+  RunConfiguration,
   TaskDefinition,
 } from "../lib/types";
 
@@ -31,9 +47,6 @@ interface FocusNotice {
   name?: string;
   message: string;
 }
-
-/** 未分组任务的固定标签值，避免与 interface 声明的分组名冲突。 */
-const UNGROUPED_TAB = "__ungrouped__";
 
 export function TasksPage() {
   const snapshot = useAppStore((state) => state.snapshot);
@@ -70,13 +83,13 @@ export function TasksPage() {
   const { project, configuration } = snapshot;
   const resource = activeResource(project, configuration);
   const controller = activeController(project);
-  const activeRun = configuration.runConfigurations.find(
+  const activeRun: RunConfiguration | undefined = configuration.runConfigurations.find(
     (run) => run.id === configuration.activeRunConfigurationId,
   );
 
-  function updateTasks(tasks: ConfiguredTask[]) {
-    // 从 store 取最新快照而不是渲染闭包里的旧 configuration：
-    // 连续勾选多个任务时，闭包值落后于 store，会把先勾的那笔覆盖回旧状态。
+  function mutateActiveRun(
+    mutate: (run: RunConfiguration) => void,
+  ) {
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
     const next = structuredClone(latest.configuration);
@@ -84,82 +97,106 @@ export function TasksPage() {
       (item) => item.id === next.activeRunConfigurationId,
     );
     if (!run) return;
-    run.tasks = tasks;
+    mutate(run);
     void saveConfiguration(next);
   }
 
-  function ensureTask(taskName: string): ConfiguredTask {
-    const task = project.tasks.find((item) => item.name === taskName);
-    const existing = activeRun?.tasks.find((item) => item.taskName === taskName);
-    if (!task) throw new Error(`Unknown task: ${taskName}`);
-    return existing ?? {
-      instanceId: `${taskName}:${Date.now()}`,
-      taskName,
-      enabled: task.defaultCheck,
-      optionValues: {},
-    };
+  function updateTask(instanceId: string, mutate: (task: ConfiguredTask) => ConfiguredTask) {
+    mutateActiveRun((run) => {
+      run.tasks = run.tasks.map((task) =>
+        task.instanceId === instanceId ? mutate(task) : task,
+      );
+    });
   }
 
-  function setTask(taskName: string, mutate: (task: ConfiguredTask) => ConfiguredTask) {
-    const task = mutate(ensureTask(taskName));
-    const other = activeRun?.tasks.filter((item) => item.taskName !== taskName) ?? [];
-    updateTasks([...other, task].sort((left, right) => left.taskName.localeCompare(right.taskName)));
+  function addTask(taskDef: TaskDefinition) {
+    mutateActiveRun((run) => {
+      run.tasks.push({
+        instanceId: `${taskDef.name}:${Date.now()}`,
+        taskName: taskDef.name,
+        enabled: taskDef.defaultCheck,
+        optionValues: {},
+        customLabel: undefined,
+      });
+    });
   }
 
-  const declaredGroups = project.groups
-    .map((group) => ({
-      group,
-      tasks: project.tasks.filter((task) => task.groups.includes(group.name)),
-    }))
-    .filter((entry) => entry.tasks.length > 0);
-  const ungroupedTasks = project.tasks.filter(
-    (task) => !project.groups.some((group) => task.groups.includes(group.name)),
-  );
-  const hasGroups = declaredGroups.length > 0;
+  function removeTask(instanceId: string) {
+    mutateActiveRun((run) => {
+      run.tasks = run.tasks.filter((task) => task.instanceId !== instanceId);
+    });
+  }
 
-  function renderTask(task: TaskDefinition) {
-    const configured = ensureTask(task.name);
+  function reorderTasks(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    mutateActiveRun((run) => {
+      const oldIndex = run.tasks.findIndex((item) => item.instanceId === active.id);
+      const newIndex = run.tasks.findIndex((item) => item.instanceId === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      run.tasks = arrayMove(run.tasks, oldIndex, newIndex);
+    });
+  }
+
+  function switchConfiguration(id: string) {
+    const latest = useAppStore.getState().snapshot;
+    if (!latest?.project) return;
+    const next = structuredClone(latest.configuration);
+    next.activeRunConfigurationId = id;
+    void saveConfiguration(next);
+  }
+
+  function createConfiguration() {
+    const latest = useAppStore.getState().snapshot;
+    if (!latest?.project) return;
+    const next = structuredClone(latest.configuration);
+    const id = crypto.randomUUID();
+    const count = next.runConfigurations.length;
+    next.runConfigurations.push({
+      id,
+      name: t("configurationLabel", { n: count + 1 }),
+      tasks: [],
+    });
+    next.activeRunConfigurationId = id;
+    void saveConfiguration(next);
+  }
+
+  function renderConfiguredTask(configured: ConfiguredTask) {
+    const task = project.tasks.find((item) => item.name === configured.taskName);
+    if (!task) return null;
     return (
-      <TaskItem
-        key={task.name}
+      <SortableTaskItem
+        key={configured.instanceId}
+        instanceId={configured.instanceId}
         task={task}
         project={project}
         controllerName={controller?.name ?? ""}
         resourceName={resource?.name ?? ""}
         configured={configured}
         onEnabledChange={(next) =>
-          setTask(task.name, (item) => ({ ...item, enabled: next }))
+          updateTask(configured.instanceId, (item) => ({ ...item, enabled: next }))
         }
         onOptionValueChange={(name, value) =>
-          setTask(task.name, (item) => ({
+          updateTask(configured.instanceId, (item) => ({
             ...item,
             optionValues: { ...item.optionValues, [name]: value },
           }))
         }
+        onRemove={() => removeTask(configured.instanceId)}
       />
     );
   }
 
-  /** 任务分类标签页：声明的分组各占一页，未分组的任务归入最后一页。 */
-  const tabItems = [
-    ...declaredGroups.map(({ group, tasks }) => ({
-      value: group.name,
-      label: group.label,
-      content: (
-        <div className="space-y-3">
-          <RichDescription text={group.description} />
-          {tasks.map(renderTask)}
-        </div>
-      ),
-    })),
-    ...(ungroupedTasks.length > 0
-      ? [{
-          value: UNGROUPED_TAB,
-          label: t("ungroupedTasks"),
-          content: <div className="space-y-3">{ungroupedTasks.map(renderTask)}</div>,
-        }]
-      : []),
-  ];
+  const availableTasks = project.tasks.filter(
+    (task) => !activeRun?.tasks.some((item) => item.taskName === task.name),
+  );
+  const configTabItems = configuration.runConfigurations.map((run) => ({
+    value: run.id,
+    label: run.name,
+    content: null,
+  }));
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   return (
     <div className="space-y-5">
@@ -179,12 +216,40 @@ export function TasksPage() {
         </section>
       )}
       <section className="space-y-3">
-        <h2 className="font-medium">{activeRun?.name ?? t("defaultRunName")}</h2>
-        {hasGroups ? (
-          <Tabs items={tabItems} ariaLabel={t("taskCategories")} />
-        ) : (
-          <div className="space-y-3">{project.tasks.map(renderTask)}</div>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <Tabs
+              items={configTabItems}
+              value={activeRun?.id}
+              onValueChange={switchConfiguration}
+              ariaLabel={t("tasksAndRun")}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={createConfiguration}
+            aria-label={t("newConfiguration")}
+            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderTasks}>
+          <SortableContext
+            items={activeRun?.tasks.map((task) => task.instanceId) ?? []}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-3">
+              {activeRun?.tasks.map(renderConfiguredTask)}
+            </div>
+          </SortableContext>
+        </DndContext>
+        <AddTaskPicker
+          available={availableTasks}
+          onAdd={addTask}
+          addLabel={t("addTask")}
+          emptyLabel={t("noTasksToAdd")}
+        />
       </section>
       {focusToast && (
         <div
@@ -261,6 +326,78 @@ function PresetPicker({
   );
 }
 
+/** 内联「添加任务」面板：点开后列出尚未添加的任务定义，点击即追加到运行列表末尾。 */
+function AddTaskPicker({
+  available,
+  onAdd,
+  addLabel,
+  emptyLabel,
+}: {
+  available: TaskDefinition[];
+  onAdd: (task: TaskDefinition) => void;
+  addLabel: string;
+  emptyLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        <Plus size={16} />
+        {addLabel}
+      </button>
+      {open && (
+        <div className="space-y-1 rounded-lg border border-line bg-surface-muted p-2">
+          {available.length === 0 ? (
+            <p className="px-2 py-1 text-sm text-ink-muted">{emptyLabel}</p>
+          ) : (
+            available.map((task) => (
+              <button
+                key={task.name}
+                type="button"
+                onClick={() => onAdd(task)}
+                className="flex h-10 w-full cursor-pointer items-center rounded-md px-3 text-left text-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                {task.label}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 包装 TaskItem 加上 @dnd-kit/sortable 的拖拽排序行为。 */
+function SortableTaskItem(props: Omit<TaskItemProps, "dragHandleProps"> & { instanceId: string }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.instanceId });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={isDragging ? "relative z-10" : undefined}>
+      <TaskItem
+        {...props}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
 interface TaskItemProps {
   task: TaskDefinition;
   project: Project;
@@ -269,6 +406,8 @@ interface TaskItemProps {
   configured: ConfiguredTask;
   onEnabledChange: (next: boolean) => void;
   onOptionValueChange: (name: string, value: OptionValue) => void;
+  onRemove: () => void;
+  dragHandleProps?: Record<string, unknown>;
 }
 
 /**
@@ -283,6 +422,8 @@ function TaskItem({
   configured,
   onEnabledChange,
   onOptionValueChange,
+  onRemove,
+  dragHandleProps,
 }: TaskItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -303,35 +444,53 @@ function TaskItem({
           : "border-line bg-raised"
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        {hasDetails ? (
-          <h3 className="flex min-h-11 flex-1 items-center font-medium">
-            <button
-              type="button"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((value) => !value)}
-              className="flex min-h-11 flex-1 items-center gap-2 text-left"
-            >
-              {label}
-              <ChevronDown
-                size={18}
-                className={`shrink-0 text-ink-muted transition-transform ${
-                  expanded ? "" : "-rotate-90"
-                }`}
-              />
-            </button>
-          </h3>
-        ) : (
-          <h3 className="font-medium">{label}</h3>
-        )}
-        <Checkbox
-          className="h-11 gap-2 text-sm"
-          checked={configured.enabled}
-          disabled={unavailable}
-          onCheckedChange={onEnabledChange}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={t("dragReorder")}
+          className="flex h-8 w-8 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
+          {...dragHandleProps}
         >
-          {t("toggleOn")}
-        </Checkbox>
+          <GripVertical size={16} />
+        </button>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          {hasDetails ? (
+            <h3 className="flex min-h-11 min-w-0 flex-1 items-center font-medium">
+              <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((value) => !value)}
+                className="flex min-h-11 flex-1 items-center gap-2 text-left"
+              >
+                {label}
+                <ChevronDown
+                  size={18}
+                  className={`shrink-0 text-ink-muted transition-transform ${
+                    expanded ? "" : "-rotate-90"
+                  }`}
+                />
+              </button>
+            </h3>
+          ) : (
+            <h3 className="min-w-0 flex-1 font-medium">{label}</h3>
+          )}
+          <Checkbox
+            className="h-11 shrink-0 gap-2 text-sm"
+            checked={configured.enabled}
+            disabled={unavailable}
+            onCheckedChange={onEnabledChange}
+          >
+            {t("toggleOn")}
+          </Checkbox>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={t("removeTask")}
+          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          <Trash2 size={16} />
+        </button>
       </div>
       {unavailable && (
         <p className="mt-2 text-sm text-ink-muted">

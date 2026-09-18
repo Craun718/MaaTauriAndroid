@@ -66,10 +66,14 @@ const en = {
 
   // Tasks
   tasksAndRun: "Tasks & Run",
-  taskCategories: "Task categories",
+  addTask: "Add task",
+  newConfiguration: "New configuration",
+  configurationLabel: "Configuration {n}",
+  dragReorder: "Drag to reorder",
+  removeTask: "Remove",
+  noTasksToAdd: "All tasks are already in this configuration.",
   presets: "Presets",
   applyPreset: "Apply",
-  ungroupedTasks: "Ungrouped",
   toggleOn: "On",
   requiresOtherController: "Requires a different controller or resource.",
 
@@ -155,10 +159,14 @@ const zh: Record<MessageKey, string> = {
   invalidInput: "输入不合法",
 
   tasksAndRun: "任务与运行",
-  taskCategories: "任务分类",
+  addTask: "添加任务",
+  newConfiguration: "新建配置",
+  configurationLabel: "配置 {n}",
+  dragReorder: "拖动排序",
+  removeTask: "移除",
+  noTasksToAdd: "所有任务都已添加。",
   presets: "预设",
   applyPreset: "启用",
-  ungroupedTasks: "未分组",
   toggleOn: "启用",
   requiresOtherController: "需要其他控制器或资源。",
 

@@ -140,7 +140,14 @@ const configuration: UserConfiguration = {
   globalOptionValues: {},
   controllerOptionValues: {},
   resourceOptionValues: {},
-  runConfigurations: [{ id: "default", name: "Default", tasks: [] }],
+  runConfigurations: [{
+    id: "default",
+    name: "Default",
+    tasks: [
+      { instanceId: "sugar:1", taskName: "糖果", enabled: false, optionValues: {} },
+      { instanceId: "cleanup:1", taskName: "整理", enabled: false, optionValues: {} },
+    ],
+  }],
   activeRunConfigurationId: "default",
 };
 
@@ -253,7 +260,7 @@ describe("nested task options", () => {
   });
 });
 
-describe("task groups and rich descriptions", () => {
+describe("run configuration tabs and flat task list", () => {
   it("places the virtual display above the run queue", async () => {
     render(<TasksPage />);
 
@@ -268,41 +275,72 @@ describe("task groups and rich descriptions", () => {
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
   });
 
-  it("renders task categories as tabs and shows the first group by default", () => {
+  it("renders run configurations as tabs with the active one selected", () => {
     render(<TasksPage />);
 
-    expect(screen.getByRole("tab", { name: "日常" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Default" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(screen.getByRole("tab", { name: "活动" })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    );
-    expect(screen.getByRole("tab", { name: "未分组" })).toBeInTheDocument();
-    // 分组说明与任务标题可见；任务详情收进下拉，任务说明暂不渲染。
-    expect(screen.getByText("组说明").tagName).toBe("B");
     expect(screen.getByRole("heading", { name: "糖果" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "整理" })).not.toBeInTheDocument();
-    expect(screen.getByText("重点").tagName).toBe("EM");
-
-    expandTaskDetails("糖果");
-    expect(screen.getByRole("button", { name: "糖果" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    expect(screen.getByText("任务").tagName).toBe("STRONG");
+    expect(screen.getByRole("heading", { name: "整理" })).toBeInTheDocument();
   });
 
-  it("switches task categories between tabs", () => {
+  it("creates a new configuration tab", async () => {
     render(<TasksPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "活动" }));
-    expect(screen.getByRole("heading", { name: "糖果" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "New configuration" }));
 
-    fireEvent.click(screen.getByRole("tab", { name: "未分组" }));
-    expect(screen.getByRole("heading", { name: "整理" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "糖果" })).not.toBeInTheDocument();
+    await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
+    const saved = saveConfiguration.mock.calls[0][0] as UserConfiguration;
+    expect(saved.runConfigurations).toHaveLength(2);
+    expect(saved.activeRunConfigurationId).toBe(saved.runConfigurations[1].id);
+    expect(saved.runConfigurations[1].tasks).toHaveLength(0);
+  });
+
+  it("switches to a newly created configuration and shows the add-task picker", async () => {
+    render(<TasksPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New configuration" }));
+
+    await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
+    // 乐观更新后 store 已切到新配置，任务列表为空
+    const state = useAppStore.getState();
+    expect(state.snapshot?.configuration.runConfigurations).toHaveLength(2);
+    expect(state.snapshot?.configuration.activeRunConfigurationId).not.toBe("default");
+  });
+
+  it("adds a task from the picker", async () => {
+    useAppStore.setState({
+      snapshot: {
+        project,
+        configuration: {
+          ...configuration,
+          runConfigurations: [{ id: "default", name: "Default", tasks: [] }],
+        },
+      },
+    });
+    render(<TasksPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add task" }));
+    fireEvent.click(screen.getByRole("button", { name: "糖果" }));
+
+    await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
+    const saved = saveConfiguration.mock.calls[0][0] as UserConfiguration;
+    expect(saved.runConfigurations[0].tasks).toHaveLength(1);
+    expect(saved.runConfigurations[0].tasks[0].taskName).toBe("糖果");
+  });
+
+  it("removes a task from the list", async () => {
+    render(<TasksPage />);
+
+    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
+    fireEvent.click(removeButtons[0]);
+
+    await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
+    const saved = saveConfiguration.mock.calls[0][0] as UserConfiguration;
+    expect(saved.runConfigurations[0].tasks).toHaveLength(1);
+    expect(saved.runConfigurations[0].tasks[0].taskName).toBe("整理");
   });
 });
 

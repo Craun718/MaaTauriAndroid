@@ -50,6 +50,8 @@
   html,
   body {
     overflow: hidden;
+    /* hidden 仍允许 focused hidden input 触发程序化滚动；clip 才能彻底禁滚。 */
+    overflow: clip;
     overscroll-behavior: none;
   }
 

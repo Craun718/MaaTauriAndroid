@@ -139,7 +139,7 @@ export function RunPanel() {
 
   return (
     <>
-      <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+      <section className="rounded-lg border border-line bg-raised p-4">
         <h2 className="text-xl font-semibold">
           {t("tasksReady", { count: enabled.length })}
         </h2>
@@ -147,7 +147,7 @@ export function RunPanel() {
           type="button"
           disabled={enabled.length === 0 || busy}
           onClick={start}
-          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[var(--accent)] font-semibold text-white disabled:opacity-50"
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-accent font-semibold text-white disabled:opacity-50"
         >
           <Play size={18} />
           {t("start")}
@@ -157,7 +157,7 @@ export function RunPanel() {
             type="button"
             disabled={!executionId || runState === "Idle"}
             onClick={stop}
-            className="flex h-12 items-center justify-center gap-2 rounded-md border border-[var(--border)] font-semibold disabled:opacity-50"
+            className="flex h-12 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >
             <Square size={18} />
             {t("stop")}
@@ -166,7 +166,7 @@ export function RunPanel() {
             type="button"
             disabled={!executionId || exporting}
             onClick={exportBundle}
-            className="flex h-12 items-center justify-center gap-2 rounded-md border border-[var(--border)] font-semibold disabled:opacity-50"
+            className="flex h-12 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >
             <Download size={18} />
             {t("exportDiagnostics")}
@@ -175,7 +175,7 @@ export function RunPanel() {
             type="button"
             disabled={!executionId || capturing}
             onClick={captureScreenshot}
-            className="flex h-12 items-center justify-center gap-2 rounded-md border border-[var(--border)] font-semibold disabled:opacity-50"
+            className="flex h-12 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >
             <Camera size={18} />
             {t("captureScreenshot")}
@@ -183,7 +183,7 @@ export function RunPanel() {
         </div>
       </section>
       {diagnostic && (
-        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4 text-sm">
+        <section className="rounded-lg border border-line bg-raised p-4 text-sm">
           <p className="font-medium">
             {t("diagnosticsStatus", {
               status:
@@ -192,16 +192,16 @@ export function RunPanel() {
                   : t("diagnosticsPartial"),
             })}
           </p>
-          <p className="mt-1 break-all text-[var(--text-muted)]">{diagnostic.path}</p>
+          <p className="mt-1 break-all text-ink-muted">{diagnostic.path}</p>
         </section>
       )}
       {/* Rust reports absolute paths back; without break-all a long one widens the
           page and the fixed bottom nav drifts sideways when the page is panned. */}
       {status && (
-        <p className="break-all text-sm text-[var(--text-muted)]">{status}</p>
+        <p className="break-all text-sm text-ink-muted">{status}</p>
       )}
       {screenshotPath && (
-        <p className="break-all text-xs text-[var(--text-muted)]">{screenshotPath}</p>
+        <p className="break-all text-xs text-ink-muted">{screenshotPath}</p>
       )}
     </>
   );

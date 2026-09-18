@@ -31,8 +31,8 @@ const statusCopy: Record<
   starting: {
     label: "privilegedStarting",
     description: "privilegedStartingDescription",
-    chip: "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-muted)]",
-    dot: "bg-[var(--text-muted)]",
+    chip: "border-line bg-surface-muted text-ink-muted",
+    dot: "bg-ink-muted",
   },
   connected: {
     label: "permissionGranted",
@@ -58,8 +58,8 @@ const statusCopy: Record<
     label: "privilegedDisconnected",
     description: "privilegedDisconnectedDescription",
     action: "retry",
-    chip: "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-muted)]",
-    dot: "bg-[var(--text-muted)]",
+    chip: "border-line bg-surface-muted text-ink-muted",
+    dot: "bg-ink-muted",
   },
   error: {
     label: "privilegedError",
@@ -136,17 +136,17 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
     action === "openShizuku" ? ExternalLink : action === "retry" ? RotateCw : ShieldCheck;
 
   return (
-    <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <ShieldCheck size={18} className="text-[var(--accent)]" />
+          <ShieldCheck size={18} className="text-accent" />
           <h2 className="font-medium">{t(title)}</h2>
         </div>
         <button
           type="button"
           onClick={() => void refreshStatus()}
           disabled={refreshing}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] text-[var(--text-muted)] disabled:opacity-50"
+          className="flex h-9 w-9 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
           aria-label={t("refreshStatus")}
         >
           <RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />
@@ -157,7 +157,7 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         <span className="font-medium">{t("shizuku")}</span>
         <span
           className={`flex h-8 flex-none items-center gap-2 rounded-md border px-2.5 text-xs font-medium ${
-            copy?.chip ?? "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-muted)]"
+            copy?.chip ?? "border-line bg-surface-muted text-ink-muted"
           }`}
         >
           {copy ? (
@@ -169,12 +169,12 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         </span>
       </div>
 
-      <p className="text-sm text-[var(--text-muted)]">
+      <p className="text-sm text-ink-muted">
         {copy ? t(copy.description) : t("checking")}
       </p>
 
       {status?.status === "error" && (
-        <p className="break-all text-xs text-[var(--text-muted)]">{status.message}</p>
+        <p className="break-all text-xs text-ink-muted">{status.message}</p>
       )}
 
       {action && action !== "request" && (
@@ -182,7 +182,7 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
           type="button"
           onClick={() => void runPrivilegeAction(action)}
           disabled={actionPending || refreshing}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--accent)] font-medium text-[var(--accent)] disabled:opacity-50"
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
         >
           {actionPending ? (
             <LoaderCircle size={16} className="animate-spin" />
@@ -197,7 +197,7 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         type="button"
         onClick={() => void runPrivilegeAction("request")}
         disabled={actionPending || refreshing}
-        className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--accent)] font-medium text-[var(--accent)] disabled:opacity-50"
+        className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
       >
         {actionPending ? (
           <LoaderCircle size={16} className="animate-spin" />

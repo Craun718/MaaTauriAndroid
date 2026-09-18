@@ -29,7 +29,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
       return (
         <div className="space-y-2">
           <Checkbox
-            className="min-h-11 gap-3 rounded-md border border-[var(--border)] px-3"
+            className="min-h-11 gap-3 rounded-md border border-line px-3"
             checked={effective.type === "single" && effective.case === pair.on}
             onCheckedChange={(next) =>
               onChange({ type: "single", case: next ? pair.on : pair.off })
@@ -109,7 +109,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
             return (
               <Checkbox
                 key={item.name}
-                className="min-h-11 gap-3 rounded-md border border-[var(--border)] px-3"
+                className="min-h-11 gap-3 rounded-md border border-line px-3"
                 checked={checked}
                 onCheckedChange={(next) => {
                   onChange({
@@ -155,7 +155,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
           return (
             <Checkbox
               key={field.name}
-              className="min-h-11 gap-3 rounded-md border border-[var(--border)] px-3"
+              className="min-h-11 gap-3 rounded-md border border-line px-3"
               checked={checked}
               onCheckedChange={(next) =>
                 onChange({

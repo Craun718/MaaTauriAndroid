@@ -19,7 +19,12 @@ interface SegmentGroupProps {
 /**
  * Ark UI 分段选择（单选标签组）。无选中值时传 undefined，组件内部会转成 null，
  * 以保持「受控但无选择」的语义与默认值展示互不干扰。
+ * 外观与 RadioGroup 共用同一套状态规则（border / bg / text 随 data-state 切换），
+ * 通过 Tailwind 类定义在本封装内。
  */
+const itemAppearance =
+  "flex cursor-pointer border border-line bg-raised transition-colors duration-[120ms] [-webkit-tap-highlight-color:transparent] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent data-[state=checked]:border-accent data-[state=checked]:bg-accent/12 data-[state=checked]:text-accent data-disabled:cursor-not-allowed data-disabled:opacity-50";
+
 export function SegmentGroup({
   items,
   onValueChange,
@@ -44,9 +49,7 @@ export function SegmentGroup({
                 {label}
               </ArkSegmentGroup.Label>
             )}
-            {description && (
-              <div className="text-sm text-[var(--text-muted)]">{description}</div>
-            )}
+            {description && <div className="text-sm text-ink-muted">{description}</div>}
           </div>
         </div>
       )}
@@ -60,15 +63,15 @@ export function SegmentGroup({
             value={item.value}
             className={
               item.description
-                ? "min-h-10 flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left text-sm font-medium"
-                : "h-10 rounded-md px-3 text-sm font-medium"
+                ? `${itemAppearance} min-h-10 flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left text-sm font-medium`
+                : `${itemAppearance} h-10 rounded-md px-3 text-sm font-medium`
             }
           >
             <ArkSegmentGroup.ItemText>{item.label}</ArkSegmentGroup.ItemText>
             {item.description && (
               <div className="w-full text-xs font-normal">{item.description}</div>
             )}
-            <ArkSegmentGroup.ItemControl />
+            <ArkSegmentGroup.ItemControl className="hidden" />
             <ArkSegmentGroup.ItemHiddenInput />
           </ArkSegmentGroup.Item>
         ))}

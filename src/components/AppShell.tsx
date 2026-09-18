@@ -22,7 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           webview container (MainActivity.insetContainerOf), so the viewport this nav is
           pinned to already ends above the gesture bar. Adding env(safe-area-inset-bottom)
           as well would double it. */}
-      <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/92 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-md items-stretch">
           {navigation.map(({ to, label, icon: Icon }) => (
             <NavLink
@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               end={to === "/"}
               className={({ isActive }) =>
                 `flex flex-1 flex-col items-center justify-center gap-1 text-[11px] ${
-                  isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
+                  isActive ? "text-accent" : "text-ink-muted"
                 }`
               }
             >

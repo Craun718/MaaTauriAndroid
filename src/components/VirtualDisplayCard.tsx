@@ -135,17 +135,17 @@ export function VirtualDisplayCard() {
     : t("checking");
 
   return (
-    <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <MonitorPlay size={18} className="text-[var(--accent)]" />
+          <MonitorPlay size={18} className="text-accent" />
           <h2 className="font-medium">{t("virtualDisplay")}</h2>
         </div>
         <button
           type="button"
           onClick={() => void refreshStatus()}
           disabled={refreshing}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] text-[var(--text-muted)] disabled:opacity-50"
+          className="flex h-9 w-9 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
           aria-label={t("refreshStatus")}
         >
           <RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />
@@ -154,9 +154,9 @@ export function VirtualDisplayCard() {
 
       <div
         ref={previewRef}
-        className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-muted)]"
+        className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-line bg-surface-muted"
       >
-        <span className="text-xs font-medium text-[var(--text-muted)]">
+        <span className="text-xs font-medium text-ink-muted">
           {active ? t("virtualDisplayRunning") : t("virtualDisplayStopped")}
         </span>
       </div>
@@ -164,7 +164,7 @@ export function VirtualDisplayCard() {
       <div className="flex items-center justify-between gap-3 text-sm">
         <div className="min-w-0">
           <p className="font-medium">{geometry}</p>
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-ink-muted">
             {status?.active
               ? t("displayId", { id: status.displayId })
               : t("virtualDisplayStopped")}

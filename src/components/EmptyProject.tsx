@@ -6,7 +6,7 @@ export function EmptyProject() {
   return (
     <div>
       <h1 className="text-2xl font-semibold">{t("project")}</h1>
-      <p className="mt-2 text-[var(--text-muted)]">{t("loadProjectHint")}</p>
+      <p className="mt-2 text-ink-muted">{t("loadProjectHint")}</p>
     </div>
   );
 }

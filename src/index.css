@@ -1,26 +1,38 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light dark;
-  --surface: #f5f7fb;
-  --surface-raised: #ffffff;
-  --surface-muted: #e8edf5;
-  --text: #172033;
-  --text-muted: #637086;
-  --border: #d7deea;
-  --accent: #0f766e;
+/*
+ * 主题色板：定义在 @theme 里，Tailwind 生成具名 utility（bg-surface、bg-raised、
+ * text-ink-muted、border-line、bg-accent 等），组件里不再写 var() 任意值。
+ * 深色跟随系统 prefers-color-scheme：所有 utility 都引用 var(--color-*)，
+ * 在媒体查询里覆盖同名变量即可全局切换，无需逐个写 dark: 变体。
+ *
+ * 注意：--color-surface 取值需与 Android 端 res/values{,-night}/colors.xml 的
+ * surface 颜色保持同步（改色时三处一起改，见 AGENTS.md）。
+ */
+@theme {
+  --color-surface: #f5f7fb;
+  --color-raised: #ffffff;
+  --color-surface-muted: #e8edf5;
+  --color-ink: #172033;
+  --color-ink-muted: #637086;
+  --color-line: #d7deea;
+  --color-accent: #0f766e;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface: #101418;
-    --surface-raised: #181f27;
-    --surface-muted: #222b35;
-    --text: #eef2f7;
-    --text-muted: #a2adc0;
-    --border: #313d4b;
-    --accent: #34d399;
+    --color-surface: #101418;
+    --color-raised: #181f27;
+    --color-surface-muted: #222b35;
+    --color-ink: #eef2f7;
+    --color-ink-muted: #a2adc0;
+    --color-line: #313d4b;
+    --color-accent: #34d399;
   }
+}
+
+:root {
+  color-scheme: light dark;
 }
 
 /*
@@ -28,59 +40,59 @@
  * 不加这层锁，WebView 会把整页（含 fixed 的底部导航）当成一张可拖动的画布，
  * 出现上下左右都能拉动的「网页」手感。
  */
-html,
-body,
-#root {
-  height: 100%;
-}
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 
-html,
-body {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
+  html,
+  body {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 
-body {
-  margin: 0;
-  background: var(--surface);
-  color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  /* 原生观感：禁掉文字选中、长按菜单、点击高亮和双击缩放 */
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
+  body {
+    margin: 0;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    /* 原生观感：禁掉文字选中、长按菜单、点击高亮和双击缩放 */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
 
-/* 输入框里当然还要能选中、能长按 */
-input,
-textarea,
-[contenteditable] {
-  -webkit-user-select: text;
-  user-select: text;
-}
+  /* 输入框里当然还要能选中、能长按 */
+  input,
+  textarea,
+  [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 }
 
 /*
- * Ark UI 控件样式层。
- * Ark UI 是 headless 组件库，只输出 data-scope / data-part / data-state 等数据属性，
- * 这里按解剖结构统一定义外观，颜色一律走上面的主题变量，因此明暗色自动跟随。
- * 具体页面只负责布局（用 Tailwind class 覆盖尺寸、间距等），不重复定义状态样式。
+ * 富文本 description（interface 提供的 Markdown / 白名单 HTML）。
+ * 渲染的是 react-markdown 生成的、不受控的 HTML 树，无法逐节点标注 utility，
+ * 所以保留这一段后代选择器规则，作为全项目唯一的组件级 CSS。
  */
 @layer components {
-  /* ---------- 富文本 description（interface 提供的 Markdown / 白名单 HTML） ---------- */
   .rich-description {
     font-size: 0.875rem;
     line-height: 1.5;
-    color: var(--text-muted);
+    color: var(--color-ink-muted);
     overflow-wrap: anywhere;
   }
 
@@ -113,25 +125,21 @@ textarea {
     padding-left: 1.25rem;
   }
 
-  .rich-description li {
-    margin: 0.125rem 0;
-  }
-
   .rich-description a {
-    color: var(--accent);
+    color: var(--color-accent);
     text-decoration: underline;
   }
 
   .rich-description blockquote {
     margin: 0.25rem 0;
     padding-left: 0.75rem;
-    border-left: 2px solid var(--border);
+    border-left: 2px solid var(--color-line);
   }
 
   .rich-description code {
     padding: 0.1rem 0.3rem;
     border-radius: 0.25rem;
-    background: var(--surface-muted);
+    background: var(--color-surface-muted);
     font-size: 0.8125rem;
   }
 
@@ -139,7 +147,7 @@ textarea {
     margin: 0.25rem 0;
     padding: 0.5rem 0.75rem;
     border-radius: 0.375rem;
-    background: var(--surface-muted);
+    background: var(--color-surface-muted);
     overflow-x: auto;
   }
 
@@ -150,159 +158,5 @@ textarea {
 
   .rich-description img {
     max-width: 100%;
-  }
-
-  /* ---------- Checkbox ---------- */
-  [data-scope="checkbox"][data-part="root"] {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  [data-scope="checkbox"][data-part="control"] {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 1.25rem;
-    height: 1.25rem;
-    border: 1px solid var(--border);
-    border-radius: 0.375rem;
-    background: var(--surface-raised);
-    transition: background-color 120ms ease, border-color 120ms ease;
-  }
-
-  [data-scope="checkbox"][data-part="control"][data-state="checked"],
-  [data-scope="checkbox"][data-part="control"][data-state="indeterminate"] {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: #ffffff;
-  }
-
-  [data-scope="checkbox"][data-part="indicator"] {
-    display: grid;
-    place-items: center;
-  }
-
-  /* ---------- RadioGroup / SegmentGroup ---------- */
-  [data-scope="radio-group"][data-part="item"],
-  [data-scope="segment-group"][data-part="item"] {
-    display: flex;
-    align-items: center;
-    border: 1px solid var(--border);
-    background: var(--surface-raised);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: background-color 120ms ease, border-color 120ms ease;
-  }
-
-  [data-scope="radio-group"][data-part="item"][data-state="checked"],
-  [data-scope="segment-group"][data-part="item"][data-state="checked"] {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
-    color: var(--accent);
-  }
-
-  /* 现网观感是「整块可点」，隐藏 Ark 自带的圆点控件 */
-  [data-scope="radio-group"][data-part="item-control"],
-  [data-scope="segment-group"][data-part="item-control"] {
-    display: none;
-  }
-
-  /* ---------- Tabs ---------- */
-  [data-scope="tabs"][data-part="list"] {
-    display: flex;
-    gap: 0.375rem;
-    padding: 0.25rem;
-    border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    background: var(--surface-muted);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  [data-scope="tabs"][data-part="list"]::-webkit-scrollbar {
-    display: none;
-  }
-
-  [data-scope="tabs"][data-part="trigger"] {
-    flex: none;
-    display: flex;
-    align-items: center;
-    min-height: 2.25rem;
-    padding: 0 0.875rem;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-muted);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: background-color 120ms ease, color 120ms ease;
-  }
-
-  [data-scope="tabs"][data-part="trigger"][data-selected] {
-    background: var(--surface-raised);
-    color: var(--text);
-  }
-
-  [data-scope="tabs"][data-part="trigger"]:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  [data-scope="tabs"][data-part="content"]:focus-visible {
-    outline: none;
-  }
-
-  /* ---------- Field ---------- */
-  [data-scope="field"][data-part="root"] {
-    display: block;
-  }
-
-  [data-scope="field"][data-part="label"] {
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: 0.875rem;
-    color: var(--text-muted);
-  }
-
-  [data-scope="field"][data-part="input"] {
-    display: block;
-    width: 100%;
-    height: 2.75rem;
-    padding: 0 0.75rem;
-    border: 1px solid var(--border);
-    border-radius: 0.375rem;
-    background: var(--surface-raised);
-    color: var(--text);
-  }
-
-  [data-scope="field"][data-part="input"]::placeholder {
-    color: var(--text-muted);
-  }
-
-  [data-scope="field"][data-part="helper-text"] {
-    display: block;
-    margin-top: 0.375rem;
-    font-size: 0.8125rem;
-  }
-
-  /* ---------- 禁用与键盘焦点 ---------- */
-  [data-scope="checkbox"][data-part="root"][data-disabled],
-  [data-scope="radio-group"][data-part="item"][data-disabled],
-  [data-scope="segment-group"][data-part="item"][data-disabled],
-  [data-scope="field"][data-part="root"][data-disabled] [data-part="input"] {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  [data-scope="checkbox"][data-part="root"]:has(input:focus-visible)
-    [data-part="control"],
-  [data-scope="radio-group"][data-part="item"]:has(input:focus-visible),
-  [data-scope="segment-group"][data-part="item"]:has(input:focus-visible),
-  [data-scope="field"][data-part="input"]:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
   }
 }

@@ -11,7 +11,7 @@ export function HomePage() {
     return (
       <div className="space-y-3">
         <h1 className="text-2xl font-semibold">{t("project")}</h1>
-        <p className="text-[var(--text-muted)]">{t("noProject")}</p>
+        <p className="text-ink-muted">{t("noProject")}</p>
       </div>
     );
   }
@@ -21,7 +21,7 @@ export function HomePage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-ink-muted">
           {project.version ?? "PI v2"}
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">{project.label}</h1>
@@ -29,7 +29,7 @@ export function HomePage() {
 
       <PrivilegeStatusCard title="privilegedHost" />
 
-      {busy && <p className="text-sm text-[var(--text-muted)]">{t("saving")}</p>}
+      {busy && <p className="text-sm text-ink-muted">{t("saving")}</p>}
     </div>
   );
 }

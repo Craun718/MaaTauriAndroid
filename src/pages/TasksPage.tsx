@@ -189,7 +189,7 @@ export function TasksPage() {
       {focusToast && (
         <div
           role="status"
-          className="fixed inset-x-4 bottom-24 z-50 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4 shadow-lg"
+          className="fixed inset-x-4 bottom-24 z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
         >
           <p className="text-sm">
             {focusToast.name ? `${focusToast.name}: ${focusToast.message}` : focusToast.message}
@@ -200,7 +200,7 @@ export function TasksPage() {
         <div
           role="alertdialog"
           aria-modal="false"
-          className="fixed inset-x-4 bottom-24 z-50 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4 shadow-lg"
+          className="fixed inset-x-4 bottom-24 z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
         >
           <p className="text-sm">
             {focusNotice.name
@@ -210,7 +210,7 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setFocusNotice(undefined)}
-            className="mt-3 h-10 w-full rounded-md bg-[var(--accent)] font-semibold text-white"
+            className="mt-3 h-10 w-full rounded-md bg-accent font-semibold text-white"
           >
             {t("focusDismiss")}
           </button>
@@ -251,7 +251,7 @@ function PresetPicker({
         <button
           type="button"
           onClick={() => onApply(active.name)}
-          className="h-11 shrink-0 rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-white"
+          className="h-11 shrink-0 rounded-md bg-accent px-4 text-sm font-semibold text-white"
         >
           {applyLabel}
         </button>
@@ -299,8 +299,8 @@ function TaskItem({
     <article
       className={`rounded-lg border p-4 ${
         unavailable
-          ? "border-[var(--border)] bg-[var(--surface-muted)] opacity-60"
-          : "border-[var(--border)] bg-[var(--surface-raised)]"
+          ? "border-line bg-surface-muted opacity-60"
+          : "border-line bg-raised"
       }`}
     >
       <div className="flex items-center justify-between gap-3">
@@ -315,7 +315,7 @@ function TaskItem({
               {label}
               <ChevronDown
                 size={18}
-                className={`shrink-0 text-[var(--text-muted)] transition-transform ${
+                className={`shrink-0 text-ink-muted transition-transform ${
                   expanded ? "" : "-rotate-90"
                 }`}
               />
@@ -334,12 +334,12 @@ function TaskItem({
         </Checkbox>
       </div>
       {unavailable && (
-        <p className="mt-2 text-sm text-[var(--text-muted)]">
+        <p className="mt-2 text-sm text-ink-muted">
           {t("requiresOtherController")}
         </p>
       )}
       {expanded && hasDetails && (
-        <div className="mt-3 space-y-4 border-t border-[var(--border)] pt-4">
+        <div className="mt-3 space-y-4 border-t border-line pt-4">
           <RichDescription text={task.description} />
           {options.map(({ name, depth }) => {
             const option = project.options[name];
@@ -348,7 +348,7 @@ function TaskItem({
               <div
                 key={name}
                 className={
-                  depth > 0 ? "border-l-2 border-[var(--border)] pl-3" : undefined
+                  depth > 0 ? "border-l-2 border-line pl-3" : undefined
                 }
               >
                 <OptionEditor

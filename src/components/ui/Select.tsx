@@ -22,7 +22,7 @@ export function Select({ items, onValueChange, value, labelledBy, className }: S
     <span className={`relative block ${className ?? ""}`}>
       <select
         aria-labelledby={labelledBy}
-        className="h-11 w-full appearance-none rounded-md border border-[var(--border)] bg-[var(--surface-raised)] pl-3 pr-9 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        className="h-11 w-full appearance-none rounded-md border border-line bg-raised pl-3 pr-9 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         value={value ?? items[0]?.value}
         onChange={(event) => onValueChange(event.target.value)}
       >
@@ -35,7 +35,7 @@ export function Select({ items, onValueChange, value, labelledBy, className }: S
       <ChevronDown
         size={16}
         aria-hidden
-        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[var(--text-muted)]"
+        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-muted"
       />
     </span>
   );

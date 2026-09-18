@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VirtualDisplayCard } from "./VirtualDisplayCard";
 import type { VirtualDisplayStatus } from "../lib/types";
+import { VirtualDisplayCard } from "./VirtualDisplayCard";
 
 const getVirtualDisplayStatus = vi.fn();
 const stopVirtualDisplay = vi.fn();
@@ -10,7 +10,8 @@ const updateVirtualDisplayBounds = vi.fn();
 vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   stopVirtualDisplay: () => stopVirtualDisplay(),
-  updateVirtualDisplayBounds: (...args: unknown[]) => updateVirtualDisplayBounds(...args),
+  updateVirtualDisplayBounds: (...args: unknown[]) =>
+    updateVirtualDisplayBounds(...args),
 }));
 
 const inactive: VirtualDisplayStatus = {
@@ -43,9 +44,13 @@ describe("VirtualDisplayCard", () => {
   it("renders the inactive state", async () => {
     render(<VirtualDisplayCard />);
 
-    expect(await screen.findByRole("heading", { name: "Virtual display" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Virtual display" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Stopped")).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start" }),
+    ).not.toBeInTheDocument();
   });
 
   it("reports the preview bounds while the display is active", async () => {
@@ -61,7 +66,12 @@ describe("VirtualDisplayCard", () => {
 
     expect(await screen.findByText("Display ID: 12")).toBeInTheDocument();
     await waitFor(() =>
-      expect(updateVirtualDisplayBounds).toHaveBeenCalledWith(16, 120, 320, 180),
+      expect(updateVirtualDisplayBounds).toHaveBeenCalledWith(
+        16,
+        120,
+        320,
+        180,
+      ),
     );
   });
 

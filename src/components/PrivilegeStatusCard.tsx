@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from "react";
 import {
   CircleAlert,
   ExternalLink,
@@ -7,13 +6,14 @@ import {
   RotateCw,
   ShieldCheck,
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getPrivilegedStatus,
   openShizuku,
   requestPrivilegedAccess,
 } from "../lib/api";
-import { useTranslation } from "../lib/i18n";
 import type { MessageKey } from "../lib/i18n";
+import { useTranslation } from "../lib/i18n";
 import type { PrivilegedStatus } from "../lib/types";
 
 type PrivilegeAction = "request" | "openShizuku" | "retry";
@@ -133,7 +133,11 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
   const copy = status ? statusCopy[status.status] : undefined;
   const action = copy?.action;
   const ActionIcon =
-    action === "openShizuku" ? ExternalLink : action === "retry" ? RotateCw : ShieldCheck;
+    action === "openShizuku"
+      ? ExternalLink
+      : action === "retry"
+        ? RotateCw
+        : ShieldCheck;
 
   return (
     <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
@@ -149,7 +153,10 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
           className="flex h-9 w-9 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
           aria-label={t("refreshStatus")}
         >
-          <RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />
+          <RefreshCw
+            size={16}
+            className={refreshing ? "animate-spin" : undefined}
+          />
         </button>
       </div>
 

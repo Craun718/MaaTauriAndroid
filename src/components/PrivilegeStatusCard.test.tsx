@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PrivilegeStatusCard } from "./PrivilegeStatusCard";
+import type {
+  AppStateSnapshot,
+  Project,
+  UserConfiguration,
+} from "../lib/types";
 import { useAppStore } from "../store/appStore";
-import type { AppStateSnapshot, Project, UserConfiguration } from "../lib/types";
+import { PrivilegeStatusCard } from "./PrivilegeStatusCard";
 
 const getPrivilegedStatus = vi.fn();
 const requestPrivilegedAccess = vi.fn();
@@ -64,9 +68,13 @@ describe("PrivilegeStatusCard", () => {
 
     expect(await screen.findByText("Connecting")).toBeInTheDocument();
     expect(
-      screen.getByText("Connecting to the privileged control unit through Shizuku."),
+      screen.getByText(
+        "Connecting to the privileged control unit through Shizuku.",
+      ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the manual permission action in the granted state", async () => {
@@ -79,7 +87,9 @@ describe("PrivilegeStatusCard", () => {
 
     expect(await screen.findByText("Granted")).toBeInTheDocument();
     expect(
-      screen.getByText("The privileged control unit is connected and ready to run tasks."),
+      screen.getByText(
+        "The privileged control unit is connected and ready to run tasks.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Request Shizuku permission" }),
@@ -102,7 +112,9 @@ describe("PrivilegeStatusCard", () => {
       await screen.findByRole("button", { name: "Request Shizuku permission" }),
     );
 
-    await waitFor(() => expect(requestPrivilegedAccess).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(requestPrivilegedAccess).toHaveBeenCalledTimes(1),
+    );
     expect(await screen.findByText("Granted")).toBeInTheDocument();
     expect(getPrivilegedStatus).toHaveBeenCalledTimes(2);
     expect(
@@ -120,7 +132,9 @@ describe("PrivilegeStatusCard", () => {
 
     render(<PrivilegeStatusCard title="privileges" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Open Shizuku" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Shizuku" }),
+    );
 
     await waitFor(() => expect(openShizuku).toHaveBeenCalledTimes(1));
     expect(getPrivilegedStatus).toHaveBeenCalledTimes(1);

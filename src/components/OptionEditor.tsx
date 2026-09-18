@@ -1,6 +1,6 @@
-import type { OptionDefinition, OptionValue } from "../lib/types";
-import { defaultOptionValue, switchCases } from "../lib/options";
 import { useTranslation } from "../lib/i18n";
+import { defaultOptionValue, switchCases } from "../lib/options";
+import type { OptionDefinition, OptionValue } from "../lib/types";
 import { RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
 import { RadioGroup } from "./ui/RadioGroup";
@@ -51,7 +51,9 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
     return (
       <div className="space-y-3">
         <div>
-          <p id={`option-label-${option.name}`} className="font-medium">{option.label}</p>
+          <p id={`option-label-${option.name}`} className="font-medium">
+            {option.label}
+          </p>
           <RichDescription text={option.description} />
         </div>
         <RadioGroup
@@ -66,7 +68,9 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
               </div>
             ),
           }))}
-          onValueChange={(caseName) => onChange({ type: "single", case: caseName })}
+          onValueChange={(caseName) =>
+            onChange({ type: "single", case: caseName })
+          }
         />
       </div>
     );
@@ -80,7 +84,11 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
     return (
       <SegmentGroup
         label={option.label}
-        description={option.description ? <RichDescription text={option.description} /> : undefined}
+        description={
+          option.description ? (
+            <RichDescription text={option.description} />
+          ) : undefined
+        }
         value={selected}
         columns={Math.min(option.cases.length, 3)}
         items={option.cases.map((item) => ({
@@ -90,13 +98,16 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
             <RichDescription text={item.description} className="text-xs" />
           ) : undefined,
         }))}
-        onValueChange={(caseName) => onChange({ type: "single", case: caseName })}
+        onValueChange={(caseName) =>
+          onChange({ type: "single", case: caseName })
+        }
       />
     );
   }
 
   if (option.kind === "checkbox") {
-    const selected = value?.type === "multiple" ? value.cases : option.defaultCases;
+    const selected =
+      value?.type === "multiple" ? value.cases : option.defaultCases;
     return (
       <div className="space-y-3">
         <div>
@@ -122,7 +133,10 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
               >
                 <span className="flex flex-col items-start gap-0.5 text-left">
                   <span className="font-medium">{item.label}</span>
-                  <RichDescription text={item.description} className="text-xs" />
+                  <RichDescription
+                    text={item.description}
+                    className="text-xs"
+                  />
                 </span>
               </Checkbox>
             );
@@ -176,18 +190,26 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
           option.kind === "input" && field.verify && current.length > 0
             ? matchesPattern(current, field.verify)
               ? undefined
-              : field.patternMessage ?? t("invalidInput")
+              : (field.patternMessage ?? t("invalidInput"))
             : undefined;
         return (
           <TextField
             key={field.name}
             label={field.label}
-            type={option.kind === "input" && field.password ? "password" : "text"}
-            inputMode={option.kind === "input" && field.pipelineType === "int" ? "numeric" : undefined}
+            type={
+              option.kind === "input" && field.password ? "password" : "text"
+            }
+            inputMode={
+              option.kind === "input" && field.pipelineType === "int"
+                ? "numeric"
+                : undefined
+            }
             value={current}
             error={patternError}
             description={
-              field.description ? <RichDescription text={field.description} /> : undefined
+              field.description ? (
+                <RichDescription text={field.description} />
+              ) : undefined
             }
             onValueChange={(next) =>
               onChange({

@@ -23,7 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-.workbuddy
+.workbuddy-ai/
+.workbuddy/
 
 # M9A agent runtime bundle（构建产物，由 resource/m9a.toml 的 bundle_sha256 锁定）
 resource/m9a-agent-dist/

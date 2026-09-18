@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import {
-  applyPreset as invokeApplyPreset,
   bootstrapApp,
+  applyPreset as invokeApplyPreset,
   loadProject as invokeLoadProject,
   saveConfiguration as invokeSaveConfiguration,
 } from "../lib/api";

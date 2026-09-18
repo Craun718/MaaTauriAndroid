@@ -1,29 +1,29 @@
-import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
 import {
-  DndContext,
-  PointerSensor,
   closestCenter,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext,
   arrayMove,
+  SortableContext,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { OptionEditor } from "../components/OptionEditor";
-import { RunPanel } from "../components/RunPanel";
+import { listen } from "@tauri-apps/api/event";
+import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
+import { OptionEditor } from "../components/OptionEditor";
 import { RichDescription } from "../components/RichDescription";
-import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
+import { RunPanel } from "../components/RunPanel";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
 import { Tabs } from "../components/ui/Tabs";
+import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
 import { useTranslation } from "../lib/i18n";
 import {
   activeController,
@@ -31,15 +31,15 @@ import {
   defaultOptionValue,
   visibleOptions,
 } from "../lib/options";
-import { useAppStore } from "../store/appStore";
 import type {
-  ConfiguredTask,
   ConfigurationTemplate,
+  ConfiguredTask,
   OptionValue,
   Project,
   RunConfiguration,
   TaskDefinition,
 } from "../lib/types";
+import { useAppStore } from "../store/appStore";
 
 interface FocusNotice {
   channel: string;
@@ -60,7 +60,10 @@ export function TasksPage() {
   useEffect(() => {
     let disposed = false;
     const unsubscribers: Array<() => void> = [];
-    const subscribe = (event: string, apply: (payload: FocusNotice) => void) => {
+    const subscribe = (
+      event: string,
+      apply: (payload: FocusNotice) => void,
+    ) => {
       listen<FocusNotice>(event, (notification) => apply(notification.payload))
         .then((stop) => {
           if (disposed) stop();
@@ -75,21 +78,28 @@ export function TasksPage() {
     subscribe("focus-notify", (payload) => setFocusNotice(payload));
     return () => {
       disposed = true;
-      unsubscribers.forEach((stop) => stop());
+      unsubscribers.forEach((stop) => {
+        stop();
+      });
     };
   }, []);
+
+  // Must stay above the early return below: React requires every hook to run on
+  // every render, otherwise the hook count changes when `project` is missing.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
 
   if (!snapshot?.project) return <EmptyProject />;
   const { project, configuration } = snapshot;
   const resource = activeResource(project, configuration);
   const controller = activeController(project);
-  const activeRun: RunConfiguration | undefined = configuration.runConfigurations.find(
-    (run) => run.id === configuration.activeRunConfigurationId,
-  );
+  const activeRun: RunConfiguration | undefined =
+    configuration.runConfigurations.find(
+      (run) => run.id === configuration.activeRunConfigurationId,
+    );
 
-  function mutateActiveRun(
-    mutate: (run: RunConfiguration) => void,
-  ) {
+  function mutateActiveRun(mutate: (run: RunConfiguration) => void) {
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
     const next = structuredClone(latest.configuration);
@@ -101,7 +111,10 @@ export function TasksPage() {
     void saveConfiguration(next);
   }
 
-  function updateTask(instanceId: string, mutate: (task: ConfiguredTask) => ConfiguredTask) {
+  function updateTask(
+    instanceId: string,
+    mutate: (task: ConfiguredTask) => ConfiguredTask,
+  ) {
     mutateActiveRun((run) => {
       run.tasks = run.tasks.map((task) =>
         task.instanceId === instanceId ? mutate(task) : task,
@@ -131,8 +144,12 @@ export function TasksPage() {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     mutateActiveRun((run) => {
-      const oldIndex = run.tasks.findIndex((item) => item.instanceId === active.id);
-      const newIndex = run.tasks.findIndex((item) => item.instanceId === over.id);
+      const oldIndex = run.tasks.findIndex(
+        (item) => item.instanceId === active.id,
+      );
+      const newIndex = run.tasks.findIndex(
+        (item) => item.instanceId === over.id,
+      );
       if (oldIndex < 0 || newIndex < 0) return;
       run.tasks = arrayMove(run.tasks, oldIndex, newIndex);
     });
@@ -162,7 +179,9 @@ export function TasksPage() {
   }
 
   function renderConfiguredTask(configured: ConfiguredTask) {
-    const task = project.tasks.find((item) => item.name === configured.taskName);
+    const task = project.tasks.find(
+      (item) => item.name === configured.taskName,
+    );
     if (!task) return null;
     return (
       <SortableTaskItem
@@ -174,7 +193,10 @@ export function TasksPage() {
         resourceName={resource?.name ?? ""}
         configured={configured}
         onEnabledChange={(next) =>
-          updateTask(configured.instanceId, (item) => ({ ...item, enabled: next }))
+          updateTask(configured.instanceId, (item) => ({
+            ...item,
+            enabled: next,
+          }))
         }
         onOptionValueChange={(name, value) =>
           updateTask(configured.instanceId, (item) => ({
@@ -195,8 +217,6 @@ export function TasksPage() {
     label: run.name,
     content: null,
   }));
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   return (
     <div className="space-y-5">
@@ -234,7 +254,11 @@ export function TasksPage() {
             <Plus size={18} />
           </button>
         </div>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderTasks}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={reorderTasks}
+        >
           <SortableContext
             items={activeRun?.tasks.map((task) => task.instanceId) ?? []}
             strategy={verticalListSortingStrategy}
@@ -257,7 +281,9 @@ export function TasksPage() {
           className="fixed inset-x-4 bottom-24 z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
         >
           <p className="text-sm">
-            {focusToast.name ? `${focusToast.name}: ${focusToast.message}` : focusToast.message}
+            {focusToast.name
+              ? `${focusToast.name}: ${focusToast.message}`
+              : focusToast.message}
           </p>
         </div>
       )}
@@ -309,7 +335,10 @@ function PresetPicker({
         <Select
           className="min-w-0 flex-1"
           labelledBy="preset-select-label"
-          items={presets.map((preset) => ({ value: preset.name, label: preset.label }))}
+          items={presets.map((preset) => ({
+            value: preset.name,
+            label: preset.label,
+          }))}
           value={active.name}
           onValueChange={onValueChange}
         />
@@ -373,7 +402,9 @@ function AddTaskPicker({
 }
 
 /** 包装 TaskItem 加上 @dnd-kit/sortable 的拖拽排序行为。 */
-function SortableTaskItem(props: Omit<TaskItemProps, "dragHandleProps"> & { instanceId: string }) {
+function SortableTaskItem(
+  props: Omit<TaskItemProps, "dragHandleProps"> & { instanceId: string },
+) {
   const {
     attributes,
     listeners,
@@ -389,11 +420,12 @@ function SortableTaskItem(props: Omit<TaskItemProps, "dragHandleProps"> & { inst
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={isDragging ? "relative z-10" : undefined}>
-      <TaskItem
-        {...props}
-        dragHandleProps={{ ...attributes, ...listeners }}
-      />
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={isDragging ? "relative z-10" : undefined}
+    >
+      <TaskItem {...props} dragHandleProps={{ ...attributes, ...listeners }} />
     </div>
   );
 }
@@ -428,7 +460,8 @@ function TaskItem({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const unavailable =
-    (task.controllers.length > 0 && !task.controllers.includes(controllerName)) ||
+    (task.controllers.length > 0 &&
+      !task.controllers.includes(controllerName)) ||
     (task.resources.length > 0 && !task.resources.includes(resourceName));
   const options = unavailable
     ? []
@@ -512,7 +545,10 @@ function TaskItem({
               >
                 <OptionEditor
                   option={option}
-                  value={defaultOptionValue(option, configured.optionValues[name])}
+                  value={defaultOptionValue(
+                    option,
+                    configured.optionValues[name],
+                  )}
                   onChange={(value) => onOptionValueChange(name, value)}
                 />
               </div>

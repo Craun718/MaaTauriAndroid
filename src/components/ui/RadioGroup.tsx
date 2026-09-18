@@ -38,7 +38,11 @@ export function RadioGroup({
       }}
     >
       {items.map((item) => (
-        <ArkRadioGroup.Item key={item.value} value={item.value} className={itemAppearance}>
+        <ArkRadioGroup.Item
+          key={item.value}
+          value={item.value}
+          className={itemAppearance}
+        >
           <ArkRadioGroup.ItemText className="flex min-w-0 flex-1 items-center justify-between gap-2">
             {item.content}
           </ArkRadioGroup.ItemText>

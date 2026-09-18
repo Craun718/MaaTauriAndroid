@@ -17,7 +17,13 @@ interface SelectProps {
  * 原生 select 封装：外观走主题变量，弹出面板交给平台
  * （Android WebView 会直接弹系统选择器，比自绘下拉更适合触屏）。
  */
-export function Select({ items, onValueChange, value, labelledBy, className }: SelectProps) {
+export function Select({
+  items,
+  onValueChange,
+  value,
+  labelledBy,
+  className,
+}: SelectProps) {
   return (
     <span className={`relative block ${className ?? ""}`}>
       <select

@@ -18,7 +18,8 @@ export function isApplicable(
   const { controllers, resources } = option.applicability;
   const controllerMatches =
     controllers.length === 0 || controllers.includes(controller.name);
-  const resourceMatches = resources.length === 0 || resources.includes(resource.name);
+  const resourceMatches =
+    resources.length === 0 || resources.includes(resource.name);
   return controllerMatches && resourceMatches;
 }
 
@@ -69,8 +70,12 @@ export interface SwitchCases {
  */
 export function switchCases(option: OptionDefinition): SwitchCases | undefined {
   if (option.kind !== "switch" || option.cases.length !== 2) return undefined;
-  const on = option.cases.find((item) => SWITCH_ON_NAMES.has(item.name.toLowerCase()));
-  const off = option.cases.find((item) => SWITCH_OFF_NAMES.has(item.name.toLowerCase()));
+  const on = option.cases.find((item) =>
+    SWITCH_ON_NAMES.has(item.name.toLowerCase()),
+  );
+  const off = option.cases.find((item) =>
+    SWITCH_OFF_NAMES.has(item.name.toLowerCase()),
+  );
   if (!on || !off) return undefined;
   return { on: on.name, off: off.name };
 }
@@ -92,7 +97,8 @@ export function selectedCaseNames(
 ): string[] {
   const effective = defaultOptionValue(option, value);
   if (effective.type === "multiple") return effective.cases;
-  if (effective.type === "single") return effective.case ? [effective.case] : [];
+  if (effective.type === "single")
+    return effective.case ? [effective.case] : [];
   return [];
 }
 
@@ -159,7 +165,9 @@ export function configuredTask(
   task: TaskDefinition,
 ): ConfiguredTask {
   const activeId = configuration.activeRunConfigurationId;
-  const run = configuration.runConfigurations.find((item) => item.id === activeId);
+  const run = configuration.runConfigurations.find(
+    (item) => item.id === activeId,
+  );
   return (
     run?.tasks.find((item) => item.taskName === task.name) ?? {
       instanceId: `${task.name}:new`,
@@ -181,8 +189,9 @@ export function activeResource(
   configuration: UserConfiguration,
 ): ResourceDefinition | undefined {
   return (
-    project.resources.find((resource) => resource.name === configuration.activeResource) ??
-    project.resources[0]
+    project.resources.find(
+      (resource) => resource.name === configuration.activeResource,
+    ) ?? project.resources[0]
   );
 }
 
@@ -193,7 +202,9 @@ export function activeResource(
  * declared, which is why the name lives on the project rather than in the
  * configuration.
  */
-export function activeController(project: Project): ControllerDefinition | undefined {
+export function activeController(
+  project: Project,
+): ControllerDefinition | undefined {
   return project.controllers[0];
 }
 

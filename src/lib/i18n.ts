@@ -186,7 +186,8 @@ const zh: Record<MessageKey, string> = {
   settings: "设置",
   apply: "应用",
   language: "语言",
-  languageDescription: "默认跟随设备语言：系统语言为中文时使用中文，否则使用英文。",
+  languageDescription:
+    "默认跟随设备语言：系统语言为中文时使用中文，否则使用英文。",
   languageSystem: "跟随系统",
   languageChinese: "简体中文",
   languageEnglish: "English",
@@ -222,8 +223,10 @@ const zh: Record<MessageKey, string> = {
   shizukuNotInstalledDescription:
     "Shizuku 未运行。请安装或打开 Shizuku 并启动服务，然后回到这里重试。",
   privilegedStartingDescription: "正在通过 Shizuku 连接特权控制单元。",
-  privilegedDisconnectedDescription: "特权控制单元已断开。如需要请重启 Shizuku，然后重试。",
-  privilegedErrorDescription: "特权控制单元启动失败。请检查 Shizuku 和 Android 服务日志，然后重试。",
+  privilegedDisconnectedDescription:
+    "特权控制单元已断开。如需要请重启 Shizuku，然后重试。",
+  privilegedErrorDescription:
+    "特权控制单元启动失败。请检查 Shizuku 和 Android 服务日志，然后重试。",
   requestPermission: "申请 Shizuku 权限",
   openShizuku: "打开 Shizuku",
   retryConnection: "重试",
@@ -283,7 +286,9 @@ export interface Translation {
 
 /** Translated strings for the current configuration, re-rendering when it changes. */
 export function useTranslation(): Translation {
-  const setting = useAppStore((state) => state.snapshot?.configuration.uiLanguage);
+  const setting = useAppStore(
+    (state) => state.snapshot?.configuration.uiLanguage,
+  );
   const language = resolveLanguage(setting, systemLanguageTags());
   return useMemo(
     () => ({

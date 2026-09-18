@@ -81,8 +81,15 @@ describe("App", () => {
       tasks: [],
       pipelineOverride: {},
     });
-    getPrivilegedStatus.mockResolvedValue({ message: "Not connected", setupRequired: [] });
-    getRunStatus.mockResolvedValue({ executionId: undefined, state: "Idle", message: "Idle" });
+    getPrivilegedStatus.mockResolvedValue({
+      message: "Not connected",
+      setupRequired: [],
+    });
+    getRunStatus.mockResolvedValue({
+      executionId: undefined,
+      state: "Idle",
+      message: "Idle",
+    });
     getVirtualDisplayStatus.mockResolvedValue({
       active: false,
       displayId: -1,
@@ -94,26 +101,40 @@ describe("App", () => {
 
   it("bootstraps the project and renders navigation", async () => {
     render(<App />);
-    expect(await screen.findByText("MaaTauriAndroid Fixture")).toBeInTheDocument();
+    expect(
+      await screen.findByText("MaaTauriAndroid Fixture"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Tasks" }));
-    expect(screen.getByRole("heading", { name: "Tasks & Run" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Tasks & Run" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps project-level settings in one tab", async () => {
     render(<App />);
-    expect(await screen.findByText("MaaTauriAndroid Fixture")).toBeInTheDocument();
+    expect(
+      await screen.findByText("MaaTauriAndroid Fixture"),
+    ).toBeInTheDocument();
 
     // The setup page is gone: nothing to configure separately from Settings.
-    expect(screen.queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "More" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Setup" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "More" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: "Settings" }));
 
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Settings" }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Home" }));
 
     // Resource setup is intentionally separate from project settings.
-    expect(screen.queryByRole("heading", { name: "Resource" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Resource" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("resource/base")).not.toBeInTheDocument();
   });
 
@@ -124,7 +145,9 @@ describe("App", () => {
     // Run controls, formerly on their own /run page.
     expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(1);
     // Tasks belonging to the active run configuration, on the same panel.
-    expect(screen.getByRole("heading", { name: "Default" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Default" }),
+    ).toBeInTheDocument();
     // The old /run tab is gone.
     expect(screen.queryByRole("link", { name: "Run" })).not.toBeInTheDocument();
   });

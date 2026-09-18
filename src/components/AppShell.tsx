@@ -1,7 +1,7 @@
-import { NavLink } from "react-router-dom";
 import { Home, ListChecks, Settings } from "lucide-react";
-import { useTranslation } from "../lib/i18n";
 import type { ReactNode } from "react";
+import { NavLink } from "react-router-dom";
+import { useTranslation } from "../lib/i18n";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();

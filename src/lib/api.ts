@@ -73,7 +73,9 @@ export async function updateVirtualDisplayBounds(
 }
 
 export async function getRunStatus() {
-  return invoke<{ executionId?: string; state: RunState; message: string }>("run_status");
+  return invoke<{ executionId?: string; state: RunState; message: string }>(
+    "run_status",
+  );
 }
 
 export async function stopRun(executionId?: string) {
@@ -81,7 +83,9 @@ export async function stopRun(executionId?: string) {
 }
 
 export async function startRun() {
-  return invoke<{ executionId: string; message: string; taskCount: number }>("start_run");
+  return invoke<{ executionId: string; message: string; taskCount: number }>(
+    "start_run",
+  );
 }
 
 export async function exportDiagnostics(executionId?: string) {
@@ -93,11 +97,16 @@ export async function exportLogs() {
 }
 
 export async function captureManualScreenshot(executionId?: string) {
-  return invoke<{ executionId: string; path: string }>("capture_manual_screenshot", {
-    executionId,
-  });
+  return invoke<{ executionId: string; path: string }>(
+    "capture_manual_screenshot",
+    {
+      executionId,
+    },
+  );
 }
 
 export async function clearDiagnosticData() {
-  return invoke<{ deletedRunCount: number; runsDir: string }>("clear_diagnostic_data");
+  return invoke<{ deletedRunCount: number; runsDir: string }>(
+    "clear_diagnostic_data",
+  );
 }

@@ -51,6 +51,7 @@
   body {
     overflow: hidden;
     /* hidden 仍允许 focused hidden input 触发程序化滚动；clip 才能彻底禁滚。 */
+    /* biome-ignore lint/suspicious/noDuplicateProperties: hidden 是旧内核回退值，clip 才是目标行为 */
     overflow: clip;
     overscroll-behavior: none;
   }
@@ -59,7 +60,8 @@
     margin: 0;
     background: var(--color-surface);
     color: var(--color-ink);
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
     /* 原生观感：禁掉文字选中、长按菜单、点击高亮和双击缩放 */
     -webkit-user-select: none;

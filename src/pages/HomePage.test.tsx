@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HomePage } from "./HomePage";
+import type {
+  AppStateSnapshot,
+  Project,
+  UserConfiguration,
+} from "../lib/types";
 import { useAppStore } from "../store/appStore";
-import type { AppStateSnapshot, Project, UserConfiguration } from "../lib/types";
+import { HomePage } from "./HomePage";
 
 const getPrivilegedStatus = vi.fn();
 const resolveCurrent = vi.fn();
@@ -82,11 +86,15 @@ describe("home layout", () => {
   it("omits resource and current selection cards", async () => {
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Privileged host" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Privileged host" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Current selection" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Resource" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Resource" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Resource A")).not.toBeInTheDocument();
     expect(screen.queryByText("resource/base")).not.toBeInTheDocument();
   });

@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SettingsPage } from "./SettingsPage";
+import type {
+  AppStateSnapshot,
+  Project,
+  UserConfiguration,
+} from "../lib/types";
 import { useAppStore } from "../store/appStore";
-import type { AppStateSnapshot, Project, UserConfiguration } from "../lib/types";
+import { SettingsPage } from "./SettingsPage";
 
 const getPrivilegedStatus = vi.fn();
 const saveConfiguration = vi.fn();
@@ -12,7 +16,8 @@ vi.mock("../lib/api", () => ({
   getPrivilegedStatus: () => getPrivilegedStatus(),
   requestPrivilegedAccess: vi.fn(),
   openShizuku: vi.fn(),
-  saveConfiguration: (configuration: unknown) => saveConfiguration(configuration),
+  saveConfiguration: (configuration: unknown) =>
+    saveConfiguration(configuration),
   loadProject: vi.fn(),
   clearDiagnosticData: vi.fn(),
   exportLogs: () => exportLogs(),
@@ -54,7 +59,12 @@ const project: Project = {
       label: "Resolution",
       description: "**分辨率**说明",
       cases: [
-        { name: "720p", label: "720p", description: "**720** 说明", options: [] },
+        {
+          name: "720p",
+          label: "720p",
+          description: "**720** 说明",
+          options: [],
+        },
         { name: "1080p", label: "1080p", options: [] },
       ],
       applicability: { controllers: [], resources: [] },
@@ -94,7 +104,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   const snapshot: AppStateSnapshot = { project, configuration };
   useAppStore.setState({ snapshot, busy: false, error: undefined });
-  getPrivilegedStatus.mockResolvedValue({ message: "Connected", setupRequired: [] });
+  getPrivilegedStatus.mockResolvedValue({
+    message: "Connected",
+    setupRequired: [],
+  });
   saveConfiguration.mockImplementation(async (next: unknown) => next);
 });
 
@@ -102,10 +115,18 @@ describe("project scope in settings", () => {
   it("keeps resource options without the directory and resource summary cards", () => {
     render(<SettingsPage />);
 
-    expect(screen.getByRole("heading", { name: "Resource options" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Resource" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Project directory" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Project directory" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Resource options" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Resource" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Project directory" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Project directory" }),
+    ).not.toBeInTheDocument();
   });
 
   it("saves a resource option change", async () => {
@@ -130,13 +151,20 @@ describe("project scope in settings", () => {
   });
 
   it("exports logs from the diagnostics card", async () => {
-    exportLogs.mockResolvedValue({ path: "/cache/maa_tauri_android-logs-1.zip", fileName: "maa_tauri_android-logs-1.zip" });
+    exportLogs.mockResolvedValue({
+      path: "/cache/maa_tauri_android-logs-1.zip",
+      fileName: "maa_tauri_android-logs-1.zip",
+    });
     render(<SettingsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
 
     await waitFor(() =>
-      expect(screen.getByText("Logs exported to Downloads: maa_tauri_android-logs-1.zip")).toBeInTheDocument(),
+      expect(
+        screen.getByText(
+          "Logs exported to Downloads: maa_tauri_android-logs-1.zip",
+        ),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -157,9 +185,13 @@ describe("project scope in settings", () => {
   it("persists the telemetry consent choice", async () => {
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /allow anonymous telemetry/i }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /allow anonymous telemetry/i }),
+    );
 
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
-    expect(saveConfiguration.mock.calls[0][0]).toMatchObject({ telemetryEnabled: true });
+    expect(saveConfiguration.mock.calls[0][0]).toMatchObject({
+      telemetryEnabled: true,
+    });
   });
 });

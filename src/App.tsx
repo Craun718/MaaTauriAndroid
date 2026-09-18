@@ -21,7 +21,9 @@ function App() {
     <HashRouter>
       <AppShell>
         {error && (
-          <p className="mb-4 break-all text-sm text-red-600 dark:text-red-300">{error}</p>
+          <p className="mb-4 break-all text-sm text-red-600 dark:text-red-300">
+            {error}
+          </p>
         )}
         <Routes>
           <Route path="/" element={<HomePage />} />

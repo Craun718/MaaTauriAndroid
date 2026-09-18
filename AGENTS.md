@@ -29,6 +29,9 @@
 - `scripts/setup.sh`：初始化子模块、下载 MaaFramework 二进制并构建 agent runtime ZIP。
 - `pnpm install`：安装 Node 依赖。包管理器统一用 **pnpm 11**（与 CI 一致，`corepack pnpm@11`）。
 - `pnpm dev`：启动 Vite 前端开发服务器。
+- `pnpm typecheck`：`tsc --noEmit`，只做类型检查不产出文件。
+- `pnpm lint`：用 Biome 做 lint。
+- `pnpm format` / `pnpm format:check`：用 Biome 格式化 / 校验 JS、TS、JSON、CSS、HTML 和 SVG。
 - `cargo fmt --manifest-path src-tauri/Cargo.toml`：格式化 Rust 代码。
 
 以下命令**默认只在 CI 中执行**，除非用户明确要求在本地运行：
@@ -42,12 +45,12 @@
 
 CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `workflow_dispatch` 手动触发。**提交后以 CI 结果为准，job 全绿即视为编译与测试通过。**
 
-| Job | 作用 |
-| --- | --- |
-| `frontend` | `pnpm test` + `pnpm build`（TypeScript 检查），产出 `dist` artifact |
-| `rust` | `cargo fmt --check` + `cargo test`（桌面目标） |
-| `android-rust` | Android 目标的 `cargo check`，依赖 `frontend` 的 `dist` |
-| `m9a-android` | 构建 arm64 debug APK，并上传 APK 与 agent runtime artifact |
+| Job            | 作用                                                                |
+| -------------- | ------------------------------------------------------------------- |
+| `frontend`     | `pnpm check` + `pnpm test` + `pnpm build`（TypeScript 检查），产出 `dist` artifact |
+| `rust`         | `cargo fmt --check` + `cargo test`（桌面目标）                      |
+| `android-rust` | Android 目标的 `cargo check`，依赖 `frontend` 的 `dist`             |
+| `m9a-android`  | 构建 arm64 debug APK，并上传 APK 与 agent runtime artifact          |
 
 `m9a-android` 受路径过滤控制，仅在 `resource/m9a/**`、`resource/m9a.toml`、`src/**`、`src-tauri/src/**`、`src-tauri/gen/android/**`、`vendor/maa/**`、`package.json`、`pnpm-lock.yaml` 等路径变更时触发；需要强制跑（例如只改了文档但要出包）用 `workflow_dispatch`。
 
@@ -63,6 +66,7 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
    - `m9a-agent-runtime-arm64-v8a`：agent runtime ZIP，需要单独验证 runtime 时使用。
 
    在 GitHub Actions 的 run 页面直接下载，或 `gh run download <run-id> -n m9a-apk-debug`。
+
 3. 报告真机结论时写明对应的 CI run 编号/链接与 artifact 名，便于复核。
 
 装机注意：`m9a-android` 目前每次构建都会重新生成 debug 密钥（`android-debug-keystore-v1` 缓存步骤不生效），所以**不同 CI 产物的签名互不相同**。`adb install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，只能先 `adb uninstall` 再装；卸载会清掉 app 私有数据（`configuration.json` 里的运行配置、Keystore 里的密码），动手前先确认 `secretManifest` 是否为空。
@@ -84,6 +88,18 @@ TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 ca
 **写好测试后交给 CI 跑**（`frontend` 与 `rust` job）；除非用户明确要求本地测试，不要在本地执行 `pnpm test` / `cargo test`。涉及 Android 的改动以 `android-rust` 的 `cargo check` 结果为准。
 
 ## 提交与 PR
+
+提交前由 husky + lint-staged 的 pre-commit 钩子自动执行检查（配置见 `lint-staged.config.mjs`），**刻意不跑测试**（测试交给 CI 的 `frontend` / `rust` job）：
+
+| 暂存文件                                              | 动作                                             |
+| ----------------------------------------------------- | ------------------------------------------------ |
+| `*.{ts,tsx}`                                          | `tsc --noEmit`，整项目类型检查                   |
+| `*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,svg,html}` | `biome check --write`，格式化并 lint 后自动重新暂存 |
+| `*.rs`                                                | `cargo fmt --manifest-path src-tauri/Cargo.toml` |
+
+两个细节：`tsc` 不接受单个文件路径，`cargo fmt` 只能整 crate 格式化，因此这两项都以函数形式配置——不拼接暂存文件名。`cargo fmt` 之所以安全，是因为 CI 有 `cargo fmt --check`，未参与本次提交的 `.rs` 文件本来就是干净的。
+
+钩子由 `pnpm install` 触发的 `prepare` 脚本安装，`core.hooksPath` 指向 `.husky/_`。Biome 规则在 `biome.json`：`resource/`（M9A submodule，JSON 被 `resource/m9a.toml` 的 sha256 锁定）、`vendor/`、`src-tauri/gen/` 一律不处理。Biome 不覆盖 Markdown 和 YAML，这些文件不进入 pre-commit 格式化流程。紧急情况下用 `git commit --no-verify` 跳过。
 
 新提交使用 Conventional Commits，例如 `fix(resolver): preserve encrypted fields` 或 `feat(android): add shizuku status`。PR 应包含变更原因与 CI 运行结果；UI 变更需要截图，Android 行为变更需要注明所使用 CI artifact 的 run 编号与真机验证结论。
 

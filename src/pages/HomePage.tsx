@@ -1,5 +1,5 @@
-import { useTranslation } from "../lib/i18n";
 import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
+import { useTranslation } from "../lib/i18n";
 import { useAppStore } from "../store/appStore";
 
 export function HomePage() {
@@ -21,10 +21,10 @@ export function HomePage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-ink-muted">
-          {project.version ?? "PI v2"}
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">{project.label}</h1>
+        <p className="text-sm text-ink-muted">{project.version ?? "PI v2"}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          {project.label}
+        </h1>
       </header>
 
       <PrivilegeStatusCard title="privilegedHost" />

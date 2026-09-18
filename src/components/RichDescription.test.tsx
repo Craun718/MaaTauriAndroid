@@ -54,7 +54,9 @@ describe("RichDescription", () => {
 
   it("renders whitelisted inline HTML", () => {
     render(
-      <RichDescription text={'<b>bold</b> <a href="https://example.com">link</a>'} />,
+      <RichDescription
+        text={'<b>bold</b> <a href="https://example.com">link</a>'}
+      />,
     );
 
     expect(screen.getByText("bold").tagName).toBe("B");
@@ -68,7 +70,7 @@ describe("RichDescription", () => {
     const { container } = render(
       <RichDescription
         text={
-          '<script>alert(1)</script><style>p{color:red}</style>' +
+          "<script>alert(1)</script><style>p{color:red}</style>" +
           '<b onclick="alert(2)">ok</b><a href="javascript:alert(3)">bad</a>'
         }
       />,
@@ -92,8 +94,12 @@ describe("RichDescription", () => {
   it("opens links through the system browser instead of the WebView", async () => {
     render(<RichDescription text="[site](https://example.com)" />);
 
-    expect(fireEvent.click(screen.getByRole("link", { name: "site" }))).toBe(false);
-    await waitFor(() => expect(openUrl).toHaveBeenCalledWith("https://example.com"));
+    expect(fireEvent.click(screen.getByRole("link", { name: "site" }))).toBe(
+      false,
+    );
+    await waitFor(() =>
+      expect(openUrl).toHaveBeenCalledWith("https://example.com"),
+    );
   });
 
   it("loads project-relative images through the backend", async () => {
@@ -107,7 +113,9 @@ describe("RichDescription", () => {
       "resource/announcement/images/CCMain.png",
     );
 
-    await waitFor(() => expect(image).toHaveAttribute("src", "blob:project-image"));
+    await waitFor(() =>
+      expect(image).toHaveAttribute("src", "blob:project-image"),
+    );
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
     expect((createObjectURL.mock.calls[0][0] as Blob).type).toBe("image/png");

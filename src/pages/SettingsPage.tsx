@@ -1,15 +1,19 @@
-import { useState } from "react";
 import { Download, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { OptionEditor } from "../components/OptionEditor";
+import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
 import { clearDiagnosticData, exportLogs } from "../lib/api";
-import { useTranslation } from "../lib/i18n";
-import { activeResource, defaultOptionValue, visibleOptions } from "../lib/options";
-import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
-import { useAppStore } from "../store/appStore";
 import type { MessageKey } from "../lib/i18n";
+import { useTranslation } from "../lib/i18n";
+import {
+  activeResource,
+  defaultOptionValue,
+  visibleOptions,
+} from "../lib/options";
 import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
+import { useAppStore } from "../store/appStore";
 
 function isUiLanguage(value: string): value is UiLanguage {
   return value === "system" || value === "zh" || value === "en";
@@ -26,9 +30,14 @@ export function SettingsPage() {
   const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
 
   const project = snapshot?.project;
-  const resource = project && snapshot ? activeResource(project, snapshot.configuration) : undefined;
+  const resource =
+    project && snapshot
+      ? activeResource(project, snapshot.configuration)
+      : undefined;
 
-  function update(mutate: (configuration: UserConfiguration) => UserConfiguration) {
+  function update(
+    mutate: (configuration: UserConfiguration) => UserConfiguration,
+  ) {
     if (!snapshot) return;
     void saveConfiguration(mutate(structuredClone(snapshot.configuration)));
   }
@@ -38,7 +47,9 @@ export function SettingsPage() {
       <h1 className="text-2xl font-semibold">{t("settings")}</h1>
       <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
         <div>
-          <h2 id="language-select-label" className="font-medium">{t("language")}</h2>
+          <h2 id="language-select-label" className="font-medium">
+            {t("language")}
+          </h2>
           <p className="text-sm text-ink-muted">{t("languageDescription")}</p>
         </div>
         <div className="flex gap-2">
@@ -50,7 +61,9 @@ export function SettingsPage() {
               { value: "zh", label: t("languageChinese") },
               { value: "en", label: t("languageEnglish") },
             ]}
-            value={languageDraft ?? snapshot?.configuration.uiLanguage ?? "system"}
+            value={
+              languageDraft ?? snapshot?.configuration.uiLanguage ?? "system"
+            }
             onValueChange={(value) => {
               if (isUiLanguage(value)) setLanguageDraft(value);
             }}
@@ -85,21 +98,29 @@ export function SettingsPage() {
             onChange={(name, value) =>
               update((current) => ({
                 ...current,
-                globalOptionValues: { ...current.globalOptionValues, [name]: value },
+                globalOptionValues: {
+                  ...current.globalOptionValues,
+                  [name]: value,
+                },
               }))
             }
           />
           <ScopedOptions
             title="resourceOptions"
             names={resource?.options ?? []}
-            values={snapshot.configuration.resourceOptionValues[resource?.name ?? ""] ?? {}}
+            values={
+              snapshot.configuration.resourceOptionValues[
+                resource?.name ?? ""
+              ] ?? {}
+            }
             onChange={(name, value) =>
               update((current) => ({
                 ...current,
                 resourceOptionValues: {
                   ...current.resourceOptionValues,
                   [resource?.name ?? ""]: {
-                    ...(current.resourceOptionValues[resource?.name ?? ""] ?? {}),
+                    ...(current.resourceOptionValues[resource?.name ?? ""] ??
+                      {}),
                     [name]: value,
                   },
                 },
@@ -181,7 +202,9 @@ export function SettingsPage() {
             setCleanupStatus(undefined);
             try {
               const result = await clearDiagnosticData();
-              setCleanupStatus(t("deletedRuns", { count: result.deletedRunCount }));
+              setCleanupStatus(
+                t("deletedRuns", { count: result.deletedRunCount }),
+              );
             } catch (error) {
               setCleanupStatus(
                 error instanceof Error ? error.message : String(error),
@@ -195,7 +218,9 @@ export function SettingsPage() {
           <Trash2 size={18} />
           {cleaning ? t("deleting") : t("deleteRuns")}
         </button>
-        {cleanupStatus && <p className="text-sm text-ink-muted">{cleanupStatus}</p>}
+        {cleanupStatus && (
+          <p className="text-sm text-ink-muted">{cleanupStatus}</p>
+        )}
       </section>
       <PrivilegeStatusCard title="privileges" />
     </div>

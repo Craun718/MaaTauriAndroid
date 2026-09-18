@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CircleAlert,
   LoaderCircle,
@@ -6,6 +5,7 @@ import {
   RefreshCw,
   Square,
 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getVirtualDisplayStatus,
   stopVirtualDisplay,
@@ -66,7 +66,7 @@ export function VirtualDisplayCard() {
     ).catch((error: unknown) => {
       setStatusError(error instanceof Error ? error.message : String(error));
     });
-  }, [status?.active]);
+  }, []);
 
   useEffect(() => {
     activeRef.current = status?.active === true;
@@ -103,17 +103,26 @@ export function VirtualDisplayCard() {
     return () => {
       window.removeEventListener("resize", scheduleBoundsReport);
       window.removeEventListener("scroll", scheduleBoundsReport);
-      window.visualViewport?.removeEventListener("resize", scheduleBoundsReport);
-      window.visualViewport?.removeEventListener("scroll", scheduleBoundsReport);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        scheduleBoundsReport,
+      );
+      window.visualViewport?.removeEventListener(
+        "scroll",
+        scheduleBoundsReport,
+      );
     };
   }, [scheduleBoundsReport]);
 
-  useEffect(() => () => {
-    if (animationRef.current !== 0) {
-      window.cancelAnimationFrame(animationRef.current);
-      animationRef.current = 0;
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (animationRef.current !== 0) {
+        window.cancelAnimationFrame(animationRef.current);
+        animationRef.current = 0;
+      }
+    },
+    [],
+  );
 
   async function stopDisplay() {
     if (actionPending) return;
@@ -131,7 +140,10 @@ export function VirtualDisplayCard() {
 
   const active = status?.active === true;
   const geometry = status
-    ? t("virtualDisplayGeometry", { width: status.width, height: status.height })
+    ? t("virtualDisplayGeometry", {
+        width: status.width,
+        height: status.height,
+      })
     : t("checking");
 
   return (
@@ -148,7 +160,10 @@ export function VirtualDisplayCard() {
           className="flex h-9 w-9 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
           aria-label={t("refreshStatus")}
         >
-          <RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />
+          <RefreshCw
+            size={16}
+            className={refreshing ? "animate-spin" : undefined}
+          />
         </button>
       </div>
 

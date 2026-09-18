@@ -37,7 +37,11 @@ export function TextField({
       className={`block data-disabled:cursor-not-allowed data-disabled:opacity-50 ${className ?? ""}`}
       disabled={disabled}
     >
-      {label && <Field.Label className="mb-1 block text-sm text-ink-muted">{label}</Field.Label>}
+      {label && (
+        <Field.Label className="mb-1 block text-sm text-ink-muted">
+          {label}
+        </Field.Label>
+      )}
       <Field.Input
         type={type}
         inputMode={inputMode}
@@ -48,10 +52,14 @@ export function TextField({
         onChange={(event) => onValueChange(event.target.value)}
       />
       {error && (
-        <Field.ErrorText className="mt-1.5 block text-[0.8125rem]">{error}</Field.ErrorText>
+        <Field.ErrorText className="mt-1.5 block text-[0.8125rem]">
+          {error}
+        </Field.ErrorText>
       )}
       {description && (
-        <Field.HelperText className="mt-1.5 block text-[0.8125rem]">{description}</Field.HelperText>
+        <Field.HelperText className="mt-1.5 block text-[0.8125rem]">
+          {description}
+        </Field.HelperText>
       )}
     </Field.Root>
   );

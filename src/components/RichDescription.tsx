@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import type { ComponentPropsWithoutRef, MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -18,7 +18,12 @@ const sanitizeSchema = {
 type MarkdownLinkProps = ComponentPropsWithoutRef<"a"> & { node?: unknown };
 type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & { node?: unknown };
 
-function MarkdownLink({ node: _node, href, children, ...rest }: MarkdownLinkProps) {
+function MarkdownLink({
+  node: _node,
+  href,
+  children,
+  ...rest
+}: MarkdownLinkProps) {
   async function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
     event.stopPropagation();
@@ -40,7 +45,8 @@ function MarkdownLink({ node: _node, href, children, ...rest }: MarkdownLinkProp
 
 function projectImagePath(source?: string): string | undefined {
   const value = source?.trim();
-  if (!value || value.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(value)) return undefined;
+  if (!value || value.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(value))
+    return undefined;
   const path = value.split(/[?#]/, 1)[0];
   try {
     return decodeURIComponent(path);
@@ -72,7 +78,7 @@ function imageMimeType(path: string): string {
   }
 }
 
-function MarkdownImage({ node: _node, src, ...rest }: MarkdownImageProps) {
+function MarkdownImage({ node: _node, src, alt, ...rest }: MarkdownImageProps) {
   const projectPath = projectImagePath(src);
   const [assetSrc, setAssetSrc] = useState<string>();
 
@@ -84,7 +90,9 @@ function MarkdownImage({ node: _node, src, ...rest }: MarkdownImageProps) {
     void readProjectImage(projectPath)
       .then((bytes) => {
         if (!active) return;
-        objectUrl = URL.createObjectURL(new Blob([bytes], { type: imageMimeType(projectPath) }));
+        objectUrl = URL.createObjectURL(
+          new Blob([bytes], { type: imageMimeType(projectPath) }),
+        );
         setAssetSrc(objectUrl);
       })
       .catch(() => undefined);
@@ -99,6 +107,7 @@ function MarkdownImage({ node: _node, src, ...rest }: MarkdownImageProps) {
     <img
       {...rest}
       src={assetSrc ?? src}
+      alt={alt ?? ""}
       data-state={projectPath && !assetSrc ? "loading" : undefined}
     />
   );
@@ -116,7 +125,11 @@ interface RichDescriptionProps {
 export function RichDescription({ text, className }: RichDescriptionProps) {
   if (!text?.trim()) return null;
   return (
-    <div className={className ? `rich-description ${className}` : "rich-description"}>
+    <div
+      className={
+        className ? `rich-description ${className}` : "rich-description"
+      }
+    >
       <Markdown
         rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
         components={{ a: MarkdownLink, img: MarkdownImage }}

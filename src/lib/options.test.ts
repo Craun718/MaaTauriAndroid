@@ -29,7 +29,14 @@ function field(name: string): OptionDefinition {
     kind: "input",
     name,
     label: name,
-    inputs: [{ name: "value", label: "Value", pipelineType: "string", password: false }],
+    inputs: [
+      {
+        name: "value",
+        label: "Value",
+        pipelineType: "string",
+        password: false,
+      },
+    ],
     applicability,
   };
 }
@@ -44,15 +51,23 @@ const definitions: Record<string, OptionDefinition> = {
   plain: branch("plain", "a", { a: [], b: [] }),
 };
 
-const single = (optionCase: string): OptionValue => ({ type: "single", case: optionCase });
+const single = (optionCase: string): OptionValue => ({
+  type: "single",
+  case: optionCase,
+});
 
 describe("visibleOptions", () => {
   it("lists a declared option on its own when no case owns anything", () => {
-    expect(visibleOptions(definitions, ["plain"])).toEqual([{ name: "plain", depth: 0 }]);
+    expect(visibleOptions(definitions, ["plain"])).toEqual([
+      { name: "plain", depth: 0 },
+    ]);
   });
 
   it("shows the options owned by the case that is selected by default", () => {
-    const yes = { ...definitions, eatSugar: branch("eatSugar", "Yes", { No: [], Yes: ["customCount"] }) };
+    const yes = {
+      ...definitions,
+      eatSugar: branch("eatSugar", "Yes", { No: [], Yes: ["customCount"] }),
+    };
 
     expect(visibleOptions(yes, ["eatSugar"])).toEqual([
       { name: "eatSugar", depth: 0 },
@@ -63,9 +78,9 @@ describe("visibleOptions", () => {
   it("leaves out the options of a case that is not selected", () => {
     // The whole point: `count` lives under customCount's Yes case only, and no
     // task declares it, so nothing would ever render it without this walk.
-    expect(visibleOptions(definitions, ["eatSugar"]).map((item) => item.name)).toEqual([
-      "eatSugar",
-    ]);
+    expect(
+      visibleOptions(definitions, ["eatSugar"]).map((item) => item.name),
+    ).toEqual(["eatSugar"]);
   });
 
   it("follows the stored choice rather than the default", () => {
@@ -87,7 +102,10 @@ describe("visibleOptions", () => {
       customCount: single("No"),
     });
 
-    expect(visible.map((item) => item.name)).toEqual(["eatSugar", "customCount"]);
+    expect(visible.map((item) => item.name)).toEqual([
+      "eatSugar",
+      "customCount",
+    ]);
   });
 
   it("collects the options of every selected case of a checkbox", () => {
@@ -103,7 +121,13 @@ describe("visibleOptions", () => {
       defaultCases: ["one", "two"],
       applicability,
     };
-    const defs = { ...definitions, extras: checkbox, childOne: field("childOne"), childTwo: field("childTwo"), childThree: field("childThree") };
+    const defs = {
+      ...definitions,
+      extras: checkbox,
+      childOne: field("childOne"),
+      childTwo: field("childTwo"),
+      childThree: field("childThree"),
+    };
 
     expect(visibleOptions(defs, ["extras"]).map((item) => item.name)).toEqual([
       "extras",
@@ -123,7 +147,12 @@ describe("visibleOptions", () => {
       ],
       applicability,
     };
-    const defs = { ...definitions, mode: select, autoDetail: field("autoDetail"), manualDetail: field("manualDetail") };
+    const defs = {
+      ...definitions,
+      mode: select,
+      autoDetail: field("autoDetail"),
+      manualDetail: field("manualDetail"),
+    };
 
     // A select with no default_case: the resolver merges "auto"'s children.
     expect(visibleOptions(defs, ["mode"]).map((item) => item.name)).toEqual([
@@ -148,7 +177,10 @@ describe("visibleOptions", () => {
   });
 
   it("renders a name owned by a selected case under that case, not at the root", () => {
-    const yes = { ...definitions, eatSugar: branch("eatSugar", "Yes", { No: [], Yes: ["customCount"] }) };
+    const yes = {
+      ...definitions,
+      eatSugar: branch("eatSugar", "Yes", { No: [], Yes: ["customCount"] }),
+    };
 
     expect(visibleOptions(yes, ["eatSugar", "customCount"])).toEqual([
       { name: "eatSugar", depth: 0 },
@@ -165,7 +197,9 @@ describe("visibleOptions", () => {
   it("terminates when a case owns the option that declares it", () => {
     const loop = branch("loop", "on", { on: ["loop"] });
 
-    expect(visibleOptions({ loop }, ["loop"])).toEqual([{ name: "loop", depth: 0 }]);
+    expect(visibleOptions({ loop }, ["loop"])).toEqual([
+      { name: "loop", depth: 0 },
+    ]);
   });
 });
 
@@ -189,8 +223,14 @@ describe("switchCases", () => {
   });
 
   it("reads Yes/No no matter which one is declared first", () => {
-    expect(switchCases(twoCases(["Yes", "No"]))).toEqual({ on: "Yes", off: "No" });
-    expect(switchCases(twoCases(["No", "Yes"]))).toEqual({ on: "Yes", off: "No" });
+    expect(switchCases(twoCases(["Yes", "No"]))).toEqual({
+      on: "Yes",
+      off: "No",
+    });
+    expect(switchCases(twoCases(["No", "Yes"]))).toEqual({
+      on: "Yes",
+      off: "No",
+    });
     expect(switchCases(sugar)).toEqual({ on: "Yes", off: "No" });
   });
 

@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TasksPage } from "./TasksPage";
+import type {
+  AppStateSnapshot,
+  Project,
+  UserConfiguration,
+} from "../lib/types";
 import { useAppStore } from "../store/appStore";
-import type { AppStateSnapshot, Project, UserConfiguration } from "../lib/types";
+import { TasksPage } from "./TasksPage";
 
 const saveConfiguration = vi.fn();
 const resolveCurrent = vi.fn();
@@ -15,7 +19,8 @@ vi.mock("../lib/api", () => ({
   exportDiagnostics: vi.fn(),
   getRunStatus: () => getRunStatus(),
   resolveCurrent: () => resolveCurrent(),
-  saveConfiguration: (configuration: unknown) => saveConfiguration(configuration),
+  saveConfiguration: (configuration: unknown) =>
+    saveConfiguration(configuration),
   startRun: vi.fn(),
   stopRun: vi.fn(),
   startVirtualDisplay: vi.fn(),
@@ -25,15 +30,18 @@ vi.mock("../lib/api", () => ({
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn((event: string, handler: (notification: { payload: unknown }) => void) => {
-    (eventHandlers.handlers[event] ??= []).push(handler);
-    return Promise.resolve(() => undefined);
-  }),
+  listen: vi.fn(
+    (event: string, handler: (notification: { payload: unknown }) => void) => {
+      eventHandlers.handlers[event] ??= [];
+      eventHandlers.handlers[event].push(handler);
+      return Promise.resolve(() => undefined);
+    },
+  ),
 }));
 
-const eventHandlers = vi.hoisted(
-  () => ({ handlers: {} as Record<string, Array<(event: { payload: unknown }) => void>> }),
-);
+const eventHandlers = vi.hoisted(() => ({
+  handlers: {} as Record<string, Array<(event: { payload: unknown }) => void>>,
+}));
 
 const applicability = { controllers: [], resources: [] };
 
@@ -50,9 +58,17 @@ const project: Project = {
   label: "Fixture",
   language: "en_us",
   languages: ["en_us"],
-  controllers: [{ name: "Android", label: "Android", controllerType: "AndroidNative" }],
+  controllers: [
+    { name: "Android", label: "Android", controllerType: "AndroidNative" },
+  ],
   resources: [
-    { name: "base", label: "Base", paths: ["resource/base"], controllers: [], options: [] },
+    {
+      name: "base",
+      label: "Base",
+      paths: ["resource/base"],
+      controllers: [],
+      options: [],
+    },
   ],
   groups: [
     {
@@ -140,14 +156,26 @@ const configuration: UserConfiguration = {
   globalOptionValues: {},
   controllerOptionValues: {},
   resourceOptionValues: {},
-  runConfigurations: [{
-    id: "default",
-    name: "Default",
-    tasks: [
-      { instanceId: "sugar:1", taskName: "糖果", enabled: false, optionValues: {} },
-      { instanceId: "cleanup:1", taskName: "整理", enabled: false, optionValues: {} },
-    ],
-  }],
+  runConfigurations: [
+    {
+      id: "default",
+      name: "Default",
+      tasks: [
+        {
+          instanceId: "sugar:1",
+          taskName: "糖果",
+          enabled: false,
+          optionValues: {},
+        },
+        {
+          instanceId: "cleanup:1",
+          taskName: "整理",
+          enabled: false,
+          optionValues: {},
+        },
+      ],
+    },
+  ],
   activeRunConfigurationId: "default",
 };
 
@@ -164,7 +192,11 @@ beforeEach(() => {
     basePipeline: {},
     pipelineOverride: {},
   });
-  getRunStatus.mockResolvedValue({ executionId: undefined, state: "Idle", message: "Idle" });
+  getRunStatus.mockResolvedValue({
+    executionId: undefined,
+    state: "Idle",
+    message: "Idle",
+  });
   getVirtualDisplayStatus.mockResolvedValue({
     active: false,
     displayId: -1,
@@ -195,7 +227,9 @@ describe("nested task options", () => {
     expect(nestedSwitch()).toBeInTheDocument();
     expect(nestedSwitch()).not.toBeChecked();
     // Nothing selects 自定义吃糖次数's Yes case yet, so its own child is not.
-    expect(screen.queryByRole("textbox", { name: "次数" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "次数" }),
+    ).not.toBeInTheDocument();
   });
 
   it("reveals the deeper option once its case is selected, and saves it", async () => {
@@ -204,8 +238,12 @@ describe("nested task options", () => {
 
     fireEvent.click(nestedSwitch());
 
-    expect(await screen.findByRole("textbox", { name: "次数" })).toBeInTheDocument();
-    expect(screen.getAllByText("说明").map((element) => element.tagName)).toContain("EM");
+    expect(
+      await screen.findByRole("textbox", { name: "次数" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("说明").map((element) => element.tagName),
+    ).toContain("EM");
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
     expect(saveConfiguration.mock.calls[0][0]).toMatchObject({
       runConfigurations: [
@@ -226,12 +264,16 @@ describe("nested task options", () => {
     render(<TasksPage />);
     expandTaskDetails("糖果");
     fireEvent.click(nestedSwitch());
-    expect(await screen.findByRole("textbox", { name: "次数" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("textbox", { name: "次数" }),
+    ).toBeInTheDocument();
 
     fireEvent.click(nestedSwitch());
 
     await waitFor(() =>
-      expect(screen.queryByRole("textbox", { name: "次数" })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("textbox", { name: "次数" }),
+      ).not.toBeInTheDocument(),
     );
   });
 
@@ -251,7 +293,9 @@ describe("nested task options", () => {
           tasks: [
             {
               taskName: "糖果",
-              optionValues: { 吃糖次数: { type: "inputs", values: { count: "6" } } },
+              optionValues: {
+                吃糖次数: { type: "inputs", values: { count: "6" } },
+              },
             },
           ],
         },
@@ -307,7 +351,9 @@ describe("run configuration tabs and flat task list", () => {
     // 乐观更新后 store 已切到新配置，任务列表为空
     const state = useAppStore.getState();
     expect(state.snapshot?.configuration.runConfigurations).toHaveLength(2);
-    expect(state.snapshot?.configuration.activeRunConfigurationId).not.toBe("default");
+    expect(state.snapshot?.configuration.activeRunConfigurationId).not.toBe(
+      "default",
+    );
   });
 
   it("adds a task from the picker", async () => {
@@ -357,7 +403,9 @@ describe("focus notifications", () => {
       },
     });
 
-    expect(await screen.findByRole("status")).toHaveTextContent("NodeA: NodeA started");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "NodeA: NodeA started",
+    );
   });
 
   it("shows focus notices with a dismiss control", async () => {
@@ -372,7 +420,9 @@ describe("focus notifications", () => {
       },
     });
 
-    expect(await screen.findByRole("alertdialog")).toHaveTextContent("NodeA failed");
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "NodeA failed",
+    );
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
     await waitFor(() =>
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),

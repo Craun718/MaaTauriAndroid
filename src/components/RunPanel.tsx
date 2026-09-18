@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Camera, Download, Play, Square } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   captureManualScreenshot,
   exportDiagnostics,
@@ -9,10 +9,10 @@ import {
   startRun,
   stopRun,
 } from "../lib/api";
-import { canAcceptRunEvent } from "../lib/runEvents";
 import { useTranslation } from "../lib/i18n";
-import { useAppStore } from "../store/appStore";
+import { canAcceptRunEvent } from "../lib/runEvents";
 import type { DiagnosticExport, ResolvedRun, RunEvent } from "../lib/types";
+import { useAppStore } from "../store/appStore";
 
 /**
  * Run controls for the active run configuration. Rendered inside the Tasks panel
@@ -37,7 +37,9 @@ export function RunPanel() {
     if (!snapshot) return;
     resolveCurrent()
       .then(setRun)
-      .catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
+      .catch((error) =>
+        setStatus(error instanceof Error ? error.message : String(error)),
+      );
     getRunStatus()
       .then((result) => {
         if (!result.executionId) return;
@@ -53,7 +55,8 @@ export function RunPanel() {
     let unsubscribe: (() => void) | undefined;
 
     listen<RunEvent>("run-event", (event) => {
-      if (!canAcceptRunEvent(executionIdRef.current, event.payload.executionId)) return;
+      if (!canAcceptRunEvent(executionIdRef.current, event.payload.executionId))
+        return;
       executionIdRef.current = event.payload.executionId;
       if (event.payload.state) setRunState(event.payload.state);
       setExecutionId(event.payload.executionId);
@@ -63,9 +66,16 @@ export function RunPanel() {
         setStatus(event.payload.message);
       }
       if (event.payload.data && typeof event.payload.data === "object") {
-        const data = event.payload.data as Partial<DiagnosticExport["manifest"]>;
-        if (Array.isArray(data.partialReasons) && data.partialReasons.length > 0) {
-          setStatus(`${event.payload.message} (${data.partialReasons.join("; ")})`);
+        const data = event.payload.data as Partial<
+          DiagnosticExport["manifest"]
+        >;
+        if (
+          Array.isArray(data.partialReasons) &&
+          data.partialReasons.length > 0
+        ) {
+          setStatus(
+            `${event.payload.message} (${data.partialReasons.join("; ")})`,
+          );
         }
       }
     })
@@ -73,7 +83,9 @@ export function RunPanel() {
         if (disposed) stop();
         else unsubscribe = stop;
       })
-      .catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
+      .catch((error) =>
+        setStatus(error instanceof Error ? error.message : String(error)),
+      );
 
     return () => {
       disposed = true;
@@ -82,7 +94,8 @@ export function RunPanel() {
   }, []);
 
   if (!snapshot?.project) return null;
-  const enabled = run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
+  const enabled =
+    run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
 
   async function start() {
     try {
@@ -197,9 +210,7 @@ export function RunPanel() {
       )}
       {/* Rust reports absolute paths back; without break-all a long one widens the
           page and the fixed bottom nav drifts sideways when the page is panned. */}
-      {status && (
-        <p className="break-all text-sm text-ink-muted">{status}</p>
-      )}
+      {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
       {screenshotPath && (
         <p className="break-all text-xs text-ink-muted">{screenshotPath}</p>
       )}

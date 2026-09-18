@@ -49,7 +49,9 @@ export function SegmentGroup({
                 {label}
               </ArkSegmentGroup.Label>
             )}
-            {description && <div className="text-sm text-ink-muted">{description}</div>}
+            {description && (
+              <div className="text-sm text-ink-muted">{description}</div>
+            )}
           </div>
         </div>
       )}
@@ -69,7 +71,9 @@ export function SegmentGroup({
           >
             <ArkSegmentGroup.ItemText>{item.label}</ArkSegmentGroup.ItemText>
             {item.description && (
-              <div className="w-full text-xs font-normal">{item.description}</div>
+              <div className="w-full text-xs font-normal">
+                {item.description}
+              </div>
             )}
             <ArkSegmentGroup.ItemControl className="hidden" />
             <ArkSegmentGroup.ItemHiddenInput />

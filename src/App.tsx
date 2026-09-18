@@ -29,7 +29,10 @@ function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        {busy && <p className="mt-4 text-sm text-[var(--text-muted)]">{t("working")}</p>}
+        {/* 常驻占位：busy 文案出现/消失时内容高度不变，避免整页抖动。 */}
+        <div aria-live="polite" className="mt-4 min-h-5 text-sm text-[var(--text-muted)]">
+          {busy ? t("working") : ""}
+        </div>
       </AppShell>
     </HashRouter>
   );

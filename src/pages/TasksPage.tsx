@@ -75,7 +75,11 @@ export function TasksPage() {
   );
 
   function updateTasks(tasks: ConfiguredTask[]) {
-    const next = structuredClone(configuration);
+    // 从 store 取最新快照而不是渲染闭包里的旧 configuration：
+    // 连续勾选多个任务时，闭包值落后于 store，会把先勾的那笔覆盖回旧状态。
+    const latest = useAppStore.getState().snapshot;
+    if (!latest?.project) return;
+    const next = structuredClone(latest.configuration);
     const run = next.runConfigurations.find(
       (item) => item.id === next.activeRunConfigurationId,
     );

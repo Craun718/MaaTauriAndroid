@@ -35,3 +35,6 @@ vendor/maa/android/
 
 # Agent runtime build cache
 .cache/
+
+# Local git worktrees
+.worktrees/

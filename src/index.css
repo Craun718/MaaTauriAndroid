@@ -1,34 +1,109 @@
 @import "tailwindcss";
 
+/* 只要组件样式，不要内置主题：主题由下面的 "ttflow" 自定义主题提供。 */
+@plugin "daisyui" {
+  themes: false;
+}
+
 /*
- * 主题色板：定义在 @theme 里，Tailwind 生成具名 utility（bg-surface、bg-raised、
- * text-ink-muted、border-line、bg-accent 等），组件里不再写 var() 任意值。
- * 深色跟随系统 prefers-color-scheme：所有 utility 都引用 var(--color-*)，
- * 在媒体查询里覆盖同名变量即可全局切换，无需逐个写 dark: 变体。
+ * 原始色板：全项目唯一的颜色真相源。
+ * 下面 @theme 与 daisyUI 的 "ttflow" 主题都引用这些变量，所以改色只需要动这一处。
+ * 深色跟随系统 prefers-color-scheme，因此 daisyUI 主题不需要单独的 --prefersdark 变体，
+ * 变量翻转后它的组件（input / select / checkbox / radio / tabs）会一起跟着变。
  *
- * 注意：--color-surface 取值需与 Android 端 res/values{,-night}/colors.xml 的
- * surface 颜色保持同步（改色时三处一起改，见 AGENTS.md）。
+ * 注意：--tt-surface 取值需与 Android 端 res/values{,-night}/colors.xml 的 surface 颜色
+ * 保持同步（改色时两处一起改，见 AGENTS.md）。
  */
-@theme {
-  --color-surface: #f5f7fb;
-  --color-raised: #ffffff;
-  --color-surface-muted: #e8edf5;
-  --color-ink: #172033;
-  --color-ink-muted: #637086;
-  --color-line: #d7deea;
-  --color-accent: #0f766e;
+:root {
+  --tt-surface: #f5f7fb;
+  --tt-raised: #ffffff;
+  --tt-surface-muted: #e8edf5;
+  --tt-ink: #172033;
+  --tt-ink-muted: #637086;
+  --tt-line: #d7deea;
+  --tt-accent: #0f766e;
+  --tt-on-accent: #ffffff;
+  --tt-danger: #dc2626;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-surface: #101418;
-    --color-raised: #181f27;
-    --color-surface-muted: #222b35;
-    --color-ink: #eef2f7;
-    --color-ink-muted: #a2adc0;
-    --color-line: #313d4b;
-    --color-accent: #34d399;
+    --tt-surface: #101418;
+    --tt-raised: #181f27;
+    --tt-surface-muted: #222b35;
+    --tt-ink: #eef2f7;
+    --tt-ink-muted: #a2adc0;
+    --tt-line: #313d4b;
+    --tt-accent: #34d399;
+    /* 深色下 accent 是浅薄荷绿，勾选标记用白会看不清，改用深色前景。 */
+    --tt-on-accent: #08251f;
+    --tt-danger: #f87171;
   }
+}
+
+/*
+ * 项目具名 utility：bg-surface、text-ink、border-line、bg-accent 等。
+ * 深色无需逐个写 dark: 变体——所有 utility 都引用 var(--color-*)，媒体查询覆盖同名变量即可。
+ */
+@theme {
+  --color-surface: var(--tt-surface);
+  --color-raised: var(--tt-raised);
+  --color-surface-muted: var(--tt-surface-muted);
+  --color-ink: var(--tt-ink);
+  --color-ink-muted: var(--tt-ink-muted);
+  --color-line: var(--tt-line);
+  --color-accent: var(--tt-accent);
+}
+
+/*
+ * daisyUI 主题：把原始色板映射进 daisyUI 的语义 token，它的组件因此自动继承本项目的
+ * 配色、圆角和扁平风格。base-100/200/300 按 daisyUI 的约定取「卡片面 / 内嵌面 / 描边」，
+ * 页面底色仍由 body 直接使用 --color-surface，不走 daisyUI。
+ *
+ * --color-accent 是两边共用的名字：这里和上面的 @theme 都指向 var(--tt-accent)，
+ * 因此无论谁的声明胜出，bg-accent 取到的都是同一个值，不会互相覆盖。
+ *
+ * 尺寸：--size-selector 决定 checkbox/radio 尺寸（*5 即 1.25rem，与原来的 size-5 一致）；
+ * --size-field 决定 input/select/tabs 高度（*10 即 2.75rem，即原来的 h-11 触屏目标）。
+ */
+@plugin "daisyui/theme" {
+  name: "ttflow";
+  default: true;
+
+  --color-base-100: var(--tt-raised);
+  --color-base-200: var(--tt-surface-muted);
+  --color-base-300: var(--tt-line);
+  --color-base-content: var(--tt-ink);
+
+  --color-primary: var(--tt-accent);
+  --color-primary-content: var(--tt-on-accent);
+  --color-secondary: var(--tt-ink-muted);
+  --color-secondary-content: var(--tt-raised);
+  --color-accent: var(--tt-accent);
+  --color-accent-content: var(--tt-on-accent);
+  --color-neutral: var(--tt-ink);
+  --color-neutral-content: var(--tt-raised);
+  /* info / success 目前没有使用场景，先与主色同值，避免凭空引入新色。 */
+  --color-info: var(--tt-accent);
+  --color-info-content: var(--tt-on-accent);
+  --color-success: var(--tt-accent);
+  --color-success-content: var(--tt-on-accent);
+  --color-warning: #d97706;
+  --color-warning-content: #ffffff;
+  --color-error: var(--tt-danger);
+  --color-error-content: #ffffff;
+
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+
+  --size-selector: 0.25rem;
+  --size-field: 0.275rem;
+
+  --border: 1px;
+  /* 项目是扁平风格：关掉 daisyUI 默认的内阴影和噪点纹理。 */
+  --depth: 0;
+  --noise: 0;
 }
 
 :root {

@@ -3,7 +3,7 @@
 ## 项目结构
 
 - `src/`：React 前端源码。`pages/` 存放页面，`components/` 存放可复用 UI，`lib/` 存放 Tauri IPC 与工具函数，`store/` 存放 Zustand 状态。
-- `src/components/ui/`：Ark UI（`@ark-ui/react`）封装层。Ark UI 是无样式组件库，只输出 `data-scope` / `data-part` / `data-state` 等数据属性；控件外观（含 `data-state` / `data-disabled` / 焦点环等状态样式）以 Tailwind 类直接定义在各封装组件内部，页面/组件只写布局 class。
+- `src/components/ui/`：daisyUI（`daisyui`，纯 CSS 的 Tailwind 插件，无运行时 JS）封装层。控件外观由 daisyUI 的组件类（`input` / `select` / `checkbox` / `radio` / `tabs` 等）提供，颜色、圆角、尺寸来自 `src/index.css` 里 `"ttflow"` 主题的 token；各封装组件只负责把调用处的 props 映射到这些类，页面/组件只写布局 class。daisyUI 没有对应组件的形态（如卡片式单选）才用它的语义 token（`border-base-300` / `bg-base-100` / `text-primary`）组合，不要新引入第二套组件库。
 - `src-tauri/src/`：Rust 后端。领域加载/解析逻辑在 `domain/`，Maa 运行时在 `runtime.rs`，配置持久化在 `persistence.rs`，敏感数据处理在 `secrets.rs`。
 - `src-tauri/gen/android/`：Android Shell、JNI 桥接、Shizuku 控制服务与 Gradle 工程。
 - `src-tauri/fixtures/`：嵌入式测试项目数据。
@@ -18,7 +18,7 @@
 - 原生：`MainActivity.insetContainerOf` 把 `systemBars() | displayCutout()` 作为 padding 施加到 WebView 的**父容器**上。监听器刻意不挂在 WebView 自身——`ViewCompat.setOnApplyWindowInsetsListener` 会顶掉该 view 自己的 `onApplyWindowInsets`，而 Chromium 依赖它跟踪软键盘和计算 `env(safe-area-inset-*)`；insets 也原样返回不消费，避免影响输入法。`values/themes.xml` 的 `windowBackground` 取 `@color/surface`（`values-night` 为深色对应值），让系统栏后面的那条留白与 Web 的 `--surface` 同色。
 - 前端：**不要**再用 `env(safe-area-inset-*)` 加 padding。原生已经按 inset 收窄过 WebView 视口，再加一次就是双重叠加（`fixed bottom-0` 的底部导航会整体抬高）。同理，新增页面不要自己补状态栏留白。
 
-改 `--color-surface` 颜色时记得同步 `res/values{,-night}/colors.xml` 与 `src/index.css` 三处。
+改 `--tt-surface`（`src/index.css` 的 `:root`，深色值在同文件的 `prefers-color-scheme` 块里）时记得同步 `res/values{,-night}/colors.xml`，两边一起改。
 
 ## 构建、测试与开发
 
@@ -75,7 +75,18 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 
 TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 camelCase 变量；React 组件与类型使用 PascalCase。Rust 提交前运行 `cargo fmt`；错误类型使用 `thiserror`，公共 IPC 数据使用 `serde` 的 camelCase 表示。Tailwind class 应保持语义清晰，避免为一次性样式引入自定义 CSS。
 
-新增表单控件时优先复用 `src/components/ui/` 里的封装（`Checkbox` / `RadioGroup` / `SegmentGroup` / `TextField`），不要在页面里手写原生 `<input>`，也不要绕过封装直接用 `@ark-ui/react`：状态样式集中在各封装组件内部（`src/index.css` 只保留 `@theme` 主题色板、`@layer base` 基础层和 `.rich-description`），散落各处会失去统一主题。颜色一律用具名 Tailwind utility（`bg-surface` / `bg-raised` / `bg-surface-muted` / `text-ink` / `text-ink-muted` / `border-line` / `bg-accent` 等，色板定义在 `src/index.css` 的 `@theme`，深色由 `prefers-color-scheme` 覆盖同名变量实现），不要写 `bg-[var(--color-*)]` 任意值或硬编码十六进制。
+新增表单控件时优先复用 `src/components/ui/` 里的封装（`Checkbox` / `RadioGroup` / `SegmentGroup` / `TextField` / `Select`），不要在页面里手写原生 `<input>`，也不要绕过封装直接写 daisyUI 组件类：状态样式集中在各封装组件内部（`src/index.css` 只保留原始色板、`@theme` 具名 utility、daisyUI 主题和 `.rich-description`），散落各处会失去统一主题。
+
+颜色分两层，改色只需要动 `src/index.css` 里 `:root` 的 `--tt-*` 原始色板一处：
+
+- 项目自己的具名 utility（`bg-surface` / `bg-raised` / `bg-surface-muted` / `text-ink` / `text-ink-muted` / `border-line` / `bg-accent`）来自 `@theme`，定义在 `src/index.css` 的 `@theme` 块；
+- daisyUI 组件的语义 token（`bg-base-100` / `text-base-content` / `border-base-300` / `text-primary` / `text-error` 等）由 `@plugin "daisyui/theme"` 的 `"ttflow"` 主题提供，其取值同样引用 `--tt-*`。
+
+两套名字指向同一批原始变量，取值必然一致；写新组件时按「daisyUI 有对应组件就用它的类，没有就用它的语义 token」来选。不要写 `bg-[var(--color-*)]` 任意值或硬编码十六进制。深色由 `prefers-color-scheme` 覆盖 `--tt-*` 同名变量实现，所以 daisyUI 主题不需要单独的 `--prefersdark` 变体，也不要引入 `data-theme` 切换。
+
+一个易踩的坑：`--color-accent` 是 `@theme` 和 daisyUI 主题共用的变量名，两处都必须指向 `var(--tt-accent)`，否则 `bg-accent` 会被静默覆盖。
+
+daisyUI 把自己的样式包在 `@layer utilities > daisyui.*` 子层里，而层自身的规则排在子层之后，因此 Tailwind 工具类（`w-full` / `min-w-full` / `border` 等）可以正常覆盖组件默认样式——`.input` 自带的 `width: clamp(3rem, 20rem, 100%)` 就是靠 `w-full` 压过去的。反之，要覆盖 daisyUI 默认外观时优先用工具类，不要加 `!important`。
 
 界面文案一律走 `src/lib/i18n.ts`：所有字符串写在 `en` / `zh` 两份目录里（`zh` 用 `Record<MessageKey, string>` 约束，漏 key 会编译失败），组件内用 `useTranslation()` 取 `t`，不要在 JSX 里写死文字，也不要给 `t` 传运行时拼出来的 key。语言存于 `UserConfiguration.uiLanguage`（`system` 跟随设备语言，`zh*` 判为中文，其余英文）；`resolveLanguage` 负责把设置解析成实际语言，`projectLanguage` 负责映射成项目 locale（`zh_cn` / `en_us`）。
 

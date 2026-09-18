@@ -1,4 +1,3 @@
-import { Field } from "@ark-ui/react/field";
 import type { ReactNode } from "react";
 
 interface TextFieldProps {
@@ -16,8 +15,9 @@ interface TextFieldProps {
 }
 
 /**
- * Ark UI 文本输入。输入框外观（边框、焦点环、禁用态）通过 Tailwind 类定义在本封装内，
- * className 作用于 Field.Root（外层容器）。
+ * daisyUI 文本输入。输入框外观（边框、焦点环、禁用态、高度）由 .input 提供，
+ * 高度与圆角来自 "ttflow" 主题的 --size-field / --radius-field；
+ * className 作用于外层 <label> 容器。
  */
 export function TextField({
   value,
@@ -33,34 +33,32 @@ export function TextField({
   description,
 }: TextFieldProps) {
   return (
-    <Field.Root
-      className={`block data-disabled:cursor-not-allowed data-disabled:opacity-50 ${className ?? ""}`}
-      disabled={disabled}
+    <label
+      className={`block ${
+        disabled ? "cursor-not-allowed opacity-50" : ""
+      } ${className ?? ""}`}
     >
       {label && (
-        <Field.Label className="mb-1 block text-sm text-ink-muted">
-          {label}
-        </Field.Label>
+        <span className="mb-1 block text-sm text-base-content/60">{label}</span>
       )}
-      <Field.Input
+      <input
         type={type}
         inputMode={inputMode}
         value={value}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        className="block h-11 w-full rounded-md border border-line bg-raised px-3 text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed"
+        disabled={disabled}
+        className="input w-full"
         onChange={(event) => onValueChange(event.target.value)}
       />
       {error && (
-        <Field.ErrorText className="mt-1.5 block text-[0.8125rem]">
+        <span className="mt-1.5 block text-[0.8125rem] text-error">
           {error}
-        </Field.ErrorText>
+        </span>
       )}
       {description && (
-        <Field.HelperText className="mt-1.5 block text-[0.8125rem]">
-          {description}
-        </Field.HelperText>
+        <span className="mt-1.5 block text-[0.8125rem]">{description}</span>
       )}
-    </Field.Root>
+    </label>
   );
 }

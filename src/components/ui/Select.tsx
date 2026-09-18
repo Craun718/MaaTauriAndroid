@@ -1,5 +1,3 @@
-import { ChevronDown } from "lucide-react";
-
 export interface SelectItem {
   value: string;
   label: string;
@@ -14,8 +12,9 @@ interface SelectProps {
 }
 
 /**
- * 原生 select 封装：外观走主题变量，弹出面板交给平台
+ * daisyUI 下拉选择，底层仍是原生 <select>：弹出面板交给平台
  * （Android WebView 会直接弹系统选择器，比自绘下拉更适合触屏）。
+ * 箭头、边框、高度由 .select 提供，不再自己叠图标。
  */
 export function Select({
   items,
@@ -25,10 +24,10 @@ export function Select({
   className,
 }: SelectProps) {
   return (
-    <span className={`relative block ${className ?? ""}`}>
+    <span className={`block ${className ?? ""}`}>
       <select
         aria-labelledby={labelledBy}
-        className="h-11 w-full appearance-none rounded-md border border-line bg-raised pl-3 pr-9 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="select w-full"
         value={value ?? items[0]?.value}
         onChange={(event) => onValueChange(event.target.value)}
       >
@@ -38,11 +37,6 @@ export function Select({
           </option>
         ))}
       </select>
-      <ChevronDown
-        size={16}
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-muted"
-      />
     </span>
   );
 }

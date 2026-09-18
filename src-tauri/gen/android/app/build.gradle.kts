@@ -5,6 +5,8 @@ import java.security.MessageDigest
 import java.util.zip.ZipFile
 import java.util.Properties
 import java.util.TreeMap
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import com.android.build.api.dsl.ApplicationExtension
 
 import top.natsuu.mta.kotlin.PiProfileReader
 
@@ -258,7 +260,7 @@ tasks.named("preBuild") {
     dependsOn(preparePiArchive, prepareAgentRuntime)
 }
 
-android {
+extensions.configure<ApplicationExtension> {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
     namespace = "top.natsuu.mta"
@@ -299,9 +301,6 @@ android {
             )
         }
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         buildConfig = true
         aidl = true
@@ -325,7 +324,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            jniLibs.srcDirs(maaTauriAndroidMaaDirPath)
+            jniLibs.directories.add(maaTauriAndroidMaaDirPath.absolutePath)
         }
     }
 
@@ -339,6 +338,12 @@ extensions.configure<com.android.build.api.variant.ApplicationAndroidComponentsE
         if (piProfile != null) {
             variant.sources.assets?.addStaticSourceDirectory(piPackedDir.get().asFile.absolutePath)
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 

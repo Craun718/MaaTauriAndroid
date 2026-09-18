@@ -43,6 +43,7 @@ object PiProfileReader {
         }
 
         val agentTable = result.getTable("agent")
+        val agent: AgentProfile? = agentTable?.let { table -> readAgent(table, file) }
         return PiProfile(
             file = file,
             assets = requiredPath(result, "pi_assets", file),
@@ -50,7 +51,7 @@ object PiProfileReader {
             exclude = stringArray(result, "pi_exclude").orEmpty(),
             resourceId = resourceId(result),
             maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
-            agent = agentTable?.let { readAgent(it, file) },
+            agent = agent,
         )
     }
 
@@ -95,9 +96,11 @@ object PiProfileReader {
         )
     }
 
-    private fun requiredString(table: TomlTable, key: String): String =
-        table.getString(key)?.takeIf { it.isNotEmpty() }
+    private fun requiredString(table: TomlTable, key: String): String {
+        val value: String? = table.getString(key)
+        return value?.takeIf(String::isNotEmpty)
             ?: throw IllegalArgumentException("$key is required")
+    }
 
     private fun requiredPath(table: TomlTable, key: String, profileFile: File): String {
         val value = requiredString(table, key)

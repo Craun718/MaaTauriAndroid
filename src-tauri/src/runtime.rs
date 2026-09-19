@@ -251,10 +251,9 @@ fn android_library_path(name: &str) -> Result<PathBuf, RuntimeError> {
         )
         .and_then(|value| value.l())
         .map_err(map_error)?;
-    let path = env
-        .get_string(&JString::from(path))
-        .map_err(map_error)?
-        .to_string_lossy();
+    let android_path = JString::from(path);
+    let java_path = env.get_string(&android_path).map_err(map_error)?;
+    let path = java_path.to_string_lossy();
     if path.is_empty() {
         return Err(RuntimeError::LibraryNotLoaded(format!(
             "the Android library path for {name} is empty"

@@ -1068,7 +1068,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                     Some(logger_for_run.execution_id()),
                     runtime::RunState::Running,
                     runtime::RunResultSeverity::Info,
-                    "The run is running".to_string(),
+                    String::new(),
                 );
                 let run_tasker = tasker.clone();
                 let task_logger = logger_for_run.clone();

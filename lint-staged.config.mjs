@@ -2,10 +2,12 @@ import { defineConfig } from "lint-staged/config";
 
 export default defineConfig({
   // `tsc` rejects individual filepaths, so the type check runs once for the
-  // whole project. Gating it on TS/TSX keeps docs-only commits fast.
+  // whole project. `pnpm test` also runs the full Vitest suite because tests
+  // can cover cross-module behavior that no single staged file isolates.
+  // Gating both on TS/TSX keeps docs-only commits fast.
   // Returning a command from a function (instead of a plain string) stops
   // lint-staged from appending the staged filepaths as arguments.
-  "*.{ts,tsx}": () => "tsc --noEmit",
+  "*.{ts,tsx}": () => ["tsc --noEmit", "pnpm test"],
 
   // Biome formats and lints in one pass. `--no-errors-on-unmatched` keeps it
   // quiet for the extensions it does not handle (Biome has no Markdown or YAML

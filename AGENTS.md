@@ -81,7 +81,13 @@ daisyUI 把自己的样式包在 `@layer utilities > daisyui.*` 子层里，而�
 
 ## 测试指南
 
-前端测试放在被测代码旁，命名为 `*.test.tsx` 或 `*.test.ts`，使用 Vitest 与 Testing Library。Rust 单元测试放在同一源文件的 `#[cfg(test)]` 模块中。修改 IPC、任务解析、持久化或密码加密时，必须补充覆盖正常与失败路径的测试。
+只测业务逻辑，不测 UI。组件渲染、样式、布局与交互（点击/输入/键盘/焦点、主题或语言切换后的界面文案变化）都不做自动化测试，这些交给人工与截图验证；不为页面和 `src/components/` 下的组件新增渲染测试。
+
+前端测试放在被测代码旁，命名为 `*.test.ts`，使用 Vitest，只测纯逻辑：`src/lib/` 与 `src/store/` 里的解析、状态迁移、IPC 调用的参数构造与错误分支。用 mock 掉 `@tauri-apps/api` 这类边界的方式断言行为，不渲染真实组件，也不断言 DOM 结构或 class。只有确实需要驱动 React 状态时才改用 `*.test.tsx` + `renderHook`，并且只验证状态与回调。Rust 单元测试放在同一源文件的 `#[cfg(test)]` 模块中。
+
+改动既有页面或组件时，顺手清掉其中属于 UI 的渲染断言，把仍值得保留的业务逻辑抽到 `src/lib/`、`src/store/` 或自定义 hook 里再覆盖。
+
+修改 IPC、任务解析、持久化或密码加密时，必须补充覆盖正常与失败路径的测试。
 
 **写好测试后交给 CI 跑**（`frontend` 与 `rust` job）；除非用户明确要求本地测试，不要在本地执行 `pnpm test` / `cargo test`。涉及 Android 的改动以 `android-rust` 的 `cargo check` 结果为准。
 

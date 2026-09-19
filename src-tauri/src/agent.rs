@@ -118,6 +118,18 @@ impl AgentSession {
             })?;
             client.bind(resource.clone())?;
 
+            if let Some(logger) = crate::run_log::latest_global() {
+                if logger.execution_id() == execution_id {
+                    let _ = logger.append_to_ui(
+                        RunEventKind::Preparing,
+                        RunState::Preparing,
+                        format!("Starting agent runtime {}...", index + 1),
+                        None,
+                        Some(serde_json::json!({ "source": "python-agent" })),
+                    );
+                }
+            }
+
             let launch = match host.launch(descriptor, execution_id, index, port, pi_env) {
                 Ok(launch) => launch,
                 Err(error) => {
@@ -130,8 +142,30 @@ impl AgentSession {
 
             client.set_timeout(i64::try_from(descriptor.timeout_ms).unwrap_or(15_000))?;
             if let Err(error) = client.connect() {
+                if let Some(logger) = crate::run_log::latest_global() {
+                    if logger.execution_id() == execution_id {
+                        let _ = logger.append_to_ui(
+                            RunEventKind::Warning,
+                            RunState::Preparing,
+                            format!("Agent runtime {} failed to connect: {error}", index + 1),
+                            None,
+                            Some(serde_json::json!({ "source": "python-agent" })),
+                        );
+                    }
+                }
                 let _ = host.stop(execution_id);
                 return Err(error.into());
+            }
+            if let Some(logger) = crate::run_log::latest_global() {
+                if logger.execution_id() == execution_id {
+                    let _ = logger.append_to_ui(
+                        RunEventKind::Preparing,
+                        RunState::Preparing,
+                        format!("Agent runtime {} connected", index + 1),
+                        None,
+                        Some(serde_json::json!({ "source": "python-agent" })),
+                    );
+                }
             }
             clients.push(client);
         }

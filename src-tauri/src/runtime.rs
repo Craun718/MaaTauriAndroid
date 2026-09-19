@@ -585,6 +585,17 @@ pub fn create_session(
 
     let config = android_controller_config(display_id, force_stop)?;
     let controller = Controller::new_android_native(&config)?;
+    if let Some(logger) = crate::run_log::latest_global() {
+        if logger.execution_id() == execution_id {
+            let _ = logger.append_to_ui(
+                crate::run_log::RunEventKind::Preparing,
+                RunState::Preparing,
+                "Connecting to device...",
+                None,
+                None,
+            );
+        }
+    }
     let connection_id = controller.post_connection()?;
     if !controller.wait(connection_id).is_success() || !controller.connected() {
         return Err(RuntimeError::ControlDisconnected);

@@ -152,6 +152,9 @@ export function RunActivityTabs({
               const taskName = runEvent?.taskName;
               const message =
                 entry.type === "run" ? entry.event.message : entry.message;
+              const displayMessage = taskName
+                ? `${taskName}: ${message}`
+                : message;
               return (
                 <li
                   key={
@@ -188,14 +191,6 @@ export function RunActivityTabs({
                           error: t("runLogError"),
                         })}
                       </span>
-                      {taskName && (
-                        <span
-                          className="max-w-full truncate text-xs font-medium"
-                          title={taskName}
-                        >
-                          {taskName}
-                        </span>
-                      )}
                     </div>
                     <p
                       className={`min-w-0 flex-1 break-words ${
@@ -208,7 +203,7 @@ export function RunActivityTabs({
                               : ""
                       }`}
                     >
-                      {message}
+                      {displayMessage}
                     </p>
                   </div>
                 </li>

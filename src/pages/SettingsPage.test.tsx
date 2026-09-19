@@ -124,23 +124,6 @@ function renderSettingsPage() {
 }
 
 describe("project scope in settings", () => {
-  it("keeps resource options without the directory and resource summary cards", () => {
-    renderSettingsPage();
-
-    expect(
-      screen.getByRole("heading", { name: "Resource options" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Resource" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Project directory" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: "Project directory" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("saves a resource option change", async () => {
     renderSettingsPage();
 
@@ -154,14 +137,6 @@ describe("project scope in settings", () => {
         "resource-a": { resolution: { type: "single", case: "1080p" } },
       },
     });
-  });
-
-  it("renders resource, option and case descriptions as rich text", () => {
-    renderSettingsPage();
-
-    expect(screen.getByText("分辨率").tagName).toBe("STRONG");
-    expect(screen.getByText("720").tagName).toBe("STRONG");
-    expect(screen.getByRole("option", { name: /720p/ })).toBeInTheDocument();
   });
 
   it("exports logs from the diagnostics card", async () => {

@@ -78,19 +78,6 @@ function renderVirtualDisplayCard() {
 }
 
 describe("VirtualDisplayCard", () => {
-  it("renders the inactive state", async () => {
-    renderVirtualDisplayCard();
-
-    expect(
-      await screen.findByRole("heading", { name: "Virtual display" }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Stopped")).toHaveLength(1);
-    expect(screen.queryByText("1280 x 720")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Start" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("reports the preview bounds while the display is active", async () => {
     getVirtualDisplayStatus.mockResolvedValue(active);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({

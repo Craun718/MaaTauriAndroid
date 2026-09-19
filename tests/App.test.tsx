@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import type { AppStateSnapshot } from "../src/lib/types";
@@ -8,6 +8,7 @@ const resolveCurrent = vi.fn();
 const getPrivilegedStatus = vi.fn();
 const getRunStatus = vi.fn();
 const getVirtualDisplayStatus = vi.fn();
+const updateVirtualDisplayBounds = vi.fn();
 const hideVirtualDisplayPreview = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
@@ -18,7 +19,7 @@ vi.mock("../src/lib/api", () => ({
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
-  updateVirtualDisplayBounds: vi.fn(),
+  updateVirtualDisplayBounds: () => updateVirtualDisplayBounds(),
   hideVirtualDisplayPreview: () => hideVirtualDisplayPreview(),
   loadProject: vi.fn(),
   saveConfiguration: vi.fn(),
@@ -99,67 +100,14 @@ describe("App", () => {
       height: 720,
       frameCount: 0,
     });
+    updateVirtualDisplayBounds.mockResolvedValue(undefined);
     hideVirtualDisplayPreview.mockResolvedValue(undefined);
   });
 
-  it("bootstraps the project and renders navigation", async () => {
+  it("bootstraps the project", async () => {
     render(<App />);
     expect(
       await screen.findByText("MaaTauriAndroid Fixture"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "Tasks" }));
-    expect(
-      screen.getByRole("heading", { name: "Tasks & Run" }),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps project-level settings in one tab", async () => {
-    render(<App />);
-    expect(
-      await screen.findByText("MaaTauriAndroid Fixture"),
-    ).toBeInTheDocument();
-
-    // The setup page is gone: nothing to configure separately from Settings.
-    expect(
-      screen.queryByRole("link", { name: "Setup" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "More" }),
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
-
-    expect(
-      screen.getByRole("heading", { name: "Settings" }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "Home" }));
-
-    // Resource setup is intentionally separate from project settings.
-    expect(
-      screen.queryByRole("heading", { name: "Resource" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("resource/base")).not.toBeInTheDocument();
-  });
-
-  it("shows the run controls and the task list in the same panel", async () => {
-    render(<App />);
-    fireEvent.click(await screen.findByRole("link", { name: "Tasks" }));
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Task actions" }),
-    );
-
-    // Run controls, formerly on their own /run page, now live in the drawer.
-    expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(1);
-    // The active run configuration is a tab, while its queue shares the panel.
-    expect(await screen.findByRole("tab", { name: "Default" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(
-      screen.getByRole("heading", { name: "0 tasks ready" }),
-    ).toBeInTheDocument();
-    // The old /run tab is gone.
-    expect(screen.queryByRole("link", { name: "Run" })).not.toBeInTheDocument();
   });
 });

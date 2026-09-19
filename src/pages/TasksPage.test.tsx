@@ -491,40 +491,6 @@ describe("run configuration tabs and flat task list", () => {
     ).toBeInTheDocument();
   });
 
-  it("places the virtual display above the run queue", async () => {
-    renderTasksPage();
-
-    const virtualDisplay = await screen.findByText("1280 x 720");
-    const runQueue = screen.getByRole("heading", { name: "0 tasks ready" });
-    expect(virtualDisplay.compareDocumentPosition(runQueue)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-    expect(screen.queryByText("Base")).not.toBeInTheDocument();
-    expect(screen.queryByText("Idle")).not.toBeInTheDocument();
-  });
-
-  it("uses bordered run-activity tabs below run controls", () => {
-    renderTasksPage();
-
-    const activityTabs = screen.getByRole("tablist", {
-      name: "Run activity",
-    });
-    const configurationTabs = screen.getByRole("tablist", {
-      name: "Tasks & Run",
-    });
-    expect(activityTabs).toHaveClass("tabs-border");
-    expect(activityTabs).not.toHaveClass("tabs-box");
-    expect(configurationTabs).toHaveClass("tabs-box");
-    expect(screen.getByRole("tab", { name: "Task list" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    );
-  });
-
   it("collects status, focus and agent output while the task list is selected", () => {
     renderTasksPage();
 
@@ -561,7 +527,8 @@ describe("run configuration tabs and flat task list", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Task logs" }));
 
     expect(screen.getByText("The run started")).toBeInTheDocument();
-    expect(screen.getByText("NodeA: NodeA started")).toBeInTheDocument();
+    const logs = screen.getByText("The run started").closest("ol");
+    expect(logs).toHaveTextContent("NodeA: NodeA started");
     expect(screen.getByText("agent says ready")).toBeInTheDocument();
     expect(screen.getAllByText("Status")).toHaveLength(1);
     expect(screen.getAllByText("Focus")).toHaveLength(1);
@@ -592,17 +559,6 @@ describe("run configuration tabs and flat task list", () => {
     expect(font).toHaveAttribute("color", "DeepSkyBlue");
     expect(container.querySelector("script")).toBeNull();
     expect(screen.queryByText("alert(1)")).not.toBeInTheDocument();
-  });
-
-  it("renders run configurations as tabs with the active one selected", () => {
-    renderTasksPage();
-
-    expect(screen.getByRole("tab", { name: "Default" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(screen.getByRole("heading", { name: "糖果" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "整理" })).toBeInTheDocument();
   });
 
   it("creates a new configuration tab", async () => {

@@ -86,24 +86,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         setStatus(undefined);
         return;
       }
-      if (payload.taskName) {
-        setStatus(`${payload.taskName}: ${payload.message}`);
-      } else {
-        setStatus(payload.message);
-      }
-      if (payload.data && typeof payload.data === "object") {
-        const data = event.payload.data as Partial<{
-          partialReasons: string[];
-        }>;
-        if (
-          Array.isArray(data.partialReasons) &&
-          data.partialReasons.length > 0
-        ) {
-          setStatus(
-            `${event.payload.message} (${data.partialReasons.join("; ")})`,
-          );
-        }
-      }
+      setStatus(undefined);
     })
       .then((stop) => {
         if (disposed) stop();
@@ -197,8 +180,6 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           </button>
         </div>
       </section>
-      {/* Rust reports absolute paths back; without break-all a long one widens the
-          page and the fixed bottom nav drifts sideways when the page is panned. */}
       {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
     </>
   );

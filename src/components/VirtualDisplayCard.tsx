@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import {
   CircleAlert,
   LoaderCircle,
@@ -39,6 +40,25 @@ export function VirtualDisplayCard() {
 
   useEffect(() => {
     void refreshStatus();
+  }, [refreshStatus]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    listen("virtual-display-changed", () => {
+      void refreshStatus();
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unsubscribe = stop;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
   }, [refreshStatus]);
 
   useEffect(() => {
@@ -91,15 +111,19 @@ export function VirtualDisplayCard() {
   }, [scheduleBoundsReport]);
 
   useEffect(() => {
+    const scrollOptions: AddEventListenerOptions = {
+      passive: true,
+      capture: true,
+    };
     window.addEventListener("resize", scheduleBoundsReport);
-    window.addEventListener("scroll", scheduleBoundsReport, { passive: true });
+    window.addEventListener("scroll", scheduleBoundsReport, scrollOptions);
     window.visualViewport?.addEventListener("resize", scheduleBoundsReport);
     window.visualViewport?.addEventListener("scroll", scheduleBoundsReport, {
       passive: true,
     });
     return () => {
       window.removeEventListener("resize", scheduleBoundsReport);
-      window.removeEventListener("scroll", scheduleBoundsReport);
+      window.removeEventListener("scroll", scheduleBoundsReport, scrollOptions);
       window.visualViewport?.removeEventListener(
         "resize",
         scheduleBoundsReport,

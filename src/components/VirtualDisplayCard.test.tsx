@@ -16,6 +16,20 @@ vi.mock("../lib/api", () => ({
     updateVirtualDisplayBounds(...args),
 }));
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    (event: string, handler: (event: { payload: unknown }) => void) => {
+      eventHandlers.handlers[event] ??= [];
+      eventHandlers.handlers[event].push(handler);
+      return Promise.resolve(() => undefined);
+    },
+  ),
+}));
+
+const eventHandlers = vi.hoisted(() => ({
+  handlers: {} as Record<string, Array<(event: { payload: unknown }) => void>>,
+}));
+
 const inactive: VirtualDisplayStatus = {
   active: false,
   displayId: -1,
@@ -34,6 +48,7 @@ const active: VirtualDisplayStatus = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  eventHandlers.handlers = {};
   useNotificationStore.setState({ notifications: [] });
   getVirtualDisplayStatus.mockResolvedValue(inactive);
   updateVirtualDisplayBounds.mockResolvedValue(undefined);
@@ -90,6 +105,62 @@ describe("VirtualDisplayCard", () => {
         180,
       ),
     );
+  });
+
+  it("reports preview bounds from an ancestor scroll container", async () => {
+    getVirtualDisplayStatus.mockResolvedValue(active);
+    const getBoundingClientRect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue({
+        left: -16,
+        top: -120,
+        width: 320,
+        height: 180,
+      } as DOMRect);
+
+    render(
+      <>
+        <NotificationHost />
+        <main>
+          <VirtualDisplayCard />
+        </main>
+      </>,
+    );
+
+    await screen.findByText("Display ID: 12");
+    await waitFor(() => expect(updateVirtualDisplayBounds).toHaveBeenCalled());
+    updateVirtualDisplayBounds.mockClear();
+    getBoundingClientRect.mockReturnValue({
+      left: 8,
+      top: 24,
+      width: 360,
+      height: 200,
+    } as DOMRect);
+
+    const scrollContainer = screen
+      .getByRole("heading", { name: "Virtual display" })
+      .closest("main");
+    if (!scrollContainer) throw new Error("scroll container not found");
+    fireEvent.scroll(scrollContainer);
+
+    await waitFor(() =>
+      expect(updateVirtualDisplayBounds).toHaveBeenCalledWith(8, 24, 360, 200),
+    );
+  });
+
+  it("refreshes status when the backend activates the display", async () => {
+    getVirtualDisplayStatus
+      .mockResolvedValueOnce(inactive)
+      .mockResolvedValue(active);
+
+    renderVirtualDisplayCard();
+    expect(await screen.findByText("Stopped")).toBeInTheDocument();
+
+    eventHandlers.handlers["virtual-display-changed"]?.forEach((handler) => {
+      handler({ payload: undefined });
+    });
+
+    expect(await screen.findByText("Display ID: 12")).toBeInTheDocument();
   });
 
   it("stops the display", async () => {

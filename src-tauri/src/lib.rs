@@ -914,6 +914,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     #[cfg(target_os = "android")]
     {
         call_runtime_bridge_start_virtual_display(1280, 720, 160)?;
+        let _ = app.emit("virtual-display-changed", ());
     }
 
     let sessions = state.maa.clone();

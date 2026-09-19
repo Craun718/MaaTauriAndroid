@@ -12,6 +12,8 @@ The TOML profile uses snake_case keys (`pi_assets`, `pi_include`, `resource_id`,
 
 When `interface.json` declares `agent`, configure the matching number of `[[agent.runtimes]]` entries — the build fails when the declared and configured counts differ. Each entry requires a local `bundle`, the executable, the explicit list of files to mark executable, and the server command. Use `{pi}`, `{bundle}`, `{identifier}`, and `{nativeLib}` placeholders in paths, arguments, and environment values. The bundle is a ZIP archive: it may not contain symlinks, must stay below the ZIP64 threshold, and must ship `lib/arm64-v8a/libMaaAgentClient.so` and `lib/arm64-v8a/libMaaAgentServer.so`.
 
+For agent-server runtimes, set `MAAFW_BINARY_PATH` to the bundle library directory (`{bundle}/lib/arm64-v8a`). The Python binding joins that directory with `libMaaAgentServer.so`; `{nativeLib}` intentionally omits that library because only the child agent process needs it.
+
 Changing the profile changes the packaged APK; it is build-time embedding, not a runtime switch. Remove or clear `pi.profile` to return to the built-in fixture in `src-tauri/fixtures/pi/minimal`.
 
 ## In-repo profiles

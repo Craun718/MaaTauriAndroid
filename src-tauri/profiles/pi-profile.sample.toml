@@ -44,5 +44,6 @@ working_dir = "{pi}"
 
 [agent.runtimes.env]
 LD_LIBRARY_PATH = "{bundle}/lib/arm64-v8a"
+MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"
 PYTHONHOME = "{bundle}/python"
 PYTHONPATH = "{pi}"

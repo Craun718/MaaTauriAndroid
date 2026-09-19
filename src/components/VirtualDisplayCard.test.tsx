@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VirtualDisplayStatus } from "../lib/types";
+import { useNotificationStore } from "../store/notificationStore";
+import { NotificationHost } from "./ui/NotificationHost";
 import { VirtualDisplayCard } from "./VirtualDisplayCard";
 
 const getVirtualDisplayStatus = vi.fn();
@@ -32,6 +34,7 @@ const active: VirtualDisplayStatus = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useNotificationStore.setState({ notifications: [] });
   getVirtualDisplayStatus.mockResolvedValue(inactive);
   updateVirtualDisplayBounds.mockResolvedValue(undefined);
 });
@@ -40,9 +43,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function renderVirtualDisplayCard() {
+  return render(
+    <>
+      <NotificationHost />
+      <VirtualDisplayCard />
+    </>,
+  );
+}
+
 describe("VirtualDisplayCard", () => {
   it("renders the inactive state", async () => {
-    render(<VirtualDisplayCard />);
+    renderVirtualDisplayCard();
 
     expect(
       await screen.findByRole("heading", { name: "1280 x 720" }),
@@ -62,7 +74,7 @@ describe("VirtualDisplayCard", () => {
       height: 180,
     } as DOMRect);
 
-    render(<VirtualDisplayCard />);
+    renderVirtualDisplayCard();
 
     expect(await screen.findByText("Display ID: 12")).toBeInTheDocument();
     await waitFor(() =>
@@ -79,7 +91,7 @@ describe("VirtualDisplayCard", () => {
     getVirtualDisplayStatus.mockResolvedValueOnce(active);
     stopVirtualDisplay.mockResolvedValue(inactive);
 
-    render(<VirtualDisplayCard />);
+    renderVirtualDisplayCard();
     const stop = await screen.findByRole("button", { name: "Stop" });
     fireEvent.click(stop);
 
@@ -91,7 +103,7 @@ describe("VirtualDisplayCard", () => {
     getVirtualDisplayStatus.mockResolvedValue(active);
     stopVirtualDisplay.mockRejectedValue(new Error("Stop failed"));
 
-    render(<VirtualDisplayCard />);
+    renderVirtualDisplayCard();
     const stop = await screen.findByRole("button", { name: "Stop" });
     await waitFor(() => expect(stop).toBeEnabled());
     fireEvent.click(stop);

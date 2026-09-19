@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { Camera, Download, Play, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   captureManualScreenshot,
   getRunStatus,
@@ -33,14 +33,18 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const { exportLogs, exporting } = useLogExport();
   const [capturing, setCapturing] = useState(false);
   const notify = useNotificationStore((state) => state.notify);
+  const reportError = useCallback(
+    (error: unknown) => {
+      notify(error instanceof Error ? error.message : String(error), {
+        tone: "error",
+      });
+    },
+    [notify],
+  );
 
   useEffect(() => {
     if (!snapshot) return;
-    resolveCurrent()
-      .then(setRun)
-      .catch((error) =>
-        setStatus(error instanceof Error ? error.message : String(error)),
-      );
+    resolveCurrent().then(setRun).catch(reportError);
     getRunStatus()
       .then((result) => {
         if (!result.executionId) return;
@@ -55,7 +59,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         setStatus(result.message);
       })
       .catch(() => undefined);
-  }, [snapshot, notify]);
+  }, [snapshot, notify, reportError]);
 
   useEffect(() => {
     let disposed = false;
@@ -102,26 +106,18 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         if (disposed) stop();
         else unsubscribe = stop;
       })
-      .catch((error) =>
-        setStatus(error instanceof Error ? error.message : String(error)),
-      );
+      .catch(reportError);
 
     return () => {
       disposed = true;
       unsubscribe?.();
     };
-  }, [notify]);
+  }, [notify, reportError]);
 
   if (!snapshot?.project) return null;
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
   const running = Boolean(executionId) && runState !== "Idle";
-
-  function reportError(error: unknown) {
-    notify(error instanceof Error ? error.message : String(error), {
-      tone: "error",
-    });
-  }
 
   async function start() {
     onRunStarted?.();
@@ -130,7 +126,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       const result = await startRun();
       executionIdRef.current = result.executionId;
       setExecutionId(result.executionId);
-      setStatus(result.message);
+      notify(result.message);
     } catch (error) {
       reportError(error);
     } finally {
@@ -140,7 +136,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
 
   async function stop() {
     try {
-      setStatus(await stopRun(executionId));
+      notify(await stopRun(executionId));
     } catch (error) {
       reportError(error);
     }
@@ -180,15 +176,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
             type="button"
             disabled={exporting}
             onClick={() => {
-              void exportLogs({
-                onSuccess: (result) =>
-                  setStatus(
-                    result.fileName
-                      ? t("logsExported", { name: result.fileName })
-                      : t("logsExportedPath", { path: result.path }),
-                  ),
-                onError: reportError,
-              });
+              void exportLogs();
             }}
             className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >

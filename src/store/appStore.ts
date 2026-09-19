@@ -6,6 +6,7 @@ import {
   saveConfiguration as invokeSaveConfiguration,
 } from "../lib/api";
 import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
+import { useNotificationStore } from "./notificationStore";
 
 interface AppStore {
   snapshot?: AppStateSnapshot;
@@ -22,6 +23,10 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function reportError(error: unknown) {
+  useNotificationStore.getState().notify(message(error), { tone: "error" });
+}
+
 /** 串行化保存请求：上一笔落盘完成后才发下一笔，响应不会互相超车。 */
 let saveQueue: Promise<void> = Promise.resolve();
 let pendingSaves = 0;
@@ -34,6 +39,7 @@ export const useAppStore = create<AppStore>((set) => ({
       set({ snapshot: await bootstrapApp(), busy: false });
     } catch (error) {
       set({ error: message(error), busy: false });
+      reportError(error);
     }
   },
   async loadProject(path, language) {
@@ -42,6 +48,7 @@ export const useAppStore = create<AppStore>((set) => ({
       set({ snapshot: await invokeLoadProject(path, language), busy: false });
     } catch (error) {
       set({ error: message(error), busy: false });
+      reportError(error);
     }
   },
   async applyPreset(presetName) {
@@ -58,6 +65,7 @@ export const useAppStore = create<AppStore>((set) => ({
       });
     } catch (error) {
       set({ error: message(error), busy: false });
+      reportError(error);
     }
   },
   async saveConfiguration(configuration) {
@@ -85,6 +93,7 @@ export const useAppStore = create<AppStore>((set) => ({
       await request;
     } catch (error) {
       set({ error: message(error) });
+      reportError(error);
     } finally {
       pendingSaves -= 1;
       if (pendingSaves === 0) set({ busy: false });

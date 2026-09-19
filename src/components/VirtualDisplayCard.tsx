@@ -13,6 +13,7 @@ import {
 } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
+import { useNotificationStore } from "../store/notificationStore";
 
 export function VirtualDisplayCard() {
   const previewRef = useRef<HTMLDivElement>(null);
@@ -23,6 +24,7 @@ export function VirtualDisplayCard() {
   const [refreshing, setRefreshing] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const { t } = useTranslation();
+  const notify = useNotificationStore((state) => state.notify);
 
   const refreshStatus = useCallback(async () => {
     setRefreshing(true);
@@ -132,7 +134,9 @@ export function VirtualDisplayCard() {
       setStatus(await stopVirtualDisplay());
     } catch (error) {
       await refreshStatus();
-      setStatusError(error instanceof Error ? error.message : String(error));
+      notify(error instanceof Error ? error.message : String(error), {
+        tone: "error",
+      });
     } finally {
       setActionPending(false);
     }

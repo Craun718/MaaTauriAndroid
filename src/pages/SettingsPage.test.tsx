@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NotificationHost } from "../components/ui/NotificationHost";
 import type {
   AppStateSnapshot,
   Project,
   UserConfiguration,
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { useNotificationStore } from "../store/notificationStore";
 import { SettingsPage } from "./SettingsPage";
 
 const getPrivilegedStatus = vi.fn();
@@ -104,6 +106,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   const snapshot: AppStateSnapshot = { project, configuration };
   useAppStore.setState({ snapshot, busy: false, error: undefined });
+  useNotificationStore.setState({ notifications: [] });
   getPrivilegedStatus.mockResolvedValue({
     message: "Connected",
     setupRequired: [],
@@ -111,9 +114,18 @@ beforeEach(() => {
   saveConfiguration.mockImplementation(async (next: unknown) => next);
 });
 
+function renderSettingsPage() {
+  return render(
+    <>
+      <NotificationHost />
+      <SettingsPage />
+    </>,
+  );
+}
+
 describe("project scope in settings", () => {
   it("keeps resource options without the directory and resource summary cards", () => {
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     expect(
       screen.getByRole("heading", { name: "Resource options" }),
@@ -130,7 +142,7 @@ describe("project scope in settings", () => {
   });
 
   it("saves a resource option change", async () => {
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     fireEvent.click(screen.getByRole("radio", { name: "1080p" }));
 
@@ -143,7 +155,7 @@ describe("project scope in settings", () => {
   });
 
   it("renders resource, option and case descriptions as rich text", () => {
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     expect(screen.getByText("分辨率").tagName).toBe("STRONG");
     expect(screen.getByText("720").tagName).toBe("STRONG");
@@ -155,7 +167,7 @@ describe("project scope in settings", () => {
       path: "/cache/maa_tauri_android-logs-1.zip",
       fileName: "maa_tauri_android-logs-1.zip",
     });
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
 
@@ -168,11 +180,27 @@ describe("project scope in settings", () => {
     );
   });
 
+  it("shows successful run cleanup as a notification", async () => {
+    const { clearDiagnosticData } = await import("../lib/api");
+    vi.mocked(clearDiagnosticData).mockResolvedValue({
+      deletedRunCount: 3,
+      runsDir: "/data/user/0/app/runs",
+    });
+    window.confirm = vi.fn(() => true);
+    renderSettingsPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete runs" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Deleted 3 run directories",
+    );
+  });
+
   it("hides telemetry consent when the interface does not declare it", () => {
     useAppStore.setState({
       snapshot: { project: projectWithoutTelemetry, configuration },
     });
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     expect(
       screen.queryByRole("heading", { name: "Anonymous telemetry" }),
@@ -183,7 +211,7 @@ describe("project scope in settings", () => {
   });
 
   it("persists the telemetry consent choice", async () => {
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     fireEvent.click(
       screen.getByRole("checkbox", { name: /allow anonymous telemetry/i }),

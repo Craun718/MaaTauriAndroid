@@ -15,6 +15,7 @@ import {
 import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
+import { useNotificationStore } from "../store/notificationStore";
 
 function isUiLanguage(value: string): value is UiLanguage {
   return value === "system" || value === "zh" || value === "en";
@@ -24,8 +25,8 @@ export function SettingsPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const busy = useAppStore((state) => state.busy);
+  const notify = useNotificationStore((state) => state.notify);
   const { t } = useTranslation();
-  const [cleanupStatus, setCleanupStatus] = useState<string>();
   const [cleaning, setCleaning] = useState(false);
   const { exportLogs, exporting } = useLogExport();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
@@ -171,19 +172,7 @@ export function SettingsPage() {
           type="button"
           disabled={exporting}
           onClick={() => {
-            setCleanupStatus(undefined);
-            void exportLogs({
-              onSuccess: (result) =>
-                setCleanupStatus(
-                  result.fileName
-                    ? t("logsExported", { name: result.fileName })
-                    : t("logsExportedPath", { path: result.path }),
-                ),
-              onError: (error) =>
-                setCleanupStatus(
-                  error instanceof Error ? error.message : String(error),
-                ),
-            });
+            void exportLogs();
           }}
           className="flex h-10 items-center justify-center gap-2 rounded-md border border-line px-3 font-semibold disabled:opacity-50"
         >
@@ -197,16 +186,13 @@ export function SettingsPage() {
             const confirmed = window.confirm(t("deleteRunsConfirm"));
             if (!confirmed) return;
             setCleaning(true);
-            setCleanupStatus(undefined);
             try {
               const result = await clearDiagnosticData();
-              setCleanupStatus(
-                t("deletedRuns", { count: result.deletedRunCount }),
-              );
+              notify(t("deletedRuns", { count: result.deletedRunCount }));
             } catch (error) {
-              setCleanupStatus(
-                error instanceof Error ? error.message : String(error),
-              );
+              notify(error instanceof Error ? error.message : String(error), {
+                tone: "error",
+              });
             } finally {
               setCleaning(false);
             }
@@ -216,9 +202,6 @@ export function SettingsPage() {
           <Trash2 size={16} />
           {cleaning ? t("deleting") : t("deleteRuns")}
         </button>
-        {cleanupStatus && (
-          <p className="text-sm text-ink-muted">{cleanupStatus}</p>
-        )}
       </section>
       <PrivilegeStatusCard title="privileges" />
     </div>

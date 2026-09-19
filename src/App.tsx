@@ -10,7 +10,6 @@ import { useAppStore } from "./store/appStore";
 function App() {
   const bootstrap = useAppStore((state) => state.bootstrap);
   const busy = useAppStore((state) => state.busy);
-  const error = useAppStore((state) => state.error);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -20,11 +19,6 @@ function App() {
   return (
     <HashRouter>
       <AppShell>
-        {error && (
-          <p className="mb-4 break-all text-sm text-red-600 dark:text-red-300">
-            {error}
-          </p>
-        )}
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/tasks" element={<TasksPage />} />

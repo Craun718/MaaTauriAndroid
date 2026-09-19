@@ -6,6 +6,8 @@ import type {
   UserConfiguration,
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { useNotificationStore } from "../store/notificationStore";
+import { NotificationHost } from "./ui/NotificationHost";
 import { PrivilegeStatusCard } from "./PrivilegeStatusCard";
 
 const getPrivilegedStatus = vi.fn();
@@ -49,12 +51,22 @@ const configuration: UserConfiguration = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useNotificationStore.setState({ notifications: [] });
   useAppStore.setState({
     snapshot: { project, configuration } satisfies AppStateSnapshot,
     busy: false,
     error: undefined,
   });
 });
+
+function renderPrivilegeStatusCard() {
+  return render(
+    <>
+      <NotificationHost />
+      <PrivilegeStatusCard title="privileges" />
+    </>,
+  );
+}
 
 describe("PrivilegeStatusCard", () => {
   it("renders the starting state without a retry action", async () => {
@@ -64,7 +76,7 @@ describe("PrivilegeStatusCard", () => {
       setupRequired: [],
     });
 
-    render(<PrivilegeStatusCard title="privileges" />);
+    renderPrivilegeStatusCard();
 
     expect(await screen.findByText("Connecting")).toBeInTheDocument();
     expect(
@@ -83,7 +95,7 @@ describe("PrivilegeStatusCard", () => {
       message: "connected",
     });
 
-    render(<PrivilegeStatusCard title="privileges" />);
+    renderPrivilegeStatusCard();
 
     expect(await screen.findByText("Granted")).toBeInTheDocument();
     expect(
@@ -106,7 +118,7 @@ describe("PrivilegeStatusCard", () => {
       .mockResolvedValueOnce({ status: "connected", message: "connected" });
     requestPrivilegedAccess.mockResolvedValue(undefined);
 
-    render(<PrivilegeStatusCard title="privileges" />);
+    renderPrivilegeStatusCard();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Request Shizuku permission" }),
@@ -134,7 +146,7 @@ describe("PrivilegeStatusCard", () => {
       new Error("The permission request timed out"),
     );
 
-    render(<PrivilegeStatusCard title="privileges" />);
+    renderPrivilegeStatusCard();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Request Shizuku permission" }),
@@ -150,7 +162,7 @@ describe("PrivilegeStatusCard", () => {
   it("shows refresh activity while the status request is pending", () => {
     getPrivilegedStatus.mockReturnValue(new Promise(() => undefined));
 
-    render(<PrivilegeStatusCard title="privileges" />);
+    renderPrivilegeStatusCard();
 
     const refreshButton = screen.getByRole("button", {
       name: "Refresh status",
@@ -167,7 +179,7 @@ describe("PrivilegeStatusCard", () => {
     });
     openShizuku.mockResolvedValue(undefined);
 
-    render(<PrivilegeStatusCard title="privileges" />);
+    renderPrivilegeStatusCard();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Open Shizuku" }),
@@ -180,7 +192,7 @@ describe("PrivilegeStatusCard", () => {
   it("shows status loading failures", async () => {
     getPrivilegedStatus.mockRejectedValue(new Error("Status failed"));
 
-    render(<PrivilegeStatusCard title="privileges" />);
+    renderPrivilegeStatusCard();
 
     expect(await screen.findByText("Status failed")).toBeInTheDocument();
   });

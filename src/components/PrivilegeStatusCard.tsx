@@ -15,6 +15,7 @@ import {
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import type { PrivilegedStatus } from "../lib/types";
+import { useNotificationStore } from "../store/notificationStore";
 
 type PrivilegeAction = "request" | "openShizuku" | "retry";
 
@@ -78,6 +79,7 @@ const actionCopy: Record<PrivilegeAction, MessageKey> = {
 
 export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
   const { t } = useTranslation();
+  const notify = useNotificationStore((state) => state.notify);
   const [status, setStatus] = useState<PrivilegedStatus>();
   const [statusError, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
@@ -127,7 +129,9 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         }
       }
     } catch (error) {
-      setStatusError(error instanceof Error ? error.message : String(error));
+      notify(error instanceof Error ? error.message : String(error), {
+        tone: "error",
+      });
     } finally {
       setActionPending(false);
     }

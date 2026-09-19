@@ -107,7 +107,7 @@ object RuntimeBridge {
                 latch.countDown()
             }
         }
-        return latch.await(15, TimeUnit.SECONDS) && granted.get()
+        return latch.await(60, TimeUnit.SECONDS) && granted.get()
     }
 
     @JvmStatic
@@ -319,14 +319,20 @@ object RuntimeBridge {
     @JvmStatic
     fun nativeLibraryPath(name: String): String {
         val context = requireNotNull(agentContext) { "the runtime bridge context is missing" }
+        val libraryDir = context.applicationInfo.nativeLibraryDir
+        if (libraryDir.isNotEmpty()) {
+            val library = File(libraryDir, System.mapLibraryName(name))
+            if (library.isFile) return library.absolutePath
+        }
+
         val abi = requireNotNull(Build.SUPPORTED_ABIS.firstOrNull()) {
             "the device does not report a supported ABI"
         }
         val sourceDir = requireNotNull(context.applicationInfo.sourceDir) {
             "the application APK path is missing"
         }
-        // Uncompressed APK-native libraries are mapped through this virtual path;
-        // nativeLibraryDir is empty when extractNativeLibs is disabled.
+        // Rust dlopen cannot open APK-internal paths. This remains as a clear
+        // diagnostic for a build that did not use legacy native-library packaging.
         return "$sourceDir!/lib/$abi/lib$name.so"
     }
 

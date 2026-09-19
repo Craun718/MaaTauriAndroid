@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotificationHost } from "../components/ui/NotificationHost";
 import type {
@@ -16,6 +22,7 @@ const getRunStatus = vi.fn();
 const getVirtualDisplayStatus = vi.fn();
 const captureManualScreenshot = vi.fn();
 const startRun = vi.fn();
+const stopRun = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
@@ -26,7 +33,7 @@ vi.mock("../lib/api", () => ({
   saveConfiguration: (configuration: unknown) =>
     saveConfiguration(configuration),
   startRun: () => startRun(),
-  stopRun: vi.fn(),
+  stopRun: () => stopRun(),
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
@@ -215,6 +222,7 @@ beforeEach(() => {
     message: "The run is starting",
     taskCount: 0,
   });
+  stopRun.mockResolvedValue("The run is stopping");
   useNotificationStore.setState({ notifications: [] });
   captureManualScreenshot.mockResolvedValue({
     executionId: "run-1",
@@ -328,6 +336,95 @@ describe("nested task options", () => {
 });
 
 describe("run configuration tabs and flat task list", () => {
+  it("starts a run with the merged control and switches to logs", async () => {
+    useAppStore.setState({
+      snapshot: {
+        project,
+        configuration: {
+          ...configuration,
+          runConfigurations: [
+            {
+              ...configuration.runConfigurations[0],
+              tasks: configuration.runConfigurations[0].tasks.map((task) => ({
+                ...task,
+                enabled: true,
+              })),
+            },
+          ],
+        },
+      },
+    });
+    renderTasksPage();
+
+    const runSection = screen
+      .getByRole("heading", { name: "2 tasks ready" })
+      .closest("section");
+    if (!runSection) throw new Error("Run panel not found");
+    fireEvent.click(within(runSection).getByRole("button", { name: "Start" }));
+
+    expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await waitFor(() => expect(startRun).toHaveBeenCalledTimes(1));
+    eventHandlers.handlers["run-event"].forEach((handler) => {
+      handler({
+        payload: {
+          executionId: "run-1",
+          sequence: 1,
+          atUnixMs: 1,
+          kind: "started",
+          state: "Running",
+          message: "The run started",
+        },
+      });
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Stop" }),
+    ).toBeInTheDocument();
+  });
+
+  it("stops a run with the same merged control", async () => {
+    useAppStore.setState({
+      snapshot: {
+        project,
+        configuration: {
+          ...configuration,
+          runConfigurations: [
+            {
+              ...configuration.runConfigurations[0],
+              tasks: configuration.runConfigurations[0].tasks.map((task) => ({
+                ...task,
+                enabled: true,
+              })),
+            },
+          ],
+        },
+      },
+    });
+    renderTasksPage();
+
+    await waitFor(() =>
+      expect(eventHandlers.handlers["run-event"]).toBeDefined(),
+    );
+    eventHandlers.handlers["run-event"].forEach((handler) => {
+      handler({
+        payload: {
+          executionId: "run-1",
+          sequence: 1,
+          atUnixMs: 1,
+          kind: "started",
+          state: "Running",
+          message: "The run started",
+        },
+      });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));
+  });
+
   it("places the virtual display above the run queue", async () => {
     renderTasksPage();
 
@@ -342,7 +439,7 @@ describe("run configuration tabs and flat task list", () => {
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
   });
 
-  it("uses a segmented run-activity selector below run controls", () => {
+  it("uses lifted run-activity tabs below run controls", () => {
     renderTasksPage();
 
     const activityTabs = screen.getByRole("tablist", {
@@ -351,6 +448,7 @@ describe("run configuration tabs and flat task list", () => {
     const configurationTabs = screen.getByRole("tablist", {
       name: "Tasks & Run",
     });
+    expect(activityTabs).toHaveClass("tabs-lift");
     expect(activityTabs).not.toHaveClass("tabs-box");
     expect(configurationTabs).toHaveClass("tabs-box");
     expect(screen.getByRole("tab", { name: "Task list" })).toHaveAttribute(

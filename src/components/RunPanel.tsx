@@ -20,7 +20,7 @@ import { useNotificationStore } from "../store/notificationStore";
  * rather than on a page of its own: the queue it drives is the task list below it,
  * and keeping them apart meant showing the same tasks twice.
  */
-export function RunPanel() {
+export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
   const { t } = useTranslation();
@@ -28,6 +28,7 @@ export function RunPanel() {
   const [status, setStatus] = useState<string>();
   const [executionId, setExecutionId] = useState<string>();
   const [runState, setRunState] = useState("Idle");
+  const [starting, setStarting] = useState(false);
   const [diagnostic, setDiagnostic] = useState<DiagnosticExport>();
   const executionIdRef = useRef<string | undefined>(undefined);
   const [exporting, setExporting] = useState(false);
@@ -115,6 +116,7 @@ export function RunPanel() {
   if (!snapshot?.project) return null;
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
+  const running = Boolean(executionId) && runState !== "Idle";
 
   function reportError(error: unknown) {
     notify(error instanceof Error ? error.message : String(error), {
@@ -123,6 +125,8 @@ export function RunPanel() {
   }
 
   async function start() {
+    onRunStarted?.();
+    setStarting(true);
     try {
       const result = await startRun();
       executionIdRef.current = result.executionId;
@@ -130,6 +134,8 @@ export function RunPanel() {
       setStatus(result.message);
     } catch (error) {
       reportError(error);
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -182,23 +188,16 @@ export function RunPanel() {
         </h2>
         <button
           type="button"
-          disabled={enabled.length === 0 || busy}
-          onClick={start}
+          disabled={
+            (running ? false : enabled.length === 0) || busy || starting
+          }
+          onClick={running ? stop : () => void start()}
           className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-accent font-semibold text-white disabled:opacity-50"
         >
-          <Play size={16} />
-          {t("start")}
+          {running ? <Square size={16} /> : <Play size={16} />}
+          {t(running ? "stop" : "start")}
         </button>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            disabled={!executionId || runState === "Idle"}
-            onClick={stop}
-            className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
-          >
-            <Square size={16} />
-            {t("stop")}
-          </button>
+        <div className="mt-2 grid grid-cols-2 gap-2">
           <button
             type="button"
             disabled={!executionId || exporting}

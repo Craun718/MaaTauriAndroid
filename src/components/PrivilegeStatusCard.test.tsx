@@ -122,6 +122,43 @@ describe("PrivilegeStatusCard", () => {
     ).toHaveLength(1);
   });
 
+  it("refreshes the status after a permission request fails", async () => {
+    getPrivilegedStatus
+      .mockResolvedValueOnce({
+        status: "permissionRequired",
+        message: "permission required",
+        setupRequired: ["grant access"],
+      })
+      .mockResolvedValueOnce({ status: "connected", message: "connected" });
+    requestPrivilegedAccess.mockRejectedValue(
+      new Error("The permission request timed out"),
+    );
+
+    render(<PrivilegeStatusCard title="privileges" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Request Shizuku permission" }),
+    );
+
+    expect(
+      await screen.findByText("The permission request timed out"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Granted")).toBeInTheDocument();
+    expect(getPrivilegedStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows refresh activity while the status request is pending", () => {
+    getPrivilegedStatus.mockReturnValue(new Promise(() => undefined));
+
+    render(<PrivilegeStatusCard title="privileges" />);
+
+    const refreshButton = screen.getByRole("button", {
+      name: "Refresh status",
+    });
+    expect(refreshButton).toBeDisabled();
+    expect(refreshButton.querySelector("svg")).toHaveClass("animate-spin");
+  });
+
   it("offers the Shizuku shortcut when the service is unavailable", async () => {
     getPrivilegedStatus.mockResolvedValue({
       status: "notInstalled",

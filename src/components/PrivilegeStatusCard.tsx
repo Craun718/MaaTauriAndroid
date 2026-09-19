@@ -120,8 +120,11 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
       if (action === "openShizuku") {
         await openShizuku();
       } else {
-        await requestPrivilegedAccess();
-        await refreshStatus();
+        try {
+          await requestPrivilegedAccess();
+        } finally {
+          await refreshStatus();
+        }
       }
     } catch (error) {
       setStatusError(error instanceof Error ? error.message : String(error));
@@ -149,13 +152,13 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         <button
           type="button"
           onClick={() => void refreshStatus()}
-          disabled={refreshing}
+          disabled={refreshing || actionPending}
           className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
           aria-label={t("refreshStatus")}
         >
           <RefreshCw
             size={14}
-            className={refreshing ? "animate-spin" : undefined}
+            className={refreshing || actionPending ? "animate-spin" : undefined}
           />
         </button>
       </div>

@@ -8,6 +8,8 @@ const MAX_RUN_LOG_EVENTS = 300;
 
 type ActivityTab = "tasks" | "logs";
 
+export type RunActivityTab = ActivityTab;
+
 /** Collects run activity even while the task list tab is selected. */
 function useRunEvents() {
   const [events, setEvents] = useState<RunEvent[]>([]);
@@ -60,10 +62,16 @@ function eventLabel(
   return labels[eventCategory(event)];
 }
 
-export function RunActivityTabs({ taskList }: { taskList: ReactNode }) {
+export function RunActivityTabs({
+  taskList,
+  activeTab,
+  onActiveTabChange,
+}: {
+  taskList: ReactNode;
+  activeTab: RunActivityTab;
+  onActiveTabChange: (tab: RunActivityTab) => void;
+}) {
   const events = useRunEvents();
-  const activeTabState = useState<ActivityTab>("tasks");
-  const [activeTab, setActiveTab] = activeTabState;
   const { t } = useTranslation();
   const groupId = useId();
   const logListRef = useRef<HTMLOListElement>(null);
@@ -84,7 +92,7 @@ export function RunActivityTabs({ taskList }: { taskList: ReactNode }) {
       <div
         role="tablist"
         aria-label={t("runActivity")}
-        className="inline-flex min-w-full gap-1 rounded-md border border-line bg-surface-muted p-1"
+        className="tabs tabs-lift tabs-xs w-max min-w-full"
       >
         {tabs.map((tab) => {
           const selected = tab.value === activeTab;
@@ -97,12 +105,8 @@ export function RunActivityTabs({ taskList }: { taskList: ReactNode }) {
               aria-selected={selected}
               aria-controls={`${groupId}-${tab.value}-panel`}
               tabIndex={selected ? 0 : -1}
-              onClick={() => setActiveTab(tab.value)}
-              className={`h-8 min-w-0 flex-1 rounded-sm px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                selected
-                  ? "bg-raised text-ink shadow-sm"
-                  : "cursor-pointer text-ink-muted hover:bg-raised/60"
-              }`}
+              onClick={() => onActiveTabChange(tab.value)}
+              className={`tab min-w-0 flex-1 font-medium${selected ? " tab-active" : ""}`}
             >
               {tab.label}
             </button>
@@ -141,41 +145,46 @@ export function RunActivityTabs({ taskList }: { taskList: ReactNode }) {
                   key={`${event.executionId}-${event.sequence}`}
                   className="text-sm"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-start gap-2">
                     <time className="w-16 flex-none text-xs text-ink-muted">
                       {new Date(event.atUnixMs).toLocaleTimeString([], {
                         hour12: false,
                       })}
                     </time>
-                    <span
-                      className={`flex h-5 flex-none items-center rounded-sm border px-1.5 text-xs font-medium ${
-                        category === "focus"
-                          ? "border-accent/40 bg-accent/10 text-accent"
-                          : "border-line bg-surface-muted text-ink-muted"
+                    <div className="flex w-20 flex-none flex-col items-start gap-1">
+                      <span
+                        className={`flex h-5 max-w-full items-center truncate rounded-sm border px-1.5 text-xs font-medium ${
+                          category === "focus"
+                            ? "border-accent/40 bg-accent/10 text-accent"
+                            : "border-line bg-surface-muted text-ink-muted"
+                        }`}
+                      >
+                        {eventLabel(event, {
+                          agent: t("runLogAgent"),
+                          focus: t("runLogFocus"),
+                          status: t("runLogStatus"),
+                          task: t("runLogTask"),
+                        })}
+                      </span>
+                      {event.taskName && (
+                        <span
+                          className="max-w-full truncate text-xs font-medium"
+                          title={event.taskName}
+                        >
+                          {event.taskName}
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className={`min-w-0 flex-1 break-words ${
+                        stream === "stderr"
+                          ? "text-red-600 dark:text-red-300"
+                          : ""
                       }`}
                     >
-                      {eventLabel(event, {
-                        agent: t("runLogAgent"),
-                        focus: t("runLogFocus"),
-                        status: t("runLogStatus"),
-                        task: t("runLogTask"),
-                      })}
-                    </span>
-                    {event.taskName && (
-                      <span className="min-w-0 truncate text-xs font-medium">
-                        {event.taskName}
-                      </span>
-                    )}
+                      {event.message}
+                    </p>
                   </div>
-                  <p
-                    className={`mt-0.5 break-words pl-18 ${
-                      stream === "stderr"
-                        ? "text-red-600 dark:text-red-300"
-                        : ""
-                    }`}
-                  >
-                    {event.message}
-                  </p>
                 </li>
               );
             })}

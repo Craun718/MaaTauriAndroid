@@ -1,5 +1,7 @@
 package top.natsuu.mta.control
 
+import android.system.Os
+import android.system.OsConstants
 import android.os.Binder
 import android.os.ParcelFileDescriptor
 import top.natsuu.mta.AgentLaunch
@@ -51,6 +53,7 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
             copyTo(runtimeBundle, runtimeZip)
             ZipSafety.validateNoSymlinks(runtimeZip)
             ZipInstaller.extract(runtimeZip, runtimeRoot)
+            markTreeExecutable(runtimeRoot)
             markExecutables(runtimeRoot, runtime.getJSONArray("executables"))
 
             staging.resolve("runtime.json").writeText(descriptorJson)
@@ -94,13 +97,22 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         }
         val runtime = runtimes.getJSONObject(runtimeIndex)
 
-        val executable = safeEntry(root, runtime.getString("exec"))
+        val runtimeRoot = safeEntry(root, "runtime-$runtimeIndex")
+        val executable = safeEntry(runtimeRoot, runtime.getString("exec"))
         require(executable.isFile && executable.canExecute()) {
-            "the declared agent executable is missing or not executable"
+            "the declared agent executable is missing or not executable: " +
+                executableDiagnostics(executable)
         }
-        val workingDir = safeEntry(
+        val workingDirValue = substitute(
+            runtime.getString("workingDir"),
+            runtimeRoot,
             root,
-            substitute(runtime.getString("workingDir"), root, port, nativeLibraryDir),
+            port,
+            nativeLibraryDir,
+        )
+        val workingDir = safeEntry(
+            if (File(workingDirValue).isAbsolute) root else runtimeRoot,
+            workingDirValue,
         )
         require(workingDir.isDirectory) { "the declared agent working directory is missing" }
 
@@ -115,7 +127,9 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
             val command = mutableListOf(executable.absolutePath)
             runtime.getJSONArray("args").let { args ->
                 for (index in 0 until args.length()) {
-                    command.add(substitute(args.getString(index), root, port, nativeLibraryDir))
+                    command.add(
+                        substitute(args.getString(index), runtimeRoot, root, port, nativeLibraryDir),
+                    )
                 }
             }
             val builder = ProcessBuilder(command)
@@ -131,7 +145,13 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
                     require(!key.startsWith("PI_")) {
                         "the descriptor may not set reserved PI_* environment variables"
                     }
-                    environment[key] = substitute(values.getString(key), root, port, nativeLibraryDir)
+                    environment[key] = substitute(
+                        values.getString(key),
+                        runtimeRoot,
+                        root,
+                        port,
+                        nativeLibraryDir,
+                    )
                 }
             }
             JSONObject(piEnvironment).let { overrides ->
@@ -225,15 +245,51 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         }
     }
 
+    private fun markTreeExecutable(root: File) {
+        root.walkBottomUp().filter(File::isFile).forEach { file ->
+            require(file.setExecutable(true, false)) {
+                "could not mark agent runtime file executable: ${file.relativeToOrNull(root)}"
+            }
+        }
+    }
+
+    private fun executableDiagnostics(executable: File): String {
+        val canonicalPath = runCatching { executable.canonicalPath }.getOrDefault("<unknown>")
+        val accessX = runCatching {
+            Os.access(executable.absolutePath, OsConstants.X_OK)
+        }.getOrNull()
+        val permissions = runCatching {
+            val mode = Os.stat(executable.absolutePath).st_mode
+            val mask = OsConstants.S_IRWXU or OsConstants.S_IRWXG or OsConstants.S_IRWXO
+            mode.and(mask).toString(8).padStart(3, '0')
+        }.getOrNull()
+
+        return buildString {
+            append(executable.absolutePath)
+            append(" (canonical=$canonicalPath")
+            append(", exists=${executable.exists()}")
+            append(", isFile=${executable.isFile}")
+            append(", isDirectory=${executable.isDirectory}")
+            append(", canRead=${executable.canRead()}")
+            append(", canWrite=${executable.canWrite()}")
+            append(", canExecute=${executable.canExecute()}")
+            append(", accessX_OK=$accessX")
+            append(", mode=$permissions")
+            append(", uid=${Os.getuid()}")
+            append(", gid=${Os.getgid()}")
+            append(")")
+        }
+    }
+
     private fun safeEntry(root: File, relative: String): File {
         require(relative.isNotEmpty() && !relative.contains('\u0000')) {
             "an agent path may not be empty or contain NUL"
         }
-        require(!File(relative).isAbsolute) { "an agent path may not be absolute: $relative" }
         require(relative.split('/', '\\').none { it == ".." }) {
             "an agent path may not escape its runtime root: $relative"
         }
-        val output = root.resolve(relative)
+        val rawPath = File(relative)
+        val output = if (rawPath.isAbsolute) rawPath else root.resolve(relative)
         require(output.canonicalPath.startsWith(root.canonicalPath + File.separator)) {
             "an agent path escapes its runtime root: $relative"
         }
@@ -242,13 +298,14 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
 
     private fun substitute(
         value: String,
-        root: File,
+        runtimeRoot: File,
+        agentRoot: File,
         port: Int,
         nativeLibraryDir: String,
     ): String = value
         .replace("{identifier}", port.toString())
-        .replace("{bundle}", root.absolutePath)
-        .replace("{pi}", root.resolve("pi").absolutePath)
+        .replace("{bundle}", runtimeRoot.absolutePath)
+        .replace("{pi}", agentRoot.resolve("pi").absolutePath)
         .replace("{nativeLib}", nativeLibraryDir)
 
     private fun parseDescriptor(descriptorJson: String): JSONObject {

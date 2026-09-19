@@ -19,7 +19,10 @@ import { useEffect, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
 import { OptionEditor } from "../components/OptionEditor";
 import { RichDescription } from "../components/RichDescription";
-import { RunActivityTabs } from "../components/RunActivityTabs";
+import {
+  type RunActivityTab,
+  RunActivityTabs,
+} from "../components/RunActivityTabs";
 import { RunPanel } from "../components/RunPanel";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
@@ -57,6 +60,7 @@ export function TasksPage() {
   const { t } = useTranslation();
   const [focusNotice, setFocusNotice] = useState<FocusNotice>();
   const [selectedPreset, setSelectedPreset] = useState<string>();
+  const [activityTab, setActivityTab] = useState<RunActivityTab>("tasks");
   const notify = useNotificationStore((state) => state.notify);
 
   useEffect(() => {
@@ -226,8 +230,10 @@ export function TasksPage() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold">{t("tasksAndRun")}</h1>
       <VirtualDisplayCard />
-      <RunPanel />
+      <RunPanel onRunStarted={() => setActivityTab("logs")} />
       <RunActivityTabs
+        activeTab={activityTab}
+        onActiveTabChange={setActivityTab}
         taskList={
           <>
             {project.presets.length > 0 && (
@@ -270,7 +276,7 @@ export function TasksPage() {
                   items={activeRun?.tasks.map((task) => task.instanceId) ?? []}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="space-y-2 rounded-lg border border-line bg-surface-muted p-2">
+                  <div className="space-y-1 rounded-lg border border-line bg-surface-muted p-2">
                     {activeRun?.tasks.map(renderConfiguredTask)}
                   </div>
                 </SortableContext>
@@ -491,9 +497,17 @@ function TaskItem({
                 type="button"
                 aria-expanded={expanded}
                 onClick={() => setExpanded((value) => !value)}
-                className="flex min-h-7 flex-1 items-center gap-2 text-left"
+                className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-left"
               >
-                {label}
+                <span
+                  className={`min-w-0 flex-1 whitespace-nowrap ${
+                    expanded
+                      ? "overflow-x-auto"
+                      : "overflow-hidden text-ellipsis"
+                  }`}
+                >
+                  {label}
+                </span>
                 <ChevronDown
                   size={16}
                   className={`shrink-0 text-ink-muted transition-transform ${

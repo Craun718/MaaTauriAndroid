@@ -3,8 +3,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const APPLICATION_LOG_FILE_STEM: &str = "ttflow";
@@ -53,7 +52,7 @@ pub struct RunLogger {
     execution_id: String,
     run_dir: PathBuf,
     sequence: Mutex<u64>,
-    ui_sink: Mutex<Option<Arc<dyn Fn(&RunEvent) + Send + Sync>>>,
+    ui_sink: RwLock<Option<Arc<dyn Fn(&RunEvent) + Send + Sync>>>,
 }
 
 static LATEST_LOGGER: RwLock<Option<Arc<RunLogger>>> = RwLock::new(None);
@@ -79,7 +78,7 @@ impl RunLogger {
             execution_id: execution_id.to_string(),
             run_dir,
             sequence: Mutex::new(0),
-            ui_sink: Mutex::new(None),
+            ui_sink: RwLock::new(None),
         })
     }
 

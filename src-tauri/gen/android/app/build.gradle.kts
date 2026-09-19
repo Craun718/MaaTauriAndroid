@@ -270,6 +270,9 @@ extensions.configure<ApplicationExtension> {
     }
 
     packaging {
+        // MaaFramework is reloaded from its file path by Rust; APK-internal
+        // "!/lib/..." paths cannot be passed to ordinary dlopen().
+        jniLibs.useLegacyPackaging = true
         jniLibs.pickFirsts.add("**/libc++_shared.so")
     }
 

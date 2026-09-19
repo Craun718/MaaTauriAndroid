@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Handler
 import android.util.Log
-import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import rikka.shizuku.Shizuku
 import top.natsuu.mta.IMaaTauriAndroidControlService
@@ -24,7 +23,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     )
         .daemon(false)
         .processNameSuffix("maa_tauri_android_control")
-        .tag(UUID.randomUUID().toString())
+        .tag("control")
         .version(SERVICE_VERSION)
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
@@ -187,7 +186,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     companion object {
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 5
+        private const val SERVICE_VERSION = 7
 
         const val STATE_SHIZUKU_UNAVAILABLE = 1
         const val STATE_PERMISSION_REQUIRED = 2

@@ -394,6 +394,9 @@ describe("run configuration tabs and flat task list", () => {
       })
     ).closest("section");
     if (!runSection) throw new Error("Run panel not found");
+    fireEvent.click(
+      within(runSection).getByRole("button", { name: "Task actions" }),
+    );
     fireEvent.click(within(runSection).getByRole("button", { name: "Start" }));
 
     expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
@@ -457,6 +460,9 @@ describe("run configuration tabs and flat task list", () => {
     ).closest("section");
     if (!runSection) throw new Error("Run panel not found");
     fireEvent.click(
+      await within(runSection).findByRole("button", { name: "Task actions" }),
+    );
+    fireEvent.click(
       await within(runSection).findByRole("button", { name: "Stop" }),
     );
 
@@ -470,7 +476,16 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
+    const runSection = (
+      await screen.findByRole("heading", { name: "0 tasks ready" })
+    ).closest("section");
+    if (!runSection) throw new Error("Run panel not found");
+    fireEvent.click(
+      within(runSection).getByRole("button", { name: "Task actions" }),
+    );
+    fireEvent.click(
+      within(runSection).getByRole("button", { name: "Export logs" }),
+    );
 
     await waitFor(() => expect(exportLogs).toHaveBeenCalledTimes(1));
     expect(

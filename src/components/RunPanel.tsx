@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { Camera, Download, Play, Square } from "lucide-react";
+import { Camera, ChevronDown, Download, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   captureManualScreenshot,
@@ -32,6 +32,8 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const executionIdRef = useRef<string | undefined>(undefined);
   const { exportLogs, exporting } = useLogExport();
   const [capturing, setCapturing] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsRef = useRef<HTMLDivElement>(null);
   const notify = useNotificationStore((state) => state.notify);
   const reportError = useCallback(
     (error: unknown) => {
@@ -100,6 +102,28 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     };
   }, [notify, reportError]);
 
+  useEffect(() => {
+    if (!actionsOpen) return;
+
+    function closeActions(event: PointerEvent) {
+      if (!actionsRef.current?.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setActionsOpen(false);
+    }
+
+    document.addEventListener("pointerdown", closeActions);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeActions);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [actionsOpen]);
+
   if (!snapshot?.project) return null;
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
@@ -143,41 +167,77 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   return (
     <>
       <section className="rounded-lg border border-line bg-raised p-4">
-        <h2 className="text-xl font-semibold">
-          {t("tasksReady", { count: enabled.length })}
-        </h2>
-        <button
-          type="button"
-          disabled={
-            (running ? false : enabled.length === 0) || busy || starting
-          }
-          onClick={running ? stop : () => void start()}
-          className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-accent font-semibold text-white disabled:opacity-50"
-        >
-          {running ? <Square size={16} /> : <Play size={16} />}
-          {t(running ? "stop" : "start")}
-        </button>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            disabled={exporting}
-            onClick={() => {
-              void exportLogs();
-            }}
-            className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
-          >
-            <Download size={16} />
-            {exporting ? t("exportingLogs") : t("exportLogs")}
-          </button>
-          <button
-            type="button"
-            disabled={!executionId || capturing}
-            onClick={captureScreenshot}
-            className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
-          >
-            <Camera size={16} />
-            {t("captureScreenshot")}
-          </button>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">
+            {t("tasksReady", { count: enabled.length })}
+          </h2>
+          <div ref={actionsRef} className="relative shrink-0">
+            <button
+              type="button"
+              aria-expanded={actionsOpen}
+              aria-haspopup="menu"
+              onClick={() => setActionsOpen((value) => !value)}
+              className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-line px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {t("taskOperations")}
+              <ChevronDown
+                size={14}
+                className={`text-ink-muted transition-transform ${
+                  actionsOpen ? "" : "-rotate-90"
+                }`}
+              />
+            </button>
+            {actionsOpen && (
+              <div
+                role="menu"
+                aria-label={t("taskOperations")}
+                className="absolute top-10 right-0 z-30 w-40 rounded-lg border border-line bg-raised p-1 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={
+                    (running ? false : enabled.length === 0) || busy || starting
+                  }
+                  onClick={() => {
+                    setActionsOpen(false);
+                    if (running) void stop();
+                    else void start();
+                  }}
+                  className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  {running ? <Square size={16} /> : <Play size={16} />}
+                  {t(running ? "stop" : "start")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={exporting}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    void exportLogs();
+                  }}
+                  className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  <Download size={16} />
+                  {exporting ? t("exportingLogs") : t("exportLogs")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!executionId || capturing}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    void captureScreenshot();
+                  }}
+                  className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  <Camera size={16} />
+                  {t("captureScreenshot")}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </section>
       {status && <p className="break-all text-sm text-ink-muted">{status}</p>}

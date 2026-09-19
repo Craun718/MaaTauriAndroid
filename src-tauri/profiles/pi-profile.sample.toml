@@ -37,12 +37,6 @@ timeout_ms = 15000
 
 [[agent.runtimes]]
 bundle = "/absolute/path/to/agent-runtime.zip"
-# Optional pin. When set, the build verifies the archive's digest and refuses to
-# package a bundle that does not match. When omitted, the build records the
-# archive's actual digest instead — useful when the bundle is rebuilt by CI and
-# its bytes are not reproducible. Either way the recorded digest is what the
-# on-device runtime verifies the packaged bundle against.
-bundle_sha256 = "64-character-lowercase-sha-256"
 exec = "python/bin/python3"
 executables = ["python/bin/python3"]
 args = ["-u", "-m", "maa.agent.agent_server", "{identifier}"]

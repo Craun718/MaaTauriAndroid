@@ -5,7 +5,6 @@ use maa_framework::agent_client::AgentClient;
 use maa_framework::resource::Resource;
 use serde::Deserialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -19,8 +18,6 @@ const DESCRIPTOR_SCHEMA_VERSION: u64 = 1;
 pub enum AgentError {
     #[error("agent descriptor is invalid: {0}")]
     InvalidDescriptor(String),
-    #[error("project interface hash does not match the agent descriptor")]
-    InterfaceMismatch,
     #[error(
         "project declares {declared} Python agents but the packaged descriptor has {packaged}"
     )]
@@ -51,9 +48,6 @@ impl From<jni::errors::Error> for AgentError {
 pub struct AgentDescriptor {
     pub schema_version: u64,
     pub abi: String,
-    pub interface_sha256: String,
-    pub pi_sha256: String,
-    pub fingerprint: String,
     pub timeout_ms: u64,
     #[serde(default)]
     pub runtimes: Vec<AgentRuntime>,
@@ -63,7 +57,6 @@ pub struct AgentDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct AgentRuntime {
     pub interface_index: usize,
-    pub bundle_sha256: String,
     pub exec: String,
     pub executables: Vec<String>,
     pub args: Vec<String>,
@@ -171,10 +164,7 @@ impl Drop for AgentSession {
     }
 }
 
-pub fn validate_descriptor(
-    descriptor: &AgentDescriptor,
-    interface_path: &Path,
-) -> Result<(), AgentError> {
+pub fn validate_descriptor(descriptor: &AgentDescriptor) -> Result<(), AgentError> {
     if descriptor.schema_version != DESCRIPTOR_SCHEMA_VERSION {
         return Err(AgentError::InvalidDescriptor(format!(
             "unsupported schema version {}",
@@ -187,25 +177,6 @@ pub fn validate_descriptor(
             descriptor.abi
         )));
     }
-    require_sha256(&descriptor.fingerprint, "fingerprint")?;
-    require_sha256(&descriptor.pi_sha256, "PI archive hash")?;
-
-    let bytes = std::fs::read(interface_path).map_err(|error| {
-        AgentError::InvalidDescriptor(format!(
-            "could not hash {}: {error}",
-            interface_path.display()
-        ))
-    })?;
-    let mut digest = Sha256::new();
-    digest.update(&bytes);
-    let interface_hash = hex::encode(digest.finalize());
-    if !constant_eq(
-        interface_hash.as_bytes(),
-        descriptor.interface_sha256.as_bytes(),
-    ) {
-        return Err(AgentError::InterfaceMismatch);
-    }
-
     let mut indexes = Vec::new();
     for (index, runtime) in descriptor.runtimes.iter().enumerate() {
         if runtime.interface_index != index {
@@ -214,10 +185,6 @@ pub fn validate_descriptor(
                 runtime.interface_index
             )));
         }
-        require_sha256(
-            &runtime.bundle_sha256,
-            &format!("runtime {index} bundle hash"),
-        )?;
         validate_relative_path(&runtime.exec, index, "exec")?;
         if runtime.executables.is_empty() {
             return Err(AgentError::InvalidDescriptor(format!(
@@ -389,16 +356,13 @@ fn localize_selection_fields(
     }
 }
 
-pub fn prepare_android(
-    interface_path: &Path,
-    declared_agents: usize,
-) -> Result<Option<PreparedAgent>, AgentError> {
+pub fn prepare_android(declared_agents: usize) -> Result<Option<PreparedAgent>, AgentError> {
     if declared_agents == 0 {
         return Ok(None);
     }
 
     let descriptor = load_android_descriptor()?;
-    validate_descriptor(&descriptor, interface_path)?;
+    validate_descriptor(&descriptor)?;
     match_agent_count(Some(&descriptor), declared_agents)?;
     if descriptor.runtimes.is_empty() {
         return Ok(None);
@@ -440,16 +404,14 @@ mod android {
                     serde_json::to_string(descriptor)
                         .map_err(|error| AgentError::InvalidDescriptor(error.to_string()))?,
                 )?;
-                let fingerprint = env.new_string(&descriptor.fingerprint)?;
                 let pi = open_asset(env, "pi.zip")?;
                 let bundle = open_asset(env, &format!("agent/runtime-{index}.zip"))?;
                 env.call_method(
                     service,
                     "prepareAgentRuntime",
-                    "(Ljava/lang/String;Ljava/lang/String;ILandroid/os/ParcelFileDescriptor;Landroid/os/ParcelFileDescriptor;)V",
+                    "(Ljava/lang/String;ILandroid/os/ParcelFileDescriptor;Landroid/os/ParcelFileDescriptor;)V",
                     &[
                         JValue::Object(&descriptor_json),
-                        JValue::Object(&fingerprint),
                         JValue::Int(index as i32),
                         JValue::Object(&pi),
                         JValue::Object(&bundle),
@@ -462,14 +424,13 @@ mod android {
 
         fn launch(
             &self,
-            descriptor: &AgentDescriptor,
+            _descriptor: &AgentDescriptor,
             execution_id: &str,
             index: usize,
             port: u16,
             pi_env: &BTreeMap<String, String>,
         ) -> Result<LaunchedAgent, AgentError> {
             super::android_bridge(|env, _bridge, service| {
-                let fingerprint = env.new_string(&descriptor.fingerprint)?;
                 let execution = env.new_string(execution_id)?;
                 let runtime_bridge_class = crate::runtime::runtime_bridge_class()
                     .map_err(|error| AgentError::Host(error.to_string()))?;
@@ -497,9 +458,8 @@ mod android {
                     .call_method(
                         service,
                         "startAgent",
-                        "(Ljava/lang/String;IILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ltop/natsuu/mta/AgentLaunch;",
+                        "(IILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ltop/natsuu/mta/AgentLaunch;",
                         &[
-                            JValue::Object(&fingerprint),
                             JValue::Int(index as i32),
                             JValue::Int(port as i32),
                             JValue::Object(&native_library_dir),
@@ -650,28 +610,16 @@ pub fn load_android_descriptor() -> Result<AgentDescriptor, AgentError> {
                 )
                 .and_then(|value| value.l())
                 .map_err(android::jni_error)?;
-            let fingerprint = env
-                .call_static_method(
-                    runtime_bridge_class,
-                    "agentFingerprint",
-                    "()Ljava/lang/String;",
-                    &[],
-                )
-                .and_then(|value| value.l())
-                .map_err(android::jni_error)?;
-            if descriptor.is_null() || fingerprint.is_null() {
+            if descriptor.is_null() {
                 return Err(AgentError::InvalidDescriptor(
                     "this build contains no agent descriptor".to_string(),
                 ));
             }
             let descriptor = jni::objects::JString::from(descriptor);
-            let fingerprint = jni::objects::JString::from(fingerprint);
             let descriptor = env.get_string(&descriptor).map_err(android::jni_error)?;
-            let fingerprint = env.get_string(&fingerprint).map_err(android::jni_error)?;
-            let mut descriptor: AgentDescriptor =
+            let descriptor: AgentDescriptor =
                 serde_json::from_str(&descriptor.to_string_lossy())
                     .map_err(|error| AgentError::InvalidDescriptor(error.to_string()))?;
-            descriptor.fingerprint = fingerprint.to_string_lossy().into_owned();
             Ok(descriptor)
         })
     }
@@ -722,29 +670,6 @@ fn validate_relative_path(value: &str, index: usize, field: &str) -> Result<(), 
     Ok(())
 }
 
-fn require_sha256(value: &str, label: &str) -> Result<(), AgentError> {
-    if value.len() != 64
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(AgentError::InvalidDescriptor(format!(
-            "{label} is not a SHA-256 digest"
-        )));
-    }
-    Ok(())
-}
-
-fn constant_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    left.iter()
-        .zip(right)
-        .fold(0u8, |difference, (left, right)| difference | (left ^ right))
-        == 0
-}
-
 fn is_android() -> bool {
     cfg!(target_os = "android")
 }
@@ -758,13 +683,9 @@ mod tests {
         serde_json::from_value(serde_json::json!({
             "schemaVersion": 1,
             "abi": "arm64-v8a",
-            "interfaceSha256": "0".repeat(64),
-            "piSha256": "c".repeat(64),
-            "fingerprint": "a".repeat(64),
             "timeoutMs": 15000,
             "runtimes": [{
                 "interfaceIndex": 0,
-                "bundleSha256": "b".repeat(64),
                 "exec": "python/bin/python3",
                 "executables": ["python/bin/python3"],
                 "args": ["-u", "-m", "maa.agent.agent_server", "{identifier}"],
@@ -787,36 +708,7 @@ mod tests {
     fn rejects_unsafe_paths() {
         let mut descriptor = descriptor();
         descriptor.runtimes[0].exec = "/bin/sh".to_string();
-        let interface =
-            std::env::temp_dir().join(format!("ttflow-agent-{}.json", uuid::Uuid::new_v4()));
-        std::fs::write(&interface, b"{}").unwrap();
-        descriptor.interface_sha256 = sha256_file(&interface);
-        assert!(validate_descriptor(&descriptor, &interface).is_err());
-        let _ = std::fs::remove_file(interface);
-    }
-
-    #[test]
-    fn rejects_invalid_digests() {
-        let mut invalid_descriptor = descriptor();
-        invalid_descriptor.pi_sha256 = "z".repeat(64);
-        assert!(matches!(
-            validate_descriptor(&invalid_descriptor, Path::new("/does/not/matter")),
-            Err(AgentError::InvalidDescriptor(_))
-        ));
-
-        let mut invalid_descriptor = descriptor();
-        invalid_descriptor.runtimes[0].bundle_sha256 = "Z".repeat(64);
-        assert!(matches!(
-            validate_descriptor(&invalid_descriptor, Path::new("/does/not/matter")),
-            Err(AgentError::InvalidDescriptor(_))
-        ));
-    }
-
-    fn sha256_file(path: &Path) -> String {
-        use sha2::Digest as _;
-        let mut digest = Sha256::new();
-        digest.update(std::fs::read(path).unwrap());
-        hex::encode(digest.finalize())
+        assert!(validate_descriptor(&descriptor).is_err());
     }
 
     #[derive(Default)]
@@ -859,15 +751,10 @@ mod tests {
         descriptor.runtimes[0]
             .env
             .insert("PI_CLIENT_NAME".to_string(), "spoofed".to_string());
-        let interface =
-            std::env::temp_dir().join(format!("ttflow-agent-pi-{}.json", uuid::Uuid::new_v4()));
-        std::fs::write(&interface, b"{}").unwrap();
-        descriptor.interface_sha256 = sha256_file(&interface);
         assert!(matches!(
-            validate_descriptor(&descriptor, &interface),
+            validate_descriptor(&descriptor),
             Err(AgentError::InvalidDescriptor(_))
         ));
-        let _ = std::fs::remove_file(interface);
     }
 
     #[test]

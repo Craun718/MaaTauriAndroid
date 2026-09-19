@@ -219,15 +219,6 @@ object RuntimeBridge {
     }
 
     @JvmStatic
-    fun agentFingerprint(): String? {
-        return runCatching {
-            agentContext?.assets?.open("agent/runtime.fingerprint")?.bufferedReader()?.use {
-                it.readText().trim()
-            }
-        }.getOrNull()
-    }
-
-    @JvmStatic
     fun openAgentAsset(name: String): ParcelFileDescriptor? {
         return requireNotNull(agentContext) { "the agent bridge context is missing" }
             .assets

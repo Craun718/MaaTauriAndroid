@@ -187,7 +187,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     companion object {
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 4
+        private const val SERVICE_VERSION = 5
 
         const val STATE_SHIZUKU_UNAVAILABLE = 1
         const val STATE_PERMISSION_REQUIRED = 2

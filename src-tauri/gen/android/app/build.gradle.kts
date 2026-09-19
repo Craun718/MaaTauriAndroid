@@ -1,7 +1,6 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import java.io.File
-import java.security.MessageDigest
 import java.util.zip.ZipFile
 import java.util.Properties
 import java.util.TreeMap
@@ -73,19 +72,6 @@ val piGeneratedDir = layout.buildDirectory.dir("generated/piAssets")
 val piRootDir = piGeneratedDir.map { it.dir("pi") }
 val piPackedDir = piGeneratedDir.map { it.dir("packed") }
 val agentPackedDir = piPackedDir.map { it.dir("agent") }
-
-fun sha256(file: File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    file.inputStream().use { input ->
-        val buffer = ByteArray(64 * 1024)
-        while (true) {
-            val count = input.read(buffer)
-            if (count < 0) break
-            digest.update(buffer, 0, count)
-        }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
-}
 
 fun interfaceAgentCount(file: File): Int {
     val parsed = JsonSlurper().parse(file)
@@ -186,7 +172,6 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
         inputs.property("runtimeConfig", canonicalJson(runtimes.map { runtime ->
             linkedMapOf<String, Any?>(
                 "args" to runtime.args,
-                "bundleSha256" to runtime.bundleSha256,
                 "env" to runtime.env,
                 "exec" to runtime.exec,
                 "executables" to runtime.executables,
@@ -200,24 +185,13 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
             packedAgentRoot.listFiles()?.forEach { it.deleteRecursively() }
             val packedPiArchive = packedRoot.resolve("pi.zip")
             require(packedPiArchive.isFile) { "the packed Project Interface archive is missing" }
-            val piArchiveHash = sha256(packedPiArchive)
 
             val descriptorRuntimes = runtimes.mapIndexed { index, runtime ->
                 validateAgentBundle(runtime.bundle, index)
                 val target = packedAgentRoot.resolve("runtime-$index.zip")
                 runtime.bundle.copyTo(target, overwrite = true)
-                val actualBundleHash = sha256(target)
-                // bundle_sha256 is an optional pin. When the profile omits it the digest of the
-                // archive just packaged is recorded instead, and that recorded value is what the
-                // on-device runtime verifies against.
-                val expectedBundleHash = runtime.bundleSha256
-                require(expectedBundleHash == null || actualBundleHash == expectedBundleHash) {
-                    "agent runtime $index does not match bundle_sha256: expected " +
-                        "$expectedBundleHash but packaged $actualBundleHash (${runtime.bundle})"
-                }
                 linkedMapOf<String, Any?>(
                     "args" to runtime.args,
-                    "bundleSha256" to actualBundleHash,
                     "env" to TreeMap(runtime.env),
                     "exec" to runtime.exec,
                     "executables" to runtime.executables,
@@ -225,25 +199,14 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
                     "workingDir" to runtime.workingDir,
                 )
             }
-            val interfaceHash = sha256(piRootDir.get().file("interface.json").asFile)
             val canonicalDescriptor = linkedMapOf<String, Any?>(
                 "abi" to "arm64-v8a",
-                "interfaceSha256" to interfaceHash,
-                "piSha256" to piArchiveHash,
                 "runtimes" to descriptorRuntimes,
                 "schemaVersion" to 1,
                 "timeoutMs" to agentProfile.timeoutMs,
             )
-            val fingerprint = sha256(packedAgentRoot.resolve("fingerprint.temp").apply {
-                writeText(canonicalJson(canonicalDescriptor))
-            })
-            packedAgentRoot.resolve("fingerprint.temp").delete()
-
-            val descriptor = LinkedHashMap(canonicalDescriptor)
-            descriptor["fingerprint"] = fingerprint
             packedAgentRoot.resolve("runtime.json")
-                .writeText(JsonOutput.prettyPrint(JsonOutput.toJson(descriptor)))
-            packedAgentRoot.resolve("runtime.fingerprint").writeText(fingerprint)
+                .writeText(JsonOutput.prettyPrint(JsonOutput.toJson(canonicalDescriptor)))
         }
     }
 } else {

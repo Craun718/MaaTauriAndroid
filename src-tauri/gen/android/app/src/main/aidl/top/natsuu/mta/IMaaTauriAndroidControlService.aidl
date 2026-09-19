@@ -23,9 +23,9 @@ interface IMaaTauriAndroidControlService {
     String bugreportProgress();
     ParcelFileDescriptor dumpsys();
     void cancelBugreport();
-    void prepareAgentRuntime(String descriptorJson, String fingerprint, int runtimeIndex,
+    void prepareAgentRuntime(String descriptorJson, int runtimeIndex,
             in ParcelFileDescriptor piArchive, in ParcelFileDescriptor runtimeBundle);
-    AgentLaunch startAgent(String fingerprint, int runtimeIndex, int port,
+    AgentLaunch startAgent(int runtimeIndex, int port,
             String nativeLibraryDir, String executionId, String piEnvironment);
     void stopAgent(String executionId);
     void stopAllAgents();

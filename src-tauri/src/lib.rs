@@ -915,8 +915,6 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
         .unwrap_or(1.0);
     let focus_translations = project.metadata.translations.clone();
     let agent_count = project.agents.len();
-    let agent_interface_path =
-        std::path::PathBuf::from(project.root.clone()).join("interface.json");
     let creation_execution_id = run_execution_id.clone();
     let controller_display_id = runtime::active_display_id();
     let resolved_for_run = resolved.clone();
@@ -951,7 +949,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
             telemetry::run_finished("failed");
         };
         let creation = tokio::task::spawn_blocking(move || {
-            let agent = agent::prepare_android(&agent_interface_path, agent_count)
+            let agent = agent::prepare_android(agent_count)
                 .map_err(|error| crate::runtime::RuntimeError::Maa(error.to_string()))?;
             runtime::create_session(
                 &creation_execution_id,

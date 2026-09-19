@@ -12,9 +12,7 @@ them:
      runtime refuses to open.
 
 It also copies `libMaaAgentClient.so` and `libMaaAgentServer.so` into
-`lib/<abi>/` inside the bundle, which `validateAgentBundle` requires, and prints
-the resulting SHA-256. Recording it as `bundle_sha256` in the profile is optional:
-without a pin the build records the digest itself.
+`lib/<abi>/` inside the bundle, which `validateAgentBundle` requires.
 
 Usage:
     python3 pack_agent_bundle.py <bundle_dir> <agent_lib_dir> <out_zip>

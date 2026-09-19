@@ -210,7 +210,6 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun prepareAgentRuntime(
         descriptorJson: String,
-        fingerprint: String,
         runtimeIndex: Int,
         piArchive: ParcelFileDescriptor?,
         runtimeBundle: ParcelFileDescriptor?,
@@ -219,7 +218,6 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         requireNotNull(runtimeBundle) { "the agent runtime bundle is missing" }
         agentRuntimeManager.prepare(
             descriptorJson,
-            fingerprint,
             runtimeIndex,
             piArchive,
             runtimeBundle,
@@ -227,7 +225,6 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     override fun startAgent(
-        fingerprint: String,
         runtimeIndex: Int,
         port: Int,
         nativeLibraryDir: String?,
@@ -235,7 +232,6 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         piEnvironment: String?,
     ): AgentLaunch {
         return agentRuntimeManager.start(
-            fingerprint,
             runtimeIndex,
             port,
             requireNotNull(nativeLibraryDir) { "the native library directory is missing" },
@@ -526,7 +522,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     companion object {
-        const val PROTOCOL_VERSION = 4
+        const val PROTOCOL_VERSION = 5
         const val METHOD_START_GAME = 1
         const val METHOD_STOP_GAME = 2
         const val METHOD_INPUT_TEXT = 4

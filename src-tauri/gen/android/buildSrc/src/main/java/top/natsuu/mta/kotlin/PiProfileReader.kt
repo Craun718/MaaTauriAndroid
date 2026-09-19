@@ -21,12 +21,6 @@ data class AgentProfile(
 
 data class AgentRuntimeProfile(
     val bundle: File,
-    /**
-     * Optional pin. When set, the build refuses to package an archive whose digest differs.
-     * When omitted, the build records the archive's actual digest instead, which is what the
-     * on-device check compares the packaged runtime against.
-     */
-    val bundleSha256: String?,
     val exec: String,
     val executables: List<String>,
     val args: List<String>,
@@ -74,13 +68,6 @@ object PiProfileReader {
         require(bundle.isFile) { "agent bundle does not exist: $bundle" }
         return AgentRuntimeProfile(
             bundle = bundle,
-            bundleSha256 = table.getString("bundle_sha256")?.lowercase()?.also { value ->
-                require(value.length == 64 && value.all { char ->
-                    char in '0'..'9' || char in 'a'..'f'
-                }) {
-                    "agent bundle_sha256 must be a SHA-256 digest"
-                }
-            },
             exec = requiredString(table, "exec"),
             executables = requireNotNull(stringArray(table, "executables")) {
                 "agent runtime executables is required"

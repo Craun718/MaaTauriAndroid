@@ -28,7 +28,6 @@ class PiProfileReaderTest {
 
                 [[agent.runtimes]]
                 bundle = "../runtime.zip"
-                bundle_sha256 = "${"a".repeat(64)}"
                 exec = "python/bin/python3"
                 executables = ["python/bin/python3"]
                 args = ["-u"]
@@ -49,59 +48,6 @@ class PiProfileReaderTest {
         assertEquals(20_000L, agent.timeoutMs)
         assertEquals(bundle.canonicalFile, agent.runtimes.single().bundle)
         assertEquals("PYTHONHOME={bundle}/python", agent.runtimes.single().env.entries.single().toString())
-    }
-
-    @Test
-    fun leavesTheBundlePinUnsetWhenTheProfileOmitsIt() {
-        val profileDirectory = temporaryFolder.newFolder("profile")
-        temporaryFolder.newFolder("pi")
-        temporaryFolder.newFile("runtime.zip")
-        val profile = profileDirectory.resolve("pi.toml").apply {
-            writeText(
-                """
-                pi_assets = "../pi"
-                resource_id = "game"
-
-                [[agent.runtimes]]
-                bundle = "../runtime.zip"
-                exec = "python/bin/python3"
-                executables = ["python/bin/python3"]
-                args = ["-u"]
-                working_dir = "{pi}"
-                """.trimIndent(),
-            )
-        }
-
-        val runtime = requireNotNull(requireNotNull(PiProfileReader.read(profile).agent).runtimes.single())
-
-        assertEquals(null, runtime.bundleSha256)
-    }
-
-    @Test
-    fun rejectsABundlePinThatIsNotASha256Digest() {
-        val profileDirectory = temporaryFolder.newFolder("profile")
-        temporaryFolder.newFolder("pi")
-        temporaryFolder.newFile("runtime.zip")
-        val profile = profileDirectory.resolve("pi.toml").apply {
-            writeText(
-                """
-                pi_assets = "../pi"
-                resource_id = "game"
-
-                [[agent.runtimes]]
-                bundle = "../runtime.zip"
-                bundle_sha256 = "not-a-digest"
-                exec = "python/bin/python3"
-                executables = ["python/bin/python3"]
-                args = ["-u"]
-                working_dir = "{pi}"
-                """.trimIndent(),
-            )
-        }
-
-        assertThrows(IllegalArgumentException::class.java) {
-            PiProfileReader.read(profile)
-        }
     }
 
     @Test

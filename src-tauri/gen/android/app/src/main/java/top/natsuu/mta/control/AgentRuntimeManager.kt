@@ -8,7 +8,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
-import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
@@ -19,25 +18,19 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
     @Synchronized
     fun prepare(
         descriptorJson: String,
-        fingerprint: String,
         runtimeIndex: Int,
         piArchive: ParcelFileDescriptor,
         runtimeBundle: ParcelFileDescriptor,
     ) {
         val uid = Binder.getCallingUid()
         val descriptor = parseDescriptor(descriptorJson)
-        requireFingerprint(descriptor.optString("fingerprint"), "descriptor fingerprint")
-        requireFingerprint(fingerprint, "fingerprint")
-        require(descriptor.optString("fingerprint") == fingerprint) {
-            "the supplied fingerprint does not match the descriptor"
-        }
 
         val runtimes = descriptor.getJSONArray("runtimes")
         require(runtimeIndex in 0 until runtimes.length()) {
             "runtime index $runtimeIndex is out of range"
         }
         val runtime = runtimes.getJSONObject(runtimeIndex)
-        val staging = stagingRoot(uid, fingerprint)
+        val staging = stagingRoot(uid)
         if (runtimeIndex == 0) {
             staging.deleteRecursively()
             staging.mkdirs()
@@ -48,32 +41,21 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         try {
             if (runtimeIndex == 0) {
                 val piZip = staging.resolve("pi.zip")
-                val piHash = copyAndDigest(piArchive, piZip)
-                require(piHash == descriptor.optString("piSha256")) {
-                    "the Project Interface archive does not match its digest"
-                }
-            ZipSafety.validateNoSymlinks(piZip)
-            ZipInstaller.extract(piZip, staging.resolve("pi"))
-                val interfaceHash = sha256(staging.resolve("pi/interface.json"))
-                require(interfaceHash == descriptor.optString("interfaceSha256")) {
-                    "the Project Interface hash does not match the agent descriptor"
-                }
+                copyTo(piArchive, piZip)
+                ZipSafety.validateNoSymlinks(piZip)
+                ZipInstaller.extract(piZip, staging.resolve("pi"))
             }
 
             val runtimeRoot = staging.resolve("runtime-$runtimeIndex")
             val runtimeZip = staging.resolve("runtime-$runtimeIndex.zip")
-            val bundleHash = copyAndDigest(runtimeBundle, runtimeZip)
-            require(bundleHash == runtime.optString("bundleSha256")) {
-                "agent runtime $runtimeIndex does not match its bundle digest"
-            }
+            copyTo(runtimeBundle, runtimeZip)
             ZipSafety.validateNoSymlinks(runtimeZip)
             ZipInstaller.extract(runtimeZip, runtimeRoot)
             markExecutables(runtimeRoot, runtime.getJSONArray("executables"))
 
             staging.resolve("runtime.json").writeText(descriptorJson)
-            staging.resolve("runtime.fingerprint").writeText(fingerprint)
             if (runtimeIndex == runtimes.length() - 1) {
-                val final = finalRoot(uid, fingerprint)
+                val final = finalRoot(uid)
                 final.deleteRecursively()
                 require(staging.renameTo(final)) { "could not publish the prepared agent runtime" }
             }
@@ -85,14 +67,12 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
 
     @Synchronized
     fun start(
-        fingerprint: String,
         runtimeIndex: Int,
         port: Int,
         nativeLibraryDir: String,
         executionId: String,
         piEnvironment: String,
     ): AgentLaunch {
-        requireFingerprint(fingerprint, "fingerprint")
         require(port in 1024..65535) { "agent port $port is outside the allowed range" }
         requireExecutionId(executionId)
         require(nativeLibraryDir.isNotEmpty() && !nativeLibraryDir.contains('\u0000')) {
@@ -106,14 +86,8 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
             "agent runtime $runtimeIndex is already running for this execution"
         }
 
-        val root = finalRoot(Binder.getCallingUid(), fingerprint)
+        val root = finalRoot(Binder.getCallingUid())
         val descriptor = parseDescriptor(root.resolve("runtime.json").readText())
-        require(root.resolve("runtime.fingerprint").readText().trim() == fingerprint) {
-            "the prepared agent fingerprint is invalid"
-        }
-        require(canonicalJsonWithoutFingerprint(descriptor) == descriptor.optString("fingerprint").toDigest()) {
-            "the prepared agent descriptor fingerprint is invalid"
-        }
         val runtimes = descriptor.getJSONArray("runtimes")
         require(runtimeIndex in 0 until runtimes.length()) {
             "runtime index $runtimeIndex is out of range"
@@ -214,34 +188,18 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         entries.forEach { entry -> entry.value.values.forEach(AgentProcess::stop) }
     }
 
-    private fun copyAndDigest(input: ParcelFileDescriptor, target: File): String {
+    private fun copyTo(input: ParcelFileDescriptor, target: File) {
         target.parentFile?.mkdirs()
-        val digest = MessageDigest.getInstance("SHA-256")
         ParcelFileDescriptor.AutoCloseInputStream(input).use { stream ->
             target.outputStream().use { output ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
                     val count = stream.read(buffer)
                     if (count < 0) break
-                    digest.update(buffer, 0, count)
                     output.write(buffer, 0, count)
                 }
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
-
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { stream ->
-            val buffer = ByteArray(64 * 1024)
-            while (true) {
-                val count = stream.read(buffer)
-                if (count < 0) break
-                digest.update(buffer, 0, count)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun pipeOutput(
@@ -297,16 +255,12 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         val descriptor = JSONObject(descriptorJson)
         require(descriptor.optInt("schemaVersion") == 1) { "unsupported agent descriptor schema" }
         require(descriptor.optString("abi") == "arm64-v8a") { "unsupported Android agent ABI" }
-        requireFingerprint(descriptor.optString("interfaceSha256"), "interface hash")
-        requireFingerprint(descriptor.optString("piSha256"), "PI archive hash")
-        requireFingerprint(descriptor.optString("fingerprint"), "descriptor fingerprint")
         require(descriptor.optLong("timeoutMs") in 1..600_000) { "invalid agent timeout" }
         val runtimes = descriptor.optJSONArray("runtimes")
         require(runtimes != null && runtimes.length() > 0) { "the descriptor has no agent runtime" }
         for (index in 0 until runtimes.length()) {
             val runtime = runtimes.getJSONObject(index)
             require(runtime.optInt("interfaceIndex") == index) { "agent runtime indexes are not ordered" }
-            requireFingerprint(runtime.optString("bundleSha256"), "runtime bundle hash")
             validateRelativePath(runtime.getString("exec"), index, "exec")
             val executables = runtime.getJSONArray("executables")
             require(executables.length() > 0) { "runtime $index declares no executables" }
@@ -329,49 +283,20 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         }
     }
 
-    private fun requireFingerprint(value: String, label: String) {
-        require(value.length == 64 && value.all { char ->
-            char in '0'..'9' || char in 'a'..'f'
-        }) { "$label is not a SHA-256 digest" }
-    }
-
     private fun requireExecutionId(value: String) {
         require(value.length <= 128 && value.all { it.isLetterOrDigit() || it == '-' || it == '_' }) {
             "the execution id contains unsafe characters"
         }
     }
 
-    private fun stagingRoot(uid: Int, fingerprint: String): File =
-        workspaceRoot.resolve(uid.toString()).resolve(".staging-$fingerprint")
+    private fun stagingRoot(uid: Int): File =
+        workspaceRoot.resolve(uid.toString()).resolve(".staging-agent")
 
-    private fun finalRoot(uid: Int, fingerprint: String): File {
-        val root = workspaceRoot.resolve(uid.toString()).resolve(fingerprint)
+    private fun finalRoot(uid: Int): File {
+        val root = workspaceRoot.resolve(uid.toString()).resolve("agent")
         require(root.exists() || root.mkdirs()) { "the prepared agent workspace is unavailable" }
         return root
     }
-
-    private fun canonicalJsonWithoutFingerprint(descriptor: JSONObject): String {
-        val canonical = JSONObject(descriptor.toString())
-        canonical.remove("fingerprint")
-        return canonicalJson(canonical)
-    }
-
-    private fun canonicalJson(value: Any): String = when (value) {
-        is JSONObject -> value.keys().asSequence().sorted().joinToString(
-            ",",
-            "{",
-            "}",
-        ) { key -> "${JSONObject.quote(key)}:${canonicalJson(value.get(key))}" }
-        is JSONArray -> (0 until value.length()).joinToString(",", "[", "]") { index ->
-            canonicalJson(value.get(index))
-        }
-        is String -> JSONObject.quote(value)
-        else -> value.toString()
-    }
-
-    private fun String.toDigest(): String = MessageDigest.getInstance("SHA-256")
-        .digest(toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
 
     private class AgentProcess(
         val launchId: String,

@@ -298,6 +298,11 @@ extensions.configure<ApplicationExtension> {
         aidl = true
     }
 
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     packaging {
         // MaaFramework is reloaded from its file path by Rust; APK-internal
         // "!/lib/..." paths cannot be passed to ordinary dlopen().

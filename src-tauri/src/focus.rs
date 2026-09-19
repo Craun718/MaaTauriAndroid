@@ -71,7 +71,7 @@ impl FocusSink {
             .and_then(Value::as_str)
             .map(str::to_string);
 
-        for template in parse_focus(focus, message) {
+        for template in parse_focus(focus, &message) {
             let content = template
                 .content
                 .as_deref()

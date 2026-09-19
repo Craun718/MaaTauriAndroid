@@ -25,8 +25,6 @@ const captureManualScreenshot = vi.fn();
 const startRun = vi.fn();
 const stopRun = vi.fn();
 const exportLogs = vi.fn();
-const updateVirtualDisplayBounds = vi.fn();
-const hideVirtualDisplayPreview = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
@@ -41,9 +39,7 @@ vi.mock("../lib/api", () => ({
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
-  updateVirtualDisplayBounds: (...args: unknown[]) =>
-    updateVirtualDisplayBounds(...args),
-  hideVirtualDisplayPreview: () => hideVirtualDisplayPreview(),
+  getVirtualDisplayStream: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -245,8 +241,6 @@ beforeEach(() => {
     height: 720,
     frameCount: 0,
   });
-  updateVirtualDisplayBounds.mockResolvedValue(undefined);
-  hideVirtualDisplayPreview.mockResolvedValue(undefined);
 });
 
 function nestedSwitch() {

@@ -428,6 +428,7 @@ bool ensure_egl_display() {
     const EGLint attributes[] = {
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RECORDABLE_ANDROID, EGL_TRUE,
         EGL_BLUE_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_RED_SIZE, 8,

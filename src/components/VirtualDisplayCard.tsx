@@ -9,21 +9,63 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getVirtualDisplayStatus,
-  hideVirtualDisplayPreview,
+  getVirtualDisplayStream,
   stopVirtualDisplay,
-  updateVirtualDisplayBounds,
 } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
 import { useNotificationStore } from "../store/notificationStore";
 
+type StreamConfig = {
+  type: "config";
+  codec: string;
+  width: number;
+  height: number;
+};
+
+type StreamVideoFrame = {
+  displayWidth: number;
+  displayHeight: number;
+  close: () => void;
+};
+
+type StreamDecoder = {
+  state: "unconfigured" | "configured" | "closed";
+  configure: (config: {
+    codec: string;
+    optimizeForLatency: boolean;
+    avc?: { format: "avc" | "annexb" };
+  }) => void;
+  decode: (chunk: unknown) => void;
+  close: () => void;
+};
+
+type WebCodecsGlobal = {
+  VideoDecoder?: new (init: {
+    output: (frame: StreamVideoFrame) => void;
+    error: (error: Error) => void;
+  }) => StreamDecoder;
+  EncodedVideoChunk?: new (init: {
+    type: "key" | "delta";
+    timestamp: number;
+    data: BufferSource;
+  }) => unknown;
+};
+
+type StreamState =
+  | "connecting"
+  | "ready"
+  | "unavailable"
+  | "unsupported"
+  | "error";
+
 export function VirtualDisplayCard() {
-  const previewRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<VirtualDisplayStatus>();
-  const [statusError, setStatusError] = useState<string>();
+  const [, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
   const [actionPending, setActionPending] = useState(false);
+  const [streamState, setStreamState] = useState<StreamState>("connecting");
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
 
@@ -42,18 +84,6 @@ export function VirtualDisplayCard() {
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
-
-  // The native SurfaceView lives outside React. Clear its bounds when this card
-  // leaves the route while an active run keeps the virtual display itself alive.
-  useEffect(() => {
-    return () => {
-      void hideVirtualDisplayPreview().catch((error: unknown) => {
-        notify(error instanceof Error ? error.message : String(error), {
-          tone: "error",
-        });
-      });
-    };
-  }, [notify]);
 
   useEffect(() => {
     let disposed = false;
@@ -83,80 +113,127 @@ export function VirtualDisplayCard() {
     document.addEventListener("visibilitychange", refreshOnFocus);
     return () => {
       window.removeEventListener("focus", refreshOnFocus);
-      document.removeEventListener("visibilitychange", refreshOnFocus);
+      window.removeEventListener("visibilitychange", refreshOnFocus);
     };
   }, [refreshStatus]);
 
-  const reportBounds = useCallback(() => {
+  useEffect(() => {
     if (status?.active !== true) return;
-    const bounds = previewRef.current?.getBoundingClientRect();
-    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
 
-    void updateVirtualDisplayBounds(
-      bounds.left,
-      bounds.top,
-      bounds.width,
-      bounds.height,
-    ).catch((error: unknown) => {
-      setStatusError(error instanceof Error ? error.message : String(error));
-    });
-  }, [status?.active]);
+    let socket: WebSocket | undefined;
+    let decoder: StreamDecoder | undefined;
+    let disposed = false;
+    setStreamState("connecting");
 
-  const scheduleBoundsReport = useCallback(() => {
-    if (animationRef.current !== 0) return;
-    animationRef.current = window.requestAnimationFrame(() => {
-      animationRef.current = 0;
-      reportBounds();
-    });
-  }, [reportBounds]);
-
-  useEffect(() => {
-    reportBounds();
-  }, [reportBounds]);
-
-  useEffect(() => {
-    const element = previewRef.current;
-    if (!element || typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(scheduleBoundsReport);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [scheduleBoundsReport]);
-
-  useEffect(() => {
-    const scrollOptions: AddEventListenerOptions = {
-      passive: true,
-      capture: true,
-    };
-    window.addEventListener("resize", scheduleBoundsReport);
-    window.addEventListener("scroll", scheduleBoundsReport, scrollOptions);
-    window.visualViewport?.addEventListener("resize", scheduleBoundsReport);
-    window.visualViewport?.addEventListener("scroll", scheduleBoundsReport, {
-      passive: true,
-    });
-    return () => {
-      window.removeEventListener("resize", scheduleBoundsReport);
-      window.removeEventListener("scroll", scheduleBoundsReport, scrollOptions);
-      window.visualViewport?.removeEventListener(
-        "resize",
-        scheduleBoundsReport,
-      );
-      window.visualViewport?.removeEventListener(
-        "scroll",
-        scheduleBoundsReport,
-      );
-    };
-  }, [scheduleBoundsReport]);
-
-  useEffect(
-    () => () => {
-      if (animationRef.current !== 0) {
-        window.cancelAnimationFrame(animationRef.current);
-        animationRef.current = 0;
+    async function connect() {
+      const webCodecs = window as unknown as WebCodecsGlobal;
+      const encodedChunkConstructor = webCodecs.EncodedVideoChunk;
+      if (!webCodecs.VideoDecoder || !encodedChunkConstructor) {
+        setStreamState("unsupported");
+        return;
       }
-    },
-    [],
-  );
+
+      const stream = await getVirtualDisplayStream();
+      if (disposed) return;
+      if (!stream.url) {
+        setStreamState("unavailable");
+        return;
+      }
+
+      decoder = new webCodecs.VideoDecoder({
+        output(frame) {
+          const canvas = canvasRef.current;
+          if (!canvas) {
+            frame.close();
+            return;
+          }
+          canvas.width = frame.displayWidth;
+          canvas.height = frame.displayHeight;
+          const context = canvas.getContext("2d");
+          if (!context) {
+            frame.close();
+            return;
+          }
+          context.drawImage(frame as unknown as CanvasImageSource, 0, 0);
+          frame.close();
+        },
+        error() {
+          setStreamState("error");
+        },
+      });
+
+      socket = new WebSocket(stream.url);
+      socket.binaryType = "arraybuffer";
+      socket.onopen = () => {
+        if (!disposed) setStreamState("connecting");
+      };
+      socket.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
+        if (disposed) return;
+
+        if (typeof event.data === "string") {
+          try {
+            const config = JSON.parse(event.data) as StreamConfig;
+            if (
+              config.type !== "config" ||
+              !config.codec ||
+              decoder?.state === "closed"
+            ) {
+              return;
+            }
+            decoder?.configure({
+              codec: config.codec,
+              optimizeForLatency: true,
+              avc: { format: "annexb" },
+            });
+            setStreamState("ready");
+          } catch {
+            setStreamState("error");
+          }
+          return;
+        }
+
+        if (decoder?.state !== "configured") return;
+        try {
+          const view = new DataView(event.data);
+          const flags = view.getUint8(0);
+          const timestamp = Number(view.getBigUint64(1));
+          const chunk = new encodedChunkConstructor({
+            type: flags & 1 ? "key" : "delta",
+            timestamp,
+            data: event.data.slice(9),
+          });
+          decoder.decode(chunk);
+        } catch {
+          setStreamState("error");
+        }
+      };
+      socket.onerror = () => {
+        if (!disposed) setStreamState("error");
+      };
+      socket.onclose = () => {
+        if (!disposed) {
+          setStreamState((current) =>
+            current === "connecting" ? "error" : current,
+          );
+        }
+      };
+    }
+
+    connect().catch(() => {
+      if (!disposed) setStreamState("error");
+    });
+
+    return () => {
+      disposed = true;
+      if (
+        socket?.readyState === WebSocket.OPEN ||
+        socket?.readyState === WebSocket.CONNECTING
+      ) {
+        socket.close();
+      }
+      if (decoder && decoder.state !== "closed") decoder.close();
+    };
+  }, [status?.active]);
 
   async function stopDisplay() {
     if (actionPending) return;
@@ -187,6 +264,15 @@ export function VirtualDisplayCard() {
       ? t("virtualDisplayRunning")
       : t("virtualDisplayStopped")
     : t("checking");
+  const streamLabel = active
+    ? {
+        connecting: t("virtualDisplayStreamConnecting"),
+        ready: "",
+        unavailable: t("virtualDisplayStreamUnavailable"),
+        unsupported: t("virtualDisplayCodecUnsupported"),
+        error: t("virtualDisplayStreamError"),
+      }[streamState]
+    : undefined;
 
   return (
     <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
@@ -228,10 +314,23 @@ export function VirtualDisplayCard() {
         </button>
       </div>
 
-      <div
-        ref={previewRef}
-        className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-line bg-surface-muted"
-      />
+      <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-line bg-surface-muted">
+        <canvas
+          ref={canvasRef}
+          className="h-full w-full object-contain"
+          aria-label={t("virtualDisplay")}
+        />
+        {streamLabel && (
+          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-surface-muted/90 px-3 py-2 text-xs text-ink-muted">
+            {streamState === "connecting" ? (
+              <LoaderCircle size={12} className="animate-spin" />
+            ) : (
+              <CircleAlert size={12} />
+            )}
+            {streamLabel}
+          </div>
+        )}
+      </div>
 
       {active && (
         <div className="flex items-center justify-between gap-3 text-sm">
@@ -252,13 +351,6 @@ export function VirtualDisplayCard() {
             {t("stop")}
           </button>
         </div>
-      )}
-
-      {statusError && (
-        <p className="flex items-start gap-2 break-all text-sm text-red-600 dark:text-red-300">
-          <CircleAlert size={16} className="mt-0.5 shrink-0" />
-          {statusError}
-        </p>
       )}
     </section>
   );

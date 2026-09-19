@@ -1,19 +1,22 @@
 package top.natsuu.mta.control
 
-import android.content.Context
 import android.content.ComponentName
+import android.content.AttributionSource
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
+import androidx.annotation.RequiresApi
 import top.natsuu.mta.AgentLaunch
 import top.natsuu.mta.InputResult
 import java.util.concurrent.Executors
@@ -39,7 +42,8 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun startVirtualDisplay(width: Int, height: Int, dpi: Int, surface: Surface): Int {
         require(width > 0 && height > 0 && dpi > 0) { "invalid virtual display geometry" }
-        val displayContext = context ?: return DISPLAY_NONE
+        val baseContext = context ?: return DISPLAY_NONE
+        val displayContext = ShellIdentityContext(baseContext)
         stopVirtualDisplay()
 
         // Several DisplayManager flags are hidden from the public SDK. Their numeric
@@ -52,7 +56,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             }
         }
         val display = displayContext
-            .getSystemService(DisplayManager::class.java)
+            .let(ShellIdentityContext::createDisplayManager)
             ?.createVirtualDisplay(
                 "TTFlowVirtualDisplay",
                 width,
@@ -63,6 +67,40 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             ) ?: return DISPLAY_NONE
         virtualDisplay.set(display)
         return display.display.displayId
+    }
+
+    /**
+     * Shizuku services run as the shell UID while retaining the host package's
+     * Context. DisplayManager validates that identity pair, so present the
+     * same identity to system_server that MaaFw and shell tools use.
+     */
+    private class ShellIdentityContext(base: Context) : ContextWrapper(base) {
+        override fun getPackageName(): String = PACKAGE_NAME
+
+        override fun getOpPackageName(): String = PACKAGE_NAME
+
+        @RequiresApi(Build.VERSION_CODES.S)
+        override fun getAttributionSource(): AttributionSource =
+            AttributionSource.Builder(android.os.Process.SHELL_UID)
+                .setPackageName(PACKAGE_NAME)
+                .build()
+
+        companion object {
+            private const val PACKAGE_NAME = "com.android.shell"
+
+            fun createDisplayManager(context: Context): DisplayManager? = runCatching {
+                DisplayManager::class.java
+                    .getDeclaredConstructor(Context::class.java)
+                    .apply { isAccessible = true }
+                    .newInstance(context) as DisplayManager
+            }.onFailure { error ->
+                android.util.Log.w(
+                    "MaaTauriAndroidControl",
+                    "Could not construct shell DisplayManager",
+                    error,
+                )
+            }.getOrNull()
+        }
     }
 
     override fun stopVirtualDisplay() {

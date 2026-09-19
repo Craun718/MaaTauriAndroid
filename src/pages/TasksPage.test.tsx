@@ -250,10 +250,7 @@ function expandTaskDetails(label: string) {
 }
 
 function selectNestedCase(checked: boolean) {
-  const checkbox = nestedSwitch();
-  if (checkbox.checked !== checked) {
-    fireEvent.click(checkbox);
-  }
+  fireEvent.change(nestedSwitch(), { target: { checked } });
 }
 
 function enabledResolvedTasks() {
@@ -458,7 +455,11 @@ describe("run configuration tabs and flat task list", () => {
         },
       });
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    const runSection = (
+      await screen.findByRole("heading", { name: "0 tasks ready" })
+    ).closest("section");
+    if (!runSection) throw new Error("Run panel not found");
+    fireEvent.click(within(runSection).getByRole("button", { name: "Stop" }));
 
     await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));
   });
@@ -483,9 +484,7 @@ describe("run configuration tabs and flat task list", () => {
   it("places the virtual display above the run queue", async () => {
     renderTasksPage();
 
-    const virtualDisplay = await screen.findByRole("heading", {
-      name: "1280 x 720",
-    });
+    const virtualDisplay = await screen.findByText("1280 x 720");
     const runQueue = screen.getByRole("heading", { name: "0 tasks ready" });
     expect(virtualDisplay.compareDocumentPosition(runQueue)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -734,9 +733,16 @@ describe("run status restoration", () => {
 
 describe("manual screenshot notifications", () => {
   it("shows a run-scoped in-app notice without exposing the raw path", async () => {
+    getRunStatus.mockResolvedValue({
+      executionId: "run-1",
+      state: "Running",
+      message: "The run started",
+    });
     renderTasksPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Shot" }));
+    const capture = await screen.findByRole("button", { name: "Shot" });
+    await waitFor(() => expect(capture).toBeEnabled());
+    fireEvent.click(capture);
 
     const message = await screen.findByText("Screenshot saved to this run.");
     expect(message.closest('[role="status"]')).toHaveTextContent(

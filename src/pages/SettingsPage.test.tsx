@@ -144,7 +144,9 @@ describe("project scope in settings", () => {
   it("saves a resource option change", async () => {
     renderSettingsPage();
 
-    fireEvent.click(screen.getByRole("radio", { name: "1080p" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Resolution" }), {
+      target: { value: "1080p" },
+    });
 
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
     expect(saveConfiguration.mock.calls[0][0]).toMatchObject({
@@ -159,7 +161,7 @@ describe("project scope in settings", () => {
 
     expect(screen.getByText("分辨率").tagName).toBe("STRONG");
     expect(screen.getByText("720").tagName).toBe("STRONG");
-    expect(screen.getByRole("radio", { name: /720p/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /720p/ })).toBeInTheDocument();
   });
 
   it("exports logs from the diagnostics card", async () => {

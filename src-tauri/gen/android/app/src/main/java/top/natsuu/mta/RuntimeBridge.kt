@@ -220,10 +220,13 @@ object RuntimeBridge {
 
     @JvmStatic
     fun openAgentAsset(name: String): ParcelFileDescriptor? {
-        return requireNotNull(agentContext) { "the agent bridge context is missing" }
-            .assets
-            .openFd(name)
-            .use { descriptor -> ParcelFileDescriptor.dup(descriptor.fileDescriptor) }
+        val context = requireNotNull(agentContext) { "the agent bridge context is missing" }
+        val asset = context.assets.open(name)
+        val file = File.createTempFile("agent-asset-", ".zip", context.cacheDir)
+        file.outputStream().use { destination -> asset.use { it.copyTo(destination) } }
+        val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+        file.delete()
+        return descriptor
     }
 
     @JvmStatic

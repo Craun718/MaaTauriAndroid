@@ -737,7 +737,7 @@ pub fn run_tasks(
             return Ok(RunOutcome::Stopped);
         }
         logger
-            .append(
+            .append_to_ui(
                 crate::run_log::RunEventKind::Task,
                 RunState::Running,
                 format!("Maa task {} started", task.task.entry),
@@ -759,7 +759,7 @@ pub fn run_tasks(
         }
         let entry = task.task.entry.clone();
         logger
-            .append(
+            .append_to_ui(
                 crate::run_log::RunEventKind::Failure,
                 RunState::Running,
                 format!("Maa task {entry} failed: {status}"),

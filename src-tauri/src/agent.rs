@@ -643,7 +643,7 @@ fn forward_output(execution_id: &str, file: File, stream: &'static str) {
                 let Ok(line) = line else { break };
                 if let Some(logger) = crate::run_log::latest_global() {
                     if logger.execution_id() == execution_id {
-                        let _ = logger.append(
+                        let _ = logger.append_to_ui(
                             RunEventKind::Task,
                             RunState::Running,
                             line,

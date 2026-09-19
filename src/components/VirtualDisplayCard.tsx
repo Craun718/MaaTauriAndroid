@@ -145,13 +145,32 @@ export function VirtualDisplayCard() {
         height: status.height,
       })
     : t("checking");
+  const statusLabel = status
+    ? active
+      ? t("virtualDisplayRunning")
+      : t("virtualDisplayStopped")
+    : t("checking");
 
   return (
     <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <MonitorPlay size={18} className="text-accent" />
-          <h2 className="font-medium">{t("virtualDisplay")}</h2>
+          <h2 className="min-w-0 truncate font-medium">{geometry}</h2>
+          <span
+            className={`flex h-6 flex-none items-center gap-1.5 rounded-md border px-2 text-xs font-medium ${
+              active
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-line bg-surface-muted text-ink-muted"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                active ? "bg-accent" : "bg-ink-muted"
+              }`}
+            />
+            {statusLabel}
+          </span>
         </div>
         <button
           type="button"
@@ -170,22 +189,13 @@ export function VirtualDisplayCard() {
       <div
         ref={previewRef}
         className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-line bg-surface-muted"
-      >
-        <span className="text-xs font-medium text-ink-muted">
-          {active ? t("virtualDisplayRunning") : t("virtualDisplayStopped")}
-        </span>
-      </div>
+      />
 
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <div className="min-w-0">
-          <p className="font-medium">{geometry}</p>
-          <p className="text-xs text-ink-muted">
-            {status?.active
-              ? t("displayId", { id: status.displayId })
-              : t("virtualDisplayStopped")}
+      {active && (
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <p className="min-w-0 text-xs text-ink-muted">
+            {t("displayId", { id: status.displayId })}
           </p>
-        </div>
-        {active && (
           <button
             type="button"
             onClick={() => void stopDisplay()}
@@ -199,8 +209,8 @@ export function VirtualDisplayCard() {
             )}
             {t("stop")}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {statusError && (
         <p className="flex items-start gap-2 break-all text-sm text-red-600 dark:text-red-300">

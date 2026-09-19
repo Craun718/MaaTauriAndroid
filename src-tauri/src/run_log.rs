@@ -53,6 +53,7 @@ pub struct RunLogger {
     execution_id: String,
     run_dir: PathBuf,
     sequence: Mutex<u64>,
+    ui_sink: Mutex<Option<Arc<dyn Fn(&RunEvent) + Send + Sync>>>,
 }
 
 static LATEST_LOGGER: RwLock<Option<Arc<RunLogger>>> = RwLock::new(None);
@@ -78,6 +79,7 @@ impl RunLogger {
             execution_id: execution_id.to_string(),
             run_dir,
             sequence: Mutex::new(0),
+            ui_sink: Mutex::new(None),
         })
     }
 
@@ -87,6 +89,10 @@ impl RunLogger {
 
     pub fn run_dir(&self) -> &Path {
         &self.run_dir
+    }
+
+    pub fn set_ui_sink(&self, sink: Arc<dyn Fn(&RunEvent) + Send + Sync>) {
+        *self.ui_sink.write().expect("run log UI sink lock poisoned") = Some(sink);
     }
 
     pub fn append(
@@ -124,6 +130,28 @@ impl RunLogger {
         log::log!(target: RUN_EVENT_TARGET, level, "{payload}");
         Ok(event)
     }
+
+    /// Appends and forwards a copy to listeners that cannot own an `AppHandle`
+    /// (the Python agent reader and background task runner, for example).
+    pub fn append_to_ui(
+        &self,
+        kind: RunEventKind,
+        state: crate::runtime::RunState,
+        message: impl Into<String>,
+        task_name: Option<String>,
+        data: Option<Value>,
+    ) -> Result<RunEvent, RunLogError> {
+        let event = self.append(kind, state, message, task_name, data)?;
+        if let Some(sink) = self
+            .ui_sink
+            .read()
+            .expect("run log UI sink lock poisoned")
+            .as_ref()
+        {
+            sink(&event);
+        }
+        Ok(event)
+    }
 }
 
 pub fn sanitize(value: &str) -> String {
@@ -148,6 +176,7 @@ pub fn sanitize(value: &str) -> String {
 mod tests {
     use super::*;
     use crate::runtime::RunState;
+    use std::sync::Mutex as StdMutex;
 
     #[test]
     fn appends_sequenced_run_events() {
@@ -177,6 +206,31 @@ mod tests {
         assert_eq!(second.sequence, 2);
         assert_eq!(second.task_name.as_deref(), Some("Login"));
         assert!(logger.run_dir().join("logs").is_dir());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn append_to_ui_forwards_exactly_once() {
+        let root =
+            std::env::temp_dir().join(format!("maa_tauri_android-run-{}", uuid::Uuid::new_v4()));
+        let logger = RunLogger::create(&root, "run/ui").unwrap();
+        let messages: Arc<StdMutex<Vec<String>>> = Arc::default();
+        let sink_messages = messages.clone();
+        logger.set_ui_sink(Arc::new(move |event| {
+            sink_messages.lock().unwrap().push(event.message.clone());
+        }));
+
+        logger
+            .append_to_ui(
+                RunEventKind::Task,
+                RunState::Running,
+                "agent line",
+                None,
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(*messages.lock().unwrap(), ["agent line"]);
         fs::remove_dir_all(root).unwrap();
     }
 }

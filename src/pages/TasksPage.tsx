@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
 import { OptionEditor } from "../components/OptionEditor";
 import { RichDescription } from "../components/RichDescription";
+import { RunActivityTabs } from "../components/RunActivityTabs";
 import { RunPanel } from "../components/RunPanel";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
@@ -226,58 +227,64 @@ export function TasksPage() {
       <h1 className="text-2xl font-semibold">{t("tasksAndRun")}</h1>
       <VirtualDisplayCard />
       <RunPanel />
-      {project.presets.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="font-medium">{t("presets")}</h2>
-          <PresetPicker
-            presets={project.presets}
-            value={selectedPreset}
-            onValueChange={setSelectedPreset}
-            onApply={(name) => void applyPreset(name)}
-            applyLabel={t("applyPreset")}
-          />
-        </section>
-      )}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <Tabs
-              items={configTabItems}
-              value={activeRun?.id}
-              onValueChange={switchConfiguration}
-              ariaLabel={t("tasksAndRun")}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={createConfiguration}
-            aria-label={t("newConfiguration")}
-            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={reorderTasks}
-        >
-          <SortableContext
-            items={activeRun?.tasks.map((task) => task.instanceId) ?? []}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-2 rounded-lg border border-line bg-surface-muted p-2">
-              {activeRun?.tasks.map(renderConfiguredTask)}
-            </div>
-          </SortableContext>
-        </DndContext>
-        <AddTaskPicker
-          available={availableTasks}
-          onAdd={addTask}
-          addLabel={t("addTask")}
-          emptyLabel={t("noTasksToAdd")}
-        />
-      </section>
+      <RunActivityTabs
+        taskList={
+          <>
+            {project.presets.length > 0 && (
+              <section className="space-y-2">
+                <h2 className="font-medium">{t("presets")}</h2>
+                <PresetPicker
+                  presets={project.presets}
+                  value={selectedPreset}
+                  onValueChange={setSelectedPreset}
+                  onApply={(name) => void applyPreset(name)}
+                  applyLabel={t("applyPreset")}
+                />
+              </section>
+            )}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <Tabs
+                    items={configTabItems}
+                    value={activeRun?.id}
+                    onValueChange={switchConfiguration}
+                    ariaLabel={t("tasksAndRun")}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={createConfiguration}
+                  aria-label={t("newConfiguration")}
+                  className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={reorderTasks}
+              >
+                <SortableContext
+                  items={activeRun?.tasks.map((task) => task.instanceId) ?? []}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2 rounded-lg border border-line bg-surface-muted p-2">
+                    {activeRun?.tasks.map(renderConfiguredTask)}
+                  </div>
+                </SortableContext>
+              </DndContext>
+              <AddTaskPicker
+                available={availableTasks}
+                onAdd={addTask}
+                addLabel={t("addTask")}
+                emptyLabel={t("noTasksToAdd")}
+              />
+            </section>
+          </>
+        }
+      />
       {focusNotice && (
         <div
           role="alertdialog"

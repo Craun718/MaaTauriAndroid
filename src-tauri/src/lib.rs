@@ -875,6 +875,10 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
         runtime::RunResultSeverity::Info,
         "The run is being prepared".to_string(),
     );
+    let ui_app = app.clone();
+    logger.set_ui_sink(Arc::new(move |event| {
+        let _ = ui_app.emit("run-event", event);
+    }));
     let stopped_before_start = state.maa.begin_preparing(&execution_id)?;
     state.set_latest_log(logger.clone());
     run_log::set_latest_global(logger.clone());

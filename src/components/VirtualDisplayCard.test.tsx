@@ -45,9 +45,9 @@ describe("VirtualDisplayCard", () => {
     render(<VirtualDisplayCard />);
 
     expect(
-      await screen.findByRole("heading", { name: "Virtual display" }),
+      await screen.findByRole("heading", { name: "1280 x 720" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Stopped")).toHaveLength(2);
+    expect(screen.getAllByText("Stopped")).toHaveLength(1);
     expect(
       screen.queryByRole("button", { name: "Start" }),
     ).not.toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("VirtualDisplayCard", () => {
     fireEvent.click(stop);
 
     expect(stopVirtualDisplay).toHaveBeenCalledTimes(1);
-    expect(await screen.findAllByText("Stopped")).toHaveLength(2);
+    expect(await screen.findAllByText("Stopped")).toHaveLength(1);
   });
 
   it("shows stop failures", async () => {

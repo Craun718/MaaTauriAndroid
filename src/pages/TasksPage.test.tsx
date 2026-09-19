@@ -332,7 +332,7 @@ describe("run configuration tabs and flat task list", () => {
     renderTasksPage();
 
     const virtualDisplay = await screen.findByRole("heading", {
-      name: "Virtual display",
+      name: "1280 x 720",
     });
     const runQueue = screen.getByRole("heading", { name: "0 tasks ready" });
     expect(virtualDisplay.compareDocumentPosition(runQueue)).toBe(
@@ -340,6 +340,70 @@ describe("run configuration tabs and flat task list", () => {
     );
     expect(screen.queryByText("Base")).not.toBeInTheDocument();
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
+  });
+
+  it("uses a segmented run-activity selector below run controls", () => {
+    renderTasksPage();
+
+    const activityTabs = screen.getByRole("tablist", {
+      name: "Run activity",
+    });
+    const configurationTabs = screen.getByRole("tablist", {
+      name: "Tasks & Run",
+    });
+    expect(activityTabs).not.toHaveClass("tabs-box");
+    expect(configurationTabs).toHaveClass("tabs-box");
+    expect(screen.getByRole("tab", { name: "Task list" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
+  it("collects status, focus and agent output while the task list is selected", () => {
+    renderTasksPage();
+
+    const runEventHandlers = eventHandlers.handlers["run-event"] ?? [];
+    const emit = (payload: unknown) => runEventHandlers.at(-1)?.({ payload });
+    emit({
+      executionId: "run-1",
+      sequence: 1,
+      atUnixMs: 1,
+      kind: "started",
+      state: "Running",
+      message: "The run started",
+    });
+    emit({
+      executionId: "run-1",
+      sequence: 2,
+      atUnixMs: 2,
+      kind: "focus",
+      state: "Running",
+      message: "NodeA started",
+      taskName: "NodeA",
+      data: { channel: "log", messageType: "Node.Action.Starting" },
+    });
+    emit({
+      executionId: "run-1",
+      sequence: 3,
+      atUnixMs: 3,
+      kind: "task",
+      state: "Running",
+      message: "agent says ready",
+      data: { source: "python-agent", stream: "stdout" },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Task logs" }));
+
+    expect(screen.getByText("The run started")).toBeInTheDocument();
+    expect(screen.getByText("NodeA started")).toBeInTheDocument();
+    expect(screen.getByText("agent says ready")).toBeInTheDocument();
+    expect(screen.getAllByText("Status")).toHaveLength(1);
+    expect(screen.getAllByText("Focus")).toHaveLength(1);
+    expect(screen.getAllByText("Agent")).toHaveLength(1);
   });
 
   it("renders run configurations as tabs with the active one selected", () => {

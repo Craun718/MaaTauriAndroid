@@ -90,7 +90,8 @@ const en = {
   diagnosticsPartial: "partial with gaps",
   diagnosticsExported: "Diagnostics exported: {path}",
   diagnosticsExportedWithGaps: "Diagnostics exported with gaps: {reasons}",
-  screenshotSaved: "Screenshot saved: {path}",
+  screenshotSavedNotice:
+    "Screenshot saved to this run. You can find it in the diagnostic export.",
 
   // Settings
   settings: "Settings",
@@ -181,7 +182,7 @@ const zh: Record<MessageKey, string> = {
   diagnosticsPartial: "部分内容缺失",
   diagnosticsExported: "诊断已导出：{path}",
   diagnosticsExportedWithGaps: "诊断已导出，但存在缺口：{reasons}",
-  screenshotSaved: "截图已保存：{path}",
+  screenshotSavedNotice: "截图已保存到本次运行记录，导出诊断包时可以查看。",
 
   settings: "设置",
   apply: "应用",

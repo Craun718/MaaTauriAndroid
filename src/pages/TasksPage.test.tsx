@@ -12,10 +12,11 @@ const saveConfiguration = vi.fn();
 const resolveCurrent = vi.fn();
 const getRunStatus = vi.fn();
 const getVirtualDisplayStatus = vi.fn();
+const captureManualScreenshot = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
-  captureManualScreenshot: vi.fn(),
+  captureManualScreenshot: () => captureManualScreenshot(),
   exportDiagnostics: vi.fn(),
   getRunStatus: () => getRunStatus(),
   resolveCurrent: () => resolveCurrent(),
@@ -196,6 +197,10 @@ beforeEach(() => {
     executionId: undefined,
     state: "Idle",
     message: "Idle",
+  });
+  captureManualScreenshot.mockResolvedValue({
+    executionId: "run-1",
+    path: "/data/user/0/top.natsuu.mta.m/runs/run-1/screens/manual-1.png",
   });
   getVirtualDisplayStatus.mockResolvedValue({
     active: false,
@@ -427,5 +432,42 @@ describe("focus notifications", () => {
     await waitFor(() =>
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("manual screenshot notifications", () => {
+  it("shows a run-scoped in-app notice without exposing the raw path", async () => {
+    render(<TasksPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Shot" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Screenshot saved to this run. You can find it in the diagnostic export.",
+    );
+    expect(
+      screen.queryByText(/\/data\/user\/0\/.*manual-1\.png/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores the backend screenshot event's diagnostic wording", async () => {
+    render(<TasksPage />);
+
+    await waitFor(() =>
+      expect(eventHandlers.handlers["run-event"]).toBeDefined(),
+    );
+    eventHandlers.handlers["run-event"][0]({
+      payload: {
+        executionId: "run-1",
+        sequence: 1,
+        atUnixMs: 1,
+        kind: "screenshot",
+        state: "Idle",
+        message: "Manual screenshot saved: /data/user/0/app/manual-1.png",
+      },
+    });
+
+    expect(
+      screen.queryByText(/Manual screenshot saved:/),
+    ).not.toBeInTheDocument();
   });
 });

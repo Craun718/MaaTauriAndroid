@@ -572,22 +572,33 @@ pub fn maa_log_dir() -> Option<&'static Path> {
     MAA_LOG_DIR.get().map(PathBuf::as_path)
 }
 
-/// Points MaaFramework's file log at the app-owned directory. Best effort:
-/// the framework falls back to the process working directory when this fails.
+/// Points MaaFramework's file log at the app-owned directory and saves error
+/// screenshots beside it. Best effort: the framework falls back to the process
+/// working directory when this fails.
 fn configure_framework_logging() {
     let Some(log_dir) = maa_log_dir() else {
         return;
     };
-    if let Err(error) = maa_framework::configure_logging(&log_dir.to_string_lossy()) {
+    let warn = |message: String| {
         if let Some(logger) = crate::run_log::latest_global() {
             let _ = logger.append(
                 crate::run_log::RunEventKind::Warning,
                 RunState::Preparing,
-                format!("MaaFramework log directory could not be set: {error}"),
+                message,
                 None,
                 None,
             );
         }
+    };
+    if let Err(error) = maa_framework::configure_logging(&log_dir.to_string_lossy()) {
+        warn(format!(
+            "MaaFramework log directory could not be set: {error}"
+        ));
+    }
+    if let Err(error) = maa_framework::set_save_on_error(true) {
+        warn(format!(
+            "MaaFramework error screenshots could not be enabled: {error}"
+        ));
     }
 }
 

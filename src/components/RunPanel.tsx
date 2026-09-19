@@ -30,6 +30,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const [runState, setRunState] = useState("Idle");
   const [starting, setStarting] = useState(false);
   const executionIdRef = useRef<string | undefined>(undefined);
+  const projectRoot = snapshot?.project?.root;
   const { exportLogs, exporting } = useLogExport();
   const [capturing, setCapturing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -47,6 +48,13 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   useEffect(() => {
     if (!snapshot) return;
     resolveCurrent().then(setRun).catch(reportError);
+  }, [snapshot, reportError]);
+
+  // Restoring the latest error is a mount-time recovery path. Re-running it on
+  // every configuration save would resurface an old failure whenever a task
+  // checkbox changes.
+  useEffect(() => {
+    if (!projectRoot) return;
     getRunStatus()
       .then((result) => {
         if (!result.executionId) return;
@@ -61,7 +69,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         setStatus(result.message);
       })
       .catch(() => undefined);
-  }, [snapshot, notify, reportError]);
+  }, [projectRoot, notify]);
 
   useEffect(() => {
     let disposed = false;

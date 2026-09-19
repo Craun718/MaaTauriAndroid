@@ -1054,6 +1054,11 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         return;
                     }
                 };
+                let task_name = if let runtime::RunOutcome::Failed { task_name, .. } = &outcome {
+                    Some(task_name.clone())
+                } else {
+                    None
+                };
                 let (kind, state, message, outcome_label, attachment_path) = match outcome {
                     runtime::RunOutcome::Completed => (
                         run_log::RunEventKind::Completed,
@@ -1069,7 +1074,11 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         "stopped",
                         None,
                     ),
-                    runtime::RunOutcome::Failed { entry } => {
+                    runtime::RunOutcome::Failed {
+                        entry,
+                        task_name,
+                        status,
+                    } => {
                         let mut attachment_path = None;
                         match diagnostics::capture_failure_screenshot(
                             logger_for_run.run_dir(),
@@ -1093,13 +1102,15 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         (
                             run_log::RunEventKind::Failure,
                             runtime::RunState::Idle,
-                            format!("Maa task {entry} failed"),
+                            format!("Maa task {entry} failed: {status}"),
                             "failed",
                             attachment_path,
                         )
                     }
                 };
-                if let Ok(event) = logger_for_run.append(kind, state, message.clone(), None, None) {
+                if let Ok(event) =
+                    logger_for_run.append(kind, state, message.clone(), task_name, None)
+                {
                     let _ = app.emit("run-event", &event);
                 }
                 telemetry::run_event(

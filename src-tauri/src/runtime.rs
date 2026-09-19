@@ -3,8 +3,8 @@ use crate::domain::types::ResolvedTask;
 #[cfg(target_os = "android")]
 use jni::objects::{GlobalRef, JClass, JString};
 use maa_framework::{
-    controller::Controller, resource::Resource, tasker::Tasker, AndroidNativeControllerConfig,
-    AndroidScreenResolution,
+    common::MaaStatus, controller::Controller, resource::Resource, tasker::Tasker,
+    AndroidNativeControllerConfig, AndroidScreenResolution,
 };
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -734,7 +734,11 @@ pub struct CreatedSession {
 pub enum RunOutcome {
     Completed,
     Stopped,
-    Failed { entry: String },
+    Failed {
+        entry: String,
+        task_name: String,
+        status: MaaStatus,
+    },
 }
 
 pub fn run_tasks(
@@ -769,16 +773,21 @@ pub fn run_tasks(
             return Ok(RunOutcome::Stopped);
         }
         let entry = task.task.entry.clone();
+        let task_name = task.task.name.clone();
         logger
             .append_to_ui(
-                crate::run_log::RunEventKind::Failure,
+                crate::run_log::RunEventKind::Task,
                 RunState::Running,
                 format!("Maa task {entry} failed: {status}"),
-                Some(task.task.name.clone()),
+                Some(task_name.clone()),
                 None,
             )
             .map_err(|error| RuntimeError::Maa(error.to_string()))?;
-        return Ok(RunOutcome::Failed { entry });
+        return Ok(RunOutcome::Failed {
+            entry,
+            task_name,
+            status,
+        });
     }
     Ok(RunOutcome::Completed)
 }

@@ -762,6 +762,26 @@ describe("run status restoration", () => {
     );
     expect(screen.getAllByText("The run failed")).toHaveLength(2);
   });
+
+  it("does not restore a failed run again after saving a checkbox", async () => {
+    getRunStatus.mockResolvedValue({
+      executionId: "run-1",
+      state: "Idle",
+      severity: "error",
+      message: "The run failed",
+    });
+
+    renderTasksPage();
+    await screen.findByRole("alert");
+    await waitFor(() => expect(getRunStatus).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "On" })[1]);
+    await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(useAppStore.getState().busy).toBe(false));
+
+    expect(getRunStatus).toHaveBeenCalledTimes(1);
+    expect(useNotificationStore.getState().notifications).toHaveLength(1);
+  });
 });
 
 describe("manual screenshot notifications", () => {

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useRunLogStore } from "./runLogStore";
 
 export type NotificationTone = "info" | "warning" | "error";
 
@@ -13,25 +14,38 @@ interface NotificationStore {
   notifications: AppNotification[];
   notify: (
     message: string,
-    options?: { tone?: NotificationTone; durationMs?: number },
+    options?: {
+      tone?: NotificationTone;
+      durationMs?: number;
+      logToActivity?: boolean;
+    },
   ) => number;
   dismiss: (id: number) => void;
 }
 
 let nextNotificationId = 1;
 const maxVisibleNotifications = 3;
+const defaultNotificationDurationMs = 15000;
 
 export const useNotificationStore = create<NotificationStore>((set) => ({
   notifications: [],
   notify(message, options) {
     const id = nextNotificationId;
     nextNotificationId += 1;
+    const tone = options?.tone ?? "info";
     const notification: AppNotification = {
       id,
-      tone: options?.tone ?? "info",
+      tone,
       message,
-      durationMs: options?.durationMs ?? 5000,
+      durationMs: options?.durationMs ?? defaultNotificationDurationMs,
     };
+    if (tone !== "info" && options?.logToActivity !== false) {
+      useRunLogStore.getState().appendNotification({
+        atUnixMs: Date.now(),
+        tone,
+        message,
+      });
+    }
     set((state) => ({
       notifications: [...state.notifications, notification].slice(
         -maxVisibleNotifications,

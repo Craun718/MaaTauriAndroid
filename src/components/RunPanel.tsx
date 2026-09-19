@@ -78,7 +78,10 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           payload.taskName
             ? `${payload.taskName}: ${payload.message}`
             : payload.message,
-          { tone: payload.kind === "failure" ? "error" : "warning" },
+          {
+            tone: payload.kind === "failure" ? "error" : "warning",
+            logToActivity: false,
+          },
         );
         setStatus(undefined);
         return;

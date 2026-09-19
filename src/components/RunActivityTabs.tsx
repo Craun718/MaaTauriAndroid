@@ -1,18 +1,16 @@
 import { listen } from "@tauri-apps/api/event";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
 import { useTranslation } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { RunEvent } from "../lib/types";
-
-const MAX_RUN_LOG_EVENTS = 300;
+import { type RunLogEntry, useRunLogStore } from "../store/runLogStore";
 
 type ActivityTab = "tasks" | "logs";
 
 export type RunActivityTab = ActivityTab;
 
-/** Collects run activity even while the task list tab is selected. */
-function useRunEvents() {
-  const [events, setEvents] = useState<RunEvent[]>([]);
+/** Collects backend run activity even while the task list tab is selected. */
+function useRunEvents(): void {
   const executionIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
@@ -25,13 +23,7 @@ function useRunEvents() {
       executionIdRef.current = next.executionId;
       if (next.kind === "screenshot") return;
 
-      setEvents((current) => {
-        if (current.at(-1)?.executionId === next.executionId) {
-          if (current.at(-1)?.sequence === next.sequence) return current;
-          return [...current, next].slice(-MAX_RUN_LOG_EVENTS);
-        }
-        return [next];
-      });
+      useRunLogStore.getState().appendRunEvent(next);
     })
       .then((stop) => {
         if (disposed) stop();
@@ -44,8 +36,6 @@ function useRunEvents() {
       unsubscribe?.();
     };
   }, []);
-
-  return events;
 }
 
 function eventCategory(event: RunEvent) {
@@ -55,11 +45,20 @@ function eventCategory(event: RunEvent) {
   return "status";
 }
 
-function eventLabel(
-  event: RunEvent,
-  labels: Record<"agent" | "focus" | "status" | "task", string>,
+function logCategory(entry: RunLogEntry) {
+  return entry.type === "notification"
+    ? entry.tone
+    : eventCategory(entry.event);
+}
+
+function logLabel(
+  entry: RunLogEntry,
+  labels: Record<
+    "agent" | "error" | "focus" | "status" | "task" | "warning",
+    string
+  >,
 ) {
-  return labels[eventCategory(event)];
+  return labels[logCategory(entry)];
 }
 
 export function RunActivityTabs({
@@ -71,11 +70,14 @@ export function RunActivityTabs({
   activeTab: RunActivityTab;
   onActiveTabChange: (tab: RunActivityTab) => void;
 }) {
-  const events = useRunEvents();
+  useRunEvents();
+  const events = useRunLogStore((state) => state.entries);
   const { t } = useTranslation();
   const groupId = useId();
   const logListRef = useRef<HTMLOListElement>(null);
-  const lastEventKey = events.at(-1)?.sequence;
+  const lastEntry = events.at(-1);
+  const lastEventKey =
+    lastEntry?.type === "run" ? lastEntry.event.sequence : lastEntry?.id;
 
   useEffect(() => {
     if (lastEventKey === undefined) return;
@@ -139,17 +141,29 @@ export function RunActivityTabs({
             ref={logListRef}
             className="max-h-64 space-y-1.5 overflow-y-auto pr-1"
           >
-            {events.map((event) => {
-              const stream = event.data?.stream;
-              const category = eventCategory(event);
+            {events.map((entry) => {
+              const runEvent = entry.type === "run" ? entry.event : undefined;
+              const notification =
+                entry.type === "notification" ? entry : undefined;
+              const stream = runEvent?.data?.stream;
+              const category = logCategory(entry);
+              const atUnixMs =
+                entry.type === "run" ? entry.event.atUnixMs : entry.atUnixMs;
+              const taskName = runEvent?.taskName;
+              const message =
+                entry.type === "run" ? entry.event.message : entry.message;
               return (
                 <li
-                  key={`${event.executionId}-${event.sequence}`}
+                  key={
+                    runEvent
+                      ? `${runEvent.executionId}-${runEvent.sequence}`
+                      : (notification?.id ?? "notification")
+                  }
                   className="text-sm"
                 >
                   <div className="flex items-start gap-2">
                     <time className="w-14 flex-none text-xs text-ink-muted">
-                      {new Date(event.atUnixMs).toLocaleTimeString([], {
+                      {new Date(atUnixMs).toLocaleTimeString([], {
                         hour12: false,
                       })}
                     </time>
@@ -158,33 +172,43 @@ export function RunActivityTabs({
                         className={`flex h-5 max-w-full items-center truncate rounded-sm border px-1.5 text-xs font-medium ${
                           category === "focus"
                             ? "border-accent/40 bg-accent/10 text-accent"
-                            : "border-line bg-surface-muted text-ink-muted"
+                            : category === "error"
+                              ? "border-error/40 bg-error/10 text-error"
+                              : category === "warning"
+                                ? "border-warning/40 bg-warning/10 text-warning"
+                                : "border-line bg-surface-muted text-ink-muted"
                         }`}
                       >
-                        {eventLabel(event, {
+                        {logLabel(entry, {
                           agent: t("runLogAgent"),
                           focus: t("runLogFocus"),
                           status: t("runLogStatus"),
                           task: t("runLogTask"),
+                          warning: t("runLogWarning"),
+                          error: t("runLogError"),
                         })}
                       </span>
-                      {event.taskName && (
+                      {taskName && (
                         <span
                           className="max-w-full truncate text-xs font-medium"
-                          title={event.taskName}
+                          title={taskName}
                         >
-                          {event.taskName}
+                          {taskName}
                         </span>
                       )}
                     </div>
                     <p
                       className={`min-w-0 flex-1 break-words ${
-                        stream === "stderr"
+                        category === "error"
                           ? "text-red-600 dark:text-red-300"
-                          : ""
+                          : category === "warning"
+                            ? "text-warning"
+                            : stream === "stderr"
+                              ? "text-red-600 dark:text-red-300"
+                              : ""
                       }`}
                     >
-                      {event.message}
+                      {message}
                     </p>
                   </div>
                 </li>

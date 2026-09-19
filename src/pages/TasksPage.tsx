@@ -80,7 +80,6 @@ export function TasksPage() {
     subscribe("focus-toast", (payload) => {
       notify(
         payload.name ? `${payload.name}: ${payload.message}` : payload.message,
-        { durationMs: 4000 },
       );
     });
     subscribe("focus-notify", (payload) => setFocusNotice(payload));

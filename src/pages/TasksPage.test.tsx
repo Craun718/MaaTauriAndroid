@@ -14,6 +14,7 @@ import type {
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
+import { useRunLogStore } from "../store/runLogStore";
 import { TasksPage } from "./TasksPage";
 
 const saveConfiguration = vi.fn();
@@ -34,7 +35,7 @@ vi.mock("../lib/api", () => ({
   saveConfiguration: (configuration: unknown) =>
     saveConfiguration(configuration),
   startRun: () => startRun(),
-  stopRun: () => stopRun(),
+  stopRun: (...args: unknown[]) => stopRun(...args),
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
@@ -225,6 +226,7 @@ beforeEach(() => {
   });
   stopRun.mockResolvedValue("The run is stopping");
   useNotificationStore.setState({ notifications: [] });
+  useRunLogStore.setState({ entries: [] });
   captureManualScreenshot.mockResolvedValue({
     executionId: "run-1",
     path: "/data/user/0/top.natsuu.mta.m/runs/run-1/screens/manual-1.png",
@@ -250,7 +252,10 @@ function expandTaskDetails(label: string) {
 }
 
 function selectNestedCase(checked: boolean) {
-  fireEvent.change(nestedSwitch(), { target: { checked } });
+  const checkbox = nestedSwitch();
+  if (checkbox.checked !== checked) {
+    fireEvent.click(checkbox);
+  }
 }
 
 function enabledResolvedTasks() {
@@ -277,7 +282,7 @@ describe("nested task options", () => {
     expect(nestedSwitch()).not.toBeChecked();
     // Nothing selects 自定义吃糖次数's Yes case yet, so its own child is not.
     expect(
-      screen.queryByRole("textbox", { name: "次数" }),
+      screen.queryByRole("textbox", { name: /^次数/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -288,7 +293,7 @@ describe("nested task options", () => {
     selectNestedCase(true);
 
     expect(
-      await screen.findByRole("textbox", { name: "次数" }),
+      await screen.findByRole("textbox", { name: /^次数/ }),
     ).toBeInTheDocument();
     expect(
       screen.getAllByText("说明").map((element) => element.tagName),
@@ -303,6 +308,7 @@ describe("nested task options", () => {
               taskName: "糖果",
               optionValues: { 自定义吃糖次数: { type: "single", case: "Yes" } },
             },
+            { taskName: "整理", optionValues: {} },
           ],
         },
       ],
@@ -314,14 +320,14 @@ describe("nested task options", () => {
     expandTaskDetails("糖果");
     selectNestedCase(true);
     expect(
-      await screen.findByRole("textbox", { name: "次数" }),
+      await screen.findByRole("textbox", { name: /^次数/ }),
     ).toBeInTheDocument();
 
     selectNestedCase(false);
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("textbox", { name: "次数" }),
+        screen.queryByRole("textbox", { name: /^次数/ }),
       ).not.toBeInTheDocument(),
     );
   });
@@ -330,7 +336,7 @@ describe("nested task options", () => {
     renderTasksPage();
     expandTaskDetails("糖果");
     selectNestedCase(true);
-    const field = await screen.findByRole("textbox", { name: "次数" });
+    const field = await screen.findByRole("textbox", { name: /^次数/ });
 
     fireEvent.change(field, { target: { value: "6" } });
 
@@ -346,6 +352,7 @@ describe("nested task options", () => {
                 吃糖次数: { type: "inputs", values: { count: "6" } },
               },
             },
+            { taskName: "整理", optionValues: {} },
           ],
         },
       ],
@@ -413,6 +420,11 @@ describe("run configuration tabs and flat task list", () => {
   });
 
   it("stops a run with the same merged control", async () => {
+    getRunStatus.mockResolvedValue({
+      executionId: "run-1",
+      state: "Running",
+      message: "The run started",
+    });
     resolveCurrent.mockResolvedValue({
       controller: project.controllers[0],
       resource: project.resources[0],
@@ -439,27 +451,14 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    await waitFor(() =>
-      expect(eventHandlers.handlers["run-event"]).toBeDefined(),
-    );
-    await waitFor(() => expect(getRunStatus).toHaveBeenCalledTimes(1));
-    eventHandlers.handlers["run-event"].forEach((handler) => {
-      handler({
-        payload: {
-          executionId: "run-1",
-          sequence: 1,
-          atUnixMs: 1,
-          kind: "started",
-          state: "Running",
-          message: "The run started",
-        },
-      });
-    });
+    await screen.findByText("The run started");
     const runSection = (
-      await screen.findByRole("heading", { name: "0 tasks ready" })
+      await screen.findByRole("heading", { name: "2 tasks ready" })
     ).closest("section");
     if (!runSection) throw new Error("Run panel not found");
-    fireEvent.click(within(runSection).getByRole("button", { name: "Stop" }));
+    fireEvent.click(
+      await within(runSection).findByRole("button", { name: "Stop" }),
+    );
 
     await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));
   });
@@ -699,6 +698,25 @@ describe("run failure notifications", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
     );
   });
+
+  it("adds app error notifications to the task log", async () => {
+    renderTasksPage();
+
+    useNotificationStore.getState().notify("Configuration failed", {
+      tone: "error",
+    });
+    const logTab = screen.getByRole("tab", { name: "Task logs" });
+    const logPanelId = logTab.getAttribute("aria-controls");
+    if (!logPanelId) throw new Error("Task logs panel is not linked");
+    const logPanel = document.getElementById(logPanelId);
+    if (!logPanel) throw new Error("Task logs panel not found");
+    fireEvent.click(logTab);
+
+    expect(
+      await within(logPanel).findByText("Configuration failed"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Error")).toBeInTheDocument();
+  });
 });
 
 describe("run status restoration", () => {
@@ -727,7 +745,7 @@ describe("run status restoration", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "The run failed",
     );
-    expect(screen.getAllByText("The run failed")).toHaveLength(1);
+    expect(screen.getAllByText("The run failed")).toHaveLength(2);
   });
 });
 

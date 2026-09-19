@@ -66,7 +66,7 @@ const snapshot: AppStateSnapshot = {
     globalOptionValues: {},
     controllerOptionValues: {},
     resourceOptionValues: {},
-    runConfigurations: [],
+    runConfigurations: [{ id: "default", name: "Default", tasks: [] }],
   },
 };
 

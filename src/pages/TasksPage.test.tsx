@@ -230,8 +230,8 @@ beforeEach(() => {
     path: "/data/user/0/top.natsuu.mta.m/runs/run-1/screens/manual-1.png",
   });
   getVirtualDisplayStatus.mockResolvedValue({
-    active: false,
-    displayId: -1,
+    active: true,
+    displayId: 1,
     width: 1280,
     height: 720,
     frameCount: 0,
@@ -239,7 +239,9 @@ beforeEach(() => {
 });
 
 function nestedSwitch() {
-  return screen.getByRole("checkbox", { name: "自定义吃糖次数" });
+  return screen.getByRole<HTMLInputElement>("checkbox", {
+    name: "自定义吃糖次数",
+  });
 }
 
 /** 任务详情收进了下拉，先展开才能摸到选项。 */
@@ -248,7 +250,10 @@ function expandTaskDetails(label: string) {
 }
 
 function selectNestedCase(checked: boolean) {
-  fireEvent.change(nestedSwitch(), { target: { checked } });
+  const checkbox = nestedSwitch();
+  if (checkbox.checked !== checked) {
+    fireEvent.click(checkbox);
+  }
 }
 
 function enabledResolvedTasks() {
@@ -379,9 +384,11 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    const runSection = screen
-      .getByRole("heading", { name: "2 tasks ready" })
-      .closest("section");
+    const runSection = (
+      await screen.findByRole("heading", {
+        name: "2 tasks ready",
+      })
+    ).closest("section");
     if (!runSection) throw new Error("Run panel not found");
     fireEvent.click(within(runSection).getByRole("button", { name: "Start" }));
 
@@ -438,6 +445,7 @@ describe("run configuration tabs and flat task list", () => {
     await waitFor(() =>
       expect(eventHandlers.handlers["run-event"]).toBeDefined(),
     );
+    await waitFor(() => expect(getRunStatus).toHaveBeenCalledTimes(1));
     eventHandlers.handlers["run-event"].forEach((handler) => {
       handler({
         payload: {
@@ -635,7 +643,8 @@ describe("focus notifications", () => {
       },
     });
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    const message = await screen.findByText("NodeA: NodeA started");
+    expect(message.closest('[role="status"]')).toHaveTextContent(
       "NodeA: NodeA started",
     );
   });
@@ -729,7 +738,8 @@ describe("manual screenshot notifications", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Shot" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    const message = await screen.findByText("Screenshot saved to this run.");
+    expect(message.closest('[role="status"]')).toHaveTextContent(
       "Screenshot saved to this run.",
     );
     expect(

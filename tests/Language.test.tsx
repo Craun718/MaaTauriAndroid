@@ -123,7 +123,7 @@ describe("language switching", () => {
   it("persists a new choice and switches the interface over", async () => {
     withDeviceLocale("en-US", () => {
       render(<SettingsPage />);
-      fireEvent.change(screen.getByRole("combobox", { name: "语言" }), {
+      fireEvent.change(screen.getByRole("combobox", { name: "Language" }), {
         target: { value: "zh" },
       });
       fireEvent.click(screen.getByRole("button", { name: "Apply" }));

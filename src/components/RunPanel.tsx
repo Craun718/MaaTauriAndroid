@@ -136,7 +136,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
 
   async function stop() {
     try {
-      notify(await stopRun(executionId));
+      notify(await stopRun(executionIdRef.current ?? executionId));
     } catch (error) {
       reportError(error);
     }
@@ -145,7 +145,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   async function captureScreenshot() {
     setCapturing(true);
     try {
-      await captureManualScreenshot(executionId);
+      await captureManualScreenshot(executionIdRef.current ?? executionId);
       notify(t("screenshotSavedNotice"));
     } catch (error) {
       reportError(error);

@@ -497,7 +497,7 @@ function TaskItem({
       if (disposed) return;
 
       const overflow = viewport.scrollWidth - viewport.clientWidth;
-      const shouldAnimate = overflow > 1 && Boolean(reduceMotionQuery?.matches);
+      const shouldAnimate = overflow > 1 && !reduceMotionQuery?.matches;
       setAnimateTitle(shouldAnimate);
       if (!shouldAnimate) return;
 

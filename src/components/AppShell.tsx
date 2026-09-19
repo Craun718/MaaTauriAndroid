@@ -2,6 +2,7 @@ import { Home, ListChecks, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "../lib/i18n";
+import { NotificationHost } from "./ui/NotificationHost";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -41,6 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </div>
       </nav>
+      <NotificationHost />
     </div>
   );
 }

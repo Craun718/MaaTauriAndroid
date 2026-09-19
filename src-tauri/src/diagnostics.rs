@@ -22,7 +22,6 @@ pub const EXPECTED_ARTIFACTS: &[&str] = &[
     "logs/bugreport-progress.txt",
     "logs/logcat-full.txt",
     "logs/maa_tauri_android-filtered.log",
-    "run.jsonl",
     "screens/main.png",
 ];
 
@@ -33,6 +32,24 @@ pub trait DiagnosticSource {
     fn logcat(&self) -> io::Result<Vec<u8>>;
     fn dumpsys(&self) -> io::Result<Vec<u8>>;
     fn bugreport(&self, destination: &Path) -> io::Result<Vec<String>>;
+
+    /// Raw platform property dump (getprop + identity) for the log export.
+    /// Optional: sources that cannot collect it keep the default and the
+    /// archive simply omits the file.
+    fn device_properties(&self) -> io::Result<Vec<u8>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "device properties are unavailable",
+        ))
+    }
+}
+
+/// A directory whose files are copied into the standalone log archive.
+pub struct LogExportRoot {
+    /// Destination prefix inside the archive, for example `logs/app`.
+    pub entry: String,
+    /// Source directory walked recursively.
+    pub path: PathBuf,
 }
 
 pub fn collect_artifacts(
@@ -187,6 +204,7 @@ pub fn capture_manual_screenshot(
 /// not require a run and skips screenshots, bugreport and manifest bookkeeping.
 pub fn export_log_archive(
     source: &dyn DiagnosticSource,
+    roots: &[LogExportRoot],
     output_path: PathBuf,
 ) -> Result<PathBuf, DiagnosticError> {
     if let Some(parent) = output_path.parent() {
@@ -223,6 +241,10 @@ pub fn export_log_archive(
             filtered.as_bytes(),
         )?;
     }
+    write_device_snapshot(source, &staging_dir);
+    for root in roots {
+        copy_log_root(root, &staging_dir);
+    }
 
     let staging_zip = output_path.with_extension("zip.partial");
     let mut archive = ZipWriter::create(staging_zip.clone())?;
@@ -239,6 +261,59 @@ pub fn export_log_archive(
         source,
     })?;
     Ok(output_path)
+}
+
+/// Device snapshots are best-effort: a missing collector must not fail the
+/// whole export, mirroring the MaaFwApp log export behaviour.
+fn write_device_snapshot(source: &dyn DiagnosticSource, staging_dir: &Path) {
+    if let Ok(bytes) = source.device_info() {
+        if !bytes.is_empty() {
+            let _ = write_file(&staging_dir.join("device-info.txt"), &bytes);
+        }
+    }
+    if let Ok(bytes) = source.device_properties() {
+        if !bytes.is_empty() {
+            let _ = write_file(&staging_dir.join("properties.txt"), &bytes);
+        }
+    }
+}
+
+fn copy_log_root(root: &LogExportRoot, staging_dir: &Path) {
+    for (source_path, relative) in collect_root_files(&root.path) {
+        let destination = staging_dir.join(&root.entry).join(&relative);
+        let Some(parent) = destination.parent() else {
+            continue;
+        };
+        if fs::create_dir_all(parent).is_err() {
+            continue;
+        }
+        let _ = fs::copy(&source_path, &destination);
+    }
+}
+
+fn collect_root_files(root: &Path) -> Vec<(PathBuf, PathBuf)> {
+    fn visit(dir: &Path, relative: &Path, output: &mut Vec<(PathBuf, PathBuf)>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let child_path = dir.join(entry.file_name());
+            let child_relative = relative.join(entry.file_name());
+            match entry.file_type() {
+                Ok(file_type) if file_type.is_dir() => {
+                    visit(&child_path, &child_relative, output);
+                }
+                Ok(file_type) if file_type.is_file() => {
+                    output.push((child_path, child_relative));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut files = Vec::new();
+    visit(root, Path::new(""), &mut files);
+    files
 }
 
 pub fn clear_run_directories(runs_dir: &Path) -> Result<usize, DiagnosticError> {
@@ -745,7 +820,7 @@ impl DiagnosticSource for AndroidLogSource {
     }
 
     fn device_info(&self) -> io::Result<Vec<u8>> {
-        self.capture_png(0)
+        bridge_string("deviceInfo").map(String::into_bytes)
     }
 
     fn display_state(&self) -> io::Result<Vec<u8>> {
@@ -783,6 +858,48 @@ impl DiagnosticSource for AndroidLogSource {
     fn bugreport(&self, _destination: &Path) -> io::Result<Vec<String>> {
         self.capture_png(0).map(|_| Vec::new())
     }
+
+    fn device_properties(&self) -> io::Result<Vec<u8>> {
+        text_source("deviceInfo")
+    }
+}
+
+/// Reads a `String` from a `RuntimeBridge` static without the privileged
+/// service, so the log export still works after Shizuku goes away.
+#[cfg(target_os = "android")]
+fn bridge_string(method: &'static str) -> io::Result<String> {
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Java runtime is not initialized",
+        )
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let _ = env.exception_clear();
+    let class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let text = match env.call_static_method(class, method, "()Ljava/lang/String;", &[]) {
+        Ok(value) => value
+            .l()
+            .map_err(|error| io::Error::other(error.to_string()))?,
+        Err(error) => {
+            let _ = env.exception_clear();
+            return Err(io::Error::other(error.to_string()));
+        }
+    };
+    if text.is_null() {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "device info is unavailable",
+        ));
+    }
+    let text = jni::objects::JString::from(text);
+    let text = env
+        .get_string(&text)
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    Ok(text.to_string_lossy().into_owned())
 }
 
 #[cfg(target_os = "android")]
@@ -1106,7 +1223,6 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         fs::create_dir_all(temp.join("screens")).unwrap();
-        fs::write(temp.join("run.jsonl"), "{\"executionId\":\"run-1\"}\n").unwrap();
         fs::write(temp.join("screens/main.png"), [1, 2, 3]).unwrap();
         let output = std::env::temp_dir().join(format!("{}.zip", uuid::Uuid::new_v4()));
 
@@ -1121,7 +1237,7 @@ mod tests {
         let checksums = fs::read_to_string(temp.join(CHECKSUMS_FILE)).unwrap();
         let zip = fs::read(&output).unwrap();
         assert!(manifest.contains("\"status\": \"partial\""));
-        assert!(checksums.contains("  run.jsonl"));
+        assert!(checksums.contains("  screens/main.png"));
         assert_eq!(&zip[..4], b"PK\x03\x04");
         let eocd_offset = zip.len() - 22;
         let central_offset =
@@ -1164,14 +1280,21 @@ mod tests {
     }
 
     #[test]
-    fn log_archive_contains_logcat_and_filtered_log() {
+    fn log_archive_contains_logcat_filtered_log_device_info_and_roots() {
         let source = FakeSource {
             capture_failures: Mutex::new(Vec::new()),
             capture_bytes: [0x89, b'P', b'N', b'G'].to_vec(),
         };
+        let log_root = std::env::temp_dir().join(format!("log-root-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&log_root).unwrap();
+        fs::write(log_root.join("ttflow.log"), b"app log line\n").unwrap();
+        let roots = vec![LogExportRoot {
+            entry: "logs/app".to_string(),
+            path: log_root.clone(),
+        }];
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        let path = export_log_archive(&source, output.clone()).unwrap();
+        let path = export_log_archive(&source, &roots, output.clone()).unwrap();
 
         assert_eq!(path, output);
         let zip = fs::read(&output).unwrap();
@@ -1180,7 +1303,15 @@ mod tests {
         assert!(zip
             .windows(30)
             .any(|window| window == b"maa_tauri_android-filtered.log"));
+        assert!(zip
+            .windows(19)
+            .any(|window| window == b"device-info-payload"));
+        assert!(zip
+            .windows(19)
+            .any(|window| window == b"logs/app/ttflow.log"));
+        assert!(zip.windows(12).any(|window| window == b"app log line"));
         fs::remove_file(output).unwrap();
+        fs::remove_dir_all(log_root).unwrap();
     }
 
     #[test]
@@ -1215,10 +1346,60 @@ mod tests {
 
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        let error = export_log_archive(&EmptySource, output.clone()).unwrap_err();
+        let error = export_log_archive(&EmptySource, &[], output.clone()).unwrap_err();
 
         assert!(error.to_string().contains("logcat capture was empty"));
         assert!(!output.exists());
+    }
+
+    #[test]
+    fn log_archive_copies_roots_and_skips_unavailable_device_info() {
+        struct LogOnlySource;
+
+        impl DiagnosticSource for LogOnlySource {
+            fn capture_png(&self, _display_id: u32) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no capture"))
+            }
+
+            fn device_info(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no device info"))
+            }
+
+            fn display_state(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no display state"))
+            }
+
+            fn logcat(&self) -> io::Result<Vec<u8>> {
+                Ok(b"MaaTauriAndroid ran\n".to_vec())
+            }
+
+            fn dumpsys(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no dumpsys"))
+            }
+
+            fn bugreport(&self, _destination: &Path) -> io::Result<Vec<String>> {
+                Ok(Vec::new())
+            }
+        }
+
+        let log_root = std::env::temp_dir().join(format!("log-root-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(log_root.join("nested")).unwrap();
+        fs::write(log_root.join("nested/maa.log"), b"maa framework log\n").unwrap();
+        let roots = vec![LogExportRoot {
+            entry: "logs/maa".to_string(),
+            path: log_root.clone(),
+        }];
+        let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
+
+        export_log_archive(&LogOnlySource, &roots, output.clone()).unwrap();
+
+        let zip = fs::read(&output).unwrap();
+        assert!(!zip.windows(15).any(|window| window == b"device-info.txt"));
+        assert!(!zip.windows(14).any(|window| window == b"properties.txt"));
+        assert!(zip.windows(16).any(|window| window == b"logs/maa/maa.log"));
+        assert!(zip.windows(17).any(|window| window == b"maa framework log"));
+        fs::remove_dir_all(log_root).unwrap();
+        fs::remove_file(output).unwrap();
     }
 
     struct FakeSource {
@@ -1235,7 +1416,7 @@ mod tests {
         }
 
         fn device_info(&self) -> io::Result<Vec<u8>> {
-            Ok(b"device".to_vec())
+            Ok(b"device-info-payload".to_vec())
         }
 
         fn display_state(&self) -> io::Result<Vec<u8>> {

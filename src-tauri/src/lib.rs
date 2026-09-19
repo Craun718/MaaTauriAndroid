@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
@@ -871,6 +872,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     runtime::set_execution_result(
         Some(&execution_id),
         runtime::RunState::Preparing,
+        runtime::RunResultSeverity::Info,
         "The run is being prepared".to_string(),
     );
     let stopped_before_start = state.maa.begin_preparing(&execution_id)?;
@@ -889,6 +891,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
         runtime::set_execution_result(
             Some(&execution_id),
             runtime::RunState::Idle,
+            runtime::RunResultSeverity::Info,
             "The run was cancelled".to_string(),
         );
         state.maa.finish(&execution_id);
@@ -932,17 +935,20 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     };
     drop(_lifecycle_guard);
     tokio::spawn(async move {
-        let fail = |logger: &run_log::RunLogger, message: String| {
-            let _ = logger.append(
+        let fail = |app: &AppHandle, logger: &run_log::RunLogger, message: String| {
+            if let Ok(event) = logger.append(
                 run_log::RunEventKind::Failure,
                 runtime::RunState::Idle,
                 message.clone(),
                 None,
                 None,
-            );
+            ) {
+                let _ = app.emit("run-event", &event);
+            }
             runtime::set_execution_result(
                 Some(logger.execution_id()),
                 runtime::RunState::Idle,
+                runtime::RunResultSeverity::Error,
                 message.clone(),
             );
             telemetry::run_event("failed", &message, None);
@@ -969,7 +975,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 {
                     Ok(tasker) => tasker,
                     Err(error) => {
-                        fail(&logger_for_run, error.to_string());
+                        fail(&app, &logger_for_run, error.to_string());
                         sessions.finish(&run_execution_id);
                         return;
                     }
@@ -978,13 +984,15 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                     app.clone(),
                     focus_translations.clone(),
                 ))) {
-                    let _ = logger_for_run.append(
+                    if let Ok(event) = logger_for_run.append(
                         run_log::RunEventKind::Warning,
                         runtime::RunState::Running,
                         format!("focus notifications could not be registered: {error}"),
                         None,
                         None,
-                    );
+                    ) {
+                        let _ = app.emit("run-event", &event);
+                    }
                 }
                 if let Ok(event) = logger_for_run.append(
                     run_log::RunEventKind::Started,
@@ -998,6 +1006,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 runtime::set_execution_result(
                     Some(logger_for_run.execution_id()),
                     runtime::RunState::Running,
+                    runtime::RunResultSeverity::Info,
                     "The run is running".to_string(),
                 );
                 let run_tasker = tasker.clone();
@@ -1009,12 +1018,12 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 let outcome = match result {
                     Ok(Ok(outcome)) => outcome,
                     Ok(Err(error)) => {
-                        fail(&logger_for_run, error.to_string());
+                        fail(&app, &logger_for_run, error.to_string());
                         sessions.finish(&run_execution_id);
                         return;
                     }
                     Err(error) => {
-                        fail(&logger_for_run, error.to_string());
+                        fail(&app, &logger_for_run, error.to_string());
                         sessions.finish(&run_execution_id);
                         return;
                     }
@@ -1075,15 +1084,25 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         .as_deref(),
                 );
                 telemetry::run_finished(outcome_label);
-                runtime::set_execution_result(Some(logger_for_run.execution_id()), state, message);
+                let severity = if kind == run_log::RunEventKind::Failure {
+                    runtime::RunResultSeverity::Error
+                } else {
+                    runtime::RunResultSeverity::Info
+                };
+                runtime::set_execution_result(
+                    Some(logger_for_run.execution_id()),
+                    state,
+                    severity,
+                    message,
+                );
                 sessions.finish(&run_execution_id);
             }
             Ok(Err(error)) => {
-                fail(&logger_for_run, error.to_string());
+                fail(&app, &logger_for_run, error.to_string());
                 sessions.finish(&run_execution_id);
             }
             Err(error) => {
-                fail(&logger_for_run, error.to_string());
+                fail(&app, &logger_for_run, error.to_string());
                 sessions.finish(&run_execution_id);
             }
         }
@@ -1141,6 +1160,7 @@ fn stop_run(
         runtime::set_execution_result(
             requested_id.as_deref(),
             runtime::RunState::Stopping,
+            runtime::RunResultSeverity::Info,
             "The run is stopping".to_string(),
         );
         Ok("The run is stopping".to_string())
@@ -1254,6 +1274,24 @@ async fn export_logs(app: AppHandle) -> Result<LogExport, AppError> {
         .cache_dir()
         .map_err(|error| AppError::Path(error.to_string()))?;
     let exports_dir = cache_dir.join("log-exports");
+    let app_log_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    let roots = vec![
+        diagnostics::LogExportRoot {
+            entry: "logs/app".to_string(),
+            path: app_log_dir,
+        },
+        diagnostics::LogExportRoot {
+            entry: "logs/maa".to_string(),
+            path: data_dir.join("maa-logs"),
+        },
+    ];
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis())
@@ -1261,7 +1299,7 @@ async fn export_logs(app: AppHandle) -> Result<LogExport, AppError> {
     let output = exports_dir.join(format!("maa_tauri_android-logs-{timestamp}.zip"));
     let archive = tokio::task::spawn_blocking(move || {
         let source = diagnostics::log_export_source();
-        diagnostics::export_log_archive(&source, output)
+        diagnostics::export_log_archive(&source, &roots, output)
     })
     .await
     .map_err(|error| AppError::Message(error.to_string()))??;
@@ -1570,6 +1608,20 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setControlState(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some(run_log::APPLICATION_LOG_FILE_STEM.to_string()),
+                    }),
+                ])
+                .level(log::LevelFilter::Info)
+                .max_file_size(1_000_000)
+                .rotation_strategy(RotationStrategy::KeepSome(3))
+                .timezone_strategy(TimezoneStrategy::UseLocal)
+                .build(),
+        )
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             bootstrap,
@@ -1601,6 +1653,9 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|error| AppError::Path(error.to_string()))?;
             state.set_runs_dir(root.join("runs"));
+            let maa_log_dir = root.join("maa-logs");
+            let _ = std::fs::create_dir_all(&maa_log_dir);
+            runtime::set_maa_log_dir(maa_log_dir);
             Ok(())
         })
         .run(tauri::generate_context!())

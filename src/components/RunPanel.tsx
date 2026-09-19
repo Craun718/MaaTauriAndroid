@@ -13,6 +13,7 @@ import { useTranslation } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { DiagnosticExport, ResolvedRun, RunEvent } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { useNotificationStore } from "../store/notificationStore";
 
 /**
  * Run controls for the active run configuration. Rendered inside the Tasks panel
@@ -31,13 +32,7 @@ export function RunPanel() {
   const executionIdRef = useRef<string | undefined>(undefined);
   const [exporting, setExporting] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [screenshotNoticeVisible, setScreenshotNoticeVisible] = useState(false);
-  const screenshotNoticeTimeout = useRef<number | undefined>(undefined);
-
-  useEffect(
-    () => () => window.clearTimeout(screenshotNoticeTimeout.current),
-    [],
-  );
+  const notify = useNotificationStore((state) => state.notify);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -52,28 +47,44 @@ export function RunPanel() {
         executionIdRef.current = result.executionId;
         setExecutionId(result.executionId);
         setRunState(result.state);
+        if (result.severity === "error") {
+          notify(result.message, { tone: "error" });
+          setStatus(undefined);
+          return;
+        }
         setStatus(result.message);
       })
       .catch(() => undefined);
-  }, [snapshot]);
+  }, [snapshot, notify]);
 
   useEffect(() => {
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
 
     listen<RunEvent>("run-event", (event) => {
+      const payload = event.payload;
       if (!canAcceptRunEvent(executionIdRef.current, event.payload.executionId))
         return;
-      executionIdRef.current = event.payload.executionId;
-      if (event.payload.state) setRunState(event.payload.state);
-      setExecutionId(event.payload.executionId);
-      if (event.payload.kind === "screenshot") return;
-      if (event.payload.taskName) {
-        setStatus(`${event.payload.taskName}: ${event.payload.message}`);
-      } else {
-        setStatus(event.payload.message);
+      executionIdRef.current = payload.executionId;
+      if (payload.state) setRunState(payload.state);
+      setExecutionId(payload.executionId);
+      if (payload.kind === "screenshot") return;
+      if (payload.kind === "failure" || payload.kind === "warning") {
+        notify(
+          payload.taskName
+            ? `${payload.taskName}: ${payload.message}`
+            : payload.message,
+          { tone: payload.kind === "failure" ? "error" : "warning" },
+        );
+        setStatus(undefined);
+        return;
       }
-      if (event.payload.data && typeof event.payload.data === "object") {
+      if (payload.taskName) {
+        setStatus(`${payload.taskName}: ${payload.message}`);
+      } else {
+        setStatus(payload.message);
+      }
+      if (payload.data && typeof payload.data === "object") {
         const data = event.payload.data as Partial<
           DiagnosticExport["manifest"]
         >;
@@ -99,11 +110,17 @@ export function RunPanel() {
       disposed = true;
       unsubscribe?.();
     };
-  }, []);
+  }, [notify]);
 
   if (!snapshot?.project) return null;
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
+
+  function reportError(error: unknown) {
+    notify(error instanceof Error ? error.message : String(error), {
+      tone: "error",
+    });
+  }
 
   async function start() {
     try {
@@ -112,7 +129,7 @@ export function RunPanel() {
       setExecutionId(result.executionId);
       setStatus(result.message);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      reportError(error);
     }
   }
 
@@ -120,7 +137,7 @@ export function RunPanel() {
     try {
       setStatus(await stopRun(executionId));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      reportError(error);
     }
   }
 
@@ -139,7 +156,7 @@ export function RunPanel() {
             }),
       );
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      reportError(error);
     } finally {
       setExporting(false);
     }
@@ -149,13 +166,9 @@ export function RunPanel() {
     setCapturing(true);
     try {
       await captureManualScreenshot(executionId);
-      window.clearTimeout(screenshotNoticeTimeout.current);
-      setScreenshotNoticeVisible(true);
-      screenshotNoticeTimeout.current = window.setTimeout(() => {
-        setScreenshotNoticeVisible(false);
-      }, 4000);
+      notify(t("screenshotSavedNotice"));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      reportError(error);
     } finally {
       setCapturing(false);
     }
@@ -222,14 +235,6 @@ export function RunPanel() {
       {/* Rust reports absolute paths back; without break-all a long one widens the
           page and the fixed bottom nav drifts sideways when the page is panned. */}
       {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
-      {screenshotNoticeVisible && (
-        <div
-          role="status"
-          className="fixed inset-x-4 bottom-40 z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
-        >
-          <p className="text-sm">{t("screenshotSavedNotice")}</p>
-        </div>
-      )}
     </>
   );
 }

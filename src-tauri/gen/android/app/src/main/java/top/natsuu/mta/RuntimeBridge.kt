@@ -4,15 +4,20 @@ import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.app.ActivityManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
+import android.os.PowerManager
 import android.os.ParcelFileDescriptor
 import android.os.Looper
 import android.provider.MediaStore
+import android.view.WindowManager
 import java.io.File
 import java.io.IOException
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -146,6 +151,83 @@ object RuntimeBridge {
         }
         reader
     }.getOrNull()
+
+    /**
+     * Builds a plain-text device snapshot without the privileged service so
+     * the log export can include it even when Shizuku is unavailable.
+     */
+    @JvmStatic
+    fun deviceInfo(): String? {
+        val context = agentContext ?: return null
+        return runCatching { renderDeviceInfo(context) }.getOrNull()
+    }
+
+    private fun renderDeviceInfo(context: Context): String {
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        val divider = "=".repeat(60)
+        return buildString {
+            append(divider).append('\n')
+            append("=== MaaTauriAndroid Device & App Info ===\n")
+            append("Export Time : ").append(DEVICE_TIME_FORMAT.format(java.time.ZonedDateTime.now())).append('\n')
+            append("App         : ").append(context.packageName).append('\n')
+            append("Version     : ").append(packageInfo.versionName)
+                .append(" (").append(packageInfo.longVersionCode).append(")\n")
+            append("Device      : ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
+            append("Android     : ").append(Build.VERSION.RELEASE)
+                .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
+            append("Security    : ").append(Build.VERSION.SECURITY_PATCH).append('\n')
+            append("ABI         : ").append(Build.SUPPORTED_ABIS.joinToString()).append('\n')
+            append("--- Device ---\n")
+            append("Screen      : ").append(screenInfo(context)).append('\n')
+            append("RAM         : ").append(memoryInfo(context)).append('\n')
+            append("Storage     : ").append(storageInfo(context)).append('\n')
+            append("Battery Opt : ").append(batteryOptimization(context)).append('\n')
+            append("SELinux     : ").append(selinuxMode()).append('\n')
+            append(divider).append('\n')
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun screenInfo(context: Context): String = runCatching {
+        val metrics = context.resources.displayMetrics
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val refresh = wm.defaultDisplay.refreshRate
+        "${metrics.widthPixels} x ${metrics.heightPixels} @ " +
+            "%.0f".format(Locale.US, refresh) +
+            "Hz (density ${metrics.densityDpi}dpi)"
+    }.getOrDefault(UNKNOWN)
+
+    private fun memoryInfo(context: Context): String = runCatching {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val info = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(info)
+        "${formatGb(info.totalMem)} total, ${formatGb(info.availMem)} free"
+    }.getOrDefault(UNKNOWN)
+
+    private fun storageInfo(context: Context): String = runCatching {
+        val dir = context.filesDir
+        "${formatGb(dir.usableSpace)} usable / ${formatGb(dir.totalSpace)} total"
+    }.getOrDefault(UNKNOWN)
+
+    private fun batteryOptimization(context: Context): String = runCatching {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(context.packageName)) {
+            "ignored (app exempt)"
+        } else {
+            "NOT ignored"
+        }
+    }.getOrDefault(UNKNOWN)
+
+    private fun selinuxMode(): String = runCatching {
+        when (File("/sys/fs/selinux/enforce").readText().trim()) {
+            "1" -> "enforcing"
+            "0" -> "permissive"
+            else -> UNKNOWN
+        }
+    }.getOrDefault(UNKNOWN)
+
+    private fun formatGb(bytes: Long): String =
+        "%.1f GB".format(Locale.US, bytes / 1024f / 1024f / 1024f)
 
     /**
      * Copies the log archive into the system Downloads collection and opens the
@@ -314,4 +396,7 @@ object RuntimeBridge {
     external fun setBootstrapProjectRoot(projectRoot: String)
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+    private const val UNKNOWN = "unknown"
+    private val DEVICE_TIME_FORMAT =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS (Z)", Locale.US)
 }

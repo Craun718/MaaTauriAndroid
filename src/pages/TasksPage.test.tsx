@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NotificationHost } from "../components/ui/NotificationHost";
 import type {
   AppStateSnapshot,
   Project,
   UserConfiguration,
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { useNotificationStore } from "../store/notificationStore";
 import { TasksPage } from "./TasksPage";
 
 const saveConfiguration = vi.fn();
@@ -13,6 +15,7 @@ const resolveCurrent = vi.fn();
 const getRunStatus = vi.fn();
 const getVirtualDisplayStatus = vi.fn();
 const captureManualScreenshot = vi.fn();
+const startRun = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
@@ -22,7 +25,7 @@ vi.mock("../lib/api", () => ({
   resolveCurrent: () => resolveCurrent(),
   saveConfiguration: (configuration: unknown) =>
     saveConfiguration(configuration),
-  startRun: vi.fn(),
+  startRun: () => startRun(),
   stopRun: vi.fn(),
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
@@ -45,6 +48,15 @@ const eventHandlers = vi.hoisted(() => ({
 }));
 
 const applicability = { controllers: [], resources: [] };
+
+function renderTasksPage() {
+  return render(
+    <>
+      <TasksPage />
+      <NotificationHost />
+    </>,
+  );
+}
 
 /**
  * Mirrors the shape M9A ships: the task only declares `吃糖`, and the options
@@ -198,6 +210,12 @@ beforeEach(() => {
     state: "Idle",
     message: "Idle",
   });
+  startRun.mockResolvedValue({
+    executionId: "run-1",
+    message: "The run is starting",
+    taskCount: 0,
+  });
+  useNotificationStore.setState({ notifications: [] });
   captureManualScreenshot.mockResolvedValue({
     executionId: "run-1",
     path: "/data/user/0/top.natsuu.mta.m/runs/run-1/screens/manual-1.png",
@@ -222,7 +240,7 @@ function expandTaskDetails(label: string) {
 
 describe("nested task options", () => {
   it("renders the option owned by a case that is selected by default", () => {
-    render(<TasksPage />);
+    renderTasksPage();
     expandTaskDetails("糖果");
 
     // 吃糖 defaults to Yes, so the option that case owns is reachable — even
@@ -238,7 +256,7 @@ describe("nested task options", () => {
   });
 
   it("reveals the deeper option once its case is selected, and saves it", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
     expandTaskDetails("糖果");
 
     fireEvent.click(nestedSwitch());
@@ -266,7 +284,7 @@ describe("nested task options", () => {
   });
 
   it("hides the deeper option again when the case is switched off", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
     expandTaskDetails("糖果");
     fireEvent.click(nestedSwitch());
     expect(
@@ -283,7 +301,7 @@ describe("nested task options", () => {
   });
 
   it("keeps the value typed into a nested option", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
     expandTaskDetails("糖果");
     fireEvent.click(nestedSwitch());
     const field = await screen.findByRole("textbox", { name: "次数" });
@@ -311,7 +329,7 @@ describe("nested task options", () => {
 
 describe("run configuration tabs and flat task list", () => {
   it("places the virtual display above the run queue", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     const virtualDisplay = await screen.findByRole("heading", {
       name: "Virtual display",
@@ -325,7 +343,7 @@ describe("run configuration tabs and flat task list", () => {
   });
 
   it("renders run configurations as tabs with the active one selected", () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     expect(screen.getByRole("tab", { name: "Default" })).toHaveAttribute(
       "aria-selected",
@@ -336,7 +354,7 @@ describe("run configuration tabs and flat task list", () => {
   });
 
   it("creates a new configuration tab", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     fireEvent.click(screen.getByRole("button", { name: "New configuration" }));
 
@@ -348,7 +366,7 @@ describe("run configuration tabs and flat task list", () => {
   });
 
   it("switches to a newly created configuration and shows the add-task picker", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     fireEvent.click(screen.getByRole("button", { name: "New configuration" }));
 
@@ -371,7 +389,7 @@ describe("run configuration tabs and flat task list", () => {
         },
       },
     });
-    render(<TasksPage />);
+    renderTasksPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Add task" }));
     fireEvent.click(screen.getByRole("button", { name: "糖果" }));
@@ -383,7 +401,7 @@ describe("run configuration tabs and flat task list", () => {
   });
 
   it("removes a task from the list", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     const removeButtons = screen.getAllByRole("button", { name: "Remove" });
     fireEvent.click(removeButtons[0]);
@@ -397,7 +415,7 @@ describe("run configuration tabs and flat task list", () => {
 
 describe("focus notifications", () => {
   it("shows focus toasts while a run is active", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     eventHandlers.handlers["focus-toast"][0]({
       payload: {
@@ -414,7 +432,7 @@ describe("focus notifications", () => {
   });
 
   it("shows focus notices with a dismiss control", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     eventHandlers.handlers["focus-notify"][0]({
       payload: {
@@ -435,6 +453,37 @@ describe("focus notifications", () => {
   });
 });
 
+describe("run failure notifications", () => {
+  it("shows backend run failures as dismissible in-app notifications", async () => {
+    renderTasksPage();
+
+    await waitFor(() =>
+      expect(eventHandlers.handlers["run-event"]).toBeDefined(),
+    );
+    eventHandlers.handlers["run-event"][0]({
+      payload: {
+        executionId: "run-1",
+        sequence: 1,
+        atUnixMs: 1,
+        kind: "failure",
+        state: "Idle",
+        message: "the control unit is not connected",
+      },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "the control unit is not connected",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss notification" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+  });
+});
+
 describe("run status restoration", () => {
   it("shows the latest backend message after a component remount", async () => {
     getRunStatus.mockResolvedValue({
@@ -443,15 +492,31 @@ describe("run status restoration", () => {
       message: "The run failed",
     });
 
-    render(<TasksPage />);
+    renderTasksPage();
 
     expect(await screen.findByText("The run failed")).toBeInTheDocument();
+  });
+
+  it("restores failed runs as in-app notifications instead of inline status", async () => {
+    getRunStatus.mockResolvedValue({
+      executionId: "run-1",
+      state: "Idle",
+      severity: "error",
+      message: "The run failed",
+    });
+
+    renderTasksPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The run failed",
+    );
+    expect(screen.getAllByText("The run failed")).toHaveLength(1);
   });
 });
 
 describe("manual screenshot notifications", () => {
   it("shows a run-scoped in-app notice without exposing the raw path", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     fireEvent.click(await screen.findByRole("button", { name: "Shot" }));
 
@@ -464,7 +529,7 @@ describe("manual screenshot notifications", () => {
   });
 
   it("ignores the backend screenshot event's diagnostic wording", async () => {
-    render(<TasksPage />);
+    renderTasksPage();
 
     await waitFor(() =>
       expect(eventHandlers.handlers["run-event"]).toBeDefined(),

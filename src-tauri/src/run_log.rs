@@ -1,18 +1,22 @@
+use log::Level;
 use serde::Serialize;
 use serde_json::Value;
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub const APPLICATION_LOG_FILE_STEM: &str = "ttflow";
+pub const RUN_EVENT_LOG_FILE_STEM: &str = "ttflow-run";
+pub const RUN_EVENT_TARGET: &str = "ttflow::run";
+
 #[derive(Debug, thiserror::Error)]
 pub enum RunLogError {
     #[error("could not create run directory: {0}")]
     CreateDirectory(std::io::Error),
-    #[error("could not write run log: {0}")]
-    Write(std::io::Error),
+    #[error("could not serialize run event: {0}")]
+    Serialize(serde_json::Error),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -47,8 +51,7 @@ pub struct RunEvent {
 
 pub struct RunLogger {
     execution_id: String,
-    path: PathBuf,
-    file: Mutex<Option<File>>,
+    run_dir: PathBuf,
     sequence: Mutex<u64>,
 }
 
@@ -71,12 +74,9 @@ impl RunLogger {
     pub fn create(runs_dir: &Path, execution_id: &str) -> Result<Self, RunLogError> {
         let run_dir = runs_dir.join(sanitize(execution_id));
         fs::create_dir_all(run_dir.join("logs")).map_err(RunLogError::CreateDirectory)?;
-        let path = run_dir.join("run.jsonl");
-        let file = File::create(&path).map_err(RunLogError::Write)?;
         Ok(Self {
             execution_id: execution_id.to_string(),
-            path,
-            file: Mutex::new(Some(file)),
+            run_dir,
             sequence: Mutex::new(0),
         })
     }
@@ -86,7 +86,7 @@ impl RunLogger {
     }
 
     pub fn run_dir(&self) -> &Path {
-        self.path.parent().unwrap_or_else(|| Path::new("."))
+        &self.run_dir
     }
 
     pub fn append(
@@ -115,16 +115,13 @@ impl RunLogger {
             task_name,
             data,
         };
-        let mut bytes = serde_json::to_vec(&event).map_err(|source| {
-            RunLogError::Write(std::io::Error::new(std::io::ErrorKind::InvalidData, source))
-        })?;
-        bytes.push(b'\n');
-        let mut file = self.file.lock().expect("run log file lock poisoned");
-        let file = file
-            .as_mut()
-            .expect("run log file remains open for the logger lifetime");
-        file.write_all(&bytes).map_err(RunLogError::Write)?;
-        file.flush().map_err(RunLogError::Write)?;
+        let payload = serde_json::to_string(&event).map_err(RunLogError::Serialize)?;
+        let level = match kind {
+            RunEventKind::Failure => Level::Error,
+            RunEventKind::Warning => Level::Warn,
+            _ => Level::Info,
+        };
+        log::log!(target: RUN_EVENT_TARGET, level, "{payload}");
         Ok(event)
     }
 }
@@ -153,11 +150,11 @@ mod tests {
     use crate::runtime::RunState;
 
     #[test]
-    fn appends_isolated_jsonl_events() {
+    fn appends_sequenced_run_events() {
         let root =
             std::env::temp_dir().join(format!("maa_tauri_android-run-{}", uuid::Uuid::new_v4()));
         let logger = RunLogger::create(&root, "run/one").unwrap();
-        logger
+        let first = logger
             .append(
                 RunEventKind::Preparing,
                 RunState::Preparing,
@@ -166,7 +163,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        logger
+        let second = logger
             .append(
                 RunEventKind::Task,
                 RunState::Running,
@@ -175,13 +172,11 @@ mod tests {
                 None,
             )
             .unwrap();
-        let contents = fs::read_to_string(&logger.path).unwrap();
-        let lines: Vec<&str> = contents.lines().collect();
-        assert_eq!(lines.len(), 2);
-        assert!(lines[0].contains("\"executionId\":\"run/one\""));
-        assert!(lines[0].contains("\"sequence\":1"));
-        assert!(lines[1].contains("\"sequence\":2"));
-        assert!(lines[1].contains("\"taskName\":\"Login\""));
+        assert_eq!(first.execution_id, "run/one");
+        assert_eq!(first.sequence, 1);
+        assert_eq!(second.sequence, 2);
+        assert_eq!(second.task_name.as_deref(), Some("Login"));
+        assert!(logger.run_dir().join("logs").is_dir());
         fs::remove_dir_all(root).unwrap();
     }
 }

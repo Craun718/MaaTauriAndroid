@@ -40,6 +40,7 @@ import type {
   TaskDefinition,
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { useNotificationStore } from "../store/notificationStore";
 
 interface FocusNotice {
   channel: string;
@@ -53,9 +54,9 @@ export function TasksPage() {
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const applyPreset = useAppStore((state) => state.applyPreset);
   const { t } = useTranslation();
-  const [focusToast, setFocusToast] = useState<FocusNotice>();
   const [focusNotice, setFocusNotice] = useState<FocusNotice>();
   const [selectedPreset, setSelectedPreset] = useState<string>();
+  const notify = useNotificationStore((state) => state.notify);
 
   useEffect(() => {
     let disposed = false;
@@ -72,8 +73,10 @@ export function TasksPage() {
         .catch(() => undefined);
     };
     subscribe("focus-toast", (payload) => {
-      setFocusToast(payload);
-      window.setTimeout(() => setFocusToast(undefined), 4000);
+      notify(
+        payload.name ? `${payload.name}: ${payload.message}` : payload.message,
+        { durationMs: 4000 },
+      );
     });
     subscribe("focus-notify", (payload) => setFocusNotice(payload));
     return () => {
@@ -82,7 +85,7 @@ export function TasksPage() {
         stop();
       });
     };
-  }, []);
+  }, [notify]);
 
   // Must stay above the early return below: React requires every hook to run on
   // every render, otherwise the hook count changes when `project` is missing.
@@ -275,18 +278,6 @@ export function TasksPage() {
           emptyLabel={t("noTasksToAdd")}
         />
       </section>
-      {focusToast && (
-        <div
-          role="status"
-          className="fixed inset-x-4 bottom-24 z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
-        >
-          <p className="text-sm">
-            {focusToast.name
-              ? `${focusToast.name}: ${focusToast.message}`
-              : focusToast.message}
-          </p>
-        </div>
-      )}
       {focusNotice && (
         <div
           role="alertdialog"

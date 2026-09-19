@@ -240,6 +240,8 @@ export interface ResolvedRun {
 
 export type RunState = "Idle" | "Preparing" | "Running" | "Stopping";
 
+export type RunResultSeverity = "info" | "error";
+
 export type RunEventKind =
   | "started"
   | "preparing"
@@ -261,6 +263,13 @@ export interface RunEvent {
   message: string;
   taskName?: string;
   data?: Record<string, unknown>;
+}
+
+export interface RunResult {
+  executionId?: string;
+  state: RunState;
+  severity?: RunResultSeverity;
+  message: string;
 }
 
 export interface DiagnosticItem {

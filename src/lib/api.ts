@@ -5,7 +5,7 @@ import type {
   LogExport,
   PrivilegedStatus,
   ResolvedRun,
-  RunState,
+  RunResult,
   UserConfiguration,
   VirtualDisplayStatus,
 } from "./types";
@@ -73,9 +73,7 @@ export async function updateVirtualDisplayBounds(
 }
 
 export async function getRunStatus() {
-  return invoke<{ executionId?: string; state: RunState; message: string }>(
-    "run_status",
-  );
+  return invoke<RunResult>("run_status");
 }
 
 export async function stopRun(executionId?: string) {

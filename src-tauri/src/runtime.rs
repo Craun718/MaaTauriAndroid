@@ -44,6 +44,8 @@ pub struct MaaSessions {
     stop_requested: AtomicBool,
 }
 
+static MAA_LIBRARY: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+
 enum SessionLease {
     Idle,
     Preparing(String),
@@ -193,6 +195,18 @@ impl MaaSessions {
     }
 }
 
+fn ensure_maa_library(path: &Path) -> Result<(), RuntimeError> {
+    ensure_maa_library_with(&MAA_LIBRARY, path, maa_framework::load_library)
+}
+
+fn ensure_maa_library_with(
+    state: &std::sync::OnceLock<Result<(), String>>,
+    path: &Path,
+    load: impl FnOnce(&Path) -> Result<(), String>,
+) -> Result<(), RuntimeError> {
+    state.get_or_init(|| load(path)).clone().map_err(set_error)
+}
+
 fn lease_id(lease: &SessionLease) -> Option<&str> {
     match lease {
         SessionLease::Preparing(execution_id) => Some(execution_id),
@@ -209,11 +223,19 @@ pub enum RunState {
     Stopping,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RunResultSeverity {
+    Info,
+    Error,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunResult {
     pub execution_id: Option<String>,
     pub state: RunState,
+    pub severity: RunResultSeverity,
     pub message: String,
 }
 
@@ -407,10 +429,16 @@ pub fn clear_run_result() {
     *RUN_RESULT.lock().expect("run result lock poisoned") = None;
 }
 
-pub fn set_execution_result(execution_id: Option<&str>, state: RunState, message: String) {
+pub fn set_execution_result(
+    execution_id: Option<&str>,
+    state: RunState,
+    severity: RunResultSeverity,
+    message: String,
+) {
     *RUN_RESULT.lock().expect("run result lock poisoned") = Some(RunResult {
         execution_id: execution_id.map(str::to_string),
         state,
+        severity,
         message,
     });
 }
@@ -505,6 +533,37 @@ struct AndroidJni {
 #[cfg(target_os = "android")]
 static ANDROID_JNI: std::sync::OnceLock<AndroidJni> = std::sync::OnceLock::new();
 
+static MAA_LOG_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Directory MaaFramework writes `maa.log` into; configured from the Tauri
+/// setup so the standalone log export knows where to collect it.
+pub fn set_maa_log_dir(path: PathBuf) {
+    let _ = MAA_LOG_DIR.set(path);
+}
+
+pub fn maa_log_dir() -> Option<&'static Path> {
+    MAA_LOG_DIR.get().map(PathBuf::as_path)
+}
+
+/// Points MaaFramework's file log at the app-owned directory. Best effort:
+/// the framework falls back to the process working directory when this fails.
+fn configure_framework_logging() {
+    let Some(log_dir) = maa_log_dir() else {
+        return;
+    };
+    if let Err(error) = maa_framework::configure_logging(&log_dir.to_string_lossy()) {
+        if let Some(logger) = crate::run_log::latest_global() {
+            let _ = logger.append(
+                crate::run_log::RunEventKind::Warning,
+                RunState::Preparing,
+                format!("MaaFramework log directory could not be set: {error}"),
+                None,
+                None,
+            );
+        }
+    }
+}
+
 pub fn run_result() -> Option<RunResult> {
     RUN_RESULT.lock().expect("run result lock poisoned").clone()
 }
@@ -519,12 +578,14 @@ pub fn create_session(
     pi_env: Option<&std::collections::BTreeMap<String, String>>,
 ) -> Result<CreatedSession, RuntimeError> {
     let maa_library = library_path()?;
-    maa_framework::load_library(&maa_library).map_err(set_error)?;
+    ensure_maa_library(&maa_library)?;
+    configure_framework_logging();
     let mut pi_environment = pi_env.cloned().unwrap_or_default();
 
     let config = android_controller_config(display_id, force_stop)?;
     let controller = Controller::new_android_native(&config)?;
-    if !controller.connected() {
+    let connection_id = controller.post_connection()?;
+    if !controller.wait(connection_id).is_success() || !controller.connected() {
         return Err(RuntimeError::ControlDisconnected);
     }
 
@@ -718,6 +779,7 @@ mod tests {
         TaskDefinition,
     };
     use std::collections::BTreeMap;
+    use std::sync::atomic::AtomicUsize;
 
     #[test]
     fn task_pipeline_overrides_are_scoped_to_task() {
@@ -752,6 +814,40 @@ mod tests {
     }
 
     #[test]
+    fn maa_library_initialization_is_cached() {
+        let state = std::sync::OnceLock::new();
+        let load_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let loader_count = load_count.clone();
+
+        ensure_maa_library_with(&state, Path::new("maa"), move |_path| {
+            loader_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        })
+        .expect("first load should succeed");
+        ensure_maa_library_with(&state, Path::new("maa"), |_path| {
+            panic!("a cached library must not be loaded again");
+        })
+        .expect("the cached load should succeed");
+
+        assert_eq!(load_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn maa_library_failure_is_cached() {
+        let state = std::sync::OnceLock::new();
+
+        let first = ensure_maa_library_with(&state, Path::new("maa"), |_path| {
+            Err("load failed".to_string())
+        });
+        let second = ensure_maa_library_with(&state, Path::new("maa"), |_path| {
+            panic!("a cached failure must not be loaded again");
+        });
+
+        assert!(matches!(first, Err(RuntimeError::Maa(message)) if message == "load failed"));
+        assert!(matches!(second, Err(RuntimeError::Maa(message)) if message == "load failed"));
+    }
+
+    #[test]
     fn configure_screen_stores_a_valid_size() {
         configure_screen(1080, 2400);
         assert!(screen_size().is_some());
@@ -767,6 +863,38 @@ mod tests {
         assert_eq!(active_display_id(), 17);
         set_active_display(0);
         assert_eq!(active_display_id(), 0);
+    }
+
+    #[test]
+    fn execution_results_expose_restoration_severity() {
+        clear_run_result();
+        set_execution_result(
+            Some("run-1"),
+            RunState::Idle,
+            RunResultSeverity::Error,
+            "the control unit is not connected".to_string(),
+        );
+        let failure = run_result().expect("failure result");
+        assert_eq!(failure.severity, RunResultSeverity::Error);
+        assert_eq!(
+            serde_json::to_value(&failure).unwrap()["severity"],
+            serde_json::json!("error")
+        );
+
+        clear_run_result();
+        set_execution_result(
+            Some("run-1"),
+            RunState::Idle,
+            RunResultSeverity::Info,
+            "The run completed".to_string(),
+        );
+        let completed = run_result().expect("completed result");
+        assert_eq!(completed.severity, RunResultSeverity::Info);
+        assert_eq!(
+            serde_json::to_value(&completed).unwrap()["severity"],
+            serde_json::json!("info")
+        );
+        clear_run_result();
     }
 
     #[test]

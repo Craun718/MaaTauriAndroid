@@ -603,7 +603,7 @@ fn android_bridge<T>(
             "the agent bridge context is missing".to_string(),
         ));
     }
-    let service = env
+    let mut service = env
         .call_static_method(
             crate::runtime::control_host_class()
                 .map_err(|error| AgentError::Host(error.to_string()))?,
@@ -613,6 +613,20 @@ fn android_bridge<T>(
         )
         .and_then(|value| value.l())
         .map_err(|error| AgentError::Host(error.to_string()))?;
+    if service.is_null() {
+        crate::runtime::ensure_control_service(10_000)
+            .map_err(|error| AgentError::Host(error.to_string()))?;
+        service = env
+            .call_static_method(
+                crate::runtime::control_host_class()
+                    .map_err(|error| AgentError::Host(error.to_string()))?,
+                "current",
+                "()Ltop/natsuu/mta/IMaaTauriAndroidControlService;",
+                &[],
+            )
+            .and_then(|value| value.l())
+            .map_err(|error| AgentError::Host(error.to_string()))?;
+    }
     if service.is_null() {
         return Err(AgentError::Host(
             "the privileged control service is disconnected".to_string(),

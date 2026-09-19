@@ -11,6 +11,8 @@ use std::{
 
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const CHECKSUMS_FILE: &str = "checksums.sha256";
+#[cfg(target_os = "android")]
+const CONTROL_RECONNECT_TIMEOUT_MS: u64 = 10_000;
 
 pub const EXPECTED_ARTIFACTS: &[&str] = &[
     "bugreport.zip",
@@ -591,6 +593,16 @@ pub fn platform_source() -> impl DiagnosticSource {
 }
 
 #[cfg(not(target_os = "android"))]
+pub fn log_export_source() -> impl DiagnosticSource {
+    UnsupportedSource
+}
+
+#[cfg(target_os = "android")]
+pub fn log_export_source() -> impl DiagnosticSource {
+    AndroidLogSource
+}
+
+#[cfg(not(target_os = "android"))]
 struct UnsupportedSource;
 
 #[cfg(not(target_os = "android"))]
@@ -721,6 +733,59 @@ impl DiagnosticSource for AndroidSource {
 }
 
 #[cfg(target_os = "android")]
+struct AndroidLogSource;
+
+#[cfg(target_os = "android")]
+impl DiagnosticSource for AndroidLogSource {
+    fn capture_png(&self, _display_id: u32) -> io::Result<Vec<u8>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "screenshots are not included in the standalone log export",
+        ))
+    }
+
+    fn device_info(&self) -> io::Result<Vec<u8>> {
+        self.capture_png(0)
+    }
+
+    fn display_state(&self) -> io::Result<Vec<u8>> {
+        self.capture_png(0)
+    }
+
+    fn logcat(&self) -> io::Result<Vec<u8>> {
+        let vm = crate::runtime::java_vm().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Java runtime is not initialized",
+            )
+        })?;
+        let mut env = vm
+            .attach_current_thread()
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        let _ = env.exception_clear();
+        let descriptor = env
+            .call_static_method(
+                crate::runtime::runtime_bridge_class()
+                    .map_err(|error| io::Error::other(error.to_string()))?,
+                "localLogcat",
+                "()Landroid/os/ParcelFileDescriptor;",
+                &[],
+            )
+            .and_then(|value| value.l())
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        read_parcel_file_descriptor(&mut env, descriptor)
+    }
+
+    fn dumpsys(&self) -> io::Result<Vec<u8>> {
+        self.capture_png(0)
+    }
+
+    fn bugreport(&self, _destination: &Path) -> io::Result<Vec<String>> {
+        self.capture_png(0).map(|_| Vec::new())
+    }
+}
+
+#[cfg(target_os = "android")]
 fn humantime_millis(value: u64) -> String {
     format!("{value}ms")
 }
@@ -759,7 +824,7 @@ fn with_service<T>(
     let mut env = vm
         .attach_current_thread()
         .map_err(|error| io::Error::other(error.to_string()))?;
-    let service = env
+    let mut service = env
         .call_static_method(
             crate::runtime::control_host_class()
                 .map_err(|error| io::Error::other(error.to_string()))?,
@@ -769,6 +834,20 @@ fn with_service<T>(
         )
         .and_then(|value| value.l())
         .map_err(|error| io::Error::other(error.to_string()))?;
+    if service.is_null() {
+        crate::runtime::ensure_control_service(CONTROL_RECONNECT_TIMEOUT_MS)
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        service = env
+            .call_static_method(
+                crate::runtime::control_host_class()
+                    .map_err(|error| io::Error::other(error.to_string()))?,
+                "current",
+                "()Ltop/natsuu/mta/IMaaTauriAndroidControlService;",
+                &[],
+            )
+            .and_then(|value| value.l())
+            .map_err(|error| io::Error::other(error.to_string()))?;
+    }
     if service.is_null() {
         return Err(io::Error::new(
             io::ErrorKind::NotConnected,

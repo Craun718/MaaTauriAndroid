@@ -8,6 +8,7 @@ import android.os.IBinder
 import android.os.Handler
 import android.util.Log
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import rikka.shizuku.Shizuku
 import top.natsuu.mta.IMaaTauriAndroidControlService
 import top.natsuu.mta.RuntimeBridge
@@ -17,6 +18,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     private val mainHandler = Handler(context.mainLooper)
     private var permissionListener: Shizuku.OnRequestPermissionResultListener? = null
     private var permissionResultCallback: ((Boolean) -> Unit)? = null
+    private val connectionResultCallbacks = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private val serviceArgs = Shizuku.UserServiceArgs(
         ComponentName(context, PrivilegedControlServiceImpl::class.java),
     )
@@ -39,11 +41,13 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
         if (binder == null) {
             RuntimeBridge.setControlState(STATE_ERROR)
+            completeConnectionRequest(false)
             completePermissionRequest(false)
             return
         }
         ControlHost.attach(IMaaTauriAndroidControlService.Stub.asInterface(binder))
         RuntimeBridge.setControlState(STATE_CONNECTED)
+        completeConnectionRequest(true)
         completePermissionRequest(true)
     }
 
@@ -52,17 +56,25 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         stopVirtualDisplaySafely()
         ControlHost.detach()
         RuntimeBridge.setControlState(STATE_DISCONNECTED)
+        completeConnectionRequest(false)
         completePermissionRequest(false)
     }
 
-    fun connect() {
+    fun connect(onResult: ((Boolean) -> Unit)? = null) {
+        onResult?.let(connectionResultCallbacks::add)
+        if (ControlHost.current() != null) {
+            completeConnectionRequest(true)
+            return
+        }
         RuntimeBridge.setControlState(STATE_STARTING)
         if (!Shizuku.pingBinder()) {
             RuntimeBridge.setControlState(STATE_SHIZUKU_UNAVAILABLE)
+            completeConnectionRequest(false)
             return
         }
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
             RuntimeBridge.setControlState(STATE_PERMISSION_REQUIRED)
+            completeConnectionRequest(false)
             return
         }
         bindService()
@@ -75,6 +87,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             bound = false
         }
         removePermissionListener()
+        completeConnectionRequest(false)
         completePermissionRequest(false)
         ControlHost.detach()
         Shizuku.removeBinderReceivedListener(binderReceivedListener)
@@ -139,6 +152,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     private fun bindService() {
         if (bound) {
             completePermissionRequest(true)
+            completeConnectionRequest(ControlHost.current() != null)
             return
         }
         RuntimeBridge.setControlState(STATE_STARTING)
@@ -149,6 +163,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             bound = false
             RuntimeBridge.setControlState(STATE_ERROR)
             Log.w("MaaTauriAndroidControl", "Could not bind Shizuku user service", error)
+            completeConnectionRequest(false)
             completePermissionRequest(false)
         }
     }
@@ -161,6 +176,13 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     private fun completePermissionRequest(result: Boolean) {
         permissionResultCallback?.invoke(result)
         permissionResultCallback = null
+    }
+
+    private fun completeConnectionRequest(result: Boolean) {
+        connectionResultCallbacks.toList().forEach { callback ->
+            runCatching { callback(result) }
+        }
+        connectionResultCallbacks.clear()
     }
 
     companion object {

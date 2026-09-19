@@ -437,6 +437,24 @@ pub fn control_host_class() -> Result<&'static GlobalRef, RuntimeError> {
 }
 
 #[cfg(target_os = "android")]
+pub fn ensure_control_service(timeout_ms: u64) -> Result<bool, RuntimeError> {
+    let vm = java_vm().ok_or_else(|| RuntimeError::JniBridge("not initialized".to_string()))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| RuntimeError::JniBridge(error.to_string()))?;
+    let connected = env
+        .call_static_method(
+            runtime_bridge_class()?,
+            "connectPrivilegedService",
+            "(J)Z",
+            &[jni::objects::JValue::Long(timeout_ms as jni::sys::jlong)],
+        )
+        .and_then(|value| value.z())
+        .map_err(|error| RuntimeError::JniBridge(error.to_string()))?;
+    Ok(connected)
+}
+
+#[cfg(target_os = "android")]
 struct AndroidJni {
     vm: jni::JavaVM,
     runtime_bridge_class: GlobalRef,

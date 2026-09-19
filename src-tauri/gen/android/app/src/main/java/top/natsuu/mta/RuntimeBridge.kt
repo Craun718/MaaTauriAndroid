@@ -16,6 +16,7 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
 
@@ -65,6 +66,20 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun connectPrivilegedService(timeoutMs: Long): Boolean {
+        val client = controlClient ?: return false
+        val latch = CountDownLatch(1)
+        val connected = AtomicBoolean(false)
+        mainHandler.post {
+            client.connect { result ->
+                connected.set(result)
+                latch.countDown()
+            }
+        }
+        return latch.await(timeoutMs, TimeUnit.MILLISECONDS) && connected.get()
+    }
+
+    @JvmStatic
     fun attachVirtualDisplayHost(host: VirtualDisplayHost) {
         virtualDisplayHost = host
     }
@@ -101,6 +116,36 @@ object RuntimeBridge {
             true
         }.getOrDefault(false)
     }
+
+    /**
+     * Reads this app's logs without the privileged service so log export still
+     * works after Shizuku or the control process goes away.
+     */
+    @JvmStatic
+    fun localLogcat(): ParcelFileDescriptor? = runCatching {
+        val process = ProcessBuilder(
+            "logcat",
+            "-d",
+            "-v",
+            "threadtime",
+            "--pid=${android.os.Process.myPid()}",
+        ).redirectErrorStream(true).start()
+        val (reader, writer) = ParcelFileDescriptor.createPipe()
+        thread {
+            try {
+                process.inputStream.use { input ->
+                    ParcelFileDescriptor.AutoCloseOutputStream(writer).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                process.waitFor()
+            } catch (error: Throwable) {
+                runCatching { writer.close() }
+                runCatching { process.destroyForcibly() }
+            }
+        }
+        reader
+    }.getOrNull()
 
     /**
      * Copies the log archive into the system Downloads collection and opens the

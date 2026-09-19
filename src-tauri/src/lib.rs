@@ -1262,7 +1262,7 @@ async fn export_logs(app: AppHandle) -> Result<LogExport, AppError> {
         .unwrap_or_default();
     let output = exports_dir.join(format!("maa_tauri_android-logs-{timestamp}.zip"));
     let archive = tokio::task::spawn_blocking(move || {
-        let source = diagnostics::platform_source();
+        let source = diagnostics::log_export_source();
         diagnostics::export_log_archive(&source, output)
     })
     .await

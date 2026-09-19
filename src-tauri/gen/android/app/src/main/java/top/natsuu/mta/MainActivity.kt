@@ -56,6 +56,13 @@ class MainActivity : TauriActivity() {
     super.onDestroy()
   }
 
+  override fun onResume() {
+    super.onResume()
+    if (::controlClient.isInitialized) {
+      controlClient.connect()
+    }
+  }
+
   /**
    * Edge-to-edge is not optional here: [enableEdgeToEdge] asks for it, and from targetSdk 36 the
    * platform enforces it anyway (`windowOptOutEdgeToEdgeEnforcement` is deprecated and disabled),

@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AppStateSnapshot,
   Project,
@@ -59,6 +65,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 function renderPrivilegeStatusCard() {
   return render(
     <>
@@ -87,6 +97,29 @@ describe("PrivilegeStatusCard", () => {
     expect(
       screen.queryByRole("button", { name: "Retry" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("polls a starting service until it connects", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getPrivilegedStatus
+      .mockResolvedValueOnce({
+        status: "starting",
+        message: "starting",
+        setupRequired: [],
+      })
+      .mockResolvedValueOnce({ status: "connected", message: "connected" });
+
+    renderPrivilegeStatusCard();
+
+    expect(await screen.findByText("Connecting")).toBeInTheDocument();
+    expect(getPrivilegedStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(await screen.findByText("Granted")).toBeInTheDocument();
+    expect(getPrivilegedStatus).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the manual permission action in the granted state", async () => {

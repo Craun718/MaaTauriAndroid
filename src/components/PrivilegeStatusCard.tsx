@@ -77,6 +77,8 @@ const actionCopy: Record<PrivilegeAction, MessageKey> = {
   retry: "retryConnection",
 };
 
+const STATUS_POLL_INTERVAL_MS = 500;
+
 export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
@@ -85,21 +87,34 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
   const [refreshing, setRefreshing] = useState(true);
   const [actionPending, setActionPending] = useState(false);
 
-  const refreshStatus = useCallback(async () => {
-    setRefreshing(true);
+  const refreshStatus = useCallback(async (trackActivity = true) => {
+    if (trackActivity) {
+      setRefreshing(true);
+    }
     try {
       setStatus(await getPrivilegedStatus());
       setStatusError(undefined);
     } catch (error) {
       setStatusError(error instanceof Error ? error.message : String(error));
     } finally {
-      setRefreshing(false);
+      if (trackActivity) {
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (status?.status !== "starting") return;
+
+    const pollId = window.setInterval(() => {
+      void refreshStatus(false);
+    }, STATUS_POLL_INTERVAL_MS);
+    return () => window.clearInterval(pollId);
+  }, [refreshStatus, status]);
 
   useEffect(() => {
     function refreshOnFocus() {

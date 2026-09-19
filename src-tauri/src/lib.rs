@@ -908,6 +908,13 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
         });
     }
 
+    // MaaFramework caches the display ID on its controller, so the virtual
+    // display must exist before session creation and before any StartApp task.
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_start_virtual_display(1280, 720, 160)?;
+    }
+
     let sessions = state.maa.clone();
     let run_execution_id = execution_id.clone();
     let logger_for_run = logger.clone();
@@ -924,6 +931,19 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let agent_count = project.agents.len();
     let creation_execution_id = run_execution_id.clone();
     let controller_display_id = runtime::active_display_id();
+    if controller_display_id == 0 {
+        state.maa.finish(&execution_id);
+        return Err(AppError::Message(
+            "The virtual display is not active".to_string(),
+        ));
+    }
+    logger.append(
+        run_log::RunEventKind::Preparing,
+        runtime::RunState::Preparing,
+        format!("Controller bound to display {controller_display_id}"),
+        None,
+        None,
+    )?;
     let resolved_for_run = resolved.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     let force_stop_target_app = configuration.force_stop_target_app;

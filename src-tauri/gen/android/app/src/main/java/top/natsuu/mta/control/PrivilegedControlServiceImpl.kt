@@ -1,7 +1,6 @@
 package top.natsuu.mta.control
 
 import android.content.Context
-import android.app.ActivityOptions
 import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Bitmap
@@ -283,7 +282,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             METHOD_START_GAME -> {
                 val target = packageName.orEmpty()
                 if (target.isNotEmpty()) {
-                    if (forceStop) {
+                    // Android reuses an existing task on the default display, so a
+                    // launch-display option alone cannot move an already-running app.
+                    val shouldForceStop = forceStop || displayId != 0
+                    if (shouldForceStop) {
                         val stopped = shell("am", "force-stop", packageNameOf(target))
                         if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
                     }
@@ -430,42 +432,20 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     private fun startGameOnDisplay(spec: String, displayId: Int): Int {
-        val displayContext = context ?: return RESULT_COMMAND_FAILED
-        val component = componentOf(spec)
-        val intent = if (component != null) {
-            Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_LAUNCHER)
-                .setComponent(component)
-        } else {
-            displayContext.packageManager.getLaunchIntentForPackage(spec)
-                ?: displayContext.packageManager.getLeanbackLaunchIntentForPackage(spec)
-        } ?: return startGameWithAm(spec, displayId)
-
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val options = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
-        return try {
-            displayContext.startActivity(intent, options.toBundle())
-            RESULT_OK
-        } catch (error: Throwable) {
-            android.util.Log.w(
-                "MaaTauriAndroidControl",
-                "Could not launch $spec on displayId=$displayId, falling back to am",
-                error,
-            )
-            startGameWithAm(spec, displayId)
-        }
+        return startGameWithAm(spec, displayId)
     }
 
     private fun startGameWithAm(spec: String, displayId: Int): Int {
         val component = componentOf(spec)
-        val intent = if (component != null) {
+        val intent = component?.let {
             Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_LAUNCHER)
-                .setComponent(component)
+                .setComponent(it)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        } else {
-            null
-        }
+        } ?: context?.packageManager?.getLaunchIntentForPackage(spec)
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ?: context?.packageManager?.getLeanbackLaunchIntentForPackage(spec)
+                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         val command = if (intent != null) {
             arrayOf(
@@ -490,6 +470,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             }
         }
         val status = shell(*command)
+        android.util.Log.i(
+            "MaaTauriAndroidControl",
+            "am start ${packageNameOf(spec)} displayId=$displayId status=$status",
+        )
         return if (status == RESULT_OK) RESULT_OK else RESULT_COMMAND_FAILED
     }
 

@@ -103,8 +103,8 @@ class MainActivity : TauriActivity() {
     val scale = if (view.scale > 0F) view.scale else 1F
     val physicalWidth = (width * scale).toInt().coerceAtLeast(1)
     val physicalHeight = (height * scale).toInt().coerceAtLeast(1)
-    val physicalLeft = view.left + (left * scale).toInt()
-    val physicalTop = view.top + (top * scale).toInt()
+    val physicalLeft = (left * scale).toInt()
+    val physicalTop = (top * scale).toInt()
 
     val surface = previewSurface ?: SurfaceView(this).apply {
       setZOrderMediaOverlay(true)

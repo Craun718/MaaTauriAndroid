@@ -435,6 +435,20 @@ describe("focus notifications", () => {
   });
 });
 
+describe("run status restoration", () => {
+  it("shows the latest backend message after a component remount", async () => {
+    getRunStatus.mockResolvedValue({
+      executionId: "run-1",
+      state: "Idle",
+      message: "The run failed",
+    });
+
+    render(<TasksPage />);
+
+    expect(await screen.findByText("The run failed")).toBeInTheDocument();
+  });
+});
+
 describe("manual screenshot notifications", () => {
   it("shows a run-scoped in-app notice without exposing the raw path", async () => {
     render(<TasksPage />);

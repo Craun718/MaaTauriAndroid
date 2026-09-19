@@ -235,6 +235,20 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun nativeLibraryPath(name: String): String {
+        val context = requireNotNull(agentContext) { "the runtime bridge context is missing" }
+        val abi = requireNotNull(Build.SUPPORTED_ABIS.firstOrNull()) {
+            "the device does not report a supported ABI"
+        }
+        val sourceDir = requireNotNull(context.applicationInfo.sourceDir) {
+            "the application APK path is missing"
+        }
+        // Uncompressed APK-native libraries are mapped through this virtual path;
+        // nativeLibraryDir is empty when extractNativeLibs is disabled.
+        return "$sourceDir!/lib/$abi/lib$name.so"
+    }
+
+    @JvmStatic
     fun startVirtualDisplay(width: Int, height: Int, dpi: Int): Boolean {
         val displayId = runCatching {
             ControlHost.startVirtualDisplay(width, height, dpi)

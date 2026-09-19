@@ -1,7 +1,7 @@
 use crate::agent::AgentSession;
 use crate::domain::types::ResolvedTask;
 #[cfg(target_os = "android")]
-use jni::objects::{GlobalRef, JClass};
+use jni::objects::{GlobalRef, JClass, JString};
 use maa_framework::{
     controller::Controller, resource::Resource, tasker::Tasker, AndroidNativeControllerConfig,
     AndroidScreenResolution,
@@ -229,6 +229,60 @@ fn library_path() -> Result<PathBuf, RuntimeError> {
         }
     }
 
+    #[cfg(target_os = "android")]
+    return android_library_path("MaaFramework");
+
+    #[cfg(not(target_os = "android"))]
+    return desktop_maps_library_path();
+}
+
+#[cfg(target_os = "android")]
+fn android_library_path(name: &str) -> Result<PathBuf, RuntimeError> {
+    let map_error = |error: jni::errors::Error| RuntimeError::JniBridge(error.to_string());
+    let vm = java_vm().ok_or_else(|| RuntimeError::JniBridge("not initialized".to_string()))?;
+    let mut env = vm.attach_current_thread().map_err(map_error)?;
+    let library_name = env.new_string(name).map_err(map_error)?;
+    let path = env
+        .call_static_method(
+            runtime_bridge_class()?,
+            "nativeLibraryPath",
+            "(Ljava/lang/String;)Ljava/lang/String;",
+            &[jni::objects::JValue::Object(&library_name)],
+        )
+        .and_then(|value| value.l())
+        .map_err(map_error)?;
+    let path = env
+        .get_string(&JString::from(path))
+        .map_err(map_error)?
+        .to_string_lossy();
+    if path.is_empty() {
+        return Err(RuntimeError::LibraryNotLoaded(format!(
+            "the Android library path for {name} is empty"
+        )));
+    }
+    Ok(PathBuf::from(path.into_owned()))
+}
+
+#[cfg(not(target_os = "android"))]
+fn control_library_path(maa_path: &Path) -> Result<PathBuf, RuntimeError> {
+    let path = maa_path
+        .parent()
+        .ok_or_else(|| RuntimeError::LibraryNotLoaded(maa_path.display().to_string()))?
+        .join("libMaaAndroidNativeControlUnit.so");
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(RuntimeError::LibraryNotLoaded(path.display().to_string()))
+    }
+}
+
+#[cfg(target_os = "android")]
+fn control_library_path(_maa_path: &Path) -> Result<PathBuf, RuntimeError> {
+    android_library_path("MaaAndroidNativeControlUnit")
+}
+
+#[cfg(not(target_os = "android"))]
+fn desktop_maps_library_path() -> Result<PathBuf, RuntimeError> {
     let maps = std::fs::read_to_string("/proc/self/maps")
         .map_err(|error| RuntimeError::LibraryNotLoaded(error.to_string()))?;
     maps.lines()
@@ -244,18 +298,6 @@ fn library_path() -> Result<PathBuf, RuntimeError> {
                 "libMaaFramework.so was not found in /proc/self/maps".to_string(),
             )
         })
-}
-
-fn control_library_path(maa_path: &Path) -> Result<PathBuf, RuntimeError> {
-    let path = maa_path
-        .parent()
-        .ok_or_else(|| RuntimeError::LibraryNotLoaded(maa_path.display().to_string()))?
-        .join("libMaaAndroidNativeControlUnit.so");
-    if path.is_file() {
-        Ok(path)
-    } else {
-        Err(RuntimeError::LibraryNotLoaded(path.display().to_string()))
-    }
 }
 
 fn resource_path(project_root: &str, relative: &str) -> PathBuf {

@@ -52,6 +52,7 @@ export function RunPanel() {
         executionIdRef.current = result.executionId;
         setExecutionId(result.executionId);
         setRunState(result.state);
+        setStatus(result.message);
       })
       .catch(() => undefined);
   }, [snapshot]);

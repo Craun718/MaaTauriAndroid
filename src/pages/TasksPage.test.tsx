@@ -39,7 +39,7 @@ vi.mock("../lib/api", () => ({
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
-  updateVirtualDisplayBounds: vi.fn(),
+  getVirtualDisplayStream: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

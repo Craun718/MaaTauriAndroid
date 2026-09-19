@@ -38,15 +38,9 @@ object RuntimeBridge {
     @Volatile
     private var controlClient: ControlServiceClient? = null
     @Volatile
-    private var virtualDisplayHost: VirtualDisplayHost? = null
-    @Volatile
     private var physicalScreenWidth = 0
     @Volatile
     private var physicalScreenHeight = 0
-
-    fun interface VirtualDisplayHost {
-        fun updateVirtualDisplayBounds(left: Int, top: Int, width: Int, height: Int)
-    }
 
     @JvmStatic
     fun attachContext(context: Context) {
@@ -82,18 +76,6 @@ object RuntimeBridge {
             }
         }
         return latch.await(timeoutMs, TimeUnit.MILLISECONDS) && connected.get()
-    }
-
-    @JvmStatic
-    fun attachVirtualDisplayHost(host: VirtualDisplayHost) {
-        virtualDisplayHost = host
-    }
-
-    @JvmStatic
-    fun detachVirtualDisplayHost(host: VirtualDisplayHost) {
-        if (virtualDisplayHost === host) {
-            virtualDisplayHost = null
-        }
     }
 
     @JvmStatic
@@ -346,11 +328,22 @@ object RuntimeBridge {
         ControlHost.configure(displayId, width, height)
         configureScreen(width, height)
         setActiveDisplay(displayId)
+        VirtualDisplayStreamHost.start(width, height)?.let { previewSurface ->
+            runCatching {
+                ControlHost.attachPreviewSurface(previewSurface)
+            }.onFailure {
+                VirtualDisplayStreamHost.stop()
+            }
+        }
         return true
     }
 
     @JvmStatic
     fun stopVirtualDisplay(): Boolean {
+        runCatching {
+            ControlHost.attachPreviewSurface(null)
+        }
+        VirtualDisplayStreamHost.stop()
         runCatching {
             ControlHost.stopVirtualDisplay()
         }
@@ -361,14 +354,6 @@ object RuntimeBridge {
             configureScreen(width, height)
         }
         setActiveDisplay(0)
-        val host = virtualDisplayHost
-        if (host != null) {
-            if (Looper.myLooper() == mainHandler.looper) {
-                host.updateVirtualDisplayBounds(0, 0, 0, 0)
-            } else {
-                mainHandler.post { host.updateVirtualDisplayBounds(0, 0, 0, 0) }
-            }
-        }
         return true
     }
 
@@ -378,13 +363,7 @@ object RuntimeBridge {
     }
 
     @JvmStatic
-    fun updateVirtualDisplayBounds(left: Int, top: Int, width: Int, height: Int): Boolean {
-        val host = virtualDisplayHost ?: return false
-        mainHandler.post {
-            host.updateVirtualDisplayBounds(left, top, width, height)
-        }
-        return true
-    }
+    fun virtualDisplayStreamUrl(): String? = VirtualDisplayStreamHost.streamUrl()
 
     @JvmStatic
     external fun configureScreen(width: Int, height: Int)

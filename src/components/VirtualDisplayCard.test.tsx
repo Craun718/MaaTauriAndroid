@@ -6,14 +6,13 @@ import { NotificationHost } from "./ui/NotificationHost";
 import { VirtualDisplayCard } from "./VirtualDisplayCard";
 
 const getVirtualDisplayStatus = vi.fn();
+const getVirtualDisplayStream = vi.fn();
 const stopVirtualDisplay = vi.fn();
-const updateVirtualDisplayBounds = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
+  getVirtualDisplayStream: () => getVirtualDisplayStream(),
   stopVirtualDisplay: () => stopVirtualDisplay(),
-  updateVirtualDisplayBounds: (...args: unknown[]) =>
-    updateVirtualDisplayBounds(...args),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -51,7 +50,9 @@ beforeEach(() => {
   eventHandlers.handlers = {};
   useNotificationStore.setState({ notifications: [] });
   getVirtualDisplayStatus.mockResolvedValue(inactive);
-  updateVirtualDisplayBounds.mockResolvedValue(undefined);
+  getVirtualDisplayStream.mockResolvedValue({
+    url: "ws://127.0.0.1:8080/virtual-display-stream?token=test",
+  });
 });
 
 afterEach(() => {
@@ -76,76 +77,18 @@ describe("VirtualDisplayCard", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("Stopped")).toHaveLength(1);
     expect(screen.queryByText("1280 x 720")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Start" }),
-    ).not.toBeInTheDocument();
+    expect(getVirtualDisplayStream).not.toHaveBeenCalled();
   });
 
-  it("reports the preview bounds while the display is active", async () => {
+  it("reports that the WebView cannot decode when WebCodecs is absent", async () => {
     getVirtualDisplayStatus.mockResolvedValue(active);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-      left: -16,
-      top: -120,
-      width: 320,
-      height: 180,
-    } as DOMRect);
 
     renderVirtualDisplayCard();
 
     expect(await screen.findByText("Display ID: 12")).toBeInTheDocument();
-    expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByText("Running").nextElementSibling).toHaveTextContent(
-      "1280 x 720",
-    );
-    await waitFor(() =>
-      expect(updateVirtualDisplayBounds).toHaveBeenCalledWith(
-        -16,
-        -120,
-        320,
-        180,
-      ),
-    );
-  });
-
-  it("reports preview bounds from an ancestor scroll container", async () => {
-    getVirtualDisplayStatus.mockResolvedValue(active);
-    const getBoundingClientRect = vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockReturnValue({
-        left: -16,
-        top: -120,
-        width: 320,
-        height: 180,
-      } as DOMRect);
-
-    render(
-      <>
-        <NotificationHost />
-        <main>
-          <VirtualDisplayCard />
-        </main>
-      </>,
-    );
-
-    await screen.findByText("Display ID: 12");
-    await waitFor(() => expect(updateVirtualDisplayBounds).toHaveBeenCalled());
-    updateVirtualDisplayBounds.mockClear();
-    getBoundingClientRect.mockReturnValue({
-      left: 8,
-      top: 24,
-      width: 360,
-      height: 200,
-    } as DOMRect);
-
-    const scrollContainer = screen
-      .getByRole("heading", { name: "Virtual display" })
-      .closest("main");
-    if (!scrollContainer) throw new Error("scroll container not found");
-    fireEvent.scroll(scrollContainer);
-
-    await waitFor(() =>
-      expect(updateVirtualDisplayBounds).toHaveBeenCalledWith(8, 24, 360, 200),
-    );
+    expect(
+      await screen.findByText("WebView cannot decode the stream"),
+    ).toBeInTheDocument();
   });
 
   it("refreshes status when the backend activates the display", async () => {

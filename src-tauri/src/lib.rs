@@ -297,6 +297,12 @@ struct VirtualDisplayStatus {
     frame_count: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VirtualDisplayStream {
+    url: Option<String>,
+}
+
 #[tauri::command]
 fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnapshot, AppError> {
     let config_path = app
@@ -664,48 +670,17 @@ fn virtual_display_status() -> Result<VirtualDisplayStatus, AppError> {
 }
 
 #[tauri::command]
-fn update_virtual_display_bounds(
-    left: f64,
-    top: f64,
-    width: f64,
-    height: f64,
-) -> Result<(), AppError> {
-    if !left.is_finite()
-        || !top.is_finite()
-        || !width.is_finite()
-        || !height.is_finite()
-        || width <= 0.0
-        || height <= 0.0
-    {
-        return Err(AppError::Message(
-            "Virtual display bounds are invalid".to_string(),
-        ));
-    }
-    let (left, top, width, height) = (left.trunc(), top.trunc(), width.trunc(), height.trunc());
-    if ![left, top]
-        .into_iter()
-        .all(|value| (i32::MIN as f64..=i32::MAX as f64).contains(&value))
-        || ![width, height]
-            .into_iter()
-            .all(|value| (0.0..=i32::MAX as f64).contains(&value))
-    {
-        return Err(AppError::Message(
-            "Virtual display bounds are out of range".to_string(),
-        ));
-    }
-    #[allow(clippy::cast_possible_truncation)]
-    let (left, top, width, height) = (left as i32, top as i32, width as i32, height as i32);
-
+fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
     #[cfg(target_os = "android")]
     {
-        call_runtime_bridge_update_bounds(left, top, width, height)?;
-        Ok(())
+        Ok(VirtualDisplayStream {
+            url: call_runtime_bridge_optional_string("virtualDisplayStreamUrl")?,
+        })
     }
 
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (left, top, width, height);
-        Ok(())
+        Ok(VirtualDisplayStream { url: None })
     }
 }
 
@@ -795,12 +770,7 @@ fn call_runtime_bridge_int_array(method: &'static str) -> Result<Vec<i32>, AppEr
 }
 
 #[cfg(target_os = "android")]
-fn call_runtime_bridge_update_bounds(
-    left: i32,
-    top: i32,
-    width: i32,
-    height: i32,
-) -> Result<(), AppError> {
+fn call_runtime_bridge_optional_string(method: &'static str) -> Result<Option<String>, AppError> {
     let bridge_class = crate::runtime::runtime_bridge_class()
         .map_err(|error| AppError::Message(error.to_string()))?;
     let vm = crate::runtime::java_vm().ok_or_else(|| {
@@ -811,30 +781,19 @@ fn call_runtime_bridge_update_bounds(
         .map_err(|error| AppError::Message(error.to_string()))?;
     let _ = env.exception_clear();
     let result = env
-        .call_static_method(
-            bridge_class,
-            "updateVirtualDisplayBounds",
-            "(IIII)Z",
-            &[
-                jni::objects::JValue::Int(left),
-                jni::objects::JValue::Int(top),
-                jni::objects::JValue::Int(width),
-                jni::objects::JValue::Int(height),
-            ],
-        )
+        .call_static_method(bridge_class, method, "()Ljava/lang/String;", &[])
         .map_err(|error| AppError::Message(error.to_string()))?;
-    result
-        .z()
-        .map_err(|error| AppError::Message(error.to_string()))
-        .and_then(|updated| {
-            if updated {
-                Ok(())
-            } else {
-                Err(AppError::Message(
-                    "The Android preview host is not initialized".to_string(),
-                ))
-            }
-        })
+    let object = result
+        .l()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    if object.is_null() {
+        return Ok(None);
+    }
+    let value = jni::objects::JString::from(object);
+    let value = env
+        .get_string(&value)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    Ok(Some(value.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
@@ -1551,21 +1510,6 @@ mod tests {
         assert_eq!(status.height, 0);
         assert_eq!(status.frame_count, 0);
     }
-
-    #[test]
-    fn virtual_display_bounds_validate_geometry() {
-        assert!(update_virtual_display_bounds(1.0, 2.0, 320.0, 180.0).is_ok());
-        assert!(update_virtual_display_bounds(-1.0, 2.0, 320.0, 180.0).is_ok());
-        assert!(update_virtual_display_bounds(1.0, -120.0, 320.0, 180.0).is_ok());
-        assert!(
-            update_virtual_display_bounds(f64::from(i32::MIN) - 1.0, 2.0, 320.0, 180.0).is_err()
-        );
-        assert!(update_virtual_display_bounds(1.0, 2.0, 0.0, 180.0).is_err());
-        assert!(
-            update_virtual_display_bounds(f64::from(i32::MAX) + 1.0, 2.0, 320.0, 180.0).is_err()
-        );
-        assert!(update_virtual_display_bounds(f64::NAN, 2.0, 320.0, 180.0).is_err());
-    }
 }
 
 #[cfg(target_os = "android")]
@@ -1678,7 +1622,7 @@ pub fn run() {
             start_virtual_display,
             stop_virtual_display,
             virtual_display_status,
-            update_virtual_display_bounds,
+            virtual_display_stream,
             start_run,
             run_status,
             stop_run,

@@ -1,10 +1,6 @@
 package top.natsuu.mta.control
 
-import android.content.ComponentName
-import android.content.AttributionSource
 import android.content.Context
-import android.content.ContextWrapper
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
@@ -16,7 +12,6 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
-import androidx.annotation.RequiresApi
 import top.natsuu.mta.AgentLaunch
 import top.natsuu.mta.InputResult
 import java.util.concurrent.Executors
@@ -69,38 +64,8 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return display.display.displayId
     }
 
-    /**
-     * Shizuku services run as the shell UID while retaining the host package's
-     * Context. DisplayManager validates that identity pair, so present the
-     * same identity to system_server that MaaFw and shell tools use.
-     */
-    private class ShellIdentityContext(base: Context) : ContextWrapper(base) {
-        override fun getPackageName(): String = PACKAGE_NAME
-
-        override fun getOpPackageName(): String = PACKAGE_NAME
-
-        @RequiresApi(Build.VERSION_CODES.S)
-        override fun getAttributionSource(): AttributionSource =
-            AttributionSource.Builder(android.os.Process.SHELL_UID)
-                .setPackageName(PACKAGE_NAME)
-                .build()
-
-        companion object {
-            private const val PACKAGE_NAME = "com.android.shell"
-
-            fun createDisplayManager(context: Context): DisplayManager? = runCatching {
-                DisplayManager::class.java
-                    .getDeclaredConstructor(Context::class.java)
-                    .apply { isAccessible = true }
-                    .newInstance(context) as DisplayManager
-            }.onFailure { error ->
-                android.util.Log.w(
-                    "MaaTauriAndroidControl",
-                    "Could not construct shell DisplayManager",
-                    error,
-                )
-            }.getOrNull()
-        }
+    private val appLauncher = AppLauncher(context?.let(::ShellIdentityContext)) { arguments ->
+        shell(*arguments)
     }
 
     override fun stopVirtualDisplay() {
@@ -324,14 +289,14 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                     // launch-display option alone cannot move an already-running app.
                     val shouldForceStop = forceStop || displayId != 0
                     if (shouldForceStop) {
-                        val stopped = shell("am", "force-stop", packageNameOf(target))
+                        val stopped = appLauncher.stopPackage(target)
                         if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
                     }
                     return startGameOnDisplay(target, displayId)
                 }
             }
             METHOD_STOP_GAME -> {
-                val stopped = shell("am", "force-stop", packageName.orEmpty())
+                val stopped = appLauncher.stopPackage(packageName.orEmpty())
                 if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
             }
             METHOD_INPUT_TEXT -> {
@@ -470,58 +435,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     private fun startGameOnDisplay(spec: String, displayId: Int): Int {
-        return startGameWithAm(spec, displayId)
-    }
-
-    private fun startGameWithAm(spec: String, displayId: Int): Int {
-        val component = componentOf(spec)
-        val intent = component?.let {
-            Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_LAUNCHER)
-                .setComponent(it)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        } ?: context?.packageManager?.getLaunchIntentForPackage(spec)
-            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            ?: context?.packageManager?.getLeanbackLaunchIntentForPackage(spec)
-                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-        val command = if (intent != null) {
-            arrayOf(
-                "am",
-                "start",
-                "--display",
-                displayId.toString(),
-                intent.toUri(Intent.URI_INTENT_SCHEME),
-            )
-        } else {
-            return if (displayId == 0) {
-                shell(
-                    "monkey",
-                    "-p",
-                    spec,
-                    "-c",
-                    "android.intent.category.LAUNCHER",
-                    "1",
-                )
-            } else {
-                RESULT_COMMAND_FAILED
-            }
-        }
-        val status = shell(*command)
-        android.util.Log.i(
-            "MaaTauriAndroidControl",
-            "am start ${packageNameOf(spec)} displayId=$displayId status=$status",
-        )
-        return if (status == RESULT_OK) RESULT_OK else RESULT_COMMAND_FAILED
-    }
-
-    private fun componentOf(spec: String): ComponentName? {
-        if (!spec.contains('/')) return null
-        return ComponentName.unflattenFromString(spec)
-    }
-
-    private fun packageNameOf(spec: String): String {
-        return componentOf(spec)?.packageName ?: spec
+        return appLauncher.startGameOnDisplay(spec, displayId)
     }
 
     private fun runCommand(output: OutputStream, vararg args: String) {

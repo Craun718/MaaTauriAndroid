@@ -18,7 +18,6 @@ import { useNotificationStore } from "../store/notificationStore";
 export function VirtualDisplayCard() {
   const previewRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef(0);
-  const activeRef = useRef(false);
   const [status, setStatus] = useState<VirtualDisplayStatus>();
   const [statusError, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
@@ -56,7 +55,7 @@ export function VirtualDisplayCard() {
   }, [refreshStatus]);
 
   const reportBounds = useCallback(() => {
-    if (!activeRef.current) return;
+    if (status?.active !== true) return;
     const bounds = previewRef.current?.getBoundingClientRect();
     if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
 
@@ -68,10 +67,6 @@ export function VirtualDisplayCard() {
     ).catch((error: unknown) => {
       setStatusError(error instanceof Error ? error.message : String(error));
     });
-  }, []);
-
-  useEffect(() => {
-    activeRef.current = status?.active === true;
   }, [status?.active]);
 
   const scheduleBoundsReport = useCallback(() => {
@@ -143,12 +138,13 @@ export function VirtualDisplayCard() {
   }
 
   const active = status?.active === true;
-  const geometry = status
-    ? t("virtualDisplayGeometry", {
-        width: status.width,
-        height: status.height,
-      })
-    : t("checking");
+  const geometry =
+    active && status
+      ? t("virtualDisplayGeometry", {
+          width: status.width,
+          height: status.height,
+        })
+      : undefined;
   const statusLabel = status
     ? active
       ? t("virtualDisplayRunning")
@@ -160,7 +156,9 @@ export function VirtualDisplayCard() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <MonitorPlay size={18} className="text-accent" />
-          <h2 className="min-w-0 truncate font-medium">{geometry}</h2>
+          <h2 className="min-w-0 truncate font-medium">
+            {t("virtualDisplay")}
+          </h2>
           <span
             className={`flex h-6 flex-none items-center gap-1.5 rounded-md border px-2 text-xs font-medium ${
               active
@@ -175,6 +173,9 @@ export function VirtualDisplayCard() {
             />
             {statusLabel}
           </span>
+          {geometry && (
+            <span className="flex-none text-xs text-ink-muted">{geometry}</span>
+          )}
         </div>
         <button
           type="button"

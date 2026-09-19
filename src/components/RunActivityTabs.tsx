@@ -79,7 +79,9 @@ export function RunActivityTabs({
 
   useEffect(() => {
     if (lastEventKey === undefined) return;
-    logListRef.current?.scrollTo({ top: logListRef.current.scrollHeight });
+    if (typeof logListRef.current?.scrollTo === "function") {
+      logListRef.current.scrollTo({ top: logListRef.current.scrollHeight });
+    }
   }, [lastEventKey]);
 
   const tabs: Array<{ value: ActivityTab; label: string }> = [
@@ -92,7 +94,7 @@ export function RunActivityTabs({
       <div
         role="tablist"
         aria-label={t("runActivity")}
-        className="tabs tabs-lift tabs-xs w-max min-w-full"
+        className="tabs tabs-border tabs-xs w-max min-w-full"
       >
         {tabs.map((tab) => {
           const selected = tab.value === activeTab;

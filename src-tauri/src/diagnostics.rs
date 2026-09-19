@@ -1396,7 +1396,9 @@ mod tests {
         let zip = fs::read(&output).unwrap();
         assert!(!zip.windows(15).any(|window| window == b"device-info.txt"));
         assert!(!zip.windows(14).any(|window| window == b"properties.txt"));
-        assert!(zip.windows(16).any(|window| window == b"logs/maa/maa.log"));
+        assert!(zip
+            .windows(23)
+            .any(|window| window == b"logs/maa/nested/maa.log"));
         assert!(zip.windows(17).any(|window| window == b"maa framework log"));
         fs::remove_dir_all(log_root).unwrap();
         fs::remove_file(output).unwrap();

@@ -247,6 +247,21 @@ function expandTaskDetails(label: string) {
   fireEvent.click(screen.getByRole("button", { name: label }));
 }
 
+function selectNestedCase(checked: boolean) {
+  fireEvent.change(nestedSwitch(), { target: { checked } });
+}
+
+function enabledResolvedTasks() {
+  return configuration.runConfigurations[0].tasks.flatMap((configured) => {
+    const task = project.tasks.find(
+      (definition) => definition.name === configured.taskName,
+    );
+    return task
+      ? [{ task, configured, enabled: true, pipelineOverride: {} }]
+      : [];
+  });
+}
+
 describe("nested task options", () => {
   it("renders the option owned by a case that is selected by default", () => {
     renderTasksPage();
@@ -268,7 +283,7 @@ describe("nested task options", () => {
     renderTasksPage();
     expandTaskDetails("糖果");
 
-    fireEvent.click(nestedSwitch());
+    selectNestedCase(true);
 
     expect(
       await screen.findByRole("textbox", { name: "次数" }),
@@ -295,12 +310,12 @@ describe("nested task options", () => {
   it("hides the deeper option again when the case is switched off", async () => {
     renderTasksPage();
     expandTaskDetails("糖果");
-    fireEvent.click(nestedSwitch());
+    selectNestedCase(true);
     expect(
       await screen.findByRole("textbox", { name: "次数" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(nestedSwitch());
+    selectNestedCase(false);
 
     await waitFor(() =>
       expect(
@@ -312,7 +327,7 @@ describe("nested task options", () => {
   it("keeps the value typed into a nested option", async () => {
     renderTasksPage();
     expandTaskDetails("糖果");
-    fireEvent.click(nestedSwitch());
+    selectNestedCase(true);
     const field = await screen.findByRole("textbox", { name: "次数" });
 
     fireEvent.change(field, { target: { value: "6" } });
@@ -338,6 +353,13 @@ describe("nested task options", () => {
 
 describe("run configuration tabs and flat task list", () => {
   it("starts a run with the merged control and switches to logs", async () => {
+    resolveCurrent.mockResolvedValue({
+      controller: project.controllers[0],
+      resource: project.resources[0],
+      tasks: enabledResolvedTasks(),
+      basePipeline: {},
+      pipelineOverride: {},
+    });
     useAppStore.setState({
       snapshot: {
         project,
@@ -387,6 +409,13 @@ describe("run configuration tabs and flat task list", () => {
   });
 
   it("stops a run with the same merged control", async () => {
+    resolveCurrent.mockResolvedValue({
+      controller: project.controllers[0],
+      resource: project.resources[0],
+      tasks: enabledResolvedTasks(),
+      basePipeline: {},
+      pipelineOverride: {},
+    });
     useAppStore.setState({
       snapshot: {
         project,
@@ -457,7 +486,7 @@ describe("run configuration tabs and flat task list", () => {
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
   });
 
-  it("uses lifted run-activity tabs below run controls", () => {
+  it("uses bordered run-activity tabs below run controls", () => {
     renderTasksPage();
 
     const activityTabs = screen.getByRole("tablist", {
@@ -466,7 +495,7 @@ describe("run configuration tabs and flat task list", () => {
     const configurationTabs = screen.getByRole("tablist", {
       name: "Tasks & Run",
     });
-    expect(activityTabs).toHaveClass("tabs-lift");
+    expect(activityTabs).toHaveClass("tabs-border");
     expect(activityTabs).not.toHaveClass("tabs-box");
     expect(configurationTabs).toHaveClass("tabs-box");
     expect(screen.getByRole("tab", { name: "Task list" })).toHaveAttribute(

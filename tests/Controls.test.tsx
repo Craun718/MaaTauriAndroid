@@ -7,9 +7,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RunPanel } from "../src/components/RunPanel";
+import { NotificationHost } from "../src/components/ui/NotificationHost";
 import type { AppStateSnapshot, Project, ResolvedRun } from "../src/lib/types";
 import { SettingsPage } from "../src/pages/SettingsPage";
 import { useAppStore } from "../src/store/appStore";
+import { useNotificationStore } from "../src/store/notificationStore";
 
 const getPrivilegedStatus = vi.fn();
 const saveConfiguration = vi.fn();
@@ -83,6 +85,7 @@ describe("diagnostic controls", () => {
     saveConfiguration.mockImplementation(
       async (configuration: unknown) => configuration,
     );
+    useNotificationStore.setState({ notifications: [] });
   });
 
   afterEach(() => {
@@ -112,7 +115,12 @@ describe("diagnostic controls", () => {
       deletedRunCount: 3,
       runsDir: "/runs",
     });
-    render(<SettingsPage />);
+    render(
+      <>
+        <SettingsPage />
+        <NotificationHost />
+      </>,
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete runs" }));
 
@@ -139,15 +147,23 @@ describe("diagnostic controls", () => {
       executionId: "run-1",
       path: "/runs/run-1/screens/manual-1.png",
     });
-    render(<RunPanel />);
+    render(
+      <>
+        <RunPanel />
+        <NotificationHost />
+      </>,
+    );
     const capture = await screen.findByRole("button", { name: "Shot" });
     await waitFor(() => expect(capture).toBeEnabled());
 
     fireEvent.click(capture);
 
     expect(captureManualScreenshot).toHaveBeenCalledWith("run-1");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Screenshot saved to this run.",
+    );
     expect(
-      await screen.findByText("/runs/run-1/screens/manual-1.png"),
-    ).toBeInTheDocument();
+      screen.queryByText("/runs/run-1/screens/manual-1.png"),
+    ).not.toBeInTheDocument();
   });
 });

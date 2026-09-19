@@ -144,9 +144,13 @@ describe("App", () => {
 
     // Run controls, formerly on their own /run page.
     expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(1);
-    // Tasks belonging to the active run configuration, on the same panel.
+    // The active run configuration is a tab, while its queue shares the panel.
+    expect(await screen.findByRole("tab", { name: "Default" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(
-      screen.getByRole("heading", { name: "Default" }),
+      screen.getByRole("heading", { name: "0 tasks ready" }),
     ).toBeInTheDocument();
     // The old /run tab is gone.
     expect(screen.queryByRole("link", { name: "Run" })).not.toBeInTheDocument();

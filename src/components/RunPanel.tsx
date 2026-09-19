@@ -3,7 +3,6 @@ import { Camera, Download, Play, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   captureManualScreenshot,
-  exportDiagnostics,
   getRunStatus,
   resolveCurrent,
   startRun,
@@ -11,7 +10,8 @@ import {
 } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
-import type { DiagnosticExport, ResolvedRun, RunEvent } from "../lib/types";
+import type { ResolvedRun, RunEvent } from "../lib/types";
+import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 
@@ -29,9 +29,8 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const [executionId, setExecutionId] = useState<string>();
   const [runState, setRunState] = useState("Idle");
   const [starting, setStarting] = useState(false);
-  const [diagnostic, setDiagnostic] = useState<DiagnosticExport>();
   const executionIdRef = useRef<string | undefined>(undefined);
-  const [exporting, setExporting] = useState(false);
+  const { exportLogs, exporting } = useLogExport();
   const [capturing, setCapturing] = useState(false);
   const notify = useNotificationStore((state) => state.notify);
 
@@ -86,9 +85,9 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         setStatus(payload.message);
       }
       if (payload.data && typeof payload.data === "object") {
-        const data = event.payload.data as Partial<
-          DiagnosticExport["manifest"]
-        >;
+        const data = event.payload.data as Partial<{
+          partialReasons: string[];
+        }>;
         if (
           Array.isArray(data.partialReasons) &&
           data.partialReasons.length > 0
@@ -147,27 +146,6 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     }
   }
 
-  async function exportBundle() {
-    const confirmed = window.confirm(t("exportConfirm"));
-    if (!confirmed) return;
-    setExporting(true);
-    try {
-      const result = await exportDiagnostics(executionId);
-      setDiagnostic(result);
-      setStatus(
-        result.manifest.status === "complete"
-          ? t("diagnosticsExported", { path: result.path })
-          : t("diagnosticsExportedWithGaps", {
-              reasons: result.manifest.partialReasons.join("; "),
-            }),
-      );
-    } catch (error) {
-      reportError(error);
-    } finally {
-      setExporting(false);
-    }
-  }
-
   async function captureScreenshot() {
     setCapturing(true);
     try {
@@ -200,12 +178,22 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button
             type="button"
-            disabled={!executionId || exporting}
-            onClick={exportBundle}
+            disabled={exporting}
+            onClick={() => {
+              void exportLogs({
+                onSuccess: (result) =>
+                  setStatus(
+                    result.fileName
+                      ? t("logsExported", { name: result.fileName })
+                      : t("logsExportedPath", { path: result.path }),
+                  ),
+                onError: reportError,
+              });
+            }}
             className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >
             <Download size={16} />
-            {t("exportDiagnostics")}
+            {exporting ? t("exportingLogs") : t("exportLogs")}
           </button>
           <button
             type="button"
@@ -218,19 +206,6 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           </button>
         </div>
       </section>
-      {diagnostic && (
-        <section className="rounded-lg border border-line bg-raised p-4 text-sm">
-          <p className="font-medium">
-            {t("diagnosticsStatus", {
-              status:
-                diagnostic.manifest.status === "complete"
-                  ? t("diagnosticsComplete")
-                  : t("diagnosticsPartial"),
-            })}
-          </p>
-          <p className="mt-1 break-all text-ink-muted">{diagnostic.path}</p>
-        </section>
-      )}
       {/* Rust reports absolute paths back; without break-all a long one widens the
           page and the fixed bottom nav drifts sideways when the page is panned. */}
       {status && <p className="break-all text-sm text-ink-muted">{status}</p>}

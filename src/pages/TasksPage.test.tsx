@@ -23,11 +23,12 @@ const getVirtualDisplayStatus = vi.fn();
 const captureManualScreenshot = vi.fn();
 const startRun = vi.fn();
 const stopRun = vi.fn();
+const exportLogs = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
   captureManualScreenshot: () => captureManualScreenshot(),
-  exportDiagnostics: vi.fn(),
+  exportLogs: () => exportLogs(),
   getRunStatus: () => getRunStatus(),
   resolveCurrent: () => resolveCurrent(),
   saveConfiguration: (configuration: unknown) =>
@@ -425,6 +426,23 @@ describe("run configuration tabs and flat task list", () => {
     await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));
   });
 
+  it("exports logs without requiring a run", async () => {
+    exportLogs.mockResolvedValue({
+      path: "/cache/maa_tauri_android-logs-1.zip",
+      fileName: "maa_tauri_android-logs-1.zip",
+    });
+    renderTasksPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
+
+    await waitFor(() => expect(exportLogs).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText(
+        "Logs exported to Downloads: maa_tauri_android-logs-1.zip",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("places the virtual display above the run queue", async () => {
     renderTasksPage();
 
@@ -683,7 +701,7 @@ describe("manual screenshot notifications", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Shot" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Screenshot saved to this run. You can find it in the diagnostic export.",
+      "Screenshot saved to this run.",
     );
     expect(
       screen.queryByText(/\/data\/user\/0\/.*manual-1\.png/),

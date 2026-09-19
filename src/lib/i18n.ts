@@ -89,17 +89,8 @@ const en = {
   tasksReady: "{count} tasks ready",
   start: "Start",
   stop: "Stop",
-  exportDiagnostics: "Export",
   captureScreenshot: "Shot",
-  exportConfirm:
-    "Export a full diagnostic package? It includes screenshots, device logs and a complete bug report.",
-  diagnosticsStatus: "Diagnostics: {status}",
-  diagnosticsComplete: "complete",
-  diagnosticsPartial: "partial with gaps",
-  diagnosticsExported: "Diagnostics exported: {path}",
-  diagnosticsExportedWithGaps: "Diagnostics exported with gaps: {reasons}",
-  screenshotSavedNotice:
-    "Screenshot saved to this run. You can find it in the diagnostic export.",
+  screenshotSavedNotice: "Screenshot saved to this run.",
 
   // Settings
   settings: "Settings",
@@ -191,15 +182,8 @@ const zh: Record<MessageKey, string> = {
   tasksReady: "{count} 个任务待运行",
   start: "开始",
   stop: "停止",
-  exportDiagnostics: "导出",
   captureScreenshot: "截图",
-  exportConfirm: "要导出完整诊断包吗？其中包含截图、设备日志和完整的错误报告。",
-  diagnosticsStatus: "诊断：{status}",
-  diagnosticsComplete: "完整",
-  diagnosticsPartial: "部分内容缺失",
-  diagnosticsExported: "诊断已导出：{path}",
-  diagnosticsExportedWithGaps: "诊断已导出，但存在缺口：{reasons}",
-  screenshotSavedNotice: "截图已保存到本次运行记录，导出诊断包时可以查看。",
+  screenshotSavedNotice: "截图已保存到本次运行记录。",
 
   settings: "设置",
   apply: "应用",

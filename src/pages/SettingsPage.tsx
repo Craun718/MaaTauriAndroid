@@ -4,7 +4,7 @@ import { OptionEditor } from "../components/OptionEditor";
 import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
-import { clearDiagnosticData, exportLogs } from "../lib/api";
+import { clearDiagnosticData } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import {
@@ -13,6 +13,7 @@ import {
   visibleOptions,
 } from "../lib/options";
 import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
+import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 
 function isUiLanguage(value: string): value is UiLanguage {
@@ -26,7 +27,7 @@ export function SettingsPage() {
   const { t } = useTranslation();
   const [cleanupStatus, setCleanupStatus] = useState<string>();
   const [cleaning, setCleaning] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const { exportLogs, exporting } = useLogExport();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
 
   const project = snapshot?.project;
@@ -169,23 +170,20 @@ export function SettingsPage() {
         <button
           type="button"
           disabled={exporting}
-          onClick={async () => {
-            setExporting(true);
+          onClick={() => {
             setCleanupStatus(undefined);
-            try {
-              const result = await exportLogs();
-              setCleanupStatus(
-                result.fileName
-                  ? t("logsExported", { name: result.fileName })
-                  : t("logsExportedPath", { path: result.path }),
-              );
-            } catch (error) {
-              setCleanupStatus(
-                error instanceof Error ? error.message : String(error),
-              );
-            } finally {
-              setExporting(false);
-            }
+            void exportLogs({
+              onSuccess: (result) =>
+                setCleanupStatus(
+                  result.fileName
+                    ? t("logsExported", { name: result.fileName })
+                    : t("logsExportedPath", { path: result.path }),
+                ),
+              onError: (error) =>
+                setCleanupStatus(
+                  error instanceof Error ? error.message : String(error),
+                ),
+            });
           }}
           className="flex h-10 items-center justify-center gap-2 rounded-md border border-line px-3 font-semibold disabled:opacity-50"
         >

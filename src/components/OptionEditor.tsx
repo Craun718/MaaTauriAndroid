@@ -3,8 +3,8 @@ import { defaultOptionValue, switchCases } from "../lib/options";
 import type { OptionDefinition, OptionValue } from "../lib/types";
 import { RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
-import { RadioGroup } from "./ui/RadioGroup";
 import { SegmentGroup } from "./ui/SegmentGroup";
+import { Select } from "./ui/Select";
 import { TextField } from "./ui/TextField";
 
 interface OptionEditorProps {
@@ -44,10 +44,13 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
   }
 
   if (option.kind === "select") {
-    // PI protocol calls this a "下拉选项框" (dropdown): the user picks exactly
-    // one case. A vertical radio list reads better than a horizontal pill row
-    // when the project declares many cases.
-    const selected = value?.type === "single" ? value.case : option.defaultCase;
+    // PI protocol defines `select` as a dropdown with one selected case. The
+    // native control keeps touch behaviour consistent with the other pickers;
+    // case descriptions are shown for the current choice because <option>
+    // cannot render rich content.
+    const effective = defaultOptionValue(option, value);
+    const selected = effective.type === "single" ? effective.case : undefined;
+    const selectedCase = option.cases.find((item) => item.name === selected);
     return (
       <div className="space-y-3">
         <div>
@@ -56,22 +59,20 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
           </p>
           <RichDescription text={option.description} />
         </div>
-        <RadioGroup
+        <Select
           labelledBy={`option-label-${option.name}`}
           value={selected}
           items={option.cases.map((item) => ({
             value: item.name,
-            content: (
-              <div className="min-w-0">
-                <p className="font-medium">{item.label}</p>
-                <RichDescription text={item.description} />
-              </div>
-            ),
+            label: item.label,
           }))}
           onValueChange={(caseName) =>
             onChange({ type: "single", case: caseName })
           }
         />
+        {selectedCase?.description && (
+          <RichDescription text={selectedCase.description} />
+        )}
       </div>
     );
   }

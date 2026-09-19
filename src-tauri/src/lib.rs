@@ -1113,7 +1113,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                     ),
                     runtime::RunOutcome::Failed {
                         entry,
-                        task_name,
+                        task_name: _,
                         status,
                     } => {
                         let mut attachment_path = None;

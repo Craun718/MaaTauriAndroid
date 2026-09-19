@@ -101,7 +101,11 @@ impl MaaSessions {
         self.request_stop_with(execution_id, || {})
     }
 
-    pub fn request_stop_with<F>(&self, execution_id: Option<&str>, on_stopping: F) -> Result<bool>
+    pub fn request_stop_with<F>(
+        &self,
+        execution_id: Option<&str>,
+        on_stopping: F,
+    ) -> Result<bool, RuntimeError>
     where
         F: FnOnce(),
     {

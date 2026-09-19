@@ -52,15 +52,14 @@ describe("projectLanguage", () => {
 
 describe("translate", () => {
   it("interpolates named parameters", () => {
-    expect(translate("en", "tasksReady", { count: 3 })).toBe("3 tasks ready");
-    expect(translate("zh", "tasksReady", { count: 3 })).toBe("3 个任务待运行");
+    expect(translate("en", "enabledTasks", { count: 3 })).toBe("3 tasks");
     expect(translate("zh", "deletedRuns", { count: 0 })).toBe(
       "已删除 0 个运行目录",
     );
   });
 
   it("leaves the placeholder alone when no value is supplied", () => {
-    expect(translate("en", "tasksReady")).toBe("{count} tasks ready");
+    expect(translate("en", "enabledTasks")).toBe("{count} tasks");
   });
 
   it("returns plain strings unchanged", () => {

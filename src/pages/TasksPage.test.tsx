@@ -397,9 +397,12 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    await screen.findByRole("heading", { name: "2 tasks ready" });
-    fireEvent.click(screen.getByRole("button", { name: "Task actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Task actions" }),
+    );
+    const start = await screen.findByRole("button", { name: "Start" });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
 
     expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
       "aria-selected",
@@ -479,8 +482,9 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    await screen.findByRole("heading", { name: "0 tasks ready" });
-    fireEvent.click(screen.getByRole("button", { name: "Task actions" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Task actions" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
 
     await waitFor(() => expect(exportLogs).toHaveBeenCalledTimes(1));

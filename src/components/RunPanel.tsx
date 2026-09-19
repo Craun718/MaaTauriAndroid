@@ -1,7 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
-import { Camera, ChevronUp, Download, Play, Square } from "lucide-react";
+import { Camera, Download, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BottomDrawer } from "./ui/BottomDrawer";
 import {
   captureManualScreenshot,
   getRunStatus,
@@ -15,6 +14,7 @@ import type { ResolvedRun, RunEvent } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
+import { BottomDrawer } from "./ui/BottomDrawer";
 
 /**
  * Run controls for the active run configuration. Rendered inside the Tasks panel
@@ -162,18 +162,14 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   return (
     <>
       <div className="space-y-3">
-        <h2 className="text-xl font-semibold">
-          {t("tasksReady", { count: enabled.length })}
-        </h2>
         <button
           type="button"
           aria-expanded={actionsOpen}
           aria-haspopup="dialog"
           onClick={() => setActionsOpen(true)}
-          className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-line text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex h-10 w-full cursor-pointer items-center justify-center rounded-md border border-line text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {t("taskOperations")}
-          <ChevronUp size={16} className="text-ink-muted" />
         </button>
         {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
       </div>

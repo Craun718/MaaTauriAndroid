@@ -88,7 +88,6 @@ const en = {
   requiresOtherController: "Requires a different controller or resource.",
 
   // Run controls
-  tasksReady: "{count} tasks ready",
   taskOperations: "Task actions",
   start: "Start",
   stop: "Stop",
@@ -185,7 +184,6 @@ const zh: Record<MessageKey, string> = {
   toggleOn: "启用",
   requiresOtherController: "需要其他控制器或资源。",
 
-  tasksReady: "{count} 个任务待运行",
   taskOperations: "任务操作",
   start: "开始",
   stop: "停止",

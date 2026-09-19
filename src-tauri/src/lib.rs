@@ -736,9 +736,33 @@ fn call_runtime_bridge_start_virtual_display(
     if started {
         Ok(())
     } else {
-        Err(AppError::Message(
-            "The privileged control service rejected the virtual display".to_string(),
-        ))
+        // The bridge only reports a boolean, so the live control service
+        // state is the closest cause: while Shizuku is unavailable or has
+        // not granted permission yet, that missing precondition is the
+        // whole reason the display could not start.
+        let (state, status) = runtime::control_state();
+        Err(AppError::Message(virtual_display_rejection_message(
+            state, &status,
+        )))
+    }
+}
+
+/// Maps a failed virtual display start to the most actionable message. The
+/// JNI bridge returns a bare boolean, so the reported control service state
+/// is the only available explanation; a connected service keeps the generic
+/// rejection wording.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn virtual_display_rejection_message(state: i64, status: &str) -> String {
+    match state {
+        1 => "Shizuku is unavailable; install or start Shizuku, then try again".to_string(),
+        2 => "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again"
+            .to_string(),
+        // The service is connected, so the refusal happened on its side.
+        3 => "The privileged control service rejected the virtual display".to_string(),
+        4 => "The privileged control service disconnected; restart Shizuku and reopen the app, then try again"
+            .to_string(),
+        5 => format!("{status}; check Shizuku and the app logs, then try again"),
+        _ => format!("{status}; try again shortly"),
     }
 }
 
@@ -1539,6 +1563,30 @@ mod tests {
         assert_eq!(status.width, 0);
         assert_eq!(status.height, 0);
         assert_eq!(status.frame_count, 0);
+    }
+
+    #[test]
+    fn virtual_display_rejection_names_the_missing_precondition() {
+        assert_eq!(
+            virtual_display_rejection_message(2, "Shizuku permission is required"),
+            "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again"
+        );
+        assert_eq!(
+            virtual_display_rejection_message(1, "Shizuku is unavailable"),
+            "Shizuku is unavailable; install or start Shizuku, then try again"
+        );
+        assert_eq!(
+            virtual_display_rejection_message(4, "The privileged control unit disconnected"),
+            "The privileged control service disconnected; restart Shizuku and reopen the app, then try again"
+        );
+        assert_eq!(
+            virtual_display_rejection_message(5, "The privileged control unit failed to start"),
+            "The privileged control unit failed to start; check Shizuku and the app logs, then try again"
+        );
+        assert_eq!(
+            virtual_display_rejection_message(3, "The privileged control unit is connected"),
+            "The privileged control service rejected the virtual display"
+        );
     }
 }
 

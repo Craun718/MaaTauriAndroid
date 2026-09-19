@@ -47,6 +47,31 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     [notify],
   );
 
+  // A preparing failure reaches the UI twice: the backend emits the failure
+  // run-event before `startRun` rejects, so the catch below and the listener
+  // would both alert. When the run result already carries this exact failure,
+  // share the listener's execution-scoped key so only one alert shows;
+  // failures recorded nowhere else keep the direct report.
+  const reportStartFailure = useCallback(
+    async (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      const result = await getRunStatus().catch(() => undefined);
+      if (
+        result?.executionId &&
+        result.severity === "error" &&
+        result.message === message
+      ) {
+        notifyOnce(`run-failure:${result.executionId}`, message, {
+          tone: "error",
+          logToActivity: false,
+        });
+        return;
+      }
+      notify(message, { tone: "error" });
+    },
+    [notify, notifyOnce],
+  );
+
   useEffect(() => {
     if (!snapshot) return;
     resolveCurrent().then(setRun).catch(reportError);
@@ -133,7 +158,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       setExecutionId(result.executionId);
       notify(result.message);
     } catch (error) {
-      reportError(error);
+      await reportStartFailure(error);
     } finally {
       setStarting(false);
     }

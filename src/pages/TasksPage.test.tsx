@@ -690,6 +690,76 @@ describe("run failure notifications", () => {
     );
   });
 
+  it("alerts once when a preparing failure arrives via both the invoke error and the run event", async () => {
+    const message =
+      "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
+    // Mount-time status is idle; the failed result only exists once the
+    // rejected start has been recorded by the backend.
+    getRunStatus
+      .mockResolvedValueOnce({
+        executionId: undefined,
+        state: "Idle",
+        message: "Idle",
+      })
+      .mockResolvedValue({
+        executionId: "run-1",
+        state: "Idle",
+        severity: "error",
+        message,
+      });
+    startRun.mockRejectedValue(new Error(message));
+    resolveCurrent.mockResolvedValue({
+      controller: project.controllers[0],
+      resource: project.resources[0],
+      tasks: enabledResolvedTasks(),
+      basePipeline: {},
+      pipelineOverride: {},
+    });
+    useAppStore.setState({
+      snapshot: {
+        project,
+        configuration: {
+          ...configuration,
+          runConfigurations: [
+            {
+              ...configuration.runConfigurations[0],
+              tasks: configuration.runConfigurations[0].tasks.map((task) => ({
+                ...task,
+                enabled: true,
+              })),
+            },
+          ],
+        },
+      },
+    });
+    renderTasksPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Task actions" }),
+    );
+    const start = await screen.findByRole("button", { name: "Start" });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+    await waitFor(() => expect(startRun).toHaveBeenCalledTimes(1));
+
+    // The backend emits the failure run-event before the invoke rejects.
+    eventHandlers.handlers["run-event"].forEach((handler) => {
+      handler({
+        payload: {
+          executionId: "run-1",
+          sequence: 1,
+          atUnixMs: 1,
+          kind: "failure",
+          state: "Idle",
+          message,
+        },
+      });
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(useNotificationStore.getState().notifications).toHaveLength(1);
+  });
+
   it("adds app error notifications to the task log", async () => {
     renderTasksPage();
 

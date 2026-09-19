@@ -4,6 +4,7 @@ import java.io.File
 import java.util.zip.ZipFile
 import java.util.Properties
 import java.util.TreeMap
+import org.gradle.api.tasks.PathSensitivity
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.android.build.api.dsl.ApplicationExtension
 
@@ -303,6 +304,18 @@ extensions.configure<com.android.build.api.variant.ApplicationAndroidComponentsE
     onVariants { variant ->
         if (piProfile != null) {
             variant.sources.assets?.addStaticSourceDirectory(piPackedDir.get().asFile.absolutePath)
+
+            // AGP may keep the asset merge up-to-date when only files inside a
+            // static source directory change. Declare the generated tree as a
+            // task input as well, so Gradle fingerprints its contents directly.
+            val mergeAssetsTaskName =
+                "merge${variant.name.replaceFirstChar { it.uppercase() }}Assets"
+            tasks.matching { it.name == mergeAssetsTaskName }.configureEach {
+                dependsOn(preparePiArchive, prepareAgentRuntime)
+                inputs.dir(piPackedDir)
+                    .withPropertyName("piPackedAssets")
+                    .withPathSensitivity(PathSensitivity.NONE)
+            }
         }
     }
 }

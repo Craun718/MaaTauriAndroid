@@ -153,6 +153,9 @@ describe("diagnostic controls", () => {
         <NotificationHost />
       </>,
     );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Task actions" }),
+    );
     const capture = await screen.findByRole("button", { name: "Shot" });
     await waitFor(() => expect(capture).toBeEnabled());
 

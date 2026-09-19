@@ -8,6 +8,7 @@ const resolveCurrent = vi.fn();
 const getPrivilegedStatus = vi.fn();
 const getRunStatus = vi.fn();
 const getVirtualDisplayStatus = vi.fn();
+const hideVirtualDisplayPreview = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
   bootstrapApp: () => bootstrap(),
@@ -18,6 +19,7 @@ vi.mock("../src/lib/api", () => ({
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   updateVirtualDisplayBounds: vi.fn(),
+  hideVirtualDisplayPreview: () => hideVirtualDisplayPreview(),
   loadProject: vi.fn(),
   saveConfiguration: vi.fn(),
   applyPreset: vi.fn(),
@@ -97,6 +99,7 @@ describe("App", () => {
       height: 720,
       frameCount: 0,
     });
+    hideVirtualDisplayPreview.mockResolvedValue(undefined);
   });
 
   it("bootstraps the project and renders navigation", async () => {
@@ -142,7 +145,11 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("link", { name: "Tasks" }));
 
-    // Run controls, formerly on their own /run page.
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Task actions" }),
+    );
+
+    // Run controls, formerly on their own /run page, now live in the drawer.
     expect(screen.getAllByRole("button", { name: "Start" })).toHaveLength(1);
     // The active run configuration is a tab, while its queue shares the panel.
     expect(await screen.findByRole("tab", { name: "Default" })).toHaveAttribute(

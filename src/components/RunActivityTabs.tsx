@@ -4,6 +4,7 @@ import { useTranslation } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { RunEvent } from "../lib/types";
 import { type RunLogEntry, useRunLogStore } from "../store/runLogStore";
+import { RichDescription } from "./RichDescription";
 
 type ActivityTab = "tasks" | "logs";
 
@@ -192,19 +193,26 @@ export function RunActivityTabs({
                         })}
                       </span>
                     </div>
-                    <p
-                      className={`min-w-0 flex-1 break-words ${
-                        category === "error"
-                          ? "text-red-600 dark:text-red-300"
-                          : category === "warning"
-                            ? "text-warning"
-                            : stream === "stderr"
-                              ? "text-red-600 dark:text-red-300"
-                              : ""
-                      }`}
-                    >
-                      {displayMessage}
-                    </p>
+                    {category === "focus" ? (
+                      <RichDescription
+                        text={displayMessage}
+                        className="min-w-0 flex-1 break-words text-ink"
+                      />
+                    ) : (
+                      <p
+                        className={`min-w-0 flex-1 break-words ${
+                          category === "error"
+                            ? "text-red-600 dark:text-red-300"
+                            : category === "warning"
+                              ? "text-warning"
+                              : stream === "stderr"
+                                ? "text-red-600 dark:text-red-300"
+                                : ""
+                        }`}
+                      >
+                        {displayMessage}
+                      </p>
+                    )}
                   </div>
                 </li>
               );

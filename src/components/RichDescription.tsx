@@ -8,6 +8,7 @@ import { readProjectImage } from "../lib/api";
 
 const sanitizeSchema = {
   ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "font"],
   protocols: {
     ...defaultSchema.protocols,
     href: ["http", "https", "mailto"],

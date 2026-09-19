@@ -55,11 +55,18 @@ describe("RichDescription", () => {
   it("renders whitelisted inline HTML", () => {
     render(
       <RichDescription
-        text={'<b>bold</b> <a href="https://example.com">link</a>'}
+        text={
+          '<b>bold</b> <font color="DeepSkyBlue">colored</font> ' +
+          '<a href="https://example.com">link</a>'
+        }
       />,
     );
 
     expect(screen.getByText("bold").tagName).toBe("B");
+    expect(screen.getByText("colored").closest("font")).toHaveAttribute(
+      "color",
+      "DeepSkyBlue",
+    );
     expect(screen.getByRole("link", { name: "link" })).toHaveAttribute(
       "href",
       "https://example.com",

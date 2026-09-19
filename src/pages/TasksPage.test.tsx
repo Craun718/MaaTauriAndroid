@@ -25,6 +25,8 @@ const captureManualScreenshot = vi.fn();
 const startRun = vi.fn();
 const stopRun = vi.fn();
 const exportLogs = vi.fn();
+const updateVirtualDisplayBounds = vi.fn();
+const hideVirtualDisplayPreview = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
@@ -39,8 +41,9 @@ vi.mock("../lib/api", () => ({
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
-  updateVirtualDisplayBounds: vi.fn(),
-  hideVirtualDisplayPreview: vi.fn(),
+  updateVirtualDisplayBounds: (...args: unknown[]) =>
+    updateVirtualDisplayBounds(...args),
+  hideVirtualDisplayPreview: () => hideVirtualDisplayPreview(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -242,6 +245,8 @@ beforeEach(() => {
     height: 720,
     frameCount: 0,
   });
+  updateVirtualDisplayBounds.mockResolvedValue(undefined);
+  hideVirtualDisplayPreview.mockResolvedValue(undefined);
 });
 
 function nestedSwitch() {
@@ -392,16 +397,9 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    const runSection = (
-      await screen.findByRole("heading", {
-        name: "2 tasks ready",
-      })
-    ).closest("section");
-    if (!runSection) throw new Error("Run panel not found");
-    fireEvent.click(
-      within(runSection).getByRole("button", { name: "Task actions" }),
-    );
-    fireEvent.click(within(runSection).getByRole("button", { name: "Start" }));
+    await screen.findByRole("heading", { name: "2 tasks ready" });
+    fireEvent.click(screen.getByRole("button", { name: "Task actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
     expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
       "aria-selected",
@@ -421,9 +419,13 @@ describe("run configuration tabs and flat task list", () => {
       });
     });
 
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Task actions" }),
+    );
+    const drawer = await screen.findByRole("dialog", { name: "Task actions" });
     expect(
-      await screen.findByRole("button", { name: "Stop" }),
-    ).toBeInTheDocument();
+      await within(drawer).findByRole("button", { name: "Stop" }),
+    ).toBeEnabled();
   });
 
   it("stops a run with the same merged control", async () => {
@@ -459,15 +461,12 @@ describe("run configuration tabs and flat task list", () => {
     renderTasksPage();
 
     await screen.findByText("The run started");
-    const runSection = (
-      await screen.findByRole("heading", { name: "2 tasks ready" })
-    ).closest("section");
-    if (!runSection) throw new Error("Run panel not found");
     fireEvent.click(
-      await within(runSection).findByRole("button", { name: "Task actions" }),
+      await screen.findByRole("button", { name: "Task actions" }),
     );
+    const drawer = await screen.findByRole("dialog", { name: "Task actions" });
     fireEvent.click(
-      await within(runSection).findByRole("button", { name: "Stop" }),
+      await within(drawer).findByRole("button", { name: "Stop" }),
     );
 
     await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));
@@ -480,16 +479,9 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    const runSection = (
-      await screen.findByRole("heading", { name: "0 tasks ready" })
-    ).closest("section");
-    if (!runSection) throw new Error("Run panel not found");
-    fireEvent.click(
-      within(runSection).getByRole("button", { name: "Task actions" }),
-    );
-    fireEvent.click(
-      within(runSection).getByRole("button", { name: "Export logs" }),
-    );
+    await screen.findByRole("heading", { name: "0 tasks ready" });
+    fireEvent.click(screen.getByRole("button", { name: "Task actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
 
     await waitFor(() => expect(exportLogs).toHaveBeenCalledTimes(1));
     expect(
@@ -569,11 +561,37 @@ describe("run configuration tabs and flat task list", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Task logs" }));
 
     expect(screen.getByText("The run started")).toBeInTheDocument();
-    expect(screen.getByText("NodeA started")).toBeInTheDocument();
+    expect(screen.getByText("NodeA: NodeA started")).toBeInTheDocument();
     expect(screen.getByText("agent says ready")).toBeInTheDocument();
     expect(screen.getAllByText("Status")).toHaveLength(1);
     expect(screen.getAllByText("Focus")).toHaveLength(1);
     expect(screen.getAllByText("Agent")).toHaveLength(1);
+  });
+
+  it("renders HTML in focus logs as sanitized rich text", () => {
+    const { container } = renderTasksPage();
+
+    const runEventHandlers = eventHandlers.handlers["run-event"] ?? [];
+    runEventHandlers.at(-1)?.({
+      payload: {
+        executionId: "run-1",
+        sequence: 1,
+        atUnixMs: 1,
+        kind: "focus",
+        state: "Running",
+        message:
+          '<font color="DeepSkyBlue">进入冒险副本任务</font><script>alert(1)</script>',
+        taskName: "Adventure",
+        data: { channel: "log", messageType: "Node.Action.Starting" },
+      },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Task logs" }));
+
+    const font = screen.getByText("进入冒险副本任务").closest("font");
+    expect(font).toHaveAttribute("color", "DeepSkyBlue");
+    expect(container.querySelector("script")).toBeNull();
+    expect(screen.queryByText("alert(1)")).not.toBeInTheDocument();
   });
 
   it("renders run configurations as tabs with the active one selected", () => {
@@ -817,6 +835,9 @@ describe("manual screenshot notifications", () => {
     });
     renderTasksPage();
 
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Task actions" }),
+    );
     const capture = await screen.findByRole("button", { name: "Shot" });
     await waitFor(() => expect(capture).toBeEnabled());
     fireEvent.click(capture);

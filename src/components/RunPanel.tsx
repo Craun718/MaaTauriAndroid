@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
-import { Camera, ChevronDown, Download, Play, Square } from "lucide-react";
+import { Camera, ChevronUp, Download, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BottomDrawer } from "./ui/BottomDrawer";
 import {
   captureManualScreenshot,
   getRunStatus,
@@ -18,7 +19,8 @@ import { useNotificationStore } from "../store/notificationStore";
 /**
  * Run controls for the active run configuration. Rendered inside the Tasks panel
  * rather than on a page of its own: the queue it drives is the task list below it,
- * and keeping them apart meant showing the same tasks twice.
+ * and keeping them apart meant showing the same tasks twice. The individual
+ * actions live in a bottom drawer opened by the standalone "task actions" button.
  */
 export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const snapshot = useAppStore((state) => state.snapshot);
@@ -34,7 +36,6 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const { exportLogs, exporting } = useLogExport();
   const [capturing, setCapturing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const actionsRef = useRef<HTMLDivElement>(null);
   const notify = useNotificationStore((state) => state.notify);
   const notifyOnce = useNotificationStore((state) => state.notifyOnce);
   const reportError = useCallback(
@@ -118,28 +119,6 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     };
   }, [notify, notifyOnce, reportError]);
 
-  useEffect(() => {
-    if (!actionsOpen) return;
-
-    function closeActions(event: PointerEvent) {
-      if (!actionsRef.current?.contains(event.target as Node)) {
-        setActionsOpen(false);
-      }
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setActionsOpen(false);
-    }
-
-    document.addEventListener("pointerdown", closeActions);
-    document.addEventListener("keydown", closeOnEscape);
-
-    return () => {
-      document.removeEventListener("pointerdown", closeActions);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [actionsOpen]);
-
   if (!snapshot?.project) return null;
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
@@ -182,81 +161,67 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
 
   return (
     <>
-      <section className="rounded-lg border border-line bg-raised p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold">
-            {t("tasksReady", { count: enabled.length })}
-          </h2>
-          <div ref={actionsRef} className="relative shrink-0">
-            <button
-              type="button"
-              aria-expanded={actionsOpen}
-              aria-haspopup="menu"
-              onClick={() => setActionsOpen((value) => !value)}
-              className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-line px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              {t("taskOperations")}
-              <ChevronDown
-                size={14}
-                className={`text-ink-muted transition-transform ${
-                  actionsOpen ? "" : "-rotate-90"
-                }`}
-              />
-            </button>
-            {actionsOpen && (
-              <div
-                role="menu"
-                aria-label={t("taskOperations")}
-                className="absolute top-10 right-0 z-30 w-40 rounded-lg border border-line bg-raised p-1 shadow-lg"
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={
-                    (running ? false : enabled.length === 0) || busy || starting
-                  }
-                  onClick={() => {
-                    setActionsOpen(false);
-                    if (running) void stop();
-                    else void start();
-                  }}
-                  className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-                >
-                  {running ? <Square size={16} /> : <Play size={16} />}
-                  {t(running ? "stop" : "start")}
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={exporting}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    void exportLogs();
-                  }}
-                  className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-                >
-                  <Download size={16} />
-                  {exporting ? t("exportingLogs") : t("exportLogs")}
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={!executionId || capturing}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    void captureScreenshot();
-                  }}
-                  className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-                >
-                  <Camera size={16} />
-                  {t("captureScreenshot")}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-      {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
+      <div className="space-y-3">
+        <h2 className="text-xl font-semibold">
+          {t("tasksReady", { count: enabled.length })}
+        </h2>
+        <button
+          type="button"
+          aria-expanded={actionsOpen}
+          aria-haspopup="dialog"
+          onClick={() => setActionsOpen(true)}
+          className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-line text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {t("taskOperations")}
+          <ChevronUp size={16} className="text-ink-muted" />
+        </button>
+        {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
+      </div>
+      <BottomDrawer
+        open={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        title={t("taskOperations")}
+      >
+        <button
+          type="button"
+          disabled={
+            (running ? false : enabled.length === 0) || busy || starting
+          }
+          onClick={() => {
+            setActionsOpen(false);
+            if (running) void stop();
+            else void start();
+          }}
+          className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          {running ? <Square size={16} /> : <Play size={16} />}
+          {t(running ? "stop" : "start")}
+        </button>
+        <button
+          type="button"
+          disabled={exporting}
+          onClick={() => {
+            setActionsOpen(false);
+            void exportLogs();
+          }}
+          className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          <Download size={16} />
+          {exporting ? t("exportingLogs") : t("exportLogs")}
+        </button>
+        <button
+          type="button"
+          disabled={!executionId || capturing}
+          onClick={() => {
+            setActionsOpen(false);
+            void captureScreenshot();
+          }}
+          className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          <Camera size={16} />
+          {t("captureScreenshot")}
+        </button>
+      </BottomDrawer>
     </>
   );
 }

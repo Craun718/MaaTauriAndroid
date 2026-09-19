@@ -22,7 +22,7 @@
 
 ## 构建、测试与开发
 
-**默认通过 CI 编译与测试；只有用户明确要求本地编译或测试时，才在本地运行。** 本地工具链（JDK、NDK、MaaFramework 版本）与 CI 不一致，本地跑出来的结果既慢又不可作为验收依据。默认本地只做写代码、`pnpm dev` 热更新和 `cargo fmt` 这类轻量操作。
+**除非用户明确要求，否则不要自行在本地执行编译或测试。** 本地工具链（JDK、NDK、MaaFramework 版本）与 CI 不一致，本地跑出来的结果既慢又不可作为验收依据。默认本地只做写代码、`pnpm dev` 热更新和 `cargo fmt` 这类轻量操作。
 
 本地可用（仅用于开发与格式化，不作为验证手段）：
 
@@ -34,7 +34,7 @@
 - `pnpm format` / `pnpm format:check`：用 Biome 格式化 / 校验 JS、TS、JSON、CSS、HTML 和 SVG。
 - `cargo fmt --manifest-path src-tauri/Cargo.toml`：格式化 Rust 代码。
 
-以下命令**默认只在 CI 中执行**，除非用户明确要求在本地运行：
+除非用户明确要求在本地运行，否则不要自行执行以下命令：
 
 - `pnpm test` / `pnpm build`
 - `cargo test --manifest-path src-tauri/Cargo.toml`
@@ -55,19 +55,6 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 `m9a-android` 受路径过滤控制，仅在 `resource/m9a/**`、`resource/m9a.toml`、`src/**`、`src-tauri/src/**`、`src-tauri/gen/android/**`、`vendor/maa/**`、`package.json`、`pnpm-lock.yaml` 等路径变更时触发；需要强制跑（例如只改了文档但要出包）用 `workflow_dispatch`。
 
 ## 真机测试
-
-**真机验证必须使用 CI 构建的产物，不要用本地构建的 APK。** 本机与 CI 的工具链不一致，本地产物不能作为验收依据。
-
-流程：
-
-1. 推送分支，等 `m9a-android` job 跑完（必要时手动 `workflow_dispatch`）。
-2. 从该次运行下载 artifact：
-   - `m9a-apk-debug`：arm64 debug APK，安装到设备测试。
-   - `m9a-agent-runtime-arm64-v8a`：agent runtime ZIP，需要单独验证 runtime 时使用。
-
-   在 GitHub Actions 的 run 页面直接下载，或 `gh run download <run-id> -n m9a-apk-debug`。
-
-3. 报告真机结论时写明对应的 CI run 编号/链接与 artifact 名，便于复核。
 
 装机注意：`m9a-android` 目前每次构建都会重新生成 debug 密钥（`android-debug-keystore-v1` 缓存步骤不生效），所以**不同 CI 产物的签名互不相同**。`adb install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，只能先 `adb uninstall` 再装；卸载会清掉 app 私有数据（`configuration.json` 里的运行配置、Keystore 里的密码），动手前先确认 `secretManifest` 是否为空。
 
@@ -112,7 +99,7 @@ daisyUI 把自己的样式包在 `@layer utilities > daisyui.*` 子层里，而�
 
 钩子由 `pnpm install` 触发的 `prepare` 脚本安装，`core.hooksPath` 指向 `.husky/_`。Biome 规则在 `biome.json`：`resource/`（M9A submodule，JSON 被 `resource/m9a.toml` 的 sha256 锁定）、`vendor/`、`src-tauri/gen/` 一律不处理。Biome 不覆盖 Markdown 和 YAML，这些文件不进入 pre-commit 格式化流程。紧急情况下用 `git commit --no-verify` 跳过。
 
-新提交使用 Conventional Commits，例如 `fix(resolver): preserve encrypted fields` 或 `feat(android): add shizuku status`。PR 应包含变更原因与 CI 运行结果；UI 变更需要截图，Android 行为变更需要注明所使用 CI artifact 的 run 编号与真机验证结论。
+新提交使用 Conventional Commits，例如 `fix(resolver): preserve encrypted fields` 或 `feat(android): add shizuku status`。PR 应包含变更原因与 CI 运行结果；UI 变更需要截图，Android 行为变更需要注明真机验证结论。
 
 ## 安全注意事项
 

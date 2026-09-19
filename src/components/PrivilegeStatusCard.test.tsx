@@ -7,8 +7,8 @@ import type {
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
-import { NotificationHost } from "./ui/NotificationHost";
 import { PrivilegeStatusCard } from "./PrivilegeStatusCard";
+import { NotificationHost } from "./ui/NotificationHost";
 
 const getPrivilegedStatus = vi.fn();
 const requestPrivilegedAccess = vi.fn();

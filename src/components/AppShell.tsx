@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex h-full w-full max-w-md flex-col">
       {/* The only scroll container in the app: html/body are locked in index.css so
           the fixed nav below can never be dragged around with the page. */}
-      <main className="flex-1 overscroll-contain overflow-y-auto overflow-x-hidden px-4 pb-28 pt-5">
+      <main className="flex-1 overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-28 pt-5">
         {children}
       </main>
       {/* No safe-area padding here: the system bar insets are applied natively to the

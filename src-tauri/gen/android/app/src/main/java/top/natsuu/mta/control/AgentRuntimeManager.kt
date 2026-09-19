@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
+import java.io.InterruptedIOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
@@ -229,8 +230,12 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         stream: String,
     ) {
         thread(name = "maa-tauri-agent-$executionId-$stream") {
-            ParcelFileDescriptor.AutoCloseOutputStream(output).use { destination ->
-                input.use { source -> source.copyTo(destination) }
+            try {
+                ParcelFileDescriptor.AutoCloseOutputStream(output).use { destination ->
+                    input.use { source -> source.copyTo(destination) }
+                }
+            } catch (_: InterruptedIOException) {
+                // stop() tears the process and its streams down while pipeOutput is blocked.
             }
         }
     }

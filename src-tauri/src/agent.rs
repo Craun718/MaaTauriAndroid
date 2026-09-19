@@ -592,7 +592,12 @@ fn android_bridge<T>(
             "the privileged control service is disconnected".to_string(),
         ));
     }
-    operation(&mut env, &bridge, &service)
+    let result = operation(&mut env, &bridge, &service);
+    if result.is_err() {
+        // Failed JNI calls leave the Java exception pending; clear it before this thread runs again.
+        let _ = env.exception_clear();
+    }
+    result
 }
 
 pub fn load_android_descriptor() -> Result<AgentDescriptor, AgentError> {

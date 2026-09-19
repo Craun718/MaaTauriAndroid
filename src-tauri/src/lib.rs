@@ -674,8 +674,6 @@ fn update_virtual_display_bounds(
         || !top.is_finite()
         || !width.is_finite()
         || !height.is_finite()
-        || left < 0.0
-        || top < 0.0
         || width <= 0.0
         || height <= 0.0
     {
@@ -684,9 +682,12 @@ fn update_virtual_display_bounds(
         ));
     }
     let (left, top, width, height) = (left.trunc(), top.trunc(), width.trunc(), height.trunc());
-    if ![left, top, width, height]
+    if ![left, top]
         .into_iter()
-        .all(|value| (0.0..=i32::MAX as f64).contains(&value))
+        .all(|value| (i32::MIN as f64..=i32::MAX as f64).contains(&value))
+        || ![width, height]
+            .into_iter()
+            .all(|value| (0.0..=i32::MAX as f64).contains(&value))
     {
         return Err(AppError::Message(
             "Virtual display bounds are out of range".to_string(),
@@ -1542,7 +1543,11 @@ mod tests {
     #[test]
     fn virtual_display_bounds_validate_geometry() {
         assert!(update_virtual_display_bounds(1.0, 2.0, 320.0, 180.0).is_ok());
-        assert!(update_virtual_display_bounds(-1.0, 2.0, 320.0, 180.0).is_err());
+        assert!(update_virtual_display_bounds(-1.0, 2.0, 320.0, 180.0).is_ok());
+        assert!(update_virtual_display_bounds(1.0, -120.0, 320.0, 180.0).is_ok());
+        assert!(
+            update_virtual_display_bounds(f64::from(i32::MIN) - 1.0, 2.0, 320.0, 180.0).is_err()
+        );
         assert!(update_virtual_display_bounds(1.0, 2.0, 0.0, 180.0).is_err());
         assert!(
             update_virtual_display_bounds(f64::from(i32::MAX) + 1.0, 2.0, 320.0, 180.0).is_err()

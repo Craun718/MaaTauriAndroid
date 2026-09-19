@@ -69,8 +69,8 @@ describe("VirtualDisplayCard", () => {
   it("reports the preview bounds while the display is active", async () => {
     getVirtualDisplayStatus.mockResolvedValue(active);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-      left: 16,
-      top: 120,
+      left: -16,
+      top: -120,
       width: 320,
       height: 180,
     } as DOMRect);
@@ -84,8 +84,8 @@ describe("VirtualDisplayCard", () => {
     );
     await waitFor(() =>
       expect(updateVirtualDisplayBounds).toHaveBeenCalledWith(
-        16,
-        120,
+        -16,
+        -120,
         320,
         180,
       ),

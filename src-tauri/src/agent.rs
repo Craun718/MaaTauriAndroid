@@ -672,6 +672,14 @@ pub fn load_android_descriptor() -> Result<AgentDescriptor, AgentError> {
     }
 }
 
+fn strip_ansi_escapes(message: &str) -> std::borrow::Cow<'_, str> {
+    static ANSI_PATTERN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let pattern = ANSI_PATTERN.get_or_init(|| {
+        regex::Regex::new(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").expect("valid ANSI pattern")
+    });
+    pattern.replace_all(message, "")
+}
+
 fn forward_output(execution_id: &str, file: File, stream: &'static str) {
     let execution_id = execution_id.to_string();
     thread::Builder::new()
@@ -680,6 +688,7 @@ fn forward_output(execution_id: &str, file: File, stream: &'static str) {
             let reader = BufReader::new(file);
             for line in reader.lines() {
                 let Ok(line) = line else { break };
+                let line = strip_ansi_escapes(&line);
                 if let Some(logger) = crate::run_log::latest_global() {
                     if logger.execution_id() == execution_id {
                         let _ = logger.append_to_ui(
@@ -748,6 +757,12 @@ mod tests {
         let mut descriptor = descriptor();
         descriptor.runtimes[0].exec = "/bin/sh".to_string();
         assert!(validate_descriptor(&descriptor).is_err());
+    }
+
+    #[test]
+    fn strips_agent_ansi_color_escapes() {
+        assert_eq!(strip_ansi_escapes("\u{1b}[32msuccess\u{1b}[0m"), "success");
+        assert_eq!(strip_ansi_escapes("plain [32mtext"), "plain [32mtext");
     }
 
     #[derive(Default)]

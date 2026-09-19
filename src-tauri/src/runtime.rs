@@ -299,7 +299,8 @@ fn control_library_path(maa_path: &Path) -> Result<PathBuf, RuntimeError> {
 
 #[cfg(target_os = "android")]
 fn control_library_path(_maa_path: &Path) -> Result<PathBuf, RuntimeError> {
-    android_library_path("MaaAndroidNativeControlUnit")
+    // MaaRuntime loads the app bridge first; dlopen by SONAME reuses that instance.
+    Ok(PathBuf::from("libmaa_tauri_android_control.so"))
 }
 
 #[cfg(not(target_os = "android"))]

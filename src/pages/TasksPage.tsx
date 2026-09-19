@@ -15,7 +15,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
 import { OptionEditor } from "../components/OptionEditor";
 import { RichDescription } from "../components/RichDescription";
@@ -472,6 +472,64 @@ function TaskItem({
     : visibleOptions(project.options, task.options, configured.optionValues);
   const hasDetails = Boolean(task.description) || options.length > 0;
   const label = configured.customLabel ?? task.label;
+  const titleViewportRef = useRef<HTMLSpanElement>(null);
+  const titleContentRef = useRef<HTMLSpanElement>(null);
+  const [animateTitle, setAnimateTitle] = useState(false);
+
+  useEffect(() => {
+    const viewport = titleViewportRef.current;
+    const content = titleContentRef.current;
+    if (!expanded || !viewport || !content) {
+      setAnimateTitle(false);
+      return;
+    }
+
+    let animation: Animation | undefined;
+    let disposed = false;
+    const reduceMotionQuery =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : undefined;
+
+    const update = () => {
+      animation?.cancel();
+      animation = undefined;
+      if (disposed) return;
+
+      const overflow = viewport.scrollWidth - viewport.clientWidth;
+      const shouldAnimate = overflow > 1 && Boolean(reduceMotionQuery?.matches);
+      setAnimateTitle(shouldAnimate);
+      if (!shouldAnimate) return;
+
+      animation = content.animate(
+        [
+          { transform: "translateX(0)" },
+          { transform: `translateX(-${overflow}px)` },
+        ],
+        {
+          duration: Math.min(12000, Math.max(2800, overflow * 24)),
+          direction: "alternate",
+          easing: "ease-in-out",
+          iterations: Infinity,
+        },
+      );
+    };
+
+    update();
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    resizeObserver?.observe(viewport);
+    resizeObserver?.observe(content);
+    reduceMotionQuery?.addEventListener("change", update);
+    void document.fonts?.ready.then(update);
+
+    return () => {
+      disposed = true;
+      animation?.cancel();
+      resizeObserver?.disconnect();
+      reduceMotionQuery?.removeEventListener("change", update);
+    };
+  }, [expanded]);
 
   return (
     <article
@@ -499,15 +557,25 @@ function TaskItem({
                 onClick={() => setExpanded((value) => !value)}
                 className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-left"
               >
-                <span
-                  className={`min-w-0 flex-1 whitespace-nowrap ${
-                    expanded
-                      ? "overflow-x-auto"
-                      : "overflow-hidden text-ellipsis"
-                  }`}
-                >
-                  {label}
-                </span>
+                {expanded ? (
+                  <span
+                    ref={titleViewportRef}
+                    className={`min-w-0 flex-1 whitespace-nowrap ${
+                      animateTitle ? "overflow-hidden" : "overflow-x-auto"
+                    }`}
+                  >
+                    <span
+                      ref={titleContentRef}
+                      className="inline-block whitespace-nowrap"
+                    >
+                      {label}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                    {label}
+                  </span>
+                )}
                 <ChevronDown
                   size={16}
                   className={`shrink-0 text-ink-muted transition-transform ${

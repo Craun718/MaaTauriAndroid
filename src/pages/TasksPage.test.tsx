@@ -226,7 +226,10 @@ beforeEach(() => {
     taskCount: 0,
   });
   stopRun.mockResolvedValue("The run is stopping");
-  useNotificationStore.setState({ notifications: [] });
+  useNotificationStore.setState({
+    notifications: [],
+    seenKeys: new Set<string>(),
+  });
   useRunLogStore.setState({ entries: [] });
   captureManualScreenshot.mockResolvedValue({
     executionId: "run-1",
@@ -762,6 +765,26 @@ describe("run status restoration", () => {
       "The run failed",
     );
     expect(screen.getAllByText("The run failed")).toHaveLength(2);
+  });
+
+  it("does not restore the same failed run again after changing routes", async () => {
+    getRunStatus.mockResolvedValue({
+      executionId: "run-1",
+      state: "Idle",
+      severity: "error",
+      message: "The run failed",
+    });
+
+    const first = renderTasksPage();
+    await screen.findByRole("alert");
+    await waitFor(() => expect(getRunStatus).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    renderTasksPage();
+    await waitFor(() => expect(getRunStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(useAppStore.getState().busy).toBe(false));
+
+    expect(useNotificationStore.getState().notifications).toHaveLength(1);
   });
 
   it("does not restore a failed run again after saving a checkbox", async () => {

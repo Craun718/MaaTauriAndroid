@@ -12,7 +12,17 @@ export interface AppNotification {
 
 interface NotificationStore {
   notifications: AppNotification[];
+  seenKeys: Set<string>;
   notify: (
+    message: string,
+    options?: {
+      tone?: NotificationTone;
+      durationMs?: number;
+      logToActivity?: boolean;
+    },
+  ) => number;
+  notifyOnce: (
+    key: string,
     message: string,
     options?: {
       tone?: NotificationTone;
@@ -27,8 +37,9 @@ let nextNotificationId = 1;
 const maxVisibleNotifications = 3;
 const defaultNotificationDurationMs = 15000;
 
-export const useNotificationStore = create<NotificationStore>((set) => ({
+export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: [],
+  seenKeys: new Set<string>(),
   notify(message, options) {
     const id = nextNotificationId;
     nextNotificationId += 1;
@@ -52,6 +63,11 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
       ),
     }));
     return id;
+  },
+  notifyOnce(key, message, options) {
+    if (get().seenKeys.has(key)) return -1;
+    set((state) => ({ seenKeys: new Set(state.seenKeys).add(key) }));
+    return get().notify(message, options);
   },
   dismiss(id) {
     set((state) => ({

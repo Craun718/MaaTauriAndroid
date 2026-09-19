@@ -36,6 +36,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   const notify = useNotificationStore((state) => state.notify);
+  const notifyOnce = useNotificationStore((state) => state.notifyOnce);
   const reportError = useCallback(
     (error: unknown) => {
       notify(error instanceof Error ? error.message : String(error), {
@@ -50,9 +51,9 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     resolveCurrent().then(setRun).catch(reportError);
   }, [snapshot, reportError]);
 
-  // Restoring the latest error is a mount-time recovery path. Re-running it on
-  // every configuration save would resurface an old failure whenever a task
-  // checkbox changes.
+  // Restoring the latest error is a mount-time recovery path. Sharing the
+  // execution-scoped notification key with live failures prevents route
+  // changes from replaying an old result as a second alert.
   useEffect(() => {
     if (!projectRoot) return;
     getRunStatus()
@@ -62,14 +63,16 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         setExecutionId(result.executionId);
         setRunState(result.state);
         if (result.severity === "error") {
-          notify(result.message, { tone: "error" });
+          notifyOnce(`run-failure:${result.executionId}`, result.message, {
+            tone: "error",
+          });
           setStatus(undefined);
           return;
         }
         setStatus(result.message);
       })
       .catch(() => undefined);
-  }, [projectRoot, notify]);
+  }, [projectRoot, notifyOnce]);
 
   useEffect(() => {
     let disposed = false;
@@ -84,15 +87,20 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       setExecutionId(payload.executionId);
       if (payload.kind === "screenshot") return;
       if (payload.kind === "failure" || payload.kind === "warning") {
-        notify(
-          payload.taskName
-            ? `${payload.taskName}: ${payload.message}`
-            : payload.message,
-          {
-            tone: payload.kind === "failure" ? "error" : "warning",
+        const message = payload.taskName
+          ? `${payload.taskName}: ${payload.message}`
+          : payload.message;
+        if (payload.kind === "failure") {
+          notifyOnce(`run-failure:${payload.executionId}`, message, {
+            tone: "error",
             logToActivity: false,
-          },
-        );
+          });
+        } else {
+          notify(message, {
+            tone: "warning",
+            logToActivity: false,
+          });
+        }
         setStatus(undefined);
         return;
       }
@@ -108,7 +116,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       disposed = true;
       unsubscribe?.();
     };
-  }, [notify, reportError]);
+  }, [notify, notifyOnce, reportError]);
 
   useEffect(() => {
     if (!actionsOpen) return;

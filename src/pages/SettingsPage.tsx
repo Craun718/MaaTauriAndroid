@@ -83,7 +83,7 @@ export function SettingsPage() {
               await saveConfiguration(next);
               setLanguageDraft(undefined);
             }}
-            className="h-11 shrink-0 rounded-md bg-accent px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className="h-10 shrink-0 rounded-md bg-accent px-3 text-sm font-semibold text-white disabled:opacity-50"
           >
             {t("apply")}
           </button>
@@ -187,9 +187,9 @@ export function SettingsPage() {
               setExporting(false);
             }
           }}
-          className="flex h-11 items-center justify-center gap-2 rounded-md border border-line px-4 font-semibold disabled:opacity-50"
+          className="flex h-10 items-center justify-center gap-2 rounded-md border border-line px-3 font-semibold disabled:opacity-50"
         >
-          <Download size={18} />
+          <Download size={16} />
           {exporting ? t("exportingLogs") : t("exportLogs")}
         </button>
         <button
@@ -213,9 +213,9 @@ export function SettingsPage() {
               setCleaning(false);
             }
           }}
-          className="flex h-11 items-center justify-center gap-2 rounded-md border border-red-300 px-4 font-semibold text-red-600 disabled:opacity-50"
+          className="flex h-10 items-center justify-center gap-2 rounded-md border border-red-300 px-3 font-semibold text-red-600 disabled:opacity-50"
         >
-          <Trash2 size={18} />
+          <Trash2 size={16} />
           {cleaning ? t("deleting") : t("deleteRuns")}
         </button>
         {cleanupStatus && (

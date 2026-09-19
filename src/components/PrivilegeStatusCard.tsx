@@ -150,11 +150,11 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
           type="button"
           onClick={() => void refreshStatus()}
           disabled={refreshing}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
           aria-label={t("refreshStatus")}
         >
           <RefreshCw
-            size={16}
+            size={14}
             className={refreshing ? "animate-spin" : undefined}
           />
         </button>
@@ -189,12 +189,12 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
           type="button"
           onClick={() => void runPrivilegeAction(action)}
           disabled={actionPending || refreshing}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
         >
           {actionPending ? (
-            <LoaderCircle size={16} className="animate-spin" />
+            <LoaderCircle size={14} className="animate-spin" />
           ) : (
-            <ActionIcon size={16} />
+            <ActionIcon size={14} />
           )}
           {t(actionCopy[action])}
         </button>
@@ -204,12 +204,12 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         type="button"
         onClick={() => void runPrivilegeAction("request")}
         disabled={actionPending || refreshing}
-        className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
+        className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
       >
         {actionPending ? (
-          <LoaderCircle size={16} className="animate-spin" />
+          <LoaderCircle size={14} className="animate-spin" />
         ) : (
-          <ShieldCheck size={16} />
+          <ShieldCheck size={14} />
         )}
         {t("requestPermission")}
       </button>

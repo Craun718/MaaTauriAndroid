@@ -157,11 +157,11 @@ export function VirtualDisplayCard() {
           type="button"
           onClick={() => void refreshStatus()}
           disabled={refreshing}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
           aria-label={t("refreshStatus")}
         >
           <RefreshCw
-            size={16}
+            size={14}
             className={refreshing ? "animate-spin" : undefined}
           />
         </button>
@@ -190,12 +190,12 @@ export function VirtualDisplayCard() {
             type="button"
             onClick={() => void stopDisplay()}
             disabled={actionPending || refreshing || status === undefined}
-            className="flex h-10 flex-none items-center justify-center gap-2 rounded-md border border-red-500/50 px-4 font-medium text-red-600 disabled:opacity-50 dark:text-red-300"
+            className="flex h-9 flex-none items-center justify-center gap-2 rounded-md border border-red-500/50 px-3 font-medium text-red-600 disabled:opacity-50 dark:text-red-300"
           >
             {actionPending ? (
-              <LoaderCircle size={16} className="animate-spin" />
+              <LoaderCircle size={14} className="animate-spin" />
             ) : (
-              <Square size={16} />
+              <Square size={14} />
             )}
             {t("stop")}
           </button>

@@ -184,9 +184,9 @@ export function RunPanel() {
           type="button"
           disabled={enabled.length === 0 || busy}
           onClick={start}
-          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-accent font-semibold text-white disabled:opacity-50"
+          className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-accent font-semibold text-white disabled:opacity-50"
         >
-          <Play size={18} />
+          <Play size={16} />
           {t("start")}
         </button>
         <div className="mt-2 grid grid-cols-3 gap-2">
@@ -194,27 +194,27 @@ export function RunPanel() {
             type="button"
             disabled={!executionId || runState === "Idle"}
             onClick={stop}
-            className="flex h-12 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
+            className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >
-            <Square size={18} />
+            <Square size={16} />
             {t("stop")}
           </button>
           <button
             type="button"
             disabled={!executionId || exporting}
             onClick={exportBundle}
-            className="flex h-12 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
+            className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >
-            <Download size={18} />
+            <Download size={16} />
             {t("exportDiagnostics")}
           </button>
           <button
             type="button"
             disabled={!executionId || capturing}
             onClick={captureScreenshot}
-            className="flex h-12 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
+            className="flex h-11 items-center justify-center gap-2 rounded-md border border-line font-semibold disabled:opacity-50"
           >
-            <Camera size={18} />
+            <Camera size={16} />
             {t("captureScreenshot")}
           </button>
         </div>

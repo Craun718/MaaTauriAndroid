@@ -49,7 +49,7 @@ export function Tabs({ items, value, onValueChange, ariaLabel }: TabsProps) {
           ref={listRef}
           role="tablist"
           aria-label={ariaLabel}
-          className="tabs tabs-box tabs-sm w-max min-w-full border border-base-300"
+          className="tabs tabs-box tabs-xs w-max min-w-full border border-base-300"
         >
           {items.map((item, index) => {
             const selected = item.value === active;

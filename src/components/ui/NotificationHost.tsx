@@ -88,9 +88,9 @@ function NotificationItem({
         type="button"
         onClick={() => onDismiss(notification.id)}
         aria-label={dismissLabel}
-        className="-m-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="-m-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <X size={16} />
+        <X size={14} />
       </button>
     </div>
   );

@@ -252,9 +252,9 @@ export function TasksPage() {
             type="button"
             onClick={createConfiguration}
             aria-label={t("newConfiguration")}
-            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            <Plus size={18} />
+            <Plus size={16} />
           </button>
         </div>
         <DndContext
@@ -266,7 +266,7 @@ export function TasksPage() {
             items={activeRun?.tasks.map((task) => task.instanceId) ?? []}
             strategy={verticalListSortingStrategy}
           >
-            <div className="space-y-3">
+            <div className="space-y-2 rounded-lg border border-line bg-surface-muted p-2">
               {activeRun?.tasks.map(renderConfiguredTask)}
             </div>
           </SortableContext>
@@ -292,7 +292,7 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setFocusNotice(undefined)}
-            className="mt-3 h-10 w-full rounded-md bg-accent font-semibold text-white"
+            className="mt-3 h-9 w-full rounded-md bg-accent font-semibold text-white"
           >
             {t("focusDismiss")}
           </button>
@@ -336,7 +336,7 @@ function PresetPicker({
         <button
           type="button"
           onClick={() => onApply(active.name)}
-          className="h-11 shrink-0 rounded-md bg-accent px-4 text-sm font-semibold text-white"
+          className="h-10 shrink-0 rounded-md bg-accent px-3 text-sm font-semibold text-white"
         >
           {applyLabel}
         </button>
@@ -365,9 +365,9 @@ function AddTaskPicker({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <Plus size={16} />
+        <Plus size={14} />
         {addLabel}
       </button>
       {open && (
@@ -380,7 +380,7 @@ function AddTaskPicker({
                 key={task.name}
                 type="button"
                 onClick={() => onAdd(task)}
-                className="flex h-10 w-full cursor-pointer items-center rounded-md px-3 text-left text-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-9 w-full cursor-pointer items-center rounded-md px-2.5 text-left text-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {task.label}
               </button>
@@ -462,7 +462,7 @@ function TaskItem({
 
   return (
     <article
-      className={`rounded-lg border p-4 ${
+      className={`rounded-lg border p-2 ${
         unavailable
           ? "border-line bg-surface-muted opacity-60"
           : "border-line bg-raised"
@@ -472,23 +472,23 @@ function TaskItem({
         <button
           type="button"
           aria-label={t("dragReorder")}
-          className="flex h-8 w-8 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
+          className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
           {...dragHandleProps}
         >
-          <GripVertical size={16} />
+          <GripVertical size={14} />
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           {hasDetails ? (
-            <h3 className="flex min-h-11 min-w-0 flex-1 items-center font-medium">
+            <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
               <button
                 type="button"
                 aria-expanded={expanded}
                 onClick={() => setExpanded((value) => !value)}
-                className="flex min-h-11 flex-1 items-center gap-2 text-left"
+                className="flex min-h-7 flex-1 items-center gap-2 text-left"
               >
                 {label}
                 <ChevronDown
-                  size={18}
+                  size={16}
                   className={`shrink-0 text-ink-muted transition-transform ${
                     expanded ? "" : "-rotate-90"
                   }`}
@@ -496,10 +496,12 @@ function TaskItem({
               </button>
             </h3>
           ) : (
-            <h3 className="min-w-0 flex-1 font-medium">{label}</h3>
+            <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
+              {label}
+            </h3>
           )}
           <Checkbox
-            className="h-11 shrink-0 gap-2 text-sm"
+            className="h-8 shrink-0 gap-2 text-sm"
             checked={configured.enabled}
             disabled={unavailable}
             onCheckedChange={onEnabledChange}
@@ -511,9 +513,9 @@ function TaskItem({
           type="button"
           onClick={onRemove}
           aria-label={t("removeTask")}
-          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          <Trash2 size={16} />
+          <Trash2 size={14} />
         </button>
       </div>
       {unavailable && (

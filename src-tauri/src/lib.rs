@@ -851,6 +851,31 @@ fn call_runtime_bridge_update_bounds(
         })
 }
 
+/// Terminates a run that is still inside `begin_preparing`: appends the
+/// terminal Failure event, resets the execution result to Idle, and reports
+/// telemetry. Must be called from within `MaaSessions::finish_with` so the
+/// preparing lease returns to Idle; otherwise every later start and stop
+/// stays wedged on the preparing lease and the run controls never recover.
+fn abort_preparing_run(app: &AppHandle, logger: &run_log::RunLogger, message: String) {
+    if let Ok(event) = logger.append(
+        run_log::RunEventKind::Failure,
+        runtime::RunState::Idle,
+        message.clone(),
+        None,
+        None,
+    ) {
+        let _ = app.emit("run-event", &event);
+    }
+    runtime::set_execution_result(
+        Some(logger.execution_id()),
+        runtime::RunState::Idle,
+        runtime::RunResultSeverity::Error,
+        message.clone(),
+    );
+    telemetry::run_event("failed", &message, None);
+    telemetry::run_finished("failed");
+}
+
 #[tauri::command]
 async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRunStatus, AppError> {
     let project = state.project()?;
@@ -925,11 +950,23 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
         });
     }
 
+    // Any failure after `begin_preparing` must finish the lease before this
+    // command returns, or every later start and stop stays wedged on the
+    // preparing lease and the run controls never return to Idle.
+    let fail_preparing = |message: String| -> AppError {
+        state.maa.finish_with(&execution_id, || {
+            abort_preparing_run(&app, &logger, message.clone());
+        });
+        AppError::Message(message)
+    };
+
     // MaaFramework caches the display ID on its controller, so the virtual
     // display must exist before session creation and before any StartApp task.
     #[cfg(target_os = "android")]
     {
-        call_runtime_bridge_start_virtual_display(1280, 720, 160)?;
+        if let Err(error) = call_runtime_bridge_start_virtual_display(1280, 720, 160) {
+            return Err(fail_preparing(error.to_string()));
+        }
         let _ = app.emit("virtual-display-changed", ());
     }
 
@@ -950,36 +987,19 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let creation_execution_id = run_execution_id.clone();
     let controller_display_id = runtime::active_display_id();
     if controller_display_id == 0 {
-        state.maa.finish_with(&execution_id, || {
-            if let Ok(event) = logger.append(
-                run_log::RunEventKind::Failure,
-                runtime::RunState::Idle,
-                "The virtual display is not active",
-                None,
-                None,
-            ) {
-                let _ = app.emit("run-event", &event);
-            }
-            runtime::set_execution_result(
-                Some(&execution_id),
-                runtime::RunState::Idle,
-                runtime::RunResultSeverity::Error,
-                "The virtual display is not active".to_string(),
-            );
-            telemetry::run_event("failed", "The virtual display is not active", None);
-            telemetry::run_finished("failed");
-        });
-        return Err(AppError::Message(
+        return Err(fail_preparing(
             "The virtual display is not active".to_string(),
         ));
     }
-    logger.append(
+    if let Err(error) = logger.append(
         run_log::RunEventKind::Preparing,
         runtime::RunState::Preparing,
         format!("Controller bound to display {controller_display_id}"),
         None,
         None,
-    )?;
+    ) {
+        return Err(fail_preparing(error.to_string()));
+    }
     let resolved_for_run = resolved.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     let force_stop_target_app = configuration.force_stop_target_app;
@@ -995,25 +1015,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     };
     drop(_lifecycle_guard);
     tokio::spawn(async move {
-        let fail = |app: &AppHandle, logger: &run_log::RunLogger, message: String| {
-            if let Ok(event) = logger.append(
-                run_log::RunEventKind::Failure,
-                runtime::RunState::Idle,
-                message.clone(),
-                None,
-                None,
-            ) {
-                let _ = app.emit("run-event", &event);
-            }
-            runtime::set_execution_result(
-                Some(logger.execution_id()),
-                runtime::RunState::Idle,
-                runtime::RunResultSeverity::Error,
-                message.clone(),
-            );
-            telemetry::run_event("failed", &message, None);
-            telemetry::run_finished("failed");
-        };
+        let fail = abort_preparing_run;
         let creation = tokio::task::spawn_blocking(move || {
             let agent = agent::prepare_android(agent_count)
                 .map_err(|error| crate::runtime::RuntimeError::Maa(error.to_string()))?;

@@ -1026,6 +1026,24 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_preparation_releases_the_wedged_lease() {
+        let sessions = MaaSessions::default();
+        sessions.begin_preparing("run-1").unwrap();
+
+        // A stop arrives while the run is still preparing.
+        assert!(sessions.request_stop(Some("run-1")).unwrap());
+        assert_eq!(sessions.status(), RunState::Preparing);
+
+        // start_run fails before Maa starts (for example, the privileged
+        // control service rejected the virtual display) and must finish the
+        // lease, or every later start and stop stays stuck on this run.
+        sessions.finish("run-1");
+        assert_eq!(sessions.status(), RunState::Idle);
+        assert!(!sessions.request_stop(Some("run-1")).unwrap());
+        assert!(sessions.begin_preparing("run-2").unwrap());
+    }
+
+    #[test]
     fn a_new_run_can_stop_after_an_old_run_finished() {
         let sessions = MaaSessions::default();
         sessions.begin_preparing("run-1").unwrap();

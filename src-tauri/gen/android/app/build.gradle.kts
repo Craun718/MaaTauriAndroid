@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.android.build.api.dsl.ApplicationExtension
 
 import top.natsuu.mta.kotlin.PiProfileReader
+import top.natsuu.mta.kotlin.PiLauncherIcon
 
 plugins {
     id("com.android.application")
@@ -220,8 +221,35 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
     }
 }
 
+val piLauncherIconResDir = layout.buildDirectory.dir("generated/piLauncherIcon")
+
+val syncPiLauncherIcon = tasks.register("syncPiLauncherIcon") {
+    group = "build"
+    description = "Generate launcher icons from the Project Interface app icon"
+    val outputDir = piLauncherIconResDir
+    outputs.dir(outputDir)
+    dependsOn(preparePiArchive)
+    if (piProfile != null) {
+        inputs.files(piRootDir)
+        doLast {
+            val resRoot = outputDir.get().asFile.apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            val icon = PiLauncherIcon.resolve(piRootDir.get().file("interface.json").asFile)
+            if (icon != null) {
+                PiLauncherIcon.generate(icon, resRoot)
+            }
+        }
+    } else {
+        doLast {
+            outputDir.get().asFile.deleteRecursively()
+        }
+    }
+}
+
 tasks.named("preBuild") {
-    dependsOn(preparePiArchive, prepareAgentRuntime)
+    dependsOn(preparePiArchive, prepareAgentRuntime, syncPiLauncherIcon)
 }
 
 extensions.configure<ApplicationExtension> {
@@ -304,6 +332,12 @@ extensions.configure<com.android.build.api.variant.ApplicationAndroidComponentsE
     onVariants { variant ->
         if (piProfile != null) {
             variant.sources.assets?.addStaticSourceDirectory(piPackedDir.get().asFile.absolutePath)
+            // Generated launcher icons live at the variant level so they
+            // override the committed Tauri defaults without touching tracked
+            // res files. An interface without an icon leaves the directory
+            // empty and the defaults win.
+            variant.sources.res
+                ?.addStaticSourceDirectory(piLauncherIconResDir.get().asFile.absolutePath)
 
             // AGP may keep the asset merge up-to-date when only files inside a
             // static source directory change. Declare the generated tree as a
@@ -314,6 +348,14 @@ extensions.configure<com.android.build.api.variant.ApplicationAndroidComponentsE
                 dependsOn(preparePiArchive, prepareAgentRuntime)
                 inputs.dir(piPackedDir)
                     .withPropertyName("piPackedAssets")
+                    .withPathSensitivity(PathSensitivity.NONE)
+            }
+            val mergeResourcesTaskName =
+                "merge${variant.name.replaceFirstChar { it.uppercase() }}Resources"
+            tasks.matching { it.name == mergeResourcesTaskName }.configureEach {
+                dependsOn(syncPiLauncherIcon)
+                inputs.dir(piLauncherIconResDir)
+                    .withPropertyName("piLauncherIconRes")
                     .withPathSensitivity(PathSensitivity.NONE)
             }
         }

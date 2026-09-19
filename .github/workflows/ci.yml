@@ -167,6 +167,9 @@ jobs:
           scripts/fetch-maafw.sh
           scripts/build-agent-runtime.sh
 
+      - name: Run buildSrc tests
+        run: ./gradlew :buildSrc:test
+
       - name: Generate M9A OCR models
         working-directory: resource/m9a
         run: python3 tools/configure.py

@@ -24,6 +24,11 @@ object ControlHost {
     fun current(): IMaaTauriAndroidControlService? = currentService
 
     @JvmStatic
+    fun stopAllAgents() {
+        currentService?.stopAllAgents()
+    }
+
+    @JvmStatic
     external fun startVirtualDisplay(width: Int, height: Int, dpi: Int): Int
 
     @JvmStatic

@@ -709,6 +709,20 @@ fn update_virtual_display_bounds(
     }
 }
 
+#[tauri::command]
+fn hide_virtual_display_preview() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_update_bounds(0, 0, 0, 0)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
+}
+
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
     let bridge_class = crate::runtime::runtime_bridge_class()
@@ -885,23 +899,25 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     run_log::set_latest_global(logger.clone());
     telemetry::run_started(&execution_id);
     if stopped_before_start {
-        let cancelled = logger.append(
-            run_log::RunEventKind::Cancelled,
-            runtime::RunState::Idle,
-            "The run was cancelled before Maa started",
-            None,
-            None,
-        )?;
-        let _ = app.emit("run-event", &cancelled);
-        runtime::set_execution_result(
-            Some(&execution_id),
-            runtime::RunState::Idle,
-            runtime::RunResultSeverity::Info,
-            "The run was cancelled".to_string(),
-        );
-        state.maa.finish(&execution_id);
-        telemetry::run_event("stopped", "The run was cancelled before Maa started", None);
-        telemetry::run_finished("stopped");
+        state.maa.finish_with(&execution_id, || {
+            if let Ok(event) = logger.append(
+                run_log::RunEventKind::Cancelled,
+                runtime::RunState::Idle,
+                "The run was cancelled before Maa started",
+                None,
+                None,
+            ) {
+                let _ = app.emit("run-event", &event);
+            }
+            runtime::set_execution_result(
+                Some(&execution_id),
+                runtime::RunState::Idle,
+                runtime::RunResultSeverity::Info,
+                "The run was cancelled".to_string(),
+            );
+            telemetry::run_event("stopped", "The run was cancelled before Maa started", None);
+            telemetry::run_finished("stopped");
+        });
         return Ok(StartRunStatus {
             execution_id,
             message: "The run was cancelled".to_string(),
@@ -934,7 +950,25 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let creation_execution_id = run_execution_id.clone();
     let controller_display_id = runtime::active_display_id();
     if controller_display_id == 0 {
-        state.maa.finish(&execution_id);
+        state.maa.finish_with(&execution_id, || {
+            if let Ok(event) = logger.append(
+                run_log::RunEventKind::Failure,
+                runtime::RunState::Idle,
+                "The virtual display is not active",
+                None,
+                None,
+            ) {
+                let _ = app.emit("run-event", &event);
+            }
+            runtime::set_execution_result(
+                Some(&execution_id),
+                runtime::RunState::Idle,
+                runtime::RunResultSeverity::Error,
+                "The virtual display is not active".to_string(),
+            );
+            telemetry::run_event("failed", "The virtual display is not active", None);
+            telemetry::run_finished("failed");
+        });
         return Err(AppError::Message(
             "The virtual display is not active".to_string(),
         ));
@@ -1001,8 +1035,9 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 {
                     Ok(tasker) => tasker,
                     Err(error) => {
-                        fail(&app, &logger_for_run, error.to_string());
-                        sessions.finish(&run_execution_id);
+                        sessions.finish_with(&run_execution_id, || {
+                            fail(&app, &logger_for_run, error.to_string());
+                        });
                         return;
                     }
                 };
@@ -1044,13 +1079,15 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 let outcome = match result {
                     Ok(Ok(outcome)) => outcome,
                     Ok(Err(error)) => {
-                        fail(&app, &logger_for_run, error.to_string());
-                        sessions.finish(&run_execution_id);
+                        sessions.finish_with(&run_execution_id, || {
+                            fail(&app, &logger_for_run, error.to_string());
+                        });
                         return;
                     }
                     Err(error) => {
-                        fail(&app, &logger_for_run, error.to_string());
-                        sessions.finish(&run_execution_id);
+                        sessions.finish_with(&run_execution_id, || {
+                            fail(&app, &logger_for_run, error.to_string());
+                        });
                         return;
                     }
                 };
@@ -1108,39 +1145,42 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         )
                     }
                 };
-                if let Ok(event) =
-                    logger_for_run.append(kind, state, message.clone(), task_name, None)
-                {
-                    let _ = app.emit("run-event", &event);
-                }
-                telemetry::run_event(
-                    outcome_label,
-                    &message,
-                    attachment_path
-                        .and_then(|path| path.to_str().map(str::to_string))
-                        .as_deref(),
-                );
-                telemetry::run_finished(outcome_label);
-                let severity = if kind == run_log::RunEventKind::Failure {
-                    runtime::RunResultSeverity::Error
-                } else {
-                    runtime::RunResultSeverity::Info
-                };
-                runtime::set_execution_result(
-                    Some(logger_for_run.execution_id()),
-                    state,
-                    severity,
-                    message,
-                );
-                sessions.finish(&run_execution_id);
+                sessions.finish_with(&run_execution_id, || {
+                    if let Ok(event) =
+                        logger_for_run.append(kind, state, message.clone(), task_name, None)
+                    {
+                        let _ = app.emit("run-event", &event);
+                    }
+                    telemetry::run_event(
+                        outcome_label,
+                        &message,
+                        attachment_path
+                            .and_then(|path| path.to_str().map(str::to_string))
+                            .as_deref(),
+                    );
+                    telemetry::run_finished(outcome_label);
+                    let severity = if kind == run_log::RunEventKind::Failure {
+                        runtime::RunResultSeverity::Error
+                    } else {
+                        runtime::RunResultSeverity::Info
+                    };
+                    runtime::set_execution_result(
+                        Some(logger_for_run.execution_id()),
+                        state,
+                        severity,
+                        message,
+                    );
+                });
             }
             Ok(Err(error)) => {
-                fail(&app, &logger_for_run, error.to_string());
-                sessions.finish(&run_execution_id);
+                sessions.finish_with(&run_execution_id, || {
+                    fail(&app, &logger_for_run, error.to_string());
+                });
             }
             Err(error) => {
-                fail(&app, &logger_for_run, error.to_string());
-                sessions.finish(&run_execution_id);
+                sessions.finish_with(&run_execution_id, || {
+                    fail(&app, &logger_for_run, error.to_string());
+                });
             }
         }
     });
@@ -1177,9 +1217,10 @@ fn stop_run(
             ));
         }
     }
-    if state.maa.request_stop(requested_id.as_deref())? {
+    let stopping_requested = requested_id.clone();
+    if state.maa.request_stop_with(requested_id.as_deref(), || {
         if let Ok(logger) = state.latest_log() {
-            if requested_id
+            if stopping_requested
                 .as_deref()
                 .is_none_or(|id| id == logger.execution_id())
             {
@@ -1195,11 +1236,12 @@ fn stop_run(
             }
         }
         runtime::set_execution_result(
-            requested_id.as_deref(),
+            stopping_requested.as_deref(),
             runtime::RunState::Stopping,
             runtime::RunResultSeverity::Info,
             "The run is stopping".to_string(),
         );
+    })? {
         Ok("The run is stopping".to_string())
     } else {
         Ok("No run is active".to_string())
@@ -1553,6 +1595,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "android"))]
+    fn hiding_virtual_display_preview_is_a_no_op_off_android() {
+        assert!(hide_virtual_display_preview().is_ok());
+    }
+
+    #[test]
     fn virtual_display_bounds_validate_geometry() {
         assert!(update_virtual_display_bounds(1.0, 2.0, 320.0, 180.0).is_ok());
         assert!(update_virtual_display_bounds(-1.0, 2.0, 320.0, 180.0).is_ok());
@@ -1679,6 +1727,7 @@ pub fn run() {
             stop_virtual_display,
             virtual_display_status,
             update_virtual_display_bounds,
+            hide_virtual_display_preview,
             start_run,
             run_status,
             stop_run,

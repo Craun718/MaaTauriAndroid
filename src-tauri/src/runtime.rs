@@ -41,6 +41,7 @@ pub struct ActiveRun {
 pub struct MaaSessions {
     lease: Mutex<SessionLease>,
     pending_stop: Mutex<Option<String>>,
+    finished_run: Mutex<Option<String>>,
     stop_requested: AtomicBool,
 }
 
@@ -57,6 +58,7 @@ impl Default for MaaSessions {
         Self {
             lease: Mutex::new(SessionLease::Idle),
             pending_stop: Mutex::new(None),
+            finished_run: Mutex::new(None),
             stop_requested: AtomicBool::new(false),
         }
     }
@@ -82,6 +84,10 @@ impl MaaSessions {
             SessionLease::Idle => {}
         }
         *lease = SessionLease::Preparing(execution_id.to_string());
+        *self
+            .finished_run
+            .lock()
+            .expect("finished run lock poisoned") = None;
         let stop_requested = self
             .pending_stop
             .lock()
@@ -92,6 +98,13 @@ impl MaaSessions {
     }
 
     pub fn request_stop(&self, execution_id: Option<&str>) -> Result<bool, RuntimeError> {
+        self.request_stop_with(execution_id, || {})
+    }
+
+    pub fn request_stop_with<F>(&self, execution_id: Option<&str>, on_stopping: F) -> Result<bool>
+    where
+        F: FnOnce(),
+    {
         {
             let lease = self.lease.lock().expect("Maa run lock poisoned");
             let lease_id = lease_id(&*lease);
@@ -105,19 +118,26 @@ impl MaaSessions {
             let Some(target) = execution_id.or(lease_id) else {
                 return Ok(false);
             };
+            if matches!(&*lease, SessionLease::Idle)
+                && *self
+                    .finished_run
+                    .lock()
+                    .expect("finished run lock poisoned")
+                    == Some(target.to_string())
+            {
+                return Ok(false);
+            }
             *self
                 .pending_stop
                 .lock()
                 .expect("pending stop lock poisoned") = Some(target.to_string());
+            if let SessionLease::Active(run) = &*lease {
+                self.stop_requested.store(true, Ordering::SeqCst);
+                run.tasker.post_stop()?;
+            }
+            on_stopping();
         }
-        let active = matches!(
-            &*self.lease.lock().expect("Maa run lock poisoned"),
-            SessionLease::Active(_)
-        );
-        if !active {
-            return Ok(true);
-        }
-        self.post_stop()
+        Ok(true)
     }
 
     pub fn begin(
@@ -153,14 +173,26 @@ impl MaaSessions {
     }
 
     pub fn finish(&self, execution_id: &str) {
+        self.finish_with(execution_id, || {})
+    }
+
+    pub fn finish_with<F>(&self, execution_id: &str, on_finished: F)
+    where
+        F: FnOnce(),
+    {
         let mut lease = self.lease.lock().expect("Maa run lock poisoned");
-        if lease_id(&*lease) == Some(execution_id) {
+        let finished = lease_id(&*lease) == Some(execution_id);
+        if finished {
             if let SessionLease::Active(run) = &*lease {
                 if let Some(agent) = &run.agent {
                     agent.shutdown();
                 }
             }
             *lease = SessionLease::Idle;
+            *self
+                .finished_run
+                .lock()
+                .expect("finished run lock poisoned") = Some(execution_id.to_string());
         }
         let mut pending = self
             .pending_stop
@@ -168,6 +200,9 @@ impl MaaSessions {
             .expect("pending stop lock poisoned");
         if pending.as_deref() == Some(execution_id) {
             *pending = None;
+        }
+        if finished {
+            on_finished();
         }
     }
 
@@ -179,19 +214,6 @@ impl MaaSessions {
             SessionLease::Preparing(_) => RunState::Preparing,
             _ => RunState::Idle,
         }
-    }
-
-    fn post_stop(&self) -> Result<bool, RuntimeError> {
-        let lease = self.lease.lock().expect("Maa run lock poisoned");
-        let Some(run) = (match &*lease {
-            SessionLease::Active(run) => Some(run),
-            _ => None,
-        }) else {
-            return Ok(false);
-        };
-        self.stop_requested.store(true, Ordering::SeqCst);
-        run.tasker.post_stop()?;
-        Ok(true)
     }
 }
 
@@ -974,6 +996,32 @@ mod tests {
         assert!(sessions.begin_preparing("run-1").is_ok());
         assert!(sessions.request_stop(Some("run-2")).is_err());
         assert_eq!(sessions.status(), RunState::Preparing);
+    }
+
+    #[test]
+    fn finished_run_rejects_a_late_stop() {
+        let sessions = MaaSessions::default();
+        sessions.begin_preparing("run-1").unwrap();
+        let mut terminal_message = None;
+        sessions.finish_with("run-1", || terminal_message = Some("completed"));
+
+        assert_eq!(terminal_message, Some("completed"));
+        assert!(!sessions.request_stop(Some("run-1")).unwrap());
+        assert_eq!(sessions.status(), RunState::Idle);
+    }
+
+    #[test]
+    fn a_new_run_can_stop_after_an_old_run_finished() {
+        let sessions = MaaSessions::default();
+        sessions.begin_preparing("run-1").unwrap();
+        sessions.finish("run-1");
+
+        assert!(sessions.begin_preparing("run-2").unwrap());
+        let mut stopping_message = None;
+        assert!(sessions
+            .request_stop_with(Some("run-2"), || stopping_message = Some("stopping"))
+            .unwrap());
+        assert_eq!(stopping_message, Some("stopping"));
     }
 
     #[test]

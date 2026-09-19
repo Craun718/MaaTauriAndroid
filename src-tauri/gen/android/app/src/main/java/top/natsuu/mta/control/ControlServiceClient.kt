@@ -81,6 +81,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     fun disconnect() {
         stopVirtualDisplaySafely()
+        stopAgentsSafely()
         if (bound) {
             Shizuku.unbindUserService(serviceArgs, this, true)
             bound = false
@@ -99,6 +100,18 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             android.util.Log.w(
                 "MaaTauriAndroidControl",
                 "Could not stop the virtual display before detaching",
+                error,
+            )
+        }
+    }
+
+    private fun stopAgentsSafely() {
+        runCatching {
+            ControlHost.stopAllAgents()
+        }.onFailure { error ->
+            Log.w(
+                "MaaTauriAndroidControl",
+                "Could not stop agents before detaching",
                 error,
             )
         }

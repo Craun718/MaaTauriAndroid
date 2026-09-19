@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getVirtualDisplayStatus,
+  hideVirtualDisplayPreview,
   stopVirtualDisplay,
   updateVirtualDisplayBounds,
 } from "../lib/api";
@@ -41,6 +42,18 @@ export function VirtualDisplayCard() {
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
+
+  // The native SurfaceView lives outside React. Clear its bounds when this card
+  // leaves the route while an active run keeps the virtual display itself alive.
+  useEffect(() => {
+    return () => {
+      void hideVirtualDisplayPreview().catch((error: unknown) => {
+        notify(error instanceof Error ? error.message : String(error), {
+          tone: "error",
+        });
+      });
+    };
+  }, [notify]);
 
   useEffect(() => {
     let disposed = false;

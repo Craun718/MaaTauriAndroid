@@ -71,6 +71,10 @@ export async function updateVirtualDisplayBounds(
   });
 }
 
+export async function hideVirtualDisplayPreview() {
+  return invoke<void>("hide_virtual_display_preview");
+}
+
 export async function getRunStatus() {
   return invoke<RunResult>("run_status");
 }

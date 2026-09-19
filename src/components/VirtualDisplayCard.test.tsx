@@ -8,12 +8,14 @@ import { VirtualDisplayCard } from "./VirtualDisplayCard";
 const getVirtualDisplayStatus = vi.fn();
 const stopVirtualDisplay = vi.fn();
 const updateVirtualDisplayBounds = vi.fn();
+const hideVirtualDisplayPreview = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   stopVirtualDisplay: () => stopVirtualDisplay(),
   updateVirtualDisplayBounds: (...args: unknown[]) =>
     updateVirtualDisplayBounds(...args),
+  hideVirtualDisplayPreview: () => hideVirtualDisplayPreview(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -52,6 +54,7 @@ beforeEach(() => {
   useNotificationStore.setState({ notifications: [] });
   getVirtualDisplayStatus.mockResolvedValue(inactive);
   updateVirtualDisplayBounds.mockResolvedValue(undefined);
+  hideVirtualDisplayPreview.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -146,6 +149,16 @@ describe("VirtualDisplayCard", () => {
     await waitFor(() =>
       expect(updateVirtualDisplayBounds).toHaveBeenCalledWith(8, 24, 360, 200),
     );
+  });
+
+  it("hides the native preview when the card unmounts", async () => {
+    getVirtualDisplayStatus.mockResolvedValue(active);
+    const { unmount } = renderVirtualDisplayCard();
+
+    await screen.findByText("Display ID: 12");
+    unmount();
+
+    expect(hideVirtualDisplayPreview).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes status when the backend activates the display", async () => {

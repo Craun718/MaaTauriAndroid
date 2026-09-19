@@ -939,7 +939,6 @@ impl ZipWriter {
             .and_then(|_| {
                 self.file.write_all(&[
                     0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0, 0,
-                    0, 0,
                 ])
             })
             .and_then(|_| {
@@ -1134,6 +1133,32 @@ mod tests {
         assert_eq!(&zip[central_offset..central_offset + 4], b"PK\x01\x02");
         assert_eq!(central_size, zip.len() - 22 - central_offset);
         assert_eq!(&zip[zip.len() - 22..zip.len() - 18], b"PK\x05\x06");
+        let mut entry = central_offset;
+        while entry < central_offset + central_size {
+            assert_eq!(&zip[entry..entry + 4], b"PK\x01\x02");
+            let name_len =
+                u16::from_le_bytes(zip[entry + 28..entry + 30].try_into().unwrap()) as usize;
+            let local_offset =
+                u32::from_le_bytes(zip[entry + 42..entry + 46].try_into().unwrap()) as usize;
+            let local_name_len = u16::from_le_bytes(
+                zip[local_offset + 26..local_offset + 28]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
+            let local_extra_len = u16::from_le_bytes(
+                zip[local_offset + 28..local_offset + 30]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
+            assert_eq!(local_name_len, name_len);
+            assert_eq!(local_extra_len, 0);
+            assert_eq!(
+                &zip[local_offset + 30..local_offset + 30 + name_len],
+                &zip[entry + 46..entry + 46 + name_len]
+            );
+            entry += 46 + name_len;
+        }
+        assert_eq!(entry, central_offset + central_size);
         fs::remove_dir_all(temp).unwrap();
         fs::remove_file(output).unwrap();
     }

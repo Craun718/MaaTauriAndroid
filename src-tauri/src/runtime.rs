@@ -11,6 +11,7 @@ use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
@@ -43,14 +44,25 @@ pub struct MaaSessions {
     pending_stop: Mutex<Option<String>>,
     finished_run: Mutex<Option<String>>,
     stop_requested: AtomicBool,
+    /// Native taskers that refused to go idle within the drain timeout.
+    ///
+    /// MaaFramework destroys its `RuntimeCache` before joining the pipeline
+    /// thread, so dropping the last handle while a task is still running is a
+    /// use-after-free. Keeping the handle alive is the only safe fallback when
+    /// the framework does not report idle.
+    retired: Mutex<Vec<Arc<Tasker>>>,
 }
 
 static MAA_LIBRARY: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+
+const TASKER_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(5);
+const TASKER_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 enum SessionLease {
     Idle,
     Preparing(String),
     Active(ActiveRun),
+    Finishing(String),
 }
 
 impl Default for MaaSessions {
@@ -60,30 +72,71 @@ impl Default for MaaSessions {
             pending_stop: Mutex::new(None),
             finished_run: Mutex::new(None),
             stop_requested: AtomicBool::new(false),
+            retired: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl Drop for MaaSessions {
+    fn drop(&mut self) {
+        // A retired run is kept only because dropping it could abort the
+        // process. At shutdown the OS reclaims those native objects.
+        let mut retired = self
+            .retired
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for tasker in retired.drain(..) {
+            std::mem::forget(tasker);
+        }
+        drop(retired);
+
+        let mut lease = self
+            .lease
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let SessionLease::Active(run) = std::mem::replace(&mut *lease, SessionLease::Idle) {
+            if let Some(agent) = &run.agent {
+                agent.shutdown();
+            }
+            std::mem::forget(run.tasker);
         }
     }
 }
 
 impl MaaSessions {
     pub fn begin_preparing(&self, execution_id: &str) -> Result<bool, RuntimeError> {
-        let mut lease = self.lease.lock().expect("Maa run lock poisoned");
-        match &*lease {
-            SessionLease::Preparing(existing) if existing == execution_id => {
-                return Err(RuntimeError::Maa(
-                    "the run is already preparing".to_string(),
-                ));
-            }
-            SessionLease::Preparing(_) => {
-                return Err(RuntimeError::Maa("another run is preparing".to_string()));
-            }
-            SessionLease::Active(run) => {
-                if run.tasker.is_running() || run.tasker.stopping() {
-                    return Err(RuntimeError::Maa("a run is already active".to_string()));
+        self.reclaim_retired();
+        let previous = {
+            let mut lease = self.lease.lock().expect("Maa run lock poisoned");
+            match &*lease {
+                SessionLease::Preparing(existing) if existing == execution_id => {
+                    return Err(RuntimeError::Maa(
+                        "the run is already preparing".to_string(),
+                    ));
                 }
+                SessionLease::Preparing(_) => {
+                    return Err(RuntimeError::Maa("another run is preparing".to_string()));
+                }
+                SessionLease::Active(run) => {
+                    if run.tasker.is_running() || run.tasker.stopping() {
+                        return Err(RuntimeError::Maa("a run is already active".to_string()));
+                    }
+                }
+                SessionLease::Finishing(_) => {
+                    return Err(RuntimeError::Maa(
+                        "the previous run is still shutting down".to_string(),
+                    ));
+                }
+                SessionLease::Idle => {}
             }
-            SessionLease::Idle => {}
-        }
-        *lease = SessionLease::Preparing(execution_id.to_string());
+            // A run reached `Active` but never completed its teardown. It
+            // reports idle above, so dropping it cannot race the pipeline
+            // thread.
+            let previous = take_active(&mut lease);
+            *lease = SessionLease::Preparing(execution_id.to_string());
+            previous
+        };
+        drop(previous);
         *self
             .finished_run
             .lock()
@@ -119,6 +172,13 @@ impl MaaSessions {
                     ));
                 }
             }
+            // The run has already been detached for draining. Do not post
+            // another stop into a tasker that is on its way out, but report
+            // the stop as accepted so the UI keeps showing "stopping".
+            if matches!(&*lease, SessionLease::Finishing(_)) {
+                on_stopping();
+                return Ok(true);
+            }
             let Some(target) = execution_id.or(lease_id) else {
                 return Ok(false);
             };
@@ -150,26 +210,40 @@ impl MaaSessions {
         tasker: Tasker,
         agent: Option<AgentSession>,
     ) -> Result<Arc<Tasker>, RuntimeError> {
-        let mut lease = self.lease.lock().expect("Maa run lock poisoned");
-        if let SessionLease::Active(run) = &*lease {
-            if run.tasker.is_running() || run.tasker.stopping() {
-                return Err(RuntimeError::Maa("a run is already active".to_string()));
+        self.reclaim_retired();
+        let (previous, tasker, stop_requested) = {
+            let mut lease = self.lease.lock().expect("Maa run lock poisoned");
+            match &*lease {
+                SessionLease::Active(run) => {
+                    if run.tasker.is_running() || run.tasker.stopping() {
+                        return Err(RuntimeError::Maa("a run is already active".to_string()));
+                    }
+                }
+                SessionLease::Finishing(_) => {
+                    return Err(RuntimeError::Maa(
+                        "the previous run is still shutting down".to_string(),
+                    ));
+                }
+                _ => {}
             }
-        }
-        let stop_requested = self
-            .pending_stop
-            .lock()
-            .expect("pending stop lock poisoned")
-            .as_deref()
-            == Some(execution_id);
-        self.stop_requested.store(stop_requested, Ordering::SeqCst);
-        let tasker = Arc::new(tasker);
-        let agent = agent.map(Arc::new);
-        *lease = SessionLease::Active(ActiveRun {
-            execution_id: execution_id.to_string(),
-            tasker: tasker.clone(),
-            agent,
-        });
+            let previous = take_active(&mut lease);
+            let stop_requested = self
+                .pending_stop
+                .lock()
+                .expect("pending stop lock poisoned")
+                .as_deref()
+                == Some(execution_id);
+            self.stop_requested.store(stop_requested, Ordering::SeqCst);
+            let tasker = Arc::new(tasker);
+            let agent = agent.map(Arc::new);
+            *lease = SessionLease::Active(ActiveRun {
+                execution_id: execution_id.to_string(),
+                tasker: tasker.clone(),
+                agent,
+            });
+            (previous, tasker, stop_requested)
+        };
+        drop(previous);
         if stop_requested {
             tasker.post_stop()?;
         }
@@ -184,30 +258,103 @@ impl MaaSessions {
     where
         F: FnOnce(),
     {
-        let mut lease = self.lease.lock().expect("Maa run lock poisoned");
-        let finished = lease_id(&*lease) == Some(execution_id);
-        if finished {
-            if let SessionLease::Active(run) = &*lease {
-                if let Some(agent) = &run.agent {
-                    agent.shutdown();
+        // Detach the native run and move the lease to `Finishing` before
+        // draining. While it is in that state no stop can post to the tasker
+        // and no new run can adopt it. The lock is released before waiting so
+        // a concurrent status query cannot block behind the drain.
+        let detached: Option<Option<ActiveRun>> = {
+            let mut lease = self.lease.lock().expect("Maa run lock poisoned");
+            let detached = if lease_id(&*lease) == Some(execution_id) {
+                match std::mem::replace(&mut *lease, SessionLease::Idle) {
+                    SessionLease::Active(run) => {
+                        *lease = SessionLease::Finishing(execution_id.to_string());
+                        Some(Some(run))
+                    }
+                    SessionLease::Preparing(_) => {
+                        *lease = SessionLease::Finishing(execution_id.to_string());
+                        Some(None)
+                    }
+                    previous => {
+                        *lease = previous;
+                        None
+                    }
                 }
+            } else {
+                None
+            };
+            if detached.is_some() {
+                *self
+                    .finished_run
+                    .lock()
+                    .expect("finished run lock poisoned") = Some(execution_id.to_string());
             }
-            *lease = SessionLease::Idle;
-            *self
-                .finished_run
+            let mut pending = self
+                .pending_stop
                 .lock()
-                .expect("finished run lock poisoned") = Some(execution_id.to_string());
+                .expect("pending stop lock poisoned");
+            if pending.as_deref() == Some(execution_id) {
+                *pending = None;
+            }
+            detached
+        };
+
+        let Some(detached) = detached else {
+            return;
+        };
+
+        if let Some(run) = detached {
+            self.finish_active_run(run);
         }
-        let mut pending = self
-            .pending_stop
-            .lock()
-            .expect("pending stop lock poisoned");
-        if pending.as_deref() == Some(execution_id) {
-            *pending = None;
-        }
-        if finished {
+
+        let mut lease = self.lease.lock().expect("Maa run lock poisoned");
+        if matches!(&*lease, SessionLease::Finishing(id) if id.as_str() == execution_id) {
+            *lease = SessionLease::Idle;
+            // Keep the lease locked until the terminal callback finishes so
+            // a concurrent start cannot publish its own state first.
             on_finished();
         }
+    }
+
+    fn finish_active_run(&self, run: ActiveRun) {
+        if !wait_for_tasker_idle(&run.tasker, TASKER_IDLE_TIMEOUT) {
+            log::error!(
+                "Maa tasker for run {} did not become idle within {:?}; keeping the native handle alive to avoid destroying a running task",
+                run.execution_id,
+                TASKER_IDLE_TIMEOUT
+            );
+            if let Some(agent) = &run.agent {
+                agent.shutdown();
+            }
+            self.retired
+                .lock()
+                .expect("retired run lock poisoned")
+                .push(run.tasker);
+            return;
+        }
+        if let Some(agent) = &run.agent {
+            agent.shutdown();
+        }
+    }
+
+    /// Drop retired handles that have since gone idle. Retired handles are a
+    /// last resort for the case where draining timed out; reclaiming them
+    /// keeps the leak bounded to runs that are genuinely stuck.
+    fn reclaim_retired(&self) {
+        let now_idle = {
+            let mut retired = self.retired.lock().expect("retired run lock poisoned");
+            let mut still_running = Vec::with_capacity(retired.len());
+            let mut idle = Vec::new();
+            for tasker in retired.drain(..) {
+                if tasker.is_running() || tasker.stopping() {
+                    still_running.push(tasker);
+                } else {
+                    idle.push(tasker);
+                }
+            }
+            *retired = still_running;
+            idle
+        };
+        drop(now_idle);
     }
 
     pub fn status(&self) -> RunState {
@@ -216,6 +363,7 @@ impl MaaSessions {
             SessionLease::Active(run) if run.tasker.stopping() => RunState::Stopping,
             SessionLease::Active(run) if run.tasker.is_running() => RunState::Running,
             SessionLease::Preparing(_) => RunState::Preparing,
+            SessionLease::Finishing(_) => RunState::Stopping,
             _ => RunState::Idle,
         }
     }
@@ -237,8 +385,36 @@ fn lease_id(lease: &SessionLease) -> Option<&str> {
     match lease {
         SessionLease::Preparing(execution_id) => Some(execution_id),
         SessionLease::Active(run) => Some(&run.execution_id),
+        SessionLease::Finishing(execution_id) => Some(execution_id),
         SessionLease::Idle => None,
     }
+}
+
+fn take_active(lease: &mut SessionLease) -> Option<ActiveRun> {
+    if !matches!(&*lease, SessionLease::Active(_)) {
+        return None;
+    }
+    match std::mem::replace(lease, SessionLease::Idle) {
+        SessionLease::Active(run) => Some(run),
+        _ => None,
+    }
+}
+
+/// Wait until MaaFramework reports that no task is running.
+///
+/// `MaaTaskerWait` only returns once the task status is written; the runner
+/// thread still has bookkeeping to do afterwards. `MaaTaskerRunning()` stays
+/// true for that window, and `MaaTaskerDestroy` destroys `RuntimeCache` before
+/// joining the thread, so destroying the handle there is a use-after-free.
+fn wait_for_tasker_idle(tasker: &Tasker, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while tasker.is_running() || tasker.stopping() {
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(TASKER_IDLE_POLL_INTERVAL);
+    }
+    true
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1055,6 +1231,42 @@ mod tests {
             .request_stop_with(Some("run-2"), || stopping_message = Some("stopping"))
             .unwrap());
         assert_eq!(stopping_message, Some("stopping"));
+    }
+
+    #[test]
+    fn finishing_lease_blocks_new_runs_and_accepts_a_stop() {
+        let sessions = MaaSessions::default();
+        *sessions.lease.lock().unwrap() = SessionLease::Finishing("run-1".to_string());
+
+        assert_eq!(sessions.status(), RunState::Stopping);
+        assert!(sessions.begin_preparing("run-2").is_err());
+
+        let mut stopping_message = None;
+        assert!(sessions
+            .request_stop_with(Some("run-1"), || stopping_message = Some("stopping"))
+            .unwrap());
+        assert_eq!(stopping_message, Some("stopping"));
+    }
+
+    #[test]
+    fn finishing_lease_rejects_a_stop_for_another_run() {
+        let sessions = MaaSessions::default();
+        *sessions.lease.lock().unwrap() = SessionLease::Finishing("run-1".to_string());
+
+        assert!(sessions.request_stop(Some("run-2")).is_err());
+    }
+
+    #[test]
+    fn finish_with_reports_a_preparing_run_once() {
+        let sessions = MaaSessions::default();
+        sessions.begin_preparing("run-1").unwrap();
+
+        let mut finished = 0;
+        sessions.finish_with("run-1", || finished += 1);
+        sessions.finish_with("run-1", || finished += 1);
+
+        assert_eq!(finished, 1);
+        assert_eq!(sessions.status(), RunState::Idle);
     }
 
     #[test]

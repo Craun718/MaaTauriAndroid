@@ -107,7 +107,7 @@ describe("App", () => {
   it("bootstraps the project", async () => {
     render(<App />);
     expect(
-      await screen.findByText("MaaTauriAndroid Fixture"),
+      await screen.findByRole("heading", { name: "MaaTauriAndroid Fixture" }),
     ).toBeInTheDocument();
   });
 });

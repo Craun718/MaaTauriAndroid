@@ -1,9 +1,9 @@
 import { Download, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { OptionEditor } from "../components/OptionEditor";
-import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
+import { VersionCard } from "../components/VersionCard";
 import { clearDiagnosticData } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
@@ -12,12 +12,7 @@ import {
   defaultOptionValue,
   visibleOptions,
 } from "../lib/options";
-import type {
-  AppStateSnapshot,
-  OptionValue,
-  UiLanguage,
-  UserConfiguration,
-} from "../lib/types";
+import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
@@ -210,47 +205,15 @@ export function SettingsPage() {
           {cleaning ? t("deleting") : t("deleteRuns")}
         </button>
       </section>
-      <PrivilegeStatusCard title="privileges" compact />
-      <AboutSection snapshot={snapshot} />
-    </div>
-  );
-}
-
-/** Versions of the client, the framework, and the loaded Project Interface. */
-function AboutSection({ snapshot }: { snapshot?: AppStateSnapshot }) {
-  const { t } = useTranslation();
-  const project = snapshot?.project;
-  const versions = snapshot?.versions;
-
-  return (
-    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
-      <h2 className="font-medium">{t("about")}</h2>
-      <dl className="space-y-2 text-sm">
-        <VersionRow label={t("appName")} value={versions?.appVersion} />
-        <VersionRow
-          label={t("aboutFramework")}
-          value={versions?.frameworkVersion}
+      {project && (
+        <VersionCard
+          title="about"
+          variant="summary"
+          project={project}
+          versions={snapshot?.versions}
+          footer={t("aboutSummaryHint")}
         />
-        {project && (
-          <>
-            <VersionRow label={t("project")} value={project.label} />
-            <VersionRow
-              label={t("projectVersion")}
-              value={project.version ?? t("aboutUnknown")}
-            />
-          </>
-        )}
-      </dl>
-    </section>
-  );
-}
-
-function VersionRow({ label, value }: { label: string; value?: string }) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="font-medium tabular-nums">{value ?? t("aboutUnknown")}</dd>
+      )}
     </div>
   );
 }

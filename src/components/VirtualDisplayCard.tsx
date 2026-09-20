@@ -1,71 +1,26 @@
 import { listen } from "@tauri-apps/api/event";
 import {
-  CircleAlert,
   LoaderCircle,
+  Maximize2,
   MonitorPlay,
   RefreshCw,
   Square,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  getVirtualDisplayStatus,
-  getVirtualDisplayStream,
-  stopVirtualDisplay,
-} from "../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { getVirtualDisplayStatus, stopVirtualDisplay } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
 import { useNotificationStore } from "../store/notificationStore";
-
-type StreamConfig = {
-  type: "config";
-  codec: string;
-  width: number;
-  height: number;
-};
-
-type StreamVideoFrame = {
-  displayWidth: number;
-  displayHeight: number;
-  close: () => void;
-};
-
-type StreamDecoder = {
-  state: "unconfigured" | "configured" | "closed";
-  configure: (config: {
-    codec: string;
-    optimizeForLatency: boolean;
-    avc?: { format: "avc" | "annexb" };
-  }) => void;
-  decode: (chunk: unknown) => void;
-  close: () => void;
-};
-
-type WebCodecsGlobal = {
-  VideoDecoder?: new (init: {
-    output: (frame: StreamVideoFrame) => void;
-    error: (error: Error) => void;
-  }) => StreamDecoder;
-  EncodedVideoChunk?: new (init: {
-    type: "key" | "delta";
-    timestamp: number;
-    data: BufferSource;
-  }) => unknown;
-};
-
-type StreamState =
-  | "connecting"
-  | "ready"
-  | "unavailable"
-  | "unsupported"
-  | "error";
+import { VirtualDisplayPreview } from "./VirtualDisplayPreview";
 
 export function VirtualDisplayCard() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<VirtualDisplayStatus>();
   const [, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
   const [actionPending, setActionPending] = useState(false);
-  const [streamState, setStreamState] = useState<StreamState>("connecting");
+  const [fullscreen, setFullscreen] = useState(false);
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
 
@@ -118,121 +73,7 @@ export function VirtualDisplayCard() {
   }, [refreshStatus]);
 
   useEffect(() => {
-    if (status?.active !== true) return;
-
-    let socket: WebSocket | undefined;
-    let decoder: StreamDecoder | undefined;
-    let disposed = false;
-    setStreamState("connecting");
-
-    async function connect() {
-      const webCodecs = window as unknown as WebCodecsGlobal;
-      const encodedChunkConstructor = webCodecs.EncodedVideoChunk;
-      if (!webCodecs.VideoDecoder || !encodedChunkConstructor) {
-        setStreamState("unsupported");
-        return;
-      }
-
-      const stream = await getVirtualDisplayStream();
-      if (disposed) return;
-      if (!stream.url) {
-        setStreamState("unavailable");
-        return;
-      }
-
-      decoder = new webCodecs.VideoDecoder({
-        output(frame) {
-          const canvas = canvasRef.current;
-          if (!canvas) {
-            frame.close();
-            return;
-          }
-          canvas.width = frame.displayWidth;
-          canvas.height = frame.displayHeight;
-          const context = canvas.getContext("2d");
-          if (!context) {
-            frame.close();
-            return;
-          }
-          context.drawImage(frame as unknown as CanvasImageSource, 0, 0);
-          frame.close();
-        },
-        error() {
-          setStreamState("error");
-        },
-      });
-
-      socket = new WebSocket(stream.url);
-      socket.binaryType = "arraybuffer";
-      socket.onopen = () => {
-        if (!disposed) setStreamState("connecting");
-      };
-      socket.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
-        if (disposed) return;
-
-        if (typeof event.data === "string") {
-          try {
-            const config = JSON.parse(event.data) as StreamConfig;
-            if (
-              config.type !== "config" ||
-              !config.codec ||
-              decoder?.state === "closed"
-            ) {
-              return;
-            }
-            decoder?.configure({
-              codec: config.codec,
-              optimizeForLatency: true,
-              avc: { format: "annexb" },
-            });
-            setStreamState("ready");
-          } catch {
-            setStreamState("error");
-          }
-          return;
-        }
-
-        if (decoder?.state !== "configured") return;
-        try {
-          const view = new DataView(event.data);
-          const flags = view.getUint8(0);
-          const timestamp = Number(view.getBigUint64(1));
-          const chunk = new encodedChunkConstructor({
-            type: flags & 1 ? "key" : "delta",
-            timestamp,
-            data: event.data.slice(9),
-          });
-          decoder.decode(chunk);
-        } catch {
-          setStreamState("error");
-        }
-      };
-      socket.onerror = () => {
-        if (!disposed) setStreamState("error");
-      };
-      socket.onclose = () => {
-        if (!disposed) {
-          setStreamState((current) =>
-            current === "connecting" ? "error" : current,
-          );
-        }
-      };
-    }
-
-    connect().catch(() => {
-      if (!disposed) setStreamState("error");
-    });
-
-    return () => {
-      disposed = true;
-      if (
-        socket?.readyState === WebSocket.OPEN ||
-        socket?.readyState === WebSocket.CONNECTING
-      ) {
-        socket.close();
-      }
-      if (decoder && decoder.state !== "closed") decoder.close();
-    };
+    if (status?.active === false) setFullscreen(false);
   }, [status?.active]);
 
   async function stopDisplay() {
@@ -264,15 +105,6 @@ export function VirtualDisplayCard() {
       ? t("virtualDisplayRunning")
       : t("virtualDisplayStopped")
     : t("checking");
-  const streamLabel = active
-    ? {
-        connecting: t("virtualDisplayStreamConnecting"),
-        ready: "",
-        unavailable: t("virtualDisplayStreamUnavailable"),
-        unsupported: t("virtualDisplayCodecUnsupported"),
-        error: t("virtualDisplayStreamError"),
-      }[streamState]
-    : undefined;
 
   return (
     <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
@@ -300,42 +132,45 @@ export function VirtualDisplayCard() {
             <span className="flex-none text-xs text-ink-muted">{geometry}</span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void refreshStatus()}
-          disabled={refreshing}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
-          aria-label={t("refreshStatus")}
-        >
-          <RefreshCw
-            size={14}
-            className={refreshing ? "animate-spin" : undefined}
-          />
-        </button>
+        <div className="flex flex-none items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void refreshStatus()}
+            disabled={refreshing}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
+            aria-label={t("refreshStatus")}
+          >
+            <RefreshCw
+              size={14}
+              className={refreshing ? "animate-spin" : undefined}
+            />
+          </button>
+          {active && (
+            <button
+              type="button"
+              onClick={() => setFullscreen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted"
+              aria-label={t("virtualDisplayFullscreen")}
+            >
+              <Maximize2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="relative flex aspect-[2/1] w-full items-center justify-center overflow-hidden rounded-md border border-line bg-surface-muted">
-        <canvas
-          ref={canvasRef}
-          className="h-full w-full object-contain"
-          aria-label={t("virtualDisplay")}
+      {active && status && !fullscreen ? (
+        <VirtualDisplayPreview
+          status={status}
+          className="aspect-[2/1] w-full rounded-md border border-line"
         />
-        {streamLabel && (
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-surface-muted/90 px-3 py-2 text-xs text-ink-muted">
-            {streamState === "connecting" ? (
-              <LoaderCircle size={12} className="animate-spin" />
-            ) : (
-              <CircleAlert size={12} />
-            )}
-            {streamLabel}
-          </div>
-        )}
-      </div>
+      ) : (
+        <div className="aspect-[2/1] w-full rounded-md border border-line bg-surface-muted" />
+      )}
 
       {active && (
         <div className="flex items-center justify-between gap-3 text-sm">
           <p className="min-w-0 text-xs text-ink-muted">
-            {t("displayId", { id: status.displayId })}
+            {t("displayId", { id: status?.displayId ?? -1 })}
           </p>
           <button
             type="button"
@@ -352,6 +187,29 @@ export function VirtualDisplayCard() {
           </button>
         </div>
       )}
+
+      {fullscreen &&
+        active &&
+        status &&
+        createPortal(
+          <div className="fixed inset-0 z-50 bg-surface">
+            <div className="absolute inset-0 flex flex-col pb-[calc(1rem_+_env(safe-area-inset-bottom))] pt-[calc(3.5rem_+_env(safe-area-inset-top))]">
+              <VirtualDisplayPreview
+                status={status}
+                className="h-full w-full"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setFullscreen(false)}
+              className="absolute right-4 top-[calc(0.75rem_+_env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-md border border-line bg-raised text-ink-muted"
+              aria-label={t("virtualDisplayExitFullscreen")}
+            >
+              <X size={16} />
+            </button>
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }

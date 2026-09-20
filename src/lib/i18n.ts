@@ -44,6 +44,8 @@ const en = {
   virtualDisplayStreamUnavailable: "Stream unavailable",
   virtualDisplayCodecUnsupported: "WebView cannot decode the stream",
   virtualDisplayStreamError: "Stream error",
+  virtualDisplayFullscreen: "Fullscreen",
+  virtualDisplayExitFullscreen: "Exit fullscreen",
   displayId: "Display ID: {id}",
   permissionGranted: "Granted",
   permissionRequiredStatus: "Required",
@@ -199,6 +201,8 @@ const zh: Record<MessageKey, string> = {
   virtualDisplayStreamUnavailable: "画面流不可用",
   virtualDisplayCodecUnsupported: "WebView 不支持解码该画面流",
   virtualDisplayStreamError: "画面流出错",
+  virtualDisplayFullscreen: "全屏",
+  virtualDisplayExitFullscreen: "退出全屏",
   displayId: "Display ID：{id}",
 
   noResources: "未声明资源。",

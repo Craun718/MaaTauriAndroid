@@ -49,7 +49,7 @@ object PiPackage {
     /** A Windows drive letter, which is never project-relative. */
     private val DRIVE_LETTER = Regex("""^[A-Za-z]:""")
 
-    fun plan(projectRoot: File): PiPackagePlan {
+    fun plan(projectRoot: File, extraEntries: List<String> = emptyList()): PiPackagePlan {
         val root = projectRoot.canonicalFile
         val interfaceFile = root.resolve(INTERFACE_FILE)
         require(interfaceFile.isFile) {
@@ -129,6 +129,10 @@ object PiPackage {
             }
         }
         OPTIONAL_DIRECTORIES.forEach { record(it, required = false) }
+
+        // Profile extras can only widen the pack set. They are treated as declared paths:
+        // a missing entry fails the build rather than being quietly skipped.
+        extraEntries.forEach { record(it, required = true) }
 
         return PiPackagePlan(entries.toList(), missing.toList())
     }

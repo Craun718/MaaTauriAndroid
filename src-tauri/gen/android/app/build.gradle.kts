@@ -104,6 +104,7 @@ fun validateAgentBundle(file: File, index: Int) {
 val preparePiArchive = if (piProfile != null) {
     // The pack set is resolved from interface.json by PiSyncTask, so a directory rename
     // upstream cannot silently produce an APK whose interface points at missing files.
+    // pi_include can only add to it; there is nothing that prunes it.
     val syncPiAssets = tasks.register<PiSyncTask>("syncPiAssets") {
         group = "build"
         description = "Resolve the Project Interface pack set from interface.json and sync it"
@@ -114,6 +115,7 @@ val preparePiArchive = if (piProfile != null) {
                 },
             ),
         )
+        extraEntries.set(piProfile.extraEntries)
         destination.set(piRootDir)
         doLast {
             val interfaceFile = piRootDir.get().file("interface.json").asFile

@@ -4,6 +4,8 @@ import java.io.File
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
@@ -13,14 +15,17 @@ import org.gradle.api.tasks.TaskAction
 /**
  * Builds the Project Interface tree that gets packed into `assets/pi.zip`.
  *
- * The copy set comes from [PiPackage], so a profile no longer lists paths by hand, and a
- * path the protocol declares but the source project lacks fails the build instead of
- * producing an APK that cannot load its own interface.
+ * The copy set comes from [PiPackage], so the profile no longer lists what to pack; its
+ * `pi_include` can only add, and a path the protocol declares but the source project
+ * lacks fails the build instead of producing an APK that cannot load its own interface.
  */
 abstract class PiSyncTask : DefaultTask() {
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val projectRoot: DirectoryProperty
+
+    @get:Input
+    abstract val extraEntries: ListProperty<String>
 
     @get:OutputDirectory
     abstract val destination: DirectoryProperty
@@ -28,7 +33,7 @@ abstract class PiSyncTask : DefaultTask() {
     @TaskAction
     fun sync() {
         val source = projectRoot.get().asFile
-        val plan = PiPackage.plan(source)
+        val plan = PiPackage.plan(source, extraEntries.get())
         if (plan.missing.isNotEmpty()) {
             throw GradleException(
                 buildString {

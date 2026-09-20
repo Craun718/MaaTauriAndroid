@@ -62,27 +62,26 @@ class PiProfileReaderTest {
     }
 
     @Test
-    fun rejectsTheRetiredIncludeAllowList() {
-        // The pack set now comes from interface.json; a leftover list would be ignored and
-        // silently give the profile author a false picture of what ships.
+    fun readsPiIncludeAsExtraEntriesRatherThanAnAllowList() {
         val profile = temporaryFolder.newFile("pi.toml").apply {
             writeText(
                 """
                 pi_assets = "."
                 resource_id = "game"
-                pi_include = ["interface.json"]
+                pi_include = ["assets/extra.png"]
                 """.trimIndent(),
             )
         }
 
-        val error = assertThrows(IllegalArgumentException::class.java) {
-            PiProfileReader.read(profile)
-        }
-        assertTrue(error.message.orEmpty().contains("pi_include"))
+        val result = PiProfileReader.read(profile)
+
+        assertEquals(listOf("assets/extra.png"), result.extraEntries)
     }
 
     @Test
-    fun rejectsTheRetiredExcludeList() {
+    fun stillRejectsTheExcludeList() {
+        // The derived pack set cannot be pruned, so pi_exclude would be a no-op pretending
+        // to be a filter.
         val profile = temporaryFolder.newFile("pi.toml").apply {
             writeText(
                 """

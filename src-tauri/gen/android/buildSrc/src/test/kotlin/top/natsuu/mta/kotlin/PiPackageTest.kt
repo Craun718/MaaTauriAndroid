@@ -256,4 +256,38 @@ class PiPackageTest {
 
         assertEquals("interface.json", PiPackage.plan(root).entries.first())
     }
+
+    @Test
+    fun packagesExtraEntriesTheProfileAsksFor() {
+        // pi_include can only widen the set: the protocol closure always ships.
+        val root = project(
+            minimal(),
+            mapOf(
+                "locales/zh_cn.json" to "{}",
+                "resource/base/pipeline/start.json" to "{}",
+                "assets/extra/notes.txt" to "hi",
+            ),
+        )
+
+        val plan = PiPackage.plan(root, listOf("./assets/extra"))
+
+        assertTrue(plan.entries.contains("assets/extra"))
+        assertTrue(plan.entries.contains("locales/zh_cn.json"))
+        assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
+    fun reportsAnExtraEntryThatDoesNotExist() {
+        val root = project(
+            minimal(),
+            mapOf(
+                "locales/zh_cn.json" to "{}",
+                "resource/base/pipeline/start.json" to "{}",
+            ),
+        )
+
+        val plan = PiPackage.plan(root, listOf("assets/missing.png"))
+
+        assertEquals(listOf("assets/missing.png"), plan.missing)
+    }
 }

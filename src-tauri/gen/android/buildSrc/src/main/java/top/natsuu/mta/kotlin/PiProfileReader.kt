@@ -7,6 +7,12 @@ import java.io.File
 data class PiProfile(
     val file: File,
     val assets: String?,
+    /**
+     * Extra project-relative paths packed on top of the set that interface.json resolves.
+     * Nothing here can shrink the derived set, and a listed path that does not exist
+     * fails the build like any other declared path.
+     */
+    val extraEntries: List<String>,
     val resourceId: String,
     val maaDir: String,
     val agent: AgentProfile?,
@@ -34,13 +40,11 @@ object PiProfileReader {
             errors.joinToString("\n") { error -> "${file.invariantSeparatorsPath}:$error" }
         }
 
-        // The pack set is derived from interface.json, so a leftover allow-list would be
-        // ignored. Reject it loudly rather than let a profile believe it still filters.
-        for (obsolete in listOf("pi_include", "pi_exclude")) {
-            require(result.getArray(obsolete) == null && !result.keySet().contains(obsolete)) {
-                "$obsolete is no longer supported: the Project Interface pack set is derived " +
-                    "from interface.json. Remove it from ${file.invariantSeparatorsPath}"
-            }
+        // The pack set comes from interface.json, so a filter would not do what its name
+        // promises. Refuse pi_exclude rather than let a profile believe it can prune.
+        require(!result.keySet().contains("pi_exclude")) {
+            "pi_exclude is no longer supported: the Project Interface pack set is derived " +
+                "from interface.json. Remove it from ${file.invariantSeparatorsPath}"
         }
 
         val agentTable = result.getTable("agent")
@@ -48,6 +52,8 @@ object PiProfileReader {
         return PiProfile(
             file = file,
             assets = requiredPath(result, "pi_assets", file),
+            // pi_include now means "also pack this", never "pack only this".
+            extraEntries = stringArray(result, "pi_include").orEmpty(),
             resourceId = resourceId(result),
             maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
             agent = agent,

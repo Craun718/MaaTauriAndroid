@@ -15,9 +15,11 @@ resource_id = "m9a"
 
 maa_dir = "vendor/maa/android"
 
-# 打包内容由 interface.json 推导，这里不再手写白名单（见 src-tauri/profiles/README.md）：
-# resource[].path 与 import、languages 指向的文件、图标与富文本引用的图片，以及 agent 负载。
-# 白名单曾静默失配——M9A v4.9.0 把 i18n/ 改名为 locales/ 后，构建照样通过，包却装不上。
+# 打包内容由 interface.json 推导（见 src-tauri/profiles/README.md）：resource[].path 与
+# import、languages 指向的文件、图标与富文本引用的图片，以及 agent 负载。
+# pi_include 现在只表示「额外再打包这些」，无法删减推导出的集合；M9A 的资源全部能被
+# 协议引用到，所以这里不需要填。白名单曾静默失配——M9A v4.9.0 把 i18n/ 改名为
+# locales/ 后，构建照样通过，包却装不上。
 
 # interface.json 声明 1 个 agent，因此这里必须恰好配置 1 个 runtime。
 [agent]

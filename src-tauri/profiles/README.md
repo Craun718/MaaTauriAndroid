@@ -12,7 +12,7 @@ The TOML profile uses snake_case keys (`pi_assets`, `resource_id`, and `maa_dir`
 
 ### Pack set is derived, not listed
 
-There is no `pi_include`/`pi_exclude`. `PiPackage` reads `interface.json` and follows the protocol's own references:
+The base set is never listed. `PiPackage` reads `interface.json` and follows the protocol's own references:
 
 | Source | Packed |
 | ------ | ------ |
@@ -24,6 +24,8 @@ There is no `pi_include`/`pi_exclude`. `PiPackage` reads `interface.json` and fo
 | — | `data/`, which the Agent reads without the protocol declaring it |
 
 A path the interface declares but the project lacks **fails the build**, because that is exactly how a silent mis-pack ships. M9A v4.9.0 renamed `i18n/` to `locales/`; the old allow-list matched nothing, the build stayed green, and the APK shipped an interface pointing at translation files absent from its own archive — a hard project-load failure on device.
+
+`pi_include` still exists, but its meaning changed: it now lists **extra** project-relative paths to pack on top of the derived set, for assets that live outside the interface and that no protocol key reaches (a tool-shipped `data/` sibling, a hand-written guide, a bundled dictionary). It can never remove anything, and a listed path that does not exist fails the build like any other declared path. `pi_exclude` is rejected outright — the derived set cannot be pruned, so an entry there would only be a filter that silently does nothing.
 
 Values documented as "file path, URL or plain text" are only treated as paths when they resolve, so prose and remote URLs are left alone. Absolute paths and `..` escapes are ignored. Development leftovers (`__pycache__`, `.git`, `node_modules`, `.venv`, `*.pyc`/`*.pyo`) are filtered out of the copy.
 

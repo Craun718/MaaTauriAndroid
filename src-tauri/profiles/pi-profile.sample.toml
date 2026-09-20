@@ -6,11 +6,16 @@
 # profile file's directory.
 pi_assets = "/absolute/path/to/your-maa-project"
 
-# There is no include/exclude list. The packaged set is derived from
-# interface.json: resource[].path, every import, the languages translation
-# files, icons and rich-text images, the Agent payload, plus the data directory
-# the Agent reads. A path the interface declares but the project lacks fails the
-# build instead of shipping a package that cannot load.
+# The packaged set is derived from interface.json: resource[].path, every import,
+# the languages translation files, icons and rich-text images, the Agent payload,
+# plus the data directory the Agent reads. A path the interface declares but the
+# project lacks fails the build instead of shipping a package that cannot load.
+
+# Optional. EXTRA project-relative paths to pack on top of that set — assets no
+# protocol key reaches. This can only add; it never prunes, and a listed path
+# that does not exist fails the build. Omit it when the interface covers
+# everything.
+# pi_include = ["assets/extra/guide.pdf"]
 
 # applicationId suffix: top.natsuu.mta.<resource_id>
 resource_id = "yourpi"

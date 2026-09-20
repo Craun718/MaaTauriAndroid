@@ -185,6 +185,7 @@ export function VirtualDisplayCard() {
         <VirtualDisplayPreview
           status={status}
           showTouchMarkers={showTouchMarkers}
+          interactive={false}
           className="aspect-[2/1] w-full rounded-md border border-line"
         />
       ) : (

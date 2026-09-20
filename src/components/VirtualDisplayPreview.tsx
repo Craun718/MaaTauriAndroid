@@ -70,10 +70,12 @@ type PreviewTouchAction = 6 | 7 | 8;
 export function VirtualDisplayPreview({
   status,
   showTouchMarkers,
+  interactive = true,
   className,
 }: {
   status: VirtualDisplayStatus;
   showTouchMarkers: boolean;
+  interactive?: boolean;
   className: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -436,7 +438,9 @@ export function VirtualDisplayPreview({
     <div className={`relative overflow-hidden ${className}`}>
       <canvas
         ref={canvasRef}
-        className="h-full w-full touch-none object-contain"
+        className={`h-full w-full object-contain ${
+          interactive ? "touch-none" : "pointer-events-none"
+        }`}
         aria-label={t("virtualDisplay")}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

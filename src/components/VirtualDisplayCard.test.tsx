@@ -63,6 +63,7 @@ beforeEach(() => {
   getVirtualDisplayStream.mockResolvedValue({
     url: "ws://127.0.0.1:8080/virtual-display-stream?token=test",
   });
+  setVirtualDisplayTouchMarkers.mockResolvedValue([]);
 });
 
 afterEach(() => {

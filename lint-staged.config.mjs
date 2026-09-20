@@ -9,6 +9,12 @@ export default defineConfig({
   // lint-staged from appending the staged filepaths as arguments.
   "*.{ts,tsx}": () => ["tsc --noEmit", "pnpm test"],
 
+  // Kotlin type and reference errors are caught by the compiler, not by the
+  // Rust or TypeScript checks. Compiling the debug variant keeps this limited
+  // to static analysis instead of packaging an APK.
+  "*.{kt,kts}": () =>
+    "./src-tauri/gen/android/gradlew --project-dir src-tauri/gen/android :app:compileUniversalDebugKotlin",
+
   // Biome formats and lints in one pass. `--no-errors-on-unmatched` keeps it
   // quiet for the extensions it does not handle (Biome has no Markdown or YAML
   // support, so AGENTS.md and ci.yml are left alone).

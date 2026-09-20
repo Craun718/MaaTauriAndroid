@@ -140,7 +140,7 @@ const en = {
   forceStopTargetApp: "Force stop target app",
   touchPreview: "Touch preview",
   touchPreviewDescription:
-    "Show manual and Maa injection positions on the virtual display preview.",
+    "Show touch positions on the virtual display preview.",
   showTouchPositions: "Show click positions",
   telemetry: "Anonymous telemetry",
   telemetryDescription:
@@ -256,7 +256,7 @@ const zh: Record<MessageKey, string> = {
   runBehavior: "运行行为",
   forceStopTargetApp: "运行前强制停止目标应用",
   touchPreview: "触点预览",
-  touchPreviewDescription: "在虚拟屏预览中显示手动点击和 Maa 注入的位置。",
+  touchPreviewDescription: "在虚拟屏预览中显示点击的位置。",
   showTouchPositions: "显示点击位置",
   telemetry: "匿名遥测",
   telemetryDescription:

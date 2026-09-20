@@ -313,7 +313,7 @@ pub struct UserConfiguration {
     pub force_stop_target_app: bool,
     #[serde(default)]
     pub telemetry_enabled: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub show_virtual_display_touches: bool,
     #[serde(default)]
     pub ui_language: UiLanguage,
@@ -336,7 +336,7 @@ impl Default for UserConfiguration {
             initialized: false,
             force_stop_target_app: false,
             telemetry_enabled: false,
-            show_virtual_display_touches: false,
+            show_virtual_display_touches: true,
             ui_language: UiLanguage::System,
             active_resource: None,
             global_option_values: BTreeMap::new(),
@@ -378,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_configuration_defaults_touch_markers_to_false() {
+    fn legacy_configuration_defaults_touch_markers_to_true() {
         let current = UserConfiguration::default();
         let mut legacy = serde_json::to_value(&current).unwrap();
         legacy
@@ -388,7 +388,7 @@ mod tests {
 
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
-        assert!(!parsed.show_virtual_display_touches);
+        assert!(parsed.show_virtual_display_touches);
     }
 
     #[test]

@@ -25,6 +25,7 @@ const captureManualScreenshot = vi.fn();
 const startRun = vi.fn();
 const stopRun = vi.fn();
 const exportLogs = vi.fn();
+const setVirtualDisplayTouchMarkers = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("../lib/api", () => ({
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   getVirtualDisplayStream: vi.fn(),
+  setVirtualDisplayTouchMarkers: () => setVirtualDisplayTouchMarkers(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -219,6 +221,7 @@ beforeEach(() => {
     state: "Idle",
     message: "Idle",
   });
+  setVirtualDisplayTouchMarkers.mockResolvedValue([]);
   startRun.mockResolvedValue({
     executionId: "run-1",
     message: "The run is starting",

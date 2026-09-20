@@ -158,7 +158,7 @@ export function SettingsPage() {
         </div>
         <Checkbox
           className="min-h-10 gap-2"
-          checked={snapshot?.configuration.showVirtualDisplayTouches ?? false}
+          checked={snapshot?.configuration.showVirtualDisplayTouches ?? true}
           disabled={busy || !snapshot}
           onCheckedChange={(next) => {
             if (!snapshot) return;

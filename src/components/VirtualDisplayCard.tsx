@@ -25,7 +25,7 @@ export function VirtualDisplayCard() {
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
   const showTouchMarkers = useAppStore(
-    (state) => state.snapshot?.configuration.showVirtualDisplayTouches ?? false,
+    (state) => state.snapshot?.configuration.showVirtualDisplayTouches ?? true,
   );
 
   const refreshStatus = useCallback(async () => {

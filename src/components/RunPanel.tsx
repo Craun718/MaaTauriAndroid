@@ -8,7 +8,7 @@ import {
   startRun,
   stopRun,
 } from "../lib/api";
-import { useTranslation } from "../lib/i18n";
+import { localizeDiagnostic, useTranslation } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { ResolvedRun, RunEvent } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
@@ -25,7 +25,7 @@ import { BottomDrawer } from "./ui/BottomDrawer";
 export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [run, setRun] = useState<ResolvedRun>();
   const [status, setStatus] = useState<string>();
   const [executionId, setExecutionId] = useState<string>();
@@ -40,36 +40,45 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
   const notifyOnce = useNotificationStore((state) => state.notifyOnce);
   const reportError = useCallback(
     (error: unknown) => {
-      notify(error instanceof Error ? error.message : String(error), {
-        tone: "error",
-      });
+      notify(
+        localizeDiagnostic(
+          error instanceof Error ? error.message : String(error),
+          language,
+        ),
+        { tone: "error" },
+      );
     },
-    [notify],
+    [notify, language],
   );
 
   // A preparing failure reaches the UI twice: the backend emits the failure
   // run-event before `startRun` rejects, so the catch below and the listener
   // would both alert. When the run result already carries this exact failure,
   // share the listener's execution-scoped key so only one alert shows;
-  // failures recorded nowhere else keep the direct report.
+  // failures recorded nowhere else keep the direct report. Deduplication
+  // compares the raw backend text while the alert shows the localized one.
   const reportStartFailure = useCallback(
     async (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
+      const raw = error instanceof Error ? error.message : String(error);
       const result = await getRunStatus().catch(() => undefined);
       if (
         result?.executionId &&
         result.severity === "error" &&
-        result.message === message
+        result.message === raw
       ) {
-        notifyOnce(`run-failure:${result.executionId}`, message, {
-          tone: "error",
-          logToActivity: false,
-        });
+        notifyOnce(
+          `run-failure:${result.executionId}`,
+          localizeDiagnostic(raw, language),
+          {
+            tone: "error",
+            logToActivity: false,
+          },
+        );
         return;
       }
-      notify(message, { tone: "error" });
+      notify(localizeDiagnostic(raw, language), { tone: "error" });
     },
-    [notify, notifyOnce],
+    [notify, notifyOnce, language],
   );
 
   useEffect(() => {
@@ -89,16 +98,20 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         setExecutionId(result.executionId);
         setRunState(result.state);
         if (result.severity === "error") {
-          notifyOnce(`run-failure:${result.executionId}`, result.message, {
-            tone: "error",
-          });
+          notifyOnce(
+            `run-failure:${result.executionId}`,
+            localizeDiagnostic(result.message, language),
+            {
+              tone: "error",
+            },
+          );
           setStatus(undefined);
           return;
         }
         setStatus(result.message);
       })
       .catch(() => undefined);
-  }, [projectRoot, notifyOnce]);
+  }, [projectRoot, notifyOnce, language]);
 
   useEffect(() => {
     let disposed = false;
@@ -113,9 +126,10 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       setExecutionId(payload.executionId);
       if (payload.kind === "screenshot") return;
       if (payload.kind === "failure" || payload.kind === "warning") {
+        const diagnostic = localizeDiagnostic(payload.message, language);
         const message = payload.taskName
-          ? `${payload.taskName}: ${payload.message}`
-          : payload.message;
+          ? `${payload.taskName}: ${diagnostic}`
+          : diagnostic;
         if (payload.kind === "failure") {
           notifyOnce(`run-failure:${payload.executionId}`, message, {
             tone: "error",
@@ -142,7 +156,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       disposed = true;
       unsubscribe?.();
     };
-  }, [notify, notifyOnce, reportError]);
+  }, [notify, notifyOnce, reportError, language]);
 
   if (!snapshot?.project) return null;
   const enabled =

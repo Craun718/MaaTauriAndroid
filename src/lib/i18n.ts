@@ -62,6 +62,20 @@ const en = {
   openShizuku: "Open Shizuku",
   retryConnection: "Retry",
 
+  // Known backend diagnostics, localized when shown as notifications
+  diagnosticShizukuUnavailable:
+    "Shizuku is unavailable; install or start Shizuku, then try again",
+  diagnosticShizukuPermissionRequired:
+    "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again",
+  diagnosticControlServiceDisconnected:
+    "The privileged control service disconnected; restart Shizuku and reopen the app, then try again",
+  diagnosticControlServiceFailedToStart:
+    "The privileged control unit failed to start; check Shizuku and the app logs, then try again",
+  diagnosticControlServiceStarting:
+    "The privileged control unit is starting; try again shortly",
+  diagnosticVirtualDisplayRejected:
+    "The privileged control service rejected the virtual display",
+
   // Settings, project scope
   noResources: "No resources are declared.",
   globalOptions: "Global options",
@@ -247,6 +261,16 @@ const zh: Record<MessageKey, string> = {
   requestPermission: "申请 Shizuku 权限",
   openShizuku: "打开 Shizuku",
   retryConnection: "重试",
+
+  diagnosticShizukuUnavailable: "Shizuku 不可用；请安装或启动 Shizuku 后重试",
+  diagnosticShizukuPermissionRequired:
+    "尚未授予 Shizuku 权限；请在 Shizuku 中授权本应用后重试",
+  diagnosticControlServiceDisconnected:
+    "特权控制服务已断开；请重启 Shizuku 并重新打开本应用后重试",
+  diagnosticControlServiceFailedToStart:
+    "特权控制单元启动失败；请检查 Shizuku 和应用日志后重试",
+  diagnosticControlServiceStarting: "特权控制单元正在启动；请稍后重试",
+  diagnosticVirtualDisplayRejected: "特权控制服务拒绝了虚拟屏请求",
 };
 
 const catalog: Record<AppLanguage, Record<MessageKey, string>> = { en, zh };
@@ -299,6 +323,35 @@ export function translate(
 export interface Translation {
   language: AppLanguage;
   t: (key: MessageKey, params?: Record<string, string | number>) => string;
+}
+
+/**
+ * Backend diagnostics arrive as fixed English strings. The known run-start
+ * failures map onto catalog keys so notifications can follow the interface
+ * language; anything unknown is shown as the original backend text.
+ */
+const diagnosticKeys: Record<string, MessageKey> = {
+  "Shizuku is unavailable; install or start Shizuku, then try again":
+    "diagnosticShizukuUnavailable",
+  "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again":
+    "diagnosticShizukuPermissionRequired",
+  "The privileged control service disconnected; restart Shizuku and reopen the app, then try again":
+    "diagnosticControlServiceDisconnected",
+  "The privileged control unit failed to start; check Shizuku and the app logs, then try again":
+    "diagnosticControlServiceFailedToStart",
+  "The privileged control unit is starting; try again shortly":
+    "diagnosticControlServiceStarting",
+  "The privileged control service rejected the virtual display":
+    "diagnosticVirtualDisplayRejected",
+};
+
+/** Localizes a known backend diagnostic; unknown text passes through unchanged. */
+export function localizeDiagnostic(
+  message: string,
+  language: AppLanguage,
+): string {
+  const key = diagnosticKeys[message];
+  return key ? translate(language, key) : message;
 }
 
 /** Translated strings for the current configuration, re-rendering when it changes. */

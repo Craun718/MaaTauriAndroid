@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isChineseLocale,
+  localizeDiagnostic,
   projectLanguage,
   resolveLanguage,
   translate,
@@ -65,5 +66,29 @@ describe("translate", () => {
   it("returns plain strings unchanged", () => {
     expect(translate("en", "start")).toBe("Start");
     expect(translate("zh", "start")).toBe("开始");
+  });
+});
+
+describe("localizeDiagnostic", () => {
+  const permission =
+    "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
+
+  it("keeps the backend wording in English and translates known failures in Chinese", () => {
+    expect(localizeDiagnostic(permission, "en")).toBe(permission);
+    expect(localizeDiagnostic(permission, "zh")).toBe(
+      "尚未授予 Shizuku 权限；请在 Shizuku 中授权本应用后重试",
+    );
+    expect(
+      localizeDiagnostic(
+        "The privileged control service rejected the virtual display",
+        "zh",
+      ),
+    ).toBe("特权控制服务拒绝了虚拟屏请求");
+  });
+
+  it("passes unknown backend text through unchanged", () => {
+    expect(localizeDiagnostic("Maa task Sugar failed: timeout", "zh")).toBe(
+      "Maa task Sugar failed: timeout",
+    );
   });
 });

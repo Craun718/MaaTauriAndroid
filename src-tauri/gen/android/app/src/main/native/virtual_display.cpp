@@ -96,7 +96,7 @@ void store_frame(const uint8_t* pixels, int32_t width, int32_t height, size_t st
         g_state.buffers[target].pixels.size() < destination_stride_bytes * height) {
         return;
     }
-    copy_rgba_to_bgr(
+    virtual_display::copy_rgba_to_bgr(
         pixels,
         stride_bytes,
         destination,

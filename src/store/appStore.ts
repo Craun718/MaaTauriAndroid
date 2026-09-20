@@ -12,11 +12,13 @@ interface AppStore {
   snapshot?: AppStateSnapshot;
   busy: boolean;
   error?: string;
+  dismissedWelcomeFingerprint?: string;
   bootstrap: () => Promise<void>;
   loadProject: (path: string, language?: string) => Promise<void>;
   applyPreset: (presetName: string) => Promise<void>;
   saveConfiguration: (configuration: UserConfiguration) => Promise<void>;
   setError: (error?: string) => void;
+  dismissWelcome: (fingerprint: string) => void;
 }
 
 function message(error: unknown) {
@@ -33,6 +35,7 @@ let pendingSaves = 0;
 
 export const useAppStore = create<AppStore>((set) => ({
   busy: false,
+  dismissedWelcomeFingerprint: undefined,
   async bootstrap() {
     set({ busy: true, error: undefined });
     try {
@@ -101,5 +104,8 @@ export const useAppStore = create<AppStore>((set) => ({
   },
   setError(error) {
     set({ error });
+  },
+  dismissWelcome(fingerprint) {
+    set({ dismissedWelcomeFingerprint: fingerprint });
   },
 }));

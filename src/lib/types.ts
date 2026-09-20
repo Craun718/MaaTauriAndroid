@@ -197,6 +197,8 @@ export interface UserConfiguration {
   runConfigurations: RunConfiguration[];
   activeRunConfigurationId?: string;
   welcomeFingerprint?: string;
+  welcomeAcknowledgedAppVersion?: string;
+  skipWelcomeAnnouncement?: boolean;
 }
 
 export interface AppStateSnapshot {

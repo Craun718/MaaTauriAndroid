@@ -160,4 +160,33 @@ mod tests {
             .secret_manifest
             .is_some_and(|manifest| manifest.contains(r#"["task","run","task","Login","token"]"#)));
     }
+
+    #[test]
+    fn parses_and_validates_legacy_welcome_acknowledgement_fields() {
+        let current = UserConfiguration::default();
+        let mut legacy_value =
+            serde_json::to_value(&current).expect("configuration should serialize");
+        {
+            let object = legacy_value
+                .as_object_mut()
+                .expect("configuration should be an object");
+            object.remove("welcomeAcknowledgedAppVersion");
+            object.remove("skipWelcomeAnnouncement");
+        }
+        let legacy = serde_json::from_slice::<PersistedConfiguration>(
+            &serde_json::to_vec(&legacy_value).expect("legacy format should serialize"),
+        )
+        .expect("legacy welcome fields should default");
+        assert_eq!(legacy.configuration.welcome_acknowledged_app_version, None);
+        assert!(!legacy.configuration.skip_welcome_announcement);
+
+        legacy_value
+            .as_object_mut()
+            .expect("configuration should be an object")
+            .insert("skipWelcomeAnnouncement".to_string(), "yes".into());
+        assert!(serde_json::from_slice::<PersistedConfiguration>(
+            &serde_json::to_vec(&legacy_value).expect("invalid format should serialize")
+        )
+        .is_err());
+    }
 }

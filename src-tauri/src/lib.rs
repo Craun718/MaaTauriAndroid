@@ -232,11 +232,6 @@ fn normalize_configuration(project: &Project, configuration: &mut UserConfigurat
     if first_install {
         configuration.telemetry_enabled = true;
     }
-
-    let next_fingerprint = project.metadata.welcome_fingerprint.clone();
-    if configuration.welcome_fingerprint.as_ref() != next_fingerprint.as_ref() {
-        configuration.welcome_fingerprint = next_fingerprint;
-    }
 }
 
 fn default_run_configuration(project: &Project, name: &str) -> RunConfiguration {
@@ -1540,7 +1535,7 @@ mod tests {
 
     #[test]
     fn telemetry_defaults_on_for_first_install_only() {
-        let project = project();
+        let mut project = project();
         let mut first_install = UserConfiguration::default();
         normalize_configuration(&project, &mut first_install);
         assert!(first_install.telemetry_enabled);
@@ -1550,6 +1545,21 @@ mod tests {
         persisted.telemetry_enabled = false;
         normalize_configuration(&project, &mut persisted);
         assert!(!persisted.telemetry_enabled);
+    }
+
+    #[test]
+    fn normalize_configuration_preserves_welcome_fingerprint() {
+        let project = project();
+        project.metadata.welcome_fingerprint = Some("project".to_string());
+        let mut configuration = UserConfiguration::default();
+        configuration.welcome_fingerprint = Some("acknowledged".to_string());
+
+        normalize_configuration(&project, &mut configuration);
+
+        assert_eq!(
+            configuration.welcome_fingerprint.as_deref(),
+            Some("acknowledged")
+        );
     }
 
     #[test]

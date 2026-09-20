@@ -67,6 +67,10 @@ const en = {
   requestPermission: "Request Shizuku permission",
   openShizuku: "Open Shizuku",
   retryConnection: "Retry",
+  announcement: "Announcement",
+  openAnnouncement: "View announcement",
+  hideAnnouncementOnLaunch: "Don't show this announcement again",
+  confirm: "Confirm",
 
   // Known backend diagnostics, localized when shown as notifications
   diagnosticShizukuUnavailable:
@@ -283,6 +287,10 @@ const zh: Record<MessageKey, string> = {
   requestPermission: "申请 Shizuku 权限",
   openShizuku: "打开 Shizuku",
   retryConnection: "重试",
+  announcement: "公告",
+  openAnnouncement: "查看公告",
+  hideAnnouncementOnLaunch: "下次启动不再展示",
+  confirm: "确认",
 
   diagnosticShizukuUnavailable: "Shizuku 不可用；请安装或启动 Shizuku 后重试",
   diagnosticShizukuPermissionRequired:

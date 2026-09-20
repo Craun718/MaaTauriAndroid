@@ -322,6 +322,9 @@ pub struct UserConfiguration {
     pub run_configurations: Vec<RunConfiguration>,
     pub active_run_configuration_id: Option<String>,
     pub welcome_fingerprint: Option<String>,
+    pub welcome_acknowledged_app_version: Option<String>,
+    #[serde(default)]
+    pub skip_welcome_announcement: bool,
 }
 
 impl Default for UserConfiguration {
@@ -339,6 +342,8 @@ impl Default for UserConfiguration {
             run_configurations: Vec::new(),
             active_run_configuration_id: None,
             welcome_fingerprint: None,
+            welcome_acknowledged_app_version: None,
+            skip_welcome_announcement: false,
         }
     }
 }

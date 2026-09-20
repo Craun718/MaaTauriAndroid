@@ -154,9 +154,10 @@ object RuntimeBridge {
         val context = agentContext ?: return null
         return runCatching {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            val deviceName = deviceName()
             JSONObject().apply {
                 put("time", DEVICE_TIME_FORMAT.format(java.time.ZonedDateTime.now()))
-                put("device", "${Build.MANUFACTURER} ${Build.MODEL}")
+                put("device", deviceName)
                 put("android", Build.VERSION.RELEASE)
                 put("sdkInt", Build.VERSION.SDK_INT)
                 put("abi", Build.SUPPORTED_ABIS.joinToString())
@@ -191,6 +192,23 @@ object RuntimeBridge {
             append(divider).append('\n')
         }
     }
+
+    private fun deviceName(): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val productName = runCatching {
+                Build::class.java.getMethod("getDeviceProductName").invoke(null) as? String
+            }.getOrNull()
+            if (!productName.isNullOrBlank()) return productName
+        }
+        return systemProperty("ro.product.marketname")
+            ?: "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+    }
+
+    private fun systemProperty(key: String): String? = runCatching {
+        Class.forName("android.os.SystemProperties")
+            .getMethod("get", String::class.java)
+            .invoke(null, key) as? String
+    }.getOrNull()?.takeIf { it.isNotBlank() }
 
     @Suppress("DEPRECATION")
     private fun screenInfo(context: Context): String = runCatching {

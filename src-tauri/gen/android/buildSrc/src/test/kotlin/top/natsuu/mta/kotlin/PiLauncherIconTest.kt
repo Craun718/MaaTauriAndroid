@@ -46,7 +46,7 @@ class PiLauncherIconTest {
         val interfaceFile = writeInterface(
             """
             {
-              "icon": "\$icon",
+              "icon": "${'$'}icon",
               "languages": {
                 "en_us": "locale/en_us.json",
                 "zh_cn": "locale/zh_cn.json"
@@ -71,7 +71,7 @@ class PiLauncherIconTest {
         val interfaceFile = writeInterface(
             """
             {
-              "icon": "\$missing",
+              "icon": "${'$'}missing",
               "languages": {"zh_cn": "locale/zh_cn.json"}
             }
             """.trimIndent(),

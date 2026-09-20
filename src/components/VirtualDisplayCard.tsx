@@ -218,9 +218,10 @@ export function VirtualDisplayCard() {
         status &&
         createPortal(
           <div className="fixed inset-0 z-50 bg-surface">
-            {/* 全屏层是沉浸式画面：padding 与退出按钮钉在物理 px 上，
-                不参与根字号的等比放大，否则 UI 会挤占视频画面空间。 */}
-            <div className="absolute inset-0 flex flex-col pb-[calc(16px_+_env(safe-area-inset-bottom))] pt-[calc(56px_+_env(safe-area-inset-top))]">
+            {/* 全屏层是沉浸式画面：视频满出血铺满视口（横屏高度只有 ~369 CSS px，
+                任何 padding 都会显著压缩 16:9 画面的等比尺寸），退出按钮浮在画面上、
+                钉物理 px 并保留 safe-area 偏移，不参与根字号的等比放大。 */}
+            <div className="absolute inset-0">
               <VirtualDisplayPreview
                 status={status}
                 showTouchMarkers={showTouchMarkers}

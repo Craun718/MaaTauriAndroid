@@ -199,7 +199,7 @@ export function SettingsPage() {
           }}
           className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
         >
-          <Download size={16} />
+          <Download size="1rem" />
           {exporting ? t("exportingLogs") : t("exportLogs")}
         </button>
         <button
@@ -222,7 +222,7 @@ export function SettingsPage() {
           }}
           className="flex h-9 items-center justify-center gap-2 rounded-md border border-red-300 px-2.5 font-semibold text-red-600 disabled:opacity-50"
         >
-          <Trash2 size={16} />
+          <Trash2 size="1rem" />
           {cleaning ? t("deleting") : t("deleteRuns")}
         </button>
       </section>

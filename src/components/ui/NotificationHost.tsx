@@ -80,7 +80,7 @@ function NotificationItem({
       role={notification.tone === "error" ? "alert" : "status"}
       className={`pointer-events-auto flex items-start gap-2 rounded-lg border bg-raised p-3 shadow-lg ${tone.container}`}
     >
-      <Icon size={18} className={`mt-0.5 shrink-0 ${tone.icon}`} />
+      <Icon size="1.125rem" className={`mt-0.5 shrink-0 ${tone.icon}`} />
       <p className="min-w-0 flex-1 break-words text-sm">
         {notification.message}
       </p>
@@ -90,7 +90,7 @@ function NotificationItem({
         aria-label={dismissLabel}
         className="-m-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <X size={14} />
+        <X size="0.875rem" />
       </button>
     </div>
   );

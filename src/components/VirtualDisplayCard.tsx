@@ -133,7 +133,7 @@ export function VirtualDisplayCard() {
     <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <MonitorPlay size={18} className="text-accent" />
+          <MonitorPlay size="1.125rem" className="text-accent" />
           <h2 className="min-w-0 truncate font-medium">
             {t("virtualDisplay")}
           </h2>
@@ -164,7 +164,7 @@ export function VirtualDisplayCard() {
             aria-label={t("refreshStatus")}
           >
             <RefreshCw
-              size={14}
+              size="0.875rem"
               className={refreshing ? "animate-spin" : undefined}
             />
           </button>
@@ -175,7 +175,7 @@ export function VirtualDisplayCard() {
               className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted"
               aria-label={t("virtualDisplayFullscreen")}
             >
-              <Maximize2 size={14} />
+              <Maximize2 size="0.875rem" />
             </button>
           )}
         </div>
@@ -204,9 +204,9 @@ export function VirtualDisplayCard() {
             className="flex h-8 flex-none items-center justify-center gap-2 rounded-md border border-red-500/50 px-2.5 font-medium text-red-600 disabled:opacity-50 dark:text-red-300"
           >
             {actionPending ? (
-              <LoaderCircle size={14} className="animate-spin" />
+              <LoaderCircle size="0.875rem" className="animate-spin" />
             ) : (
-              <Square size={14} />
+              <Square size="0.875rem" />
             )}
             {t("stop")}
           </button>
@@ -231,7 +231,7 @@ export function VirtualDisplayCard() {
               className="absolute right-4 top-[calc(0.75rem_+_env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-md border border-line bg-raised text-ink-muted"
               aria-label={t("virtualDisplayExitFullscreen")}
             >
-              <X size={16} />
+              <X size="1rem" />
             </button>
           </div>,
           document.body,

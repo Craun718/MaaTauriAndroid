@@ -238,7 +238,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           }}
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
         >
-          {running ? <Square size={16} /> : <Play size={16} />}
+          {running ? <Square size="1rem" /> : <Play size="1rem" />}
           {t(running ? "stop" : "start")}
         </button>
         <button
@@ -250,7 +250,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           }}
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
         >
-          <Download size={16} />
+          <Download size="1rem" />
           {exporting ? t("exportingLogs") : t("exportLogs")}
         </button>
         <button
@@ -262,7 +262,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           }}
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
         >
-          <Camera size={16} />
+          <Camera size="1rem" />
           {t("captureScreenshot")}
         </button>
         <button
@@ -273,7 +273,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           }}
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
         >
-          <Undo2 size={16} />
+          <Undo2 size="1rem" />
           {t("back")}
         </button>
       </BottomDrawer>

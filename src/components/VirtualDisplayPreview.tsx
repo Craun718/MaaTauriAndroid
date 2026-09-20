@@ -556,9 +556,9 @@ export function VirtualDisplayPreview({
       {streamState !== "ready" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-surface-muted/90 px-3 py-2 text-xs text-ink-muted">
           {streamState === "connecting" ? (
-            <LoaderCircle size={12} className="animate-spin" />
+            <LoaderCircle size="0.75rem" className="animate-spin" />
           ) : (
-            <CircleAlert size={12} />
+            <CircleAlert size="0.75rem" />
           )}
           {streamLabel}
         </div>

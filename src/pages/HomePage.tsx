@@ -126,7 +126,7 @@ function ProjectAnnouncements({
         onClick={() => setManualFingerprint(contentFingerprint)}
         className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-line bg-raised font-medium text-ink"
       >
-        <Megaphone size={16} />
+        <Megaphone size="1rem" />
         {t("openAnnouncement")}
       </button>
 

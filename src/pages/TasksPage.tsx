@@ -263,7 +263,7 @@ export function TasksPage() {
                   aria-label={t("newConfiguration")}
                   className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
-                  <Plus size={16} />
+                  <Plus size="1rem" />
                 </button>
               </div>
               <DndContext
@@ -381,7 +381,7 @@ function AddTaskPicker({
         aria-expanded={open}
         className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <Plus size={14} />
+        <Plus size="0.875rem" />
         {addLabel}
       </button>
       {open && (
@@ -547,7 +547,7 @@ function TaskItem({
           className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
           {...dragHandleProps}
         >
-          <GripVertical size={14} />
+          <GripVertical size="0.875rem" />
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
           {hasDetails ? (
@@ -578,7 +578,7 @@ function TaskItem({
                   </span>
                 )}
                 <ChevronDown
-                  size={16}
+                  size="1rem"
                   className={`shrink-0 text-ink-muted transition-transform ${
                     expanded ? "" : "-rotate-90"
                   }`}
@@ -605,7 +605,7 @@ function TaskItem({
           aria-label={t("removeTask")}
           className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          <Trash2 size={14} />
+          <Trash2 size="0.875rem" />
         </button>
       </div>
       {unavailable && (

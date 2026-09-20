@@ -63,7 +63,7 @@ export function AnnouncementModal({
             aria-label={t("close")}
             className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            <X size={16} />
+            <X size="1rem" />
           </button>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3">

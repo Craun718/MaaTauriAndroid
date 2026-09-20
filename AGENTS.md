@@ -64,6 +64,8 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 
 TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 camelCase 变量；React 组件与类型使用 PascalCase。Rust 提交前运行 `cargo fmt`；错误类型使用 `thiserror`，公共 IPC 数据使用 `serde` 的 camelCase 表示。Tailwind class 应保持语义清晰，避免为一次性样式引入自定义 CSS。
 
+尺寸一律走 rem，不要写 px 定值：应用全屏（平板、桌面、横屏等宽视口）时靠 `src/index.css` 里 `html` 的根字号规则（`clamp(16px, 100vw / 28, 32px)`）把整个 rem 体系等比放大，设计基准宽是 28rem（`max-w-md`）。lucide 图标的 `size` 因此写 rem 字符串（如 `size="1rem"`），不要写回数字（`size={16}` 是固定 px，不会跟随缩放）；`env(safe-area-inset-*)` 与 1px 描边保持物理像素，属例外。
+
 新增表单控件时优先复用 `src/components/ui/` 里的封装（`Checkbox` / `RadioGroup` / `SegmentGroup` / `TextField` / `Select`），不要在页面里手写原生 `<input>`，也不要绕过封装直接写 daisyUI 组件类：状态样式集中在各封装组件内部（`src/index.css` 只保留原始色板、`@theme` 具名 utility、daisyUI 主题和 `.rich-description`），散落各处会失去统一主题。
 
 颜色分两层，改色只需要动 `src/index.css` 里 `:root` 的 `--tt-*` 原始色板一处：

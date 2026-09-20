@@ -27,12 +27,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               to={to}
               end={to === "/"}
               className={({ isActive }) =>
-                `flex flex-1 flex-col items-center justify-center gap-1 text-[11px] ${
+                `flex flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] ${
                   isActive ? "text-accent" : "text-ink-muted"
                 }`
               }
             >
-              <Icon size={20} strokeWidth={2} />
+              <Icon size="1.25rem" strokeWidth={2} />
               {label}
             </NavLink>
           ))}

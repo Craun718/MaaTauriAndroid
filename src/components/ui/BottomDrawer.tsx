@@ -63,7 +63,7 @@ export function BottomDrawer({
             aria-label={t("close")}
             className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            <X size={16} />
+            <X size="1rem" />
           </button>
         </div>
         <div className="mt-1 space-y-1">{children}</div>

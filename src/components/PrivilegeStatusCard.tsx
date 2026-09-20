@@ -175,7 +175,7 @@ export function PrivilegeStatusCard({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <ShieldCheck size={18} className="text-accent" />
+          <ShieldCheck size="1.125rem" className="text-accent" />
           <h2 className="font-medium">{t(title)}</h2>
         </div>
         <button
@@ -188,7 +188,7 @@ export function PrivilegeStatusCard({
           aria-label={t("refreshStatus")}
         >
           <RefreshCw
-            size={14}
+            size="0.875rem"
             className={refreshing || actionPending ? "animate-spin" : undefined}
           />
         </button>
@@ -204,7 +204,7 @@ export function PrivilegeStatusCard({
           {copy ? (
             <span className={`h-2 w-2 rounded-full ${copy.dot}`} />
           ) : (
-            <LoaderCircle size={12} className="animate-spin" />
+            <LoaderCircle size="0.75rem" className="animate-spin" />
           )}
           {copy ? t(copy.label) : t("checking")}
         </span>
@@ -228,9 +228,9 @@ export function PrivilegeStatusCard({
           }`}
         >
           {actionPending ? (
-            <LoaderCircle size={14} className="animate-spin" />
+            <LoaderCircle size="0.875rem" className="animate-spin" />
           ) : (
-            <ActionIcon size={14} />
+            <ActionIcon size="0.875rem" />
           )}
           {t(actionCopy[action])}
         </button>
@@ -245,16 +245,16 @@ export function PrivilegeStatusCard({
         }`}
       >
         {actionPending ? (
-          <LoaderCircle size={14} className="animate-spin" />
+          <LoaderCircle size="0.875rem" className="animate-spin" />
         ) : (
-          <ShieldCheck size={14} />
+          <ShieldCheck size="0.875rem" />
         )}
         {t("requestPermission")}
       </button>
 
       {statusError && (
         <p className="flex items-start gap-2 break-all text-sm text-red-600 dark:text-red-300">
-          <CircleAlert size={16} className="mt-0.5 shrink-0" />
+          <CircleAlert size="1rem" className="mt-0.5 shrink-0" />
           {statusError}
         </p>
       )}

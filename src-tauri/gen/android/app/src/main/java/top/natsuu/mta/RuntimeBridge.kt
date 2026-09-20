@@ -87,6 +87,19 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun startRunForegroundService(): Boolean {
+        val context = agentContext ?: return false
+        return RunForegroundService.start(context)
+    }
+
+    @JvmStatic
+    fun stopRunForegroundService(): Boolean {
+        val context = agentContext ?: return false
+        RunForegroundService.stop(context)
+        return true
+    }
+
+    @JvmStatic
     fun attachControlClient(client: ControlServiceClient) {
         controlClient = client
     }

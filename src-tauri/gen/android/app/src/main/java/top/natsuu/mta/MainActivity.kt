@@ -46,7 +46,9 @@ class MainActivity : TauriActivity() {
   override fun onDestroy() {
     RuntimeBridge.setVirtualDisplayLandscape(false)
     RuntimeBridge.detachActivity(this)
-    RuntimeBridge.stopVirtualDisplay()
+    if (!RunForegroundService.isRunning) {
+      RuntimeBridge.stopVirtualDisplay()
+    }
     RuntimeBridge.detachControlClient(controlClient)
     controlClient.disconnect()
     super.onDestroy()

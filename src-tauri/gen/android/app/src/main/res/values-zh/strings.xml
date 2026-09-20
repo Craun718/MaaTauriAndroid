@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="run_notification_channel">Maa 任务</string>
+    <string name="run_notification_title">Maa 任务正在运行</string>
+    <string name="run_notification_text">自动化任务仍在后台执行</string>
+</resources>

@@ -708,6 +708,16 @@ fn virtual_display_status() -> Result<VirtualDisplayStatus, AppError> {
     }
 }
 
+#[cfg(target_os = "android")]
+fn cleanup_virtual_display_on_exit() {
+    if let Err(error) = stop_virtual_display() {
+        log::warn!("Could not stop the virtual display on exit: {error}");
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn cleanup_virtual_display_on_exit() {}
+
 #[tauri::command]
 fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
     #[cfg(target_os = "android")]
@@ -916,6 +926,13 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
         .map_err(|error| AppError::Message(error.to_string()))
 }
 
+fn stop_run_foreground_service() {
+    #[cfg(target_os = "android")]
+    {
+        let _ = call_runtime_bridge_boolean("stopRunForegroundService");
+    }
+}
+
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean_with_bool(
     method: &'static str,
@@ -1102,6 +1119,7 @@ fn call_runtime_bridge_optional_string(method: &'static str) -> Result<Option<St
 /// preparing lease returns to Idle; otherwise every later start and stop
 /// stays wedged on the preparing lease and the run controls never recover.
 fn abort_preparing_run(app: &AppHandle, logger: &run_log::RunLogger, message: String) {
+    stop_run_foreground_service();
     if let Ok(event) = logger.append(
         run_log::RunEventKind::Failure,
         runtime::RunState::Idle,
@@ -1211,6 +1229,11 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     {
         if let Err(error) = call_runtime_bridge_start_virtual_display(1280, 720, 160) {
             return Err(fail_preparing(error.to_string()));
+        }
+        if !call_runtime_bridge_boolean("startRunForegroundService")? {
+            return Err(fail_preparing(
+                "The run foreground service could not be started".to_string(),
+            ));
         }
         if configuration.show_virtual_display_touches {
             let _ = set_virtual_display_touch_markers(true);
@@ -1396,6 +1419,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                     }
                 };
                 sessions.finish_with(&run_execution_id, || {
+                    stop_run_foreground_service();
                     if let Ok(event) =
                         logger_for_run.append(kind, state, message.clone(), task_name, None)
                     {
@@ -2090,6 +2114,11 @@ pub fn run() {
             log::info!("{}", version::banner(version::environment().as_ref()));
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                cleanup_virtual_display_on_exit();
+            }
+        });
 }

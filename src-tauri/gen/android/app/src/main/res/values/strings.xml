@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="run_notification_channel">Maa run</string>
+    <string name="run_notification_title">Maa run in progress</string>
+    <string name="run_notification_text">The automation task is still running</string>
+</resources>

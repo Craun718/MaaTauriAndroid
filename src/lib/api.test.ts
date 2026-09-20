@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bootstrapApp, loadProject } from "./api";
+import { bootstrapApp, loadProject, setVirtualDisplayLandscape } from "./api";
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -62,5 +62,31 @@ describe("version-aware app state snapshots", () => {
     await expect(loadProject("/tmp/broken", "zh_cn")).rejects.toThrow(
       "unsupported Project Interface version",
     );
+  });
+});
+
+describe("virtual display fullscreen orientation", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("requests orientation changes with an explicit flag", async () => {
+    invoke.mockResolvedValue(undefined);
+
+    await expect(setVirtualDisplayLandscape(true)).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith("set_virtual_display_landscape", {
+      enabled: true,
+    });
+  });
+
+  it("propagates an orientation bridge failure", async () => {
+    invoke.mockRejectedValue(new Error("host activity unavailable"));
+
+    await expect(setVirtualDisplayLandscape(false)).rejects.toThrow(
+      "host activity unavailable",
+    );
+    expect(invoke).toHaveBeenCalledWith("set_virtual_display_landscape", {
+      enabled: false,
+    });
   });
 });

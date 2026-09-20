@@ -23,6 +23,7 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     MaaRuntime.load()
     RuntimeBridge.attachContext(applicationContext)
+    RuntimeBridge.attachActivity(this)
     RuntimeBridge.initializeSecretBridge()
     PiInstaller.install(this)?.let { projectRoot ->
         RuntimeBridge.setBootstrapProjectRoot(projectRoot.absolutePath)
@@ -43,6 +44,8 @@ class MainActivity : TauriActivity() {
   }
 
   override fun onDestroy() {
+    RuntimeBridge.setVirtualDisplayLandscape(false)
+    RuntimeBridge.detachActivity(this)
     RuntimeBridge.stopVirtualDisplay()
     RuntimeBridge.detachControlClient(controlClient)
     controlClient.disconnect()

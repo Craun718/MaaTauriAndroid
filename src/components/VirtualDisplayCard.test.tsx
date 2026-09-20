@@ -13,15 +13,19 @@ import { VirtualDisplayCard } from "./VirtualDisplayCard";
 
 const getVirtualDisplayStatus = vi.fn();
 const getVirtualDisplayStream = vi.fn();
+const stopRun = vi.fn();
 const stopVirtualDisplay = vi.fn();
 const touchVirtualDisplay = vi.fn();
+const setVirtualDisplayLandscape = vi.fn();
 const setVirtualDisplayTouchMarkers = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   getVirtualDisplayStream: () => getVirtualDisplayStream(),
+  stopRun: () => stopRun(),
   stopVirtualDisplay: () => stopVirtualDisplay(),
   touchVirtualDisplay: () => touchVirtualDisplay(),
+  setVirtualDisplayLandscape: () => setVirtualDisplayLandscape(),
   setVirtualDisplayTouchMarkers: () => setVirtualDisplayTouchMarkers(),
 }));
 
@@ -119,6 +123,7 @@ describe("VirtualDisplayCard", () => {
   });
 
   it("stops the display", async () => {
+    stopRun.mockResolvedValue("The run is stopping");
     getVirtualDisplayStatus.mockResolvedValueOnce(active);
     stopVirtualDisplay.mockResolvedValue(inactive);
 
@@ -126,7 +131,12 @@ describe("VirtualDisplayCard", () => {
     const stop = await screen.findByRole("button", { name: "Stop" });
     fireEvent.click(stop);
 
+    expect(stopRun).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(stopVirtualDisplay).toHaveBeenCalledTimes(1));
     expect(stopVirtualDisplay).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(stopRun).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(stopVirtualDisplay).mock.invocationCallOrder[0],
+    );
     expect(await screen.findAllByText("Stopped")).toHaveLength(1);
     expect(screen.queryByText("1280 x 720")).not.toBeInTheDocument();
   });

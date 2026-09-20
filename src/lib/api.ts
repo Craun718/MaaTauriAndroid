@@ -61,6 +61,10 @@ export async function getVirtualDisplayStream() {
   return invoke<{ url: string | null }>("virtual_display_stream");
 }
 
+export async function setVirtualDisplayLandscape(enabled: boolean) {
+  return invoke<void>("set_virtual_display_landscape", { enabled });
+}
+
 export async function touchVirtualDisplay(input: {
   displayId: number;
   action: 6 | 7 | 8;

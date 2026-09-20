@@ -724,6 +724,26 @@ fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
 }
 
 #[tauri::command]
+fn set_virtual_display_landscape(enabled: bool) -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        if call_runtime_bridge_boolean_with_bool("setVirtualDisplayLandscape", enabled)? {
+            Ok(())
+        } else {
+            Err(AppError::Message(
+                "The host activity is unavailable for fullscreen orientation".to_string(),
+            ))
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = enabled;
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn virtual_display_touch(
     display_id: i32,
     action: i32,
@@ -890,6 +910,33 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
     let _ = env.exception_clear();
     let result = env
         .call_static_method(bridge_class, method, "()Z", &[])
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    result
+        .z()
+        .map_err(|error| AppError::Message(error.to_string()))
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_boolean_with_bool(
+    method: &'static str,
+    value: bool,
+) -> Result<bool, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(
+            bridge_class,
+            method,
+            "(Z)Z",
+            &[jni::objects::JValue::Bool(value)],
+        )
         .map_err(|error| AppError::Message(error.to_string()))?;
     result
         .z()
@@ -2017,6 +2064,7 @@ pub fn run() {
             stop_virtual_display,
             virtual_display_status,
             virtual_display_stream,
+            set_virtual_display_landscape,
             virtual_display_touch,
             set_virtual_display_touch_markers,
             start_run,

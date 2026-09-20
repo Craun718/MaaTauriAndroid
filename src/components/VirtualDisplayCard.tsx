@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getVirtualDisplayStatus, stopVirtualDisplay } from "../lib/api";
+import {
+  getVirtualDisplayStatus,
+  setVirtualDisplayLandscape,
+  stopRun,
+  stopVirtualDisplay,
+} from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
 import { useAppStore } from "../store/appStore";
@@ -80,11 +85,25 @@ export function VirtualDisplayCard() {
     if (status?.active === false) setFullscreen(false);
   }, [status?.active]);
 
+  useEffect(() => {
+    if (!fullscreen || status?.active !== true) return;
+
+    let disposed = false;
+    setVirtualDisplayLandscape(true).catch(() => undefined);
+
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      void setVirtualDisplayLandscape(false).catch(() => undefined);
+    };
+  }, [fullscreen, status?.active]);
+
   async function stopDisplay() {
     if (actionPending) return;
     setActionPending(true);
     setStatusError(undefined);
     try {
+      await stopRun();
       setStatus(await stopVirtualDisplay());
     } catch (error) {
       await refreshStatus();

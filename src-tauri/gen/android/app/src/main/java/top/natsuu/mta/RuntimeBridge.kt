@@ -5,6 +5,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.app.ActivityManager
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -21,6 +23,7 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.lang.ref.WeakReference
 import kotlin.concurrent.thread
 import org.json.JSONObject
 import top.natsuu.mta.control.ControlHost
@@ -38,6 +41,7 @@ object RuntimeBridge {
 
     @Volatile
     private var controlClient: ControlServiceClient? = null
+    private var hostActivity: WeakReference<Activity>? = null
     @Volatile
     private var physicalScreenWidth = 0
     @Volatile
@@ -52,6 +56,35 @@ object RuntimeBridge {
 
     @JvmStatic
     fun agentBridgeContext(): Any? = agentContext
+
+    @JvmStatic
+    fun attachActivity(activity: Activity) {
+        hostActivity = WeakReference(activity)
+    }
+
+    @JvmStatic
+    fun detachActivity(activity: Activity) {
+        if (hostActivity?.get() !== activity) return
+        hostActivity = null
+    }
+
+    @JvmStatic
+    fun setVirtualDisplayLandscape(enabled: Boolean): Boolean {
+        val activity = hostActivity?.get() ?: return false
+        val targetOrientation = if (enabled) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        return runCatching {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                activity.requestedOrientation = targetOrientation
+            } else {
+                mainHandler.post { activity.requestedOrientation = targetOrientation }
+            }
+            true
+        }.getOrDefault(false)
+    }
 
     @JvmStatic
     fun attachControlClient(client: ControlServiceClient) {

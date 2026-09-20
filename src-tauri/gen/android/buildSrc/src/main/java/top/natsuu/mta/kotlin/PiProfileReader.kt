@@ -7,8 +7,6 @@ import java.io.File
 data class PiProfile(
     val file: File,
     val assets: String?,
-    val include: List<String>?,
-    val exclude: List<String>,
     val resourceId: String,
     val maaDir: String,
     val agent: AgentProfile?,
@@ -36,13 +34,20 @@ object PiProfileReader {
             errors.joinToString("\n") { error -> "${file.invariantSeparatorsPath}:$error" }
         }
 
+        // The pack set is derived from interface.json, so a leftover allow-list would be
+        // ignored. Reject it loudly rather than let a profile believe it still filters.
+        for (obsolete in listOf("pi_include", "pi_exclude")) {
+            require(result.getArray(obsolete) == null && !result.keySet().contains(obsolete)) {
+                "$obsolete is no longer supported: the Project Interface pack set is derived " +
+                    "from interface.json. Remove it from ${file.invariantSeparatorsPath}"
+            }
+        }
+
         val agentTable = result.getTable("agent")
         val agent: AgentProfile? = agentTable?.let { table -> readAgent(table, file) }
         return PiProfile(
             file = file,
             assets = requiredPath(result, "pi_assets", file),
-            include = stringArray(result, "pi_include"),
-            exclude = stringArray(result, "pi_exclude").orEmpty(),
             resourceId = resourceId(result),
             maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
             agent = agent,

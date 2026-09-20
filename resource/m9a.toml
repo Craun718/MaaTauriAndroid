@@ -15,27 +15,9 @@ resource_id = "m9a"
 
 maa_dir = "vendor/maa/android"
 
-pi_include = [
-  "interface.json",
-  "locales/**",
-  "tasks/**",
-  "resource/**",
-  "data/**",
-  "agent/**",
-  "config/**",
-  "logo.ico",
-  "CONTACT",
-  "LICENSE",
-]
-
-# images/ 不能整目录挖：银行等 option 的 icon 指在这里
-pi_exclude = [
-  "resource/announcement/*.md",
-  "resource/announcement/images/mojing_tjb.jpg",
-  "resource/announcement/images/uttu.png",
-  "resource/announcement/images/SOSMain.png",
-  "resource/announcement/images/newbie-main-interface.png",
-]
+# 打包内容由 interface.json 推导，这里不再手写白名单（见 src-tauri/profiles/README.md）：
+# resource[].path 与 import、languages 指向的文件、图标与富文本引用的图片，以及 agent 负载。
+# 白名单曾静默失配——M9A v4.9.0 把 i18n/ 改名为 locales/ 后，构建照样通过，包却装不上。
 
 # interface.json 声明 1 个 agent，因此这里必须恰好配置 1 个 runtime。
 [agent]

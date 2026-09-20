@@ -6,22 +6,11 @@
 # profile file's directory.
 pi_assets = "/absolute/path/to/your-maa-project"
 
-# Replace the whole list when set. Keep icons and data needed by the resource.
-pi_include = [
-  "interface.json",
-  "tasks/**",
-  "resource/**",
-  "resource_*/**",
-  "config/**",
-  "data/**",
-  "locale/**",
-  "locales/**",
-  "CONTACT",
-  "LICENSE",
-]
-
-# Applied on top of pi.include.
-pi_exclude = []
+# There is no include/exclude list. The packaged set is derived from
+# interface.json: resource[].path, every import, the languages translation
+# files, icons and rich-text images, the Agent payload, plus the data directory
+# the Agent reads. A path the interface declares but the project lacks fails the
+# build instead of shipping a package that cannot load.
 
 # applicationId suffix: top.natsuu.mta.<resource_id>
 resource_id = "yourpi"

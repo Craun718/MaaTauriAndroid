@@ -10,6 +10,7 @@ import com.android.build.api.dsl.ApplicationExtension
 
 import top.natsuu.mta.kotlin.PiProfileReader
 import top.natsuu.mta.kotlin.PiLauncherIcon
+import top.natsuu.mta.kotlin.PiSyncTask
 
 plugins {
     id("com.android.application")
@@ -45,21 +46,6 @@ val piProfileFile = piProfilePath?.let { path ->
 val piProfile = piProfileFile?.let(PiProfileReader::read)
 
 val piAssets = piProfile?.assets
-val piInclude = piProfile?.include ?: listOf(
-    "interface.json",
-    "tasks/**",
-    "resource/**",
-    "resource_*/**",
-    "config/**",
-    "data/**",
-    "locale/**",
-    "locales/**",
-    "agent/**",
-    "python/**",
-    "CONTACT",
-    "LICENSE",
-)
-val piExclude = piProfile?.exclude.orEmpty()
 val maaTauriAndroidResourceId = piProfile?.resourceId ?: "fixture"
 val maaTauriAndroidMaaDir = piProfile?.maaDir ?: "vendor/maa/android"
 val maaTauriAndroidMaaDirPath = if (File(maaTauriAndroidMaaDir).isAbsolute) {
@@ -116,18 +102,19 @@ fun validateAgentBundle(file: File, index: Int) {
 }
 
 val preparePiArchive = if (piProfile != null) {
-    val syncPiAssets = tasks.register<Sync>("syncPiAssets") {
+    // The pack set is resolved from interface.json by PiSyncTask, so a directory rename
+    // upstream cannot silently produce an APK whose interface points at missing files.
+    val syncPiAssets = tasks.register<PiSyncTask>("syncPiAssets") {
         group = "build"
-        description = "Sync the configured Project Interface resources into the generated PI tree"
-        val sourceDir = requireNotNull(piAssets) {
-            "No Project Interface configured; set pi.profile in local.properties or pass -Ppi.profile"
-        }
-        into(piRootDir)
-        from(sourceDir) {
-            include(piInclude)
-            exclude(piExclude)
-            exclude(".git/**", "node_modules/**", ".venv/**", "__pycache__/**")
-        }
+        description = "Resolve the Project Interface pack set from interface.json and sync it"
+        projectRoot.set(
+            file(
+                requireNotNull(piAssets) {
+                    "No Project Interface configured; set pi.profile in local.properties or pass -Ppi.profile"
+                },
+            ),
+        )
+        destination.set(piRootDir)
         doLast {
             val interfaceFile = piRootDir.get().file("interface.json").asFile
             require(interfaceFile.isFile) {

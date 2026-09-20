@@ -1,8 +1,8 @@
 package top.natsuu.mta.kotlin
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -59,5 +59,43 @@ class PiProfileReaderTest {
         assertThrows(IllegalArgumentException::class.java) {
             PiProfileReader.read(profile)
         }
+    }
+
+    @Test
+    fun rejectsTheRetiredIncludeAllowList() {
+        // The pack set now comes from interface.json; a leftover list would be ignored and
+        // silently give the profile author a false picture of what ships.
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+                pi_include = ["interface.json"]
+                """.trimIndent(),
+            )
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            PiProfileReader.read(profile)
+        }
+        assertTrue(error.message.orEmpty().contains("pi_include"))
+    }
+
+    @Test
+    fun rejectsTheRetiredExcludeList() {
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+                pi_exclude = ["resource/announcement/*.md"]
+                """.trimIndent(),
+            )
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            PiProfileReader.read(profile)
+        }
+        assertTrue(error.message.orEmpty().contains("pi_exclude"))
     }
 }

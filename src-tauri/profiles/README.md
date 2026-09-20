@@ -6,9 +6,28 @@ Android builds can embed a MaaFramework Project Interface without moving it into
 pi.profile=/absolute/path/to/your-pi-profile.toml
 ```
 
-`pi.profile` is read from a Gradle property (`-Ppi.profile`), then `local.properties`, then the `PI_PROFILE` environment variable. `pi_assets` must be the directory containing `interface.json`. The build syncs the selected files, packs them as `assets/pi.zip`, and the Android runtime unpacks that archive to app-private storage before Tauri starts.
+`pi.profile` is read from a Gradle property (`-Ppi.profile`), then `local.properties`, then the `PI_PROFILE` environment variable. `pi_assets` must be the directory containing `interface.json`. The build resolves the pack set from that interface, packs it as `assets/pi.zip`, and the Android runtime unpacks that archive to app-private storage before Tauri starts.
 
-The TOML profile uses snake_case keys (`pi_assets`, `pi_include`, `resource_id`, and `maa_dir`). Relative `pi_assets` and `bundle` paths resolve from the profile directory; relative `maa_dir` paths resolve from the repository root. The default pack list contains `interface.json`, common resource directories, configuration, data, locale, and `CONTACT`/`LICENSE`. If the project keeps assets elsewhere, replace `pi_include` with the required patterns. Resource paths declared by `interface.json` are resolved from the unpacked Project Interface root at runtime.
+The TOML profile uses snake_case keys (`pi_assets`, `resource_id`, and `maa_dir`). Relative `pi_assets` and `bundle` paths resolve from the profile directory; relative `maa_dir` paths resolve from the repository root.
+
+### Pack set is derived, not listed
+
+There is no `pi_include`/`pi_exclude`. `PiPackage` reads `interface.json` and follows the protocol's own references:
+
+| Source | Packed |
+| ------ | ------ |
+| `resource[].path`, `controller[].attach_resource_path` | load roots, recursively |
+| `import[]` | the task/option/preset files, read to reach nested icons |
+| `languages{}` | the declared translation files |
+| `icon` / `contact` / `license` / `description` / `doc` / `desc` / `welcome`, at any depth and in every imported file | the file when the value names one, including `$Key` lookups and markdown image links |
+| `agent[]` | the `agent` directory holding the `child_args` entrypoint |
+| — | `data/`, which the Agent reads without the protocol declaring it |
+
+A path the interface declares but the project lacks **fails the build**, because that is exactly how a silent mis-pack ships. M9A v4.9.0 renamed `i18n/` to `locales/`; the old allow-list matched nothing, the build stayed green, and the APK shipped an interface pointing at translation files absent from its own archive — a hard project-load failure on device.
+
+Values documented as "file path, URL or plain text" are only treated as paths when they resolve, so prose and remote URLs are left alone. Absolute paths and `..` escapes are ignored. Development leftovers (`__pycache__`, `.git`, `node_modules`, `.venv`, `*.pyc`/`*.pyo`) are filtered out of the copy.
+
+`CONTACT` and `LICENSE` are packaged when `interface.json` names them, which it does through `contact`/`license`; the M9A profile needs no entry for either.
 
 When `interface.json` declares `agent`, configure the matching number of `[[agent.runtimes]]` entries — the build fails when the declared and configured counts differ. Each entry requires a local `bundle`, the executable, the explicit list of files to mark executable, and the server command. Use `{pi}`, `{bundle}`, `{identifier}`, and `{nativeLib}` placeholders in paths, arguments, and environment values. The bundle is a ZIP archive: it may not contain symlinks, must stay below the ZIP64 threshold, and must ship `lib/arm64-v8a/libMaaAgentClient.so` and `lib/arm64-v8a/libMaaAgentServer.so`.
 

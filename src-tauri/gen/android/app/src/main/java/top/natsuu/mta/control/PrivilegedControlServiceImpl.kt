@@ -38,6 +38,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     private val agentRuntimeManager = AgentRuntimeManager(
         File("/data/local/tmp/maa-tauri-android"),
     )
+    private val targetPackages = TargetPackages()
 
     private val binder = this
 
@@ -76,6 +77,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     override fun stopVirtualDisplay() {
+        stopTargetPackages()
         virtualDisplay.getAndSet(null)?.release()
         synchronized(touchMarkers) {
             touchMarkers.clear()
@@ -83,6 +85,17 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         synchronized(contacts) {
             contacts.clear()
             gestureDownTime = 0L
+        }
+    }
+
+    private fun stopTargetPackages() {
+        targetPackages.drain().forEach { packageName ->
+            if (appLauncher.stopPackage(packageName) != RESULT_OK) {
+                android.util.Log.w(
+                    "MaaTauriAndroidControl",
+                    "Could not stop the target app before closing the virtual display: $packageName",
+                )
+            }
         }
     }
 
@@ -314,12 +327,19 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                         val stopped = appLauncher.stopPackage(target)
                         if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
                     }
-                    return startGameOnDisplay(target, displayId)
+                    val result = startGameOnDisplay(target, displayId)
+                    val activeDisplayId = virtualDisplay.get()?.display?.displayId
+                    if (result == RESULT_OK && displayId != 0 && displayId == activeDisplayId) {
+                        targetPackages.add(appLauncher.packageNameOf(target))
+                    }
+                    return result
                 }
             }
             METHOD_STOP_GAME -> {
-                val stopped = appLauncher.stopPackage(packageName.orEmpty())
+                val target = packageName.orEmpty()
+                val stopped = appLauncher.stopPackage(target)
                 if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
+                targetPackages.remove(appLauncher.packageNameOf(target))
             }
             METHOD_INPUT_TEXT -> {
                 if (!text.isNullOrEmpty()) {

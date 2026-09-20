@@ -474,7 +474,7 @@ internal class AppLauncher(
         }.getOrNull()
     }
 
-    private fun packageNameOf(spec: String): String {
+    internal fun packageNameOf(spec: String): String {
         return componentOf(spec)?.packageName ?: spec
     }
 

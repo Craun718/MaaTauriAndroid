@@ -167,8 +167,13 @@ jobs:
           scripts/fetch-maafw.sh
           scripts/build-agent-runtime.sh
 
+      # buildSrc is its own Gradle build: there is no gradlew at the repository
+      # root, and the Android settings.gradle applies tauri.settings.gradle,
+      # which the Tauri CLI only generates during the APK build below. Run the
+      # tests from buildSrc so they do not depend on generated files.
       - name: Run buildSrc tests
-        run: ./gradlew :buildSrc:test
+        working-directory: src-tauri/gen/android/buildSrc
+        run: ../gradlew test
 
       - name: Generate M9A OCR models
         working-directory: resource/m9a

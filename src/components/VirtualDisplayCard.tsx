@@ -218,7 +218,9 @@ export function VirtualDisplayCard() {
         status &&
         createPortal(
           <div className="fixed inset-0 z-50 bg-surface">
-            <div className="absolute inset-0 flex flex-col pb-[calc(1rem_+_env(safe-area-inset-bottom))] pt-[calc(3.5rem_+_env(safe-area-inset-top))]">
+            {/* 全屏层是沉浸式画面：padding 与退出按钮钉在物理 px 上，
+                不参与根字号的等比放大，否则 UI 会挤占视频画面空间。 */}
+            <div className="absolute inset-0 flex flex-col pb-[calc(16px_+_env(safe-area-inset-bottom))] pt-[calc(56px_+_env(safe-area-inset-top))]">
               <VirtualDisplayPreview
                 status={status}
                 showTouchMarkers={showTouchMarkers}
@@ -228,10 +230,10 @@ export function VirtualDisplayCard() {
             <button
               type="button"
               onClick={() => setFullscreen(false)}
-              className="absolute right-4 top-[calc(0.75rem_+_env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-md border border-line bg-raised text-ink-muted"
+              className="absolute right-[16px] top-[calc(12px_+_env(safe-area-inset-top))] flex h-[36px] w-[36px] items-center justify-center rounded-[6px] border border-line bg-raised text-ink-muted"
               aria-label={t("virtualDisplayExitFullscreen")}
             >
-              <X size="1rem" />
+              <X size={16} />
             </button>
           </div>,
           document.body,

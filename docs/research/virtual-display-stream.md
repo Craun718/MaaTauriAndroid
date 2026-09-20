@@ -20,9 +20,9 @@ created by `control_bridge`/`virtual_display.cpp`.
 
 Each available frame has two consumers:
 
-1. `copy_hardware_frame()` maps the hardware buffer and copies RGBA pixels into
-   CPU-owned buffers. Maa's Android native controller later reads these buffers
-   through `GetLockedPixels()`.
+1. `copy_hardware_frame()` maps the hardware buffer and converts its RGBA pixels
+   into CPU-owned BGR buffers. Maa's Android native controller later reads these
+   buffers through `GetLockedPixels()`.
 2. `dispatch_preview()` sends the original hardware-backed image to an EGL render
    thread. That thread draws it into a native `SurfaceView` overlay above the
    WebView.
@@ -31,14 +31,14 @@ The overlay is not a `MediaProjection`; it is a native view. The frontend only
 reports its measured bounds, and `MainActivity` positions the native view in
 physical pixels.
 
-At the default 1280x720 resolution, one RGBA frame is about 3.69 MB. At 60 fps,
-the existing Maa screenshot copy alone moves about 221 MB/s through CPU-visible
-memory. At 1080x1920 it is about 8.29 MB/frame, or about 498 MB/s at 60 fps.
-This cost exists for recognition and must not be moved to the browser path.
+At the default 1280x720 resolution, converting and storing one BGR Maa frame is
+about 2.76 MB, while reading the source RGBA frame is another 3.69 MB. At 60 fps,
+the existing screenshot path therefore moves about 387 MB/s through CPU-visible
+memory. This cost exists for recognition and must not be moved to the browser path.
 
 ## Recommended architecture
 
-Keep the existing `AImageReader -> RGBA CPU buffer -> Maa` path unchanged. Do
+Keep the existing `AImageReader -> BGR CPU buffer -> Maa` path unchanged. Do
 not ask Maa to recognize from a decoded or lossy browser frame.
 
 Add an independent preview path:
@@ -112,8 +112,9 @@ upload. It will saturate the bridge and cause UI jank.
 Numbers assume 720p60 on a mid-range ARM device and a healthy hardware encoder.
 They are implementation targets for measurement, not guarantees.
 
-- CPU: the current full-frame Maa copy remains, about 3.7 MB/frame. The stream
-  transport adds little CPU, normally under 2% of one big core.
+- CPU: the current full-frame Maa RGBA-to-BGR conversion remains, about
+  6.45 MB/frame of source reads plus destination writes. The stream transport
+  adds little CPU, normally under 2% of one big core.
 - GPU/codec: replacing the SurfaceView draw with an encoder-input draw is a
   similar full-screen texture sample. The hardware encoder/decoder pair adds
   roughly 0.3-1.5 W package power on mid-range silicon.
@@ -126,7 +127,7 @@ They are implementation targets for measurement, not guarantees.
   native overlay while the task is visible. Software encode or MJPEG can be
   several times worse and can interfere with the Maa task.
 
-The dominant existing cost is not the native overlay itself; it is the CPU RGBA
+The dominant existing cost is not the native overlay itself; it is the CPU BGR
 copy retained for Maa recognition. The stream should therefore be treated as a
 small additional GPU/codec load rather than a replacement for that copy.
 

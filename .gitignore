@@ -38,3 +38,6 @@ vendor/maa/android/
 
 # Local git worktrees
 .worktrees/
+
+# pnpm store
+.pnpm-store/

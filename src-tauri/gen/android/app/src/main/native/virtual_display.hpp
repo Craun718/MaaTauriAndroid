@@ -37,4 +37,13 @@ int unlock_frame(FrameInfo frame);
 
 void attach_preview(JNIEnv& env, jobject surface);
 
+void copy_rgba_to_bgr(
+    const uint8_t* source,
+    size_t source_stride_bytes,
+    uint8_t* destination,
+    size_t destination_stride_bytes,
+    int32_t width,
+    int32_t height
+);
+
 } // namespace virtual_display

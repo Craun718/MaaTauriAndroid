@@ -284,22 +284,33 @@ extern "C" FrameInfo GetLockedPixels() {
         return {};
     }
 
-    std::vector<uint8_t> pixels(static_cast<size_t>(byte_count));
-    const bool read_succeeded = read_all(fd, pixels);
+    std::vector<uint8_t> rgba_pixels(static_cast<size_t>(byte_count));
+    const bool read_succeeded = read_all(fd, rgba_pixels);
     close(fd);
     if (!read_succeeded) {
         return {};
     }
 
+    std::vector<uint8_t> bgr_pixels(static_cast<size_t>(width) *
+                                    static_cast<size_t>(height) * 3U);
+    virtual_display::copy_rgba_to_bgr(
+        rgba_pixels.data(),
+        static_cast<size_t>(width) * 4U,
+        bgr_pixels.data(),
+        static_cast<size_t>(width) * 3U,
+        width,
+        height
+    );
+
     FrameInfo info;
     info.width = static_cast<uint32_t>(width);
     info.height = static_cast<uint32_t>(height);
-    info.stride = static_cast<uint32_t>(width) * 4U;
-    info.length = static_cast<uint32_t>(byte_count);
-    info.data = pixels.data();
-    info.frame_ref = pixels.data();
+    info.stride = static_cast<uint32_t>(width) * 3U;
+    info.length = static_cast<uint32_t>(bgr_pixels.size());
+    info.data = bgr_pixels.data();
+    info.frame_ref = bgr_pixels.data();
 
-    g_frame_buffer = std::move(pixels);
+    g_frame_buffer = std::move(bgr_pixels);
     g_frame_locked = true;
     return info;
 }

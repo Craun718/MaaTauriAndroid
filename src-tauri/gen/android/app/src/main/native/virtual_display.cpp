@@ -16,7 +16,6 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <cstring>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -54,7 +53,7 @@ void log_error(const char* function, const char* message, int code = 0) {
 }
 
 void seed_frames_locked(int32_t width, int32_t height) {
-    const size_t size = static_cast<size_t>(width) * static_cast<size_t>(height) * 4U;
+    const size_t size = static_cast<size_t>(width) * static_cast<size_t>(height) * 3U;
     for (FrameBuffer& buffer : g_state.buffers) {
         buffer.pixels.assign(size, 0);
         buffer.locked = false;
@@ -87,18 +86,24 @@ void store_frame(const uint8_t* pixels, int32_t width, int32_t height, size_t st
         return;
     }
 
-    const size_t row_bytes = static_cast<size_t>(width) * 4U;
-    uint8_t* destination = g_state.buffers[target].pixels.data();
-    if (destination == nullptr || g_state.buffers[target].pixels.size() < row_bytes * height) {
+    if (stride_bytes < static_cast<size_t>(width) * 4U) {
         return;
     }
-    for (int32_t row = 0; row < height; ++row) {
-        std::memcpy(
-            destination + static_cast<size_t>(row) * row_bytes,
-            pixels + static_cast<size_t>(row) * stride_bytes,
-            row_bytes
-        );
+
+    const size_t destination_stride_bytes = static_cast<size_t>(width) * 3U;
+    uint8_t* destination = g_state.buffers[target].pixels.data();
+    if (destination == nullptr ||
+        g_state.buffers[target].pixels.size() < destination_stride_bytes * height) {
+        return;
     }
+    copy_rgba_to_bgr(
+        pixels,
+        stride_bytes,
+        destination,
+        destination_stride_bytes,
+        width,
+        height
+    );
     g_state.latest = target;
     g_frame_count.fetch_add(1, std::memory_order_release);
 }
@@ -334,7 +339,7 @@ FrameInfo lock_frame() {
     FrameInfo frame;
     frame.width = static_cast<uint32_t>(g_state.width);
     frame.height = static_cast<uint32_t>(g_state.height);
-    frame.stride = frame.width * 4U;
+    frame.stride = frame.width * 3U;
     frame.length = static_cast<uint32_t>(buffer.pixels.size());
     frame.data = buffer.pixels.data();
     frame.frame_ref = &buffer;
@@ -699,6 +704,28 @@ void stop_preview() {
 } // namespace
 
 namespace virtual_display {
+
+void copy_rgba_to_bgr(
+    const uint8_t* source,
+    size_t source_stride_bytes,
+    uint8_t* destination,
+    size_t destination_stride_bytes,
+    int32_t width,
+    int32_t height
+) {
+    for (int32_t row = 0; row < height; ++row) {
+        const uint8_t* source_row = source + static_cast<size_t>(row) * source_stride_bytes;
+        uint8_t* destination_row =
+            destination + static_cast<size_t>(row) * destination_stride_bytes;
+        for (int32_t column = 0; column < width; ++column) {
+            const uint8_t* source_pixel = source_row + static_cast<size_t>(column) * 4U;
+            uint8_t* destination_pixel = destination_row + static_cast<size_t>(column) * 3U;
+            destination_pixel[0] = source_pixel[2];
+            destination_pixel[1] = source_pixel[1];
+            destination_pixel[2] = source_pixel[0];
+        }
+    }
+}
 
 void attach_preview(JNIEnv& env, jobject surface) {
     if (surface == nullptr) {

@@ -935,7 +935,7 @@ fn call_runtime_bridge_boolean_with_bool(
             bridge_class,
             method,
             "(Z)Z",
-            &[jni::objects::JValue::Bool(value)],
+            &[jni::objects::JValue::Bool(u8::from(value))],
         )
         .map_err(|error| AppError::Message(error.to_string()))?;
     result

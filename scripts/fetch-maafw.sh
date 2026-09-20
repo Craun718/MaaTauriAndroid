@@ -3,9 +3,14 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env.sh"
 
 DEST="${REPO_ROOT}/vendor/maa/android/arm64-v8a"
+VERSION_FILE="${DEST}/.maafw-version"
+installed_version="$(cat "${VERSION_FILE}" 2>/dev/null || true)"
 mkdir -p "${DEST}"
 
-if [ -f "${DEST}/libMaaFramework.so" ]; then
+if
+  [ -f "${DEST}/libMaaFramework.so" ] &&
+    [ "${installed_version}" = "${MAAFW_VERSION}" ]
+then
   echo "==> MaaFramework already present at ${DEST}; skipping download."
   echo "    (delete the directory to force a re-download)"
   exit 0
@@ -21,7 +26,7 @@ unzip -q "${TMP}/maafw.zip" -d "${TMP}/maafw"
 
 echo "==> Installing into vendor/maa/android/arm64-v8a/…"
 cp "${TMP}"/maafw/bin/*.so "${DEST}/"
+printf '%s\n' "${MAAFW_VERSION}" >"${VERSION_FILE}"
 
 echo "==> Installed:"
 ls -lh "${DEST}"
-

@@ -23,6 +23,7 @@ python3 "${TMP}/build_agent_bundle.py" \
   --requirements "${REPO_ROOT}/resource/m9a/requirements.txt" \
   --exclude pillow --require pillow==11.0.0 \
   --extra-index-url https://chaquo.com/pypi-13.1/ \
+  --core-tag "${MAAFW_CORE_TAG}" \
   --work "${WORK}"
 
 VENDOR_DIR="${REPO_ROOT}/vendor/maa/android/${ABI}"

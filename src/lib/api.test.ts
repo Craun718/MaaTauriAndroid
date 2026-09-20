@@ -16,7 +16,7 @@ describe("version-aware app state snapshots", () => {
       configuration: {},
       versions: {
         appVersion: "0.1.0",
-        frameworkVersion: "v5.13.0-beta.5",
+        frameworkVersion: "v5.13.1",
         appTag: "v0.2.0",
         resourceTag: "v4.9.0",
       },
@@ -40,7 +40,7 @@ describe("version-aware app state snapshots", () => {
       configuration: {},
       versions: {
         appVersion: "0.1.0",
-        frameworkVersion: "v5.13.0-beta.5",
+        frameworkVersion: "v5.13.1",
         appTag: "v0.2.0",
         resourceTag: "v4.9.0",
       },

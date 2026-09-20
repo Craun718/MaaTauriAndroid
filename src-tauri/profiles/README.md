@@ -72,4 +72,4 @@ Keep the MaaFramework version of `libMaaAgentClient.so`/`libMaaAgentServer.so` a
 
 The M9A job in `.github/workflows/ci.yml` performs this workflow and then builds the release APK.
 
-> Note: `MaaAgentCoreAndroid` currently ships `maafw 5.12.3`, while `vendor/maa/android` vendors `v5.13.0-beta.5`. The bundle build drops the pinned `maafw` from `requirements.txt` in favour of the core's copy. If the agent handshake ever fails on device, align the two.
+> Note: `MaaAgentCoreAndroid` is pinned by `MAAFW_CORE_TAG`; native libraries are pinned by `MAAFW_VERSION`. Both target `maafw 5.13.1`. The bundle build drops the pinned `maafw` from `requirements.txt` in favour of the core's copy.

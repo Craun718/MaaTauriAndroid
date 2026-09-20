@@ -2,10 +2,9 @@ package top.natsuu.mta.kotlin
 
 import groovy.json.JsonSlurper
 import java.awt.Graphics2D
-import java.awt.geom.Ellipse2D
 import java.awt.RenderingHints
-import java.awt.image.BufferedImage
 import java.awt.geom.Ellipse2D
+import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 

@@ -407,6 +407,15 @@ object RuntimeBridge {
     fun virtualDisplayStreamUrl(): String? = VirtualDisplayStreamHost.streamUrl()
 
     @JvmStatic
+    fun setVirtualDisplayTouchMarkers(enabled: Boolean): IntArray {
+        return runCatching {
+            ControlHost.current()?.setTouchMarkersEnabled(enabled) ?: IntArray(0)
+        }.onFailure { error ->
+            android.util.Log.w("MaaTauriAndroidControl", "Touch marker update failed", error)
+        }.getOrDefault(IntArray(0))
+    }
+
+    @JvmStatic
     fun dispatchVirtualDisplayTouch(
         displayId: Int,
         action: Int,

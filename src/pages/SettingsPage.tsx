@@ -149,6 +149,27 @@ export function SettingsPage() {
           <span className="font-medium">{t("forceStopTargetApp")}</span>
         </Checkbox>
       </section>
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+        <div>
+          <h2 className="font-medium">{t("touchPreview")}</h2>
+          <p className="text-sm text-ink-muted">
+            {t("touchPreviewDescription")}
+          </p>
+        </div>
+        <Checkbox
+          className="min-h-10 gap-2"
+          checked={snapshot?.configuration.showVirtualDisplayTouches ?? false}
+          disabled={busy || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.showVirtualDisplayTouches = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
+          <span className="font-medium">{t("showTouchPositions")}</span>
+        </Checkbox>
+      </section>
       {project?.metadata.telemetry?.dsn && (
         <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
           <h2 className="font-medium">{t("telemetry")}</h2>

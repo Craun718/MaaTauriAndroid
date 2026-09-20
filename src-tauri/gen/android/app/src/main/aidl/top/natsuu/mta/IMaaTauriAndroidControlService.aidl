@@ -29,5 +29,6 @@ interface IMaaTauriAndroidControlService {
             String nativeLibraryDir, String executionId, String piEnvironment);
     void stopAgent(String executionId);
     void stopAllAgents();
+    int[] setTouchMarkersEnabled(boolean enabled);
     int protocolVersion();
 }

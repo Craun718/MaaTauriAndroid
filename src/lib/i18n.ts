@@ -138,6 +138,10 @@ const en = {
   loadProject: "Load project",
   runBehavior: "Run behavior",
   forceStopTargetApp: "Force stop target app",
+  touchPreview: "Touch preview",
+  touchPreviewDescription:
+    "Show manual and Maa injection positions on the virtual display preview.",
+  showTouchPositions: "Show click positions",
   telemetry: "Anonymous telemetry",
   telemetryDescription:
     "Share crash and task statistics with the resource author. Debug builds never upload anything, and you can turn this off at any time.",
@@ -251,6 +255,9 @@ const zh: Record<MessageKey, string> = {
   loadProject: "加载项目",
   runBehavior: "运行行为",
   forceStopTargetApp: "运行前强制停止目标应用",
+  touchPreview: "触点预览",
+  touchPreviewDescription: "在虚拟屏预览中显示手动点击和 Maa 注入的位置。",
+  showTouchPositions: "显示点击位置",
   telemetry: "匿名遥测",
   telemetryDescription:
     "向资源作者共享崩溃与任务统计数据。调试构建不会上传任何内容，你也可以随时关闭。",

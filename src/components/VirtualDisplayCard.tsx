@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { getVirtualDisplayStatus, stopVirtualDisplay } from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
+import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { VirtualDisplayPreview } from "./VirtualDisplayPreview";
 
@@ -23,6 +24,9 @@ export function VirtualDisplayCard() {
   const [fullscreen, setFullscreen] = useState(false);
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
+  const showTouchMarkers = useAppStore(
+    (state) => state.snapshot?.configuration.showVirtualDisplayTouches ?? false,
+  );
 
   const refreshStatus = useCallback(async () => {
     setRefreshing(true);
@@ -161,6 +165,7 @@ export function VirtualDisplayCard() {
       {active && status && !fullscreen ? (
         <VirtualDisplayPreview
           status={status}
+          showTouchMarkers={showTouchMarkers}
           className="aspect-[2/1] w-full rounded-md border border-line"
         />
       ) : (
@@ -196,6 +201,7 @@ export function VirtualDisplayCard() {
             <div className="absolute inset-0 flex flex-col pb-[calc(1rem_+_env(safe-area-inset-bottom))] pt-[calc(3.5rem_+_env(safe-area-inset-top))]">
               <VirtualDisplayPreview
                 status={status}
+                showTouchMarkers={showTouchMarkers}
                 className="h-full w-full"
               />
             </div>

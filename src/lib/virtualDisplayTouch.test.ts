@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   VirtualDisplayMoveScheduler,
   VirtualDisplayPointerSlots,
+  VirtualDisplayTouchMarkerTimeline,
   virtualDisplayPoint,
 } from "./virtualDisplayTouch";
 
@@ -26,7 +27,7 @@ describe("virtualDisplayPoint", () => {
   it("accounts for vertical black bars", () => {
     const point = virtualDisplayPoint(
       640,
-      100,
+      99,
       { width: 1280, height: 920 },
       display,
     );
@@ -36,6 +37,43 @@ describe("virtualDisplayPoint", () => {
   it("clamps an active pointer that leaves the image", () => {
     const point = virtualDisplayPoint(-20, 900, display, display);
     expect(point).toEqual({ x: 0, y: 719, inside: false });
+  });
+});
+
+describe("VirtualDisplayTouchMarkerTimeline", () => {
+  function marker(id: number) {
+    return { id, x: id, y: id * 2, action: 0, contact: 0 };
+  }
+
+  it("keeps recently received markers in identifier order", () => {
+    const timeline = new VirtualDisplayTouchMarkerTimeline();
+
+    timeline.append([marker(2)], 0);
+    timeline.append([marker(1)], 20);
+
+    expect(timeline.active(20).map((item) => item.id)).toEqual([1, 2]);
+  });
+
+  it("expires markers after the visual lifetime", () => {
+    const timeline = new VirtualDisplayTouchMarkerTimeline();
+
+    timeline.append([marker(1)], 0);
+    expect(timeline.active(599)).toHaveLength(1);
+    expect(timeline.active(600)).toHaveLength(0);
+  });
+
+  it("limits trails so long gestures do not grow without bound", () => {
+    const timeline = new VirtualDisplayTouchMarkerTimeline();
+
+    timeline.append(
+      Array.from({ length: 24 }, (_, index) => marker(index + 1)),
+      0,
+    );
+
+    const markers = timeline.active(0);
+    expect(markers).toHaveLength(16);
+    expect(markers[0].id).toBe(9);
+    expect(markers.at(-1)?.id).toBe(24);
   });
 });
 
@@ -68,16 +106,29 @@ describe("VirtualDisplayPointerSlots", () => {
 describe("VirtualDisplayMoveScheduler", () => {
   it("keeps only the latest move for each contact in a frame", () => {
     const callback = vi.fn();
-    const scheduler = new VirtualDisplayMoveScheduler(callback);
-    scheduler.move({ contact: 15, x: 1, y: 1 });
-    scheduler.move({ contact: 14, x: 2, y: 2 });
-    scheduler.move({ contact: 15, x: 3, y: 3 });
-    expect(callback).toHaveBeenCalledTimes(1);
+    const frames: Array<() => void> = [];
+    const requestAnimationFrame = vi.fn((render: () => void) => {
+      frames.push(render);
+      return 1;
+    });
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
 
-    callback.mock.calls[0][0]();
-    expect(scheduler.flush()).toEqual([
-      { contact: 15, x: 3, y: 3 },
-      { contact: 14, x: 2, y: 2 },
-    ]);
+    try {
+      const scheduler = new VirtualDisplayMoveScheduler(callback);
+      scheduler.move({ contact: 15, x: 1, y: 1 });
+      scheduler.move({ contact: 14, x: 2, y: 2 });
+      scheduler.move({ contact: 15, x: 3, y: 3 });
+
+      expect(frames).toHaveLength(1);
+      frames[0]?.();
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith([
+        { contact: 15, x: 3, y: 3 },
+        { contact: 14, x: 2, y: 2 },
+      ]);
+      expect(scheduler.flush()).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

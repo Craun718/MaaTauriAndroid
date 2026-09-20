@@ -15,12 +15,14 @@ const getVirtualDisplayStatus = vi.fn();
 const getVirtualDisplayStream = vi.fn();
 const stopVirtualDisplay = vi.fn();
 const touchVirtualDisplay = vi.fn();
+const setVirtualDisplayTouchMarkers = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   getVirtualDisplayStream: () => getVirtualDisplayStream(),
   stopVirtualDisplay: () => stopVirtualDisplay(),
   touchVirtualDisplay: () => touchVirtualDisplay(),
+  setVirtualDisplayTouchMarkers: () => setVirtualDisplayTouchMarkers(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

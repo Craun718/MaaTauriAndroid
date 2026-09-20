@@ -15,6 +15,8 @@ import android.view.Surface
 import top.natsuu.mta.AgentLaunch
 import top.natsuu.mta.InputResult
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.io.BufferedReader
 import java.io.File
@@ -30,6 +32,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     private val bugreportProcess = AtomicReference<Process?>(null)
     private val bugreportProgress = AtomicReference("idle|0")
     private val virtualDisplay = AtomicReference<VirtualDisplay?>(null)
+    private val touchMarkersEnabled = AtomicBoolean(false)
+    private val touchMarkerId = AtomicLong(0)
+    private val touchMarkers = ArrayDeque<IntArray>()
     private val agentRuntimeManager = AgentRuntimeManager(
         File("/data/local/tmp/maa-tauri-android"),
     )
@@ -72,9 +77,20 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun stopVirtualDisplay() {
         virtualDisplay.getAndSet(null)?.release()
+        synchronized(touchMarkers) {
+            touchMarkers.clear()
+        }
         synchronized(contacts) {
             contacts.clear()
             gestureDownTime = 0L
+        }
+    }
+
+    override fun setTouchMarkersEnabled(enabled: Boolean): IntArray {
+        val changed = touchMarkersEnabled.getAndSet(enabled) != enabled
+        synchronized(touchMarkers) {
+            if (!enabled || changed) touchMarkers.clear()
+            return drainTouchMarkersLocked()
         }
     }
 
@@ -372,8 +388,36 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                 contacts.remove(contact)
                 if (contacts.isEmpty()) gestureDownTime = 0L
             }
+            recordTouchMarker(x, y, step.action, contact)
             return RESULT_OK
         }
+    }
+
+    private fun recordTouchMarker(x: Int, y: Int, action: Int, contact: Int) {
+        if (!touchMarkersEnabled.get()) return
+        synchronized(touchMarkers) {
+            if (touchMarkers.size == TOUCH_MARKER_LIMIT) touchMarkers.removeFirst()
+            touchMarkers.addLast(
+                intArrayOf(
+                    touchMarkerId.incrementAndGet().toInt(),
+                    x,
+                    y,
+                    action,
+                    contact,
+                ),
+            )
+        }
+    }
+
+    private fun drainTouchMarkersLocked(): IntArray {
+        val result = IntArray(touchMarkers.size * TOUCH_MARKER_FIELDS)
+        var index = 0
+        while (touchMarkers.isNotEmpty()) {
+            val marker = touchMarkers.removeFirst()
+            marker.copyInto(result, index)
+            index += TOUCH_MARKER_FIELDS
+        }
+        return result
     }
 
     private fun obtainEvent(
@@ -506,17 +550,17 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         methods.firstOrNull { method ->
             val parameters: Array<Class<*>>? = when (method.name) {
                 "freezeDisplayRotation" -> when (method.parameterTypes.size) {
-                    2 -> arrayOf(Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+                    2 -> arrayOf(java.lang.Integer.TYPE, java.lang.Integer.TYPE)
                     3 -> arrayOf(
-                        Int::class.javaPrimitiveType,
-                        Int::class.javaPrimitiveType,
+                        java.lang.Integer.TYPE,
+                        java.lang.Integer.TYPE,
                         String::class.java,
                     )
 
                     else -> null
                 }
 
-                "freezeRotation" -> arrayOf(Int::class.javaPrimitiveType)
+                "freezeRotation" -> arrayOf(java.lang.Integer.TYPE)
                 else -> null
             }
             parameters?.contentEquals(method.parameterTypes) == true
@@ -539,9 +583,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                 method.name == "setForcedDisplaySize" &&
                     method.parameterTypes.contentEquals(
                         arrayOf(
-                            Int::class.javaPrimitiveType,
-                            Int::class.javaPrimitiveType,
-                            Int::class.javaPrimitiveType,
+                            java.lang.Integer.TYPE,
+                            java.lang.Integer.TYPE,
+                            java.lang.Integer.TYPE,
                         ),
                     )
             }?.let { method ->
@@ -552,7 +596,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     private fun windowManager(): Any? {
         val binder = runCatching {
-            android.os.ServiceManager::class.java
+            Class.forName("android.os.ServiceManager")
                 .getDeclaredMethod("getService", String::class.java)
                 .invoke(null, "window")
         }.getOrNull() ?: return null
@@ -604,7 +648,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     companion object {
-        const val PROTOCOL_VERSION = 5
+        const val PROTOCOL_VERSION = 6
+        private const val TOUCH_MARKER_FIELDS = 5
+        private const val TOUCH_MARKER_LIMIT = 256
         const val METHOD_START_GAME = 1
         const val METHOD_STOP_GAME = 2
         const val METHOD_INPUT_TEXT = 4

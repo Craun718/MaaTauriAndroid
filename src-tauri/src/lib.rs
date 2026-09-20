@@ -326,6 +326,16 @@ struct VirtualDisplayTouchResult {
     message: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VirtualDisplayTouchMarker {
+    id: i32,
+    x: i32,
+    y: i32,
+    action: i32,
+    contact: i32,
+}
+
 #[tauri::command]
 fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnapshot, AppError> {
     let config_path = app
@@ -460,6 +470,8 @@ fn save_configuration(
     let mut configuration = configuration;
     normalize_configuration(&project, &mut configuration);
     state.set_configuration(configuration.clone())?;
+    #[cfg(target_os = "android")]
+    let _ = set_virtual_display_touch_markers(configuration.show_virtual_display_touches);
     configure_telemetry(&project, &configuration);
     Ok(configuration)
 }
@@ -777,6 +789,80 @@ fn validate_virtual_display_touch(
     Ok(())
 }
 
+#[tauri::command]
+fn set_virtual_display_touch_markers(
+    enabled: bool,
+) -> Result<Vec<VirtualDisplayTouchMarker>, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        let values =
+            call_runtime_bridge_method_with_boolean("setVirtualDisplayTouchMarkers", enabled)?;
+        return parse_virtual_display_touch_markers(&values);
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = enabled;
+        Ok(Vec::new())
+    }
+}
+
+fn parse_virtual_display_touch_markers(
+    values: &[i32],
+) -> Result<Vec<VirtualDisplayTouchMarker>, AppError> {
+    if values.len() % 5 != 0 {
+        return Err(AppError::Message(
+            "The virtual display touch marker data is incomplete".to_string(),
+        ));
+    }
+
+    Ok(values
+        .chunks_exact(5)
+        .map(|marker| VirtualDisplayTouchMarker {
+            id: marker[0],
+            x: marker[1],
+            y: marker[2],
+            action: marker[3],
+            contact: marker[4],
+        })
+        .collect())
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_method_with_boolean(
+    method: &'static str,
+    enabled: bool,
+) -> Result<Vec<i32>, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(
+            bridge_class,
+            method,
+            "(Z)[I",
+            &[jni::objects::JValue::Bool(enabled as u8)],
+        )
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let object = result
+        .l()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let array: &jni::objects::JIntArray = (&object).into();
+    let length = env
+        .get_array_length(array)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let mut values = vec![0_i32; length as usize];
+    env.get_int_array_region(array, 0, &mut values)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    Ok(values)
+}
+
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn virtual_display_touch_rejection_message(code: i32) -> String {
     match code {
@@ -1078,6 +1164,9 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     {
         if let Err(error) = call_runtime_bridge_start_virtual_display(1280, 720, 160) {
             return Err(fail_preparing(error.to_string()));
+        }
+        if configuration.show_virtual_display_touches {
+            let _ = set_virtual_display_touch_markers(true);
         }
         let _ = app.emit("virtual-display-changed", ());
     }
@@ -1770,6 +1859,29 @@ mod tests {
     }
 
     #[test]
+    fn virtual_display_touch_markers_are_parsed_in_field_groups() {
+        let markers = parse_virtual_display_touch_markers(&[11, 24, 48, 0, 15, 12, 96, 120, 5, 0])
+            .expect("complete marker data is available");
+
+        assert_eq!(markers.len(), 2);
+        assert_eq!(markers[0].id, 11);
+        assert_eq!(markers[0].x, 24);
+        assert_eq!(markers[0].y, 48);
+        assert_eq!(markers[0].action, 0);
+        assert_eq!(markers[0].contact, 15);
+        assert_eq!(markers[1].action, 5);
+    }
+
+    #[test]
+    fn incomplete_virtual_display_touch_markers_are_rejected() {
+        assert!(matches!(
+            parse_virtual_display_touch_markers(&[11, 24, 48, 0]),
+            Err(AppError::Message(message))
+                if message == "The virtual display touch marker data is incomplete"
+        ));
+    }
+
+    #[test]
     fn virtual_display_rejection_names_the_missing_precondition() {
         assert_eq!(
             virtual_display_rejection_message(2, "Shizuku permission is required"),
@@ -1906,6 +2018,7 @@ pub fn run() {
             virtual_display_status,
             virtual_display_stream,
             virtual_display_touch,
+            set_virtual_display_touch_markers,
             start_run,
             run_status,
             stop_run,

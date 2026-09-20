@@ -98,22 +98,64 @@ export type VirtualDisplayMove = {
   y: number;
 };
 
+export type VirtualDisplayTouchMarkerInput = {
+  id: number;
+  x: number;
+  y: number;
+  action: number;
+  contact: number;
+};
+
+export type VirtualDisplayTouchMarker = VirtualDisplayTouchMarkerInput & {
+  receivedAt: number;
+};
+
+export const VIRTUAL_DISPLAY_TOUCH_MARKER_TTL_MS = 600;
+export const VIRTUAL_DISPLAY_TOUCH_MARKER_LIMIT = 16;
+
+export class VirtualDisplayTouchMarkerTimeline {
+  private markers: VirtualDisplayTouchMarker[] = [];
+
+  append(markers: VirtualDisplayTouchMarkerInput[], receivedAt: number): void {
+    const current = this.markers.filter(
+      (marker) =>
+        receivedAt - marker.receivedAt < VIRTUAL_DISPLAY_TOUCH_MARKER_TTL_MS,
+    );
+    const next = [
+      ...current,
+      ...markers.map((marker) => ({ ...marker, receivedAt })),
+    ];
+    next.sort((left, right) => left.id - right.id);
+    this.markers = next.slice(-VIRTUAL_DISPLAY_TOUCH_MARKER_LIMIT);
+  }
+
+  active(now: number): VirtualDisplayTouchMarker[] {
+    this.markers = this.markers.filter(
+      (marker) => now - marker.receivedAt < VIRTUAL_DISPLAY_TOUCH_MARKER_TTL_MS,
+    );
+    return this.markers;
+  }
+
+  clear(): void {
+    this.markers = [];
+  }
+}
+
 export class VirtualDisplayMoveScheduler {
   private latest = new Map<number, VirtualDisplayMove>();
   private scheduled = false;
 
   constructor(
-    private readonly schedule: (callback: () => void) => void = (callback) => {
-      requestAnimationFrame(callback);
-    },
+    private readonly callback: (moves: VirtualDisplayMove[]) => void = () => {},
   ) {}
 
   move(move: VirtualDisplayMove): void {
     this.latest.set(move.contact, move);
     if (this.scheduled) return;
     this.scheduled = true;
-    this.schedule(() => {
-      this.flush();
+    requestAnimationFrame(() => {
+      const moves = this.flush();
+      this.callback(moves);
     });
   }
 

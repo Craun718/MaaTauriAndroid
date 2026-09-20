@@ -6,12 +6,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { getVirtualDisplayStream, touchVirtualDisplay } from "../lib/api";
+import {
+  getVirtualDisplayStream,
+  setVirtualDisplayTouchMarkers,
+  touchVirtualDisplay,
+} from "../lib/api";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
 import {
+  VIRTUAL_DISPLAY_TOUCH_MARKER_TTL_MS,
   VirtualDisplayMoveScheduler,
   VirtualDisplayPointerSlots,
+  VirtualDisplayTouchMarkerTimeline,
   virtualDisplayPoint,
 } from "../lib/virtualDisplayTouch";
 import { useNotificationStore } from "../store/notificationStore";
@@ -63,15 +69,19 @@ type PreviewTouchAction = 6 | 7 | 8;
 
 export function VirtualDisplayPreview({
   status,
+  showTouchMarkers,
   className,
 }: {
   status: VirtualDisplayStatus;
+  showTouchMarkers: boolean;
   className: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const markerCanvasRef = useRef<HTMLCanvasElement>(null);
   const statusRef = useRef(status);
   const pointerSlots = useRef(new VirtualDisplayPointerSlots());
   const lastPoints = useRef(new Map<number, { x: number; y: number }>());
+  const touchMarkers = useRef(new VirtualDisplayTouchMarkerTimeline());
   const [streamState, setStreamState] = useState<StreamState>("connecting");
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
@@ -255,6 +265,101 @@ export function VirtualDisplayPreview({
     };
   }, [dispatchTouch, status.active]);
 
+  useEffect(() => {
+    if (showTouchMarkers === false || status.active !== true) {
+      touchMarkers.current.clear();
+      return;
+    }
+
+    let disposed = false;
+    let timer: number | undefined;
+
+    async function poll() {
+      try {
+        const markers = await setVirtualDisplayTouchMarkers(true);
+        if (!disposed) {
+          touchMarkers.current.append(markers, performance.now());
+        }
+      } catch (error) {
+        console.warn("Virtual display touch markers unavailable", error);
+      }
+      if (!disposed) {
+        timer = window.setTimeout(poll, 100);
+      }
+    }
+
+    void poll();
+    return () => {
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      touchMarkers.current.clear();
+      void setVirtualDisplayTouchMarkers(false).catch(() => undefined);
+    };
+  }, [showTouchMarkers, status.active]);
+
+  useEffect(() => {
+    if (showTouchMarkers === false || status.active !== true) return;
+
+    const canvas = markerCanvasRef.current;
+    if (!canvas) return;
+    canvas.width = status.width;
+    canvas.height = status.height;
+
+    let frame: number | undefined;
+    function draw(now: number) {
+      const context = canvas?.getContext("2d");
+      if (!canvas || !context) return;
+      const theme = getComputedStyle(canvas);
+      const accent = theme.getPropertyValue("--color-accent").trim();
+      const error = theme.getPropertyValue("--color-error").trim();
+      const center = theme.getPropertyValue("--color-primary-content").trim();
+      const markers = touchMarkers.current.active(now);
+
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      markers.forEach((marker) => {
+        const progress = Math.min(
+          1,
+          Math.max(
+            0,
+            (now - marker.receivedAt) / VIRTUAL_DISPLAY_TOUCH_MARKER_TTL_MS,
+          ),
+        );
+        const alpha = 1 - progress;
+        const x =
+          ((marker.x + 0.5) / Math.max(1, canvas.width - 1)) * canvas.width;
+        const y =
+          ((marker.y + 0.5) / Math.max(1, canvas.height - 1)) * canvas.height;
+
+        if (marker.contact <= 0) {
+          context.beginPath();
+          context.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
+          context.lineWidth = Math.max(1, canvas.width / 640);
+          context.arc(x, y, canvas.width / 70, 0, Math.PI * 2);
+          context.stroke();
+        }
+
+        context.beginPath();
+        context.strokeStyle = marker.action === 1 ? error : accent;
+        context.globalAlpha = alpha;
+        context.lineWidth = Math.max(1, canvas.width / 500);
+        context.arc(x, y, canvas.width / 90, 0, Math.PI * 2);
+        context.stroke();
+        context.beginPath();
+        context.fillStyle = center;
+        context.arc(x, y, Math.max(1, canvas.width / 300), 0, Math.PI * 2);
+        context.fill();
+        context.globalAlpha = 1;
+      });
+
+      frame = requestAnimationFrame(draw);
+    }
+
+    frame = requestAnimationFrame(draw);
+    return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
+  }, [showTouchMarkers, status.active, status.width, status.height]);
+
   function mapPoint(event: ReactPointerEvent<HTMLCanvasElement>) {
     const canvas = event.currentTarget;
     const current = statusRef.current;
@@ -325,6 +430,14 @@ export function VirtualDisplayPreview({
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
       />
+      {status.active && showTouchMarkers && (
+        <div className="pointer-events-none absolute inset-0">
+          <canvas
+            ref={markerCanvasRef}
+            className="h-full w-full object-contain"
+          />
+        </div>
+      )}
       {streamState !== "ready" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-surface-muted/90 px-3 py-2 text-xs text-ink-muted">
           {streamState === "connecting" ? (

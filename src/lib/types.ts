@@ -189,6 +189,7 @@ export interface UserConfiguration {
   initialized: boolean;
   forceStopTargetApp: boolean;
   telemetryEnabled: boolean;
+  showVirtualDisplayTouches?: boolean;
   uiLanguage?: UiLanguage;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;

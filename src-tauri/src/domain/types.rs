@@ -314,6 +314,8 @@ pub struct UserConfiguration {
     #[serde(default)]
     pub telemetry_enabled: bool,
     #[serde(default)]
+    pub show_virtual_display_touches: bool,
+    #[serde(default)]
     pub ui_language: UiLanguage,
     pub active_resource: Option<String>,
     pub global_option_values: BTreeMap<String, OptionValue>,
@@ -334,6 +336,7 @@ impl Default for UserConfiguration {
             initialized: false,
             force_stop_target_app: false,
             telemetry_enabled: false,
+            show_virtual_display_touches: false,
             ui_language: UiLanguage::System,
             active_resource: None,
             global_option_values: BTreeMap::new(),
@@ -372,6 +375,35 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert_eq!(parsed.ui_language, UiLanguage::System);
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_touch_markers_to_false() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("showVirtualDisplayTouches");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert!(!parsed.show_virtual_display_touches);
+    }
+
+    #[test]
+    fn touch_markers_round_trip_through_the_configuration() {
+        let mut configuration = UserConfiguration::default();
+        configuration.show_virtual_display_touches = true;
+
+        let encoded = serde_json::to_value(&configuration).unwrap();
+        assert_eq!(
+            encoded["showVirtualDisplayTouches"],
+            serde_json::json!(true)
+        );
+
+        let decoded: UserConfiguration = serde_json::from_value(encoded).unwrap();
+        assert!(decoded.show_virtual_display_touches);
     }
 
     #[test]

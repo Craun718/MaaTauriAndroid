@@ -74,6 +74,18 @@ export async function touchVirtualDisplay(input: {
   );
 }
 
+export async function setVirtualDisplayTouchMarkers(enabled: boolean) {
+  return invoke<
+    Array<{
+      id: number;
+      x: number;
+      y: number;
+      action: number;
+      contact: number;
+    }>
+  >("set_virtual_display_touch_markers", { enabled });
+}
+
 export async function getRunStatus() {
   return invoke<RunResult>("run_status");
 }

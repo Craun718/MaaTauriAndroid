@@ -11,6 +11,10 @@ import {
   setVirtualDisplayTouchMarkers,
   touchVirtualDisplay,
 } from "../lib/api";
+import {
+  reportFrontendError,
+  reportFrontendWarning,
+} from "../lib/frontendLogging";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
 import {
@@ -115,7 +119,7 @@ export function VirtualDisplayPreview({
         if (visibleFailure) {
           notify(message, { tone: "error" });
         } else {
-          console.error("Virtual display touch failed", error);
+          reportFrontendError("Virtual display touch failed", error);
         }
         return false;
       }
@@ -137,15 +141,20 @@ export function VirtualDisplayPreview({
     let socket: WebSocket | undefined;
     let decoder: StreamDecoder | undefined;
     let disposed = false;
+    let decoderConfig: StreamConfig | undefined;
+    let decoderRecreations = 0;
+    let waitingForKeyFrame = true;
     setStreamState("connecting");
 
     async function connect() {
       const webCodecs = window as unknown as WebCodecsGlobal;
       const encodedChunkConstructor = webCodecs.EncodedVideoChunk;
-      if (!webCodecs.VideoDecoder || !encodedChunkConstructor) {
+      const detectedVideoDecoderConstructor = webCodecs.VideoDecoder;
+      if (!detectedVideoDecoderConstructor || !encodedChunkConstructor) {
         setStreamState("unsupported");
         return;
       }
+      const videoDecoderConstructor = detectedVideoDecoderConstructor;
 
       const stream = await getVirtualDisplayStream();
       if (disposed) return;
@@ -154,28 +163,77 @@ export function VirtualDisplayPreview({
         return;
       }
 
-      decoder = new webCodecs.VideoDecoder({
-        output(frame) {
-          const canvas = canvasRef.current;
-          if (!canvas) {
+      function createDecoder() {
+        const createdDecoder = new videoDecoderConstructor({
+          output(frame) {
+            const canvas = canvasRef.current;
+            if (!canvas) {
+              frame.close();
+              return;
+            }
+            canvas.width = frame.displayWidth;
+            canvas.height = frame.displayHeight;
+            const context = canvas.getContext("2d");
+            if (!context) {
+              frame.close();
+              return;
+            }
+            context.drawImage(frame as unknown as CanvasImageSource, 0, 0);
             frame.close();
-            return;
-          }
-          canvas.width = frame.displayWidth;
-          canvas.height = frame.displayHeight;
-          const context = canvas.getContext("2d");
-          if (!context) {
-            frame.close();
-            return;
-          }
-          context.drawImage(frame as unknown as CanvasImageSource, 0, 0);
-          frame.close();
-        },
-        error(error) {
-          console.error("Virtual display decoder failed", error);
+            decoderRecreations = 0;
+          },
+          error(error) {
+            reportFrontendError("Virtual display decoder failed", error);
+            queueMicrotask(() => {
+              if (!disposed && decoder === createdDecoder) {
+                recreateDecoder();
+              }
+            });
+          },
+        });
+
+        return createdDecoder;
+      }
+
+      function recreateDecoder() {
+        if (disposed) return false;
+        if (!decoderConfig || decoderRecreations >= 3) {
           setStreamState("error");
-        },
-      });
+          return false;
+        }
+
+        decoderRecreations += 1;
+        const failedDecoder = decoder;
+        decoder = undefined;
+        try {
+          failedDecoder?.close();
+        } catch (error) {
+          reportFrontendWarning("Virtual display decoder close failed", error);
+        }
+
+        try {
+          decoder = createDecoder();
+          const recreatedDecoder = decoder;
+          recreatedDecoder.configure({
+            codec: decoderConfig.codec,
+            optimizeForLatency: true,
+            avc: { format: "annexb" },
+          });
+          waitingForKeyFrame = true;
+          setStreamState("connecting");
+          reportFrontendWarning(
+            `Virtual display decoder recreated (${decoderRecreations}/3)`,
+          );
+          return true;
+        } catch (error) {
+          reportFrontendError("Virtual display decoder recreate failed", error);
+          decoder = undefined;
+          setStreamState("error");
+          return false;
+        }
+      }
+
+      decoder = createDecoder();
 
       socket = new WebSocket(stream.url);
       socket.binaryType = "arraybuffer";
@@ -188,50 +246,67 @@ export function VirtualDisplayPreview({
         if (typeof event.data === "string") {
           try {
             const config = JSON.parse(event.data) as StreamConfig;
-            if (
-              config.type !== "config" ||
-              !config.codec ||
-              decoder?.state === "closed"
-            ) {
-              return;
+            if (config.type !== "config" || !config.codec) return;
+            decoderConfig = config;
+            if (!decoder || decoder.state === "closed") {
+              decoder = createDecoder();
+              waitingForKeyFrame = true;
             }
-            decoder?.configure({
+            const configuredDecoder = decoder;
+            configuredDecoder.configure({
               codec: config.codec,
               optimizeForLatency: true,
               avc: { format: "annexb" },
             });
+            waitingForKeyFrame = true;
             setStreamState("ready");
           } catch (error) {
-            console.error("Virtual display stream config failed", error);
+            reportFrontendError("Virtual display stream config failed", error);
             setStreamState("error");
           }
           return;
         }
 
-        if (decoder?.state !== "configured") return;
+        const activeDecoder = decoder;
+        if (activeDecoder?.state !== "configured") return;
         try {
           const view = new DataView(event.data);
           const flags = view.getUint8(0);
+          const keyFrame = (flags & 1) !== 0;
+          if (waitingForKeyFrame && !keyFrame) return;
           const timestamp = Number(view.getBigUint64(1));
           const chunk = new encodedChunkConstructor({
-            type: flags & 1 ? "key" : "delta",
+            type: keyFrame ? "key" : "delta",
             timestamp,
             data: event.data.slice(9),
           });
-          decoder.decode(chunk);
+          activeDecoder.decode(chunk);
+          waitingForKeyFrame = false;
+          setStreamState("ready");
         } catch (error) {
-          console.error("Virtual display stream frame failed", error);
-          setStreamState("error");
+          const key =
+            event.data.byteLength > 0 &&
+            (new DataView(event.data).getUint8(0) & 1) !== 0;
+          reportFrontendError(
+            `Virtual display stream frame failed (state=${decoder?.state}, ` +
+              `key=${key}, bytes=${Math.max(0, event.data.byteLength - 9)})`,
+            error,
+          );
+          if (error instanceof DOMException) {
+            recreateDecoder();
+          } else {
+            setStreamState("error");
+          }
         }
       };
       socket.onerror = (event) => {
         if (disposed) return;
-        console.error("Virtual display stream socket failed", event);
+        reportFrontendError("Virtual display stream socket failed", event);
         setStreamState("error");
       };
       socket.onclose = (event) => {
         if (!disposed) {
-          console.warn(
+          reportFrontendWarning(
             "Virtual display stream socket closed",
             event.code,
             event.reason,
@@ -246,7 +321,7 @@ export function VirtualDisplayPreview({
 
     connect().catch((error) => {
       if (disposed) return;
-      console.error("Virtual display stream connection failed", error);
+      reportFrontendError("Virtual display stream connection failed", error);
       setStreamState("error");
     });
 
@@ -296,7 +371,10 @@ export function VirtualDisplayPreview({
           touchMarkers.current.append(markers, performance.now());
         }
       } catch (error) {
-        console.warn("Virtual display touch markers unavailable", error);
+        reportFrontendWarning(
+          "Virtual display touch markers unavailable",
+          error,
+        );
       }
       if (!disposed) {
         timer = window.setTimeout(poll, 100);

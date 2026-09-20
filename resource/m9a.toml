@@ -17,7 +17,7 @@ maa_dir = "vendor/maa/android"
 
 pi_include = [
   "interface.json",
-  "i18n/**",
+  "locales/**",
   "tasks/**",
   "resource/**",
   "data/**",

@@ -370,7 +370,36 @@ impl MaaSessions {
 }
 
 fn ensure_maa_library(path: &Path) -> Result<(), RuntimeError> {
-    ensure_maa_library_with(&MAA_LIBRARY, path, maa_framework::load_library)
+    ensure_maa_library_with(&MAA_LIBRARY, path, maa_framework::load_library)?;
+    Ok(())
+}
+
+/// Asks the freshly loaded library for its version and logs it once.
+///
+/// This is the *runtime* version, as opposed to `version::MAA_FRAMEWORK_VERSION`
+/// (the release the vendored `.so` files were downloaded from). Logging both is what
+/// makes a mismatch visible. `MaaVersion()` panics unless the library is loaded, so
+/// this must only run after a successful load.
+fn log_maa_framework_loaded() {
+    static LOGGED: std::sync::Once = std::sync::Once::new();
+    LOGGED.call_once(|| {
+        log::info!(
+            "MaaFramework loaded: {}",
+            normalized_framework_version(maa_framework::maa_version())
+        );
+    });
+}
+
+/// MaaFwApp normalizes the same way: `MaaVersion()` may or may not carry the `v`.
+fn normalized_framework_version(version: &str) -> String {
+    if version.is_empty() {
+        return "unknown".to_string();
+    }
+    if version.starts_with('v') {
+        version.to_string()
+    } else {
+        format!("v{version}")
+    }
 }
 
 fn ensure_maa_library_with(
@@ -793,6 +822,7 @@ pub fn create_session(
 ) -> Result<CreatedSession, RuntimeError> {
     let maa_library = library_path()?;
     ensure_maa_library(&maa_library)?;
+    log_maa_framework_loaded();
     configure_framework_logging();
     let mut pi_environment = pi_env.cloned().unwrap_or_default();
 

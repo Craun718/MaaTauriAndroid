@@ -203,6 +203,32 @@ export interface AppStateSnapshot {
   project?: Project;
   configuration: UserConfiguration;
   projectPath?: string;
+  /** Versions for the About card, filled by the shell on bootstrap and project load. */
+  versions?: VersionInfo;
+}
+
+/** Versions the About and version cards show. */
+export interface VersionInfo {
+  appVersion: string;
+  frameworkVersion: string;
+  /** Tag of this checkout, or its short commit hash when HEAD has no tag. */
+  appTag: string;
+  /** Tag (or short commit hash) of the loaded resource's own checkout. */
+  resourceTag?: string;
+  /** Device facts the diagnostic export collects; absent on desktop. */
+  environment?: EnvironmentInfo;
+}
+
+/** Device facts the shell reads from `android.os.Build`. */
+export interface EnvironmentInfo {
+  time: string;
+  device: string;
+  android: string;
+  sdkInt: number;
+  abi: string;
+  versionName: string;
+  versionCode: number;
+  buildType: string;
 }
 
 export interface VirtualDisplayStatus {

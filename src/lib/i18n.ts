@@ -25,6 +25,10 @@ const en = {
   // Home
   project: "Project",
   noProject: "No project is loaded.",
+  versions: "Versions",
+  device: "Device",
+  androidVersion: "Android version",
+  abi: "ABI",
   loadProjectHint: "Load a project from Settings.",
   currentSelection: "Current selection",
   refreshStatus: "Refresh status",
@@ -143,6 +147,11 @@ const en = {
     "Delete all stored run directories? Diagnostic exports inside them will also be removed.",
   deletedRuns: "Deleted {count} run directories",
   privileges: "Privileges",
+  about: "About",
+  appName: "MaaTauriAndroid",
+  projectVersion: "Project version",
+  aboutFramework: "Framework",
+  aboutUnknown: "Unknown",
 };
 
 export type MessageKey = keyof typeof en;
@@ -164,6 +173,10 @@ const zh: Record<MessageKey, string> = {
 
   project: "项目",
   noProject: "尚未加载项目。",
+  versions: "版本",
+  device: "设备",
+  androidVersion: "Android 版本",
+  abi: "ABI",
   loadProjectHint: "请在设置页加载项目。",
   currentSelection: "当前选择",
   refreshStatus: "刷新状态",
@@ -241,6 +254,11 @@ const zh: Record<MessageKey, string> = {
   deleteRunsConfirm: "要删除全部运行目录吗？其中的诊断导出也会一并删除。",
   deletedRuns: "已删除 {count} 个运行目录",
   privileges: "权限",
+  about: "关于",
+  appName: "MaaTauriAndroid",
+  projectVersion: "项目版本",
+  aboutFramework: "框架",
+  aboutUnknown: "未知",
   permissionGranted: "已授权",
   permissionRequiredStatus: "未授权",
   shizuku: "Shizuku",

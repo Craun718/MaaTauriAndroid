@@ -69,7 +69,6 @@ pub fn collect_artifacts(
     })?;
 
     for (name, bytes) in [
-        ("device-info.txt", source.device_info()),
         ("display-state.txt", source.display_state()),
         ("dumpsys.txt", source.dumpsys()),
         ("logs/logcat-full.txt", source.logcat()),
@@ -81,6 +80,14 @@ pub fn collect_artifacts(
             Ok(_) => gaps.push(format!("{name} was empty")),
             Err(error) => gaps.push(format!("{name}: {error}")),
         }
+    }
+
+    match source.device_info() {
+        Ok(bytes) if !bytes.is_empty() => {
+            write_file(&run_dir.join("device-info.txt"), &with_version_rows(bytes))?;
+        }
+        Ok(_) => gaps.push("device-info.txt was empty".to_string()),
+        Err(error) => gaps.push(format!("device-info.txt: {error}")),
     }
 
     for (display_id, name) in [(0_u32, "screens/main.png")] {
@@ -263,12 +270,30 @@ pub fn export_log_archive(
     Ok(output_path)
 }
 
+/// Appends the client and framework versions to a device snapshot.
+///
+/// These are written here rather than read from the platform collector so every
+/// device snapshot names the exact build it came from, even when the privileged
+/// collector is unavailable. The collector's payload may not end with a newline,
+/// so one is inserted before the rows to avoid gluing them onto its last line.
+fn with_version_rows(payload: Vec<u8>) -> Vec<u8> {
+    let mut snapshot = payload;
+    if !snapshot.ends_with(b"\n") {
+        snapshot.push(b'\n');
+    }
+    snapshot.extend_from_slice(crate::version::device_info_rows().as_bytes());
+    snapshot
+}
+
 /// Device snapshots are best-effort: a missing collector must not fail the
 /// whole export, mirroring the MaaFwApp log export behaviour.
 fn write_device_snapshot(source: &dyn DiagnosticSource, staging_dir: &Path) {
     if let Ok(bytes) = source.device_info() {
         if !bytes.is_empty() {
-            let _ = write_file(&staging_dir.join("device-info.txt"), &bytes);
+            let _ = write_file(
+                &staging_dir.join("device-info.txt"),
+                &with_version_rows(bytes),
+            );
         }
     }
     if let Ok(bytes) = source.device_properties() {
@@ -867,7 +892,7 @@ impl DiagnosticSource for AndroidLogSource {
 /// Reads a `String` from a `RuntimeBridge` static without the privileged
 /// service, so the log export still works after Shizuku goes away.
 #[cfg(target_os = "android")]
-fn bridge_string(method: &'static str) -> io::Result<String> {
+pub(crate) fn bridge_string(method: &'static str) -> io::Result<String> {
     let vm = crate::runtime::java_vm().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::Unsupported,
@@ -1519,6 +1544,58 @@ mod tests {
                 .starts_with("manual-")
         }));
         fs::remove_dir_all(runs_root).unwrap();
+    }
+
+    #[test]
+    fn exported_device_snapshot_names_the_client_and_framework() {
+        struct DeviceSource;
+
+        impl DiagnosticSource for DeviceSource {
+            fn capture_png(&self, _display_id: u32) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no capture"))
+            }
+
+            fn device_info(&self) -> io::Result<Vec<u8>> {
+                Ok(b"Device      : Pixel 9".to_vec())
+            }
+
+            fn display_state(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no display state"))
+            }
+
+            fn logcat(&self) -> io::Result<Vec<u8>> {
+                Ok(b"MaaTauriAndroid ran\n".to_vec())
+            }
+
+            fn dumpsys(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no dumpsys"))
+            }
+
+            fn bugreport(&self, _destination: &Path) -> io::Result<Vec<String>> {
+                Ok(Vec::new())
+            }
+        }
+
+        let staging = std::env::temp_dir().join(format!("snapshot-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&staging).unwrap();
+
+        write_device_snapshot(&DeviceSource, &staging);
+
+        let snapshot = fs::read_to_string(staging.join("device-info.txt")).unwrap();
+        assert!(snapshot.contains("Device      : Pixel 9"));
+        assert!(snapshot.contains(&format!(
+            "{} : {}",
+            crate::version::APP_NAME,
+            crate::version::APP_VERSION
+        )));
+        assert!(snapshot.contains(&format!(
+            "Framework       : {}",
+            crate::version::MAA_FRAMEWORK_VERSION
+        )));
+        // The collector's payload has no trailing newline; the appended rows must
+        // not be glued onto its last line.
+        assert!(snapshot.contains("Pixel 9\nMaaTauriAndroid"));
+        fs::remove_dir_all(staging).unwrap();
     }
 
     #[test]

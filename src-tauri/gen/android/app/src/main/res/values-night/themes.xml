@@ -1,6 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.maa_tauri_android" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Dark startup backdrop matching src/index.css. -->
+        <item name="android:windowBackground">@color/surface</item>
     </style>
 </resources>

@@ -2,6 +2,7 @@ package top.natsuu.mta
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import top.natsuu.mta.MaaRuntime
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
@@ -18,6 +19,7 @@ class MainActivity : TauriActivity() {
   private lateinit var controlClient: ControlServiceClient
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    installSplashScreen()
     enableEdgeToEdge()
     MaaRuntime.load()
     RuntimeBridge.attachContext(applicationContext)

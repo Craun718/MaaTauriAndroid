@@ -1388,7 +1388,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         return;
                     }
                 };
-                if let Err(error) = tasker.add_event_sink(Box::new(focus::FocusSink::new(
+                if let Err(error) = tasker.add_context_event_sink(Box::new(focus::FocusSink::new(
                     app.clone(),
                     focus_translations.clone(),
                 ))) {

@@ -120,6 +120,7 @@ const en = {
   start: "Start",
   stop: "Stop",
   captureScreenshot: "Shot",
+  back: "Back",
   screenshotSavedNotice: "Screenshot saved to this run.",
 
   // Settings
@@ -231,6 +232,7 @@ const zh: Record<MessageKey, string> = {
   start: "开始",
   stop: "停止",
   captureScreenshot: "截图",
+  back: "返回",
   screenshotSavedNotice: "截图已保存到本次运行记录。",
 
   settings: "设置",

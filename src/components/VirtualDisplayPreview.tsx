@@ -169,7 +169,8 @@ export function VirtualDisplayPreview({
           context.drawImage(frame as unknown as CanvasImageSource, 0, 0);
           frame.close();
         },
-        error() {
+        error(error) {
+          console.error("Virtual display decoder failed", error);
           setStreamState("error");
         },
       });
@@ -198,7 +199,8 @@ export function VirtualDisplayPreview({
               avc: { format: "annexb" },
             });
             setStreamState("ready");
-          } catch {
+          } catch (error) {
+            console.error("Virtual display stream config failed", error);
             setStreamState("error");
           }
           return;
@@ -215,15 +217,24 @@ export function VirtualDisplayPreview({
             data: event.data.slice(9),
           });
           decoder.decode(chunk);
-        } catch {
+        } catch (error) {
+          console.error("Virtual display stream frame failed", error);
           setStreamState("error");
         }
       };
-      socket.onerror = () => {
-        if (!disposed) setStreamState("error");
+      socket.onerror = (event) => {
+        if (disposed) return;
+        console.error("Virtual display stream socket failed", event);
+        setStreamState("error");
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (!disposed) {
+          console.warn(
+            "Virtual display stream socket closed",
+            event.code,
+            event.reason,
+            event.wasClean,
+          );
           setStreamState((current) =>
             current === "connecting" ? "error" : current,
           );
@@ -231,8 +242,10 @@ export function VirtualDisplayPreview({
       };
     }
 
-    connect().catch(() => {
-      if (!disposed) setStreamState("error");
+    connect().catch((error) => {
+      if (disposed) return;
+      console.error("Virtual display stream connection failed", error);
+      setStreamState("error");
     });
 
     return () => {

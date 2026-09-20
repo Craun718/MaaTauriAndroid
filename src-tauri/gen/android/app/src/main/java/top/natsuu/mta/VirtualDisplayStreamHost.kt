@@ -181,6 +181,10 @@ object VirtualDisplayStreamHost {
             } catch (_: SocketTimeoutException) {
             } catch (_: IOException) {
                 if (running.get()) {
+                    android.util.Log.e(
+                        "TTFlowVirtualDisplay",
+                        "Virtual display stream accept loop failed",
+                    )
                     stopInternal()
                 }
             }
@@ -201,7 +205,14 @@ object VirtualDisplayStreamHost {
         while (running.get()) {
             val index = try {
                 encoder.dequeueOutputBuffer(info, 10_000)
-            } catch (_: IllegalStateException) {
+            } catch (error: IllegalStateException) {
+                if (running.get()) {
+                    android.util.Log.e(
+                        "TTFlowVirtualDisplay",
+                        "Virtual display stream encoder failed",
+                        error,
+                    )
+                }
                 break
             }
 
@@ -354,7 +365,14 @@ object VirtualDisplayStreamHost {
                         output.flush()
                     }
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                if (active.get()) {
+                    android.util.Log.e(
+                        "TTFlowVirtualDisplay",
+                        "Virtual display stream writer failed",
+                        error,
+                    )
+                }
             } finally {
                 active.set(false)
                 clients.remove(this)
@@ -457,7 +475,14 @@ object VirtualDisplayStreamHost {
                         if (opcode == 8) return
                     }
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                if (active.get()) {
+                    android.util.Log.w(
+                        "TTFlowVirtualDisplay",
+                        "Virtual display stream reader failed",
+                        error,
+                    )
+                }
             } finally {
                 close()
                 clients.remove(this)

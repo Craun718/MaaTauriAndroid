@@ -25,7 +25,8 @@ import top.natsuu.mta.IMaaTauriAndroidControlService
 
 class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAndroidControlService.Stub() {
     private val executor = Executors.newSingleThreadExecutor()
-    private val contacts = LinkedHashMap<Int, TouchPointer>()
+    private val contacts = LinkedHashMap<Int, TouchPointerSequence.Pointer>()
+    private var gestureDownTime = 0L
     private val bugreportProcess = AtomicReference<Process?>(null)
     private val bugreportProgress = AtomicReference("idle|0")
     private val virtualDisplay = AtomicReference<VirtualDisplay?>(null)
@@ -61,6 +62,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                 flags,
             ) ?: return DISPLAY_NONE
         virtualDisplay.set(display)
+        stabilizeDisplay(display.display.displayId, width, height)
         return display.display.displayId
     }
 
@@ -70,6 +72,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun stopVirtualDisplay() {
         virtualDisplay.getAndSet(null)?.release()
+        synchronized(contacts) {
+            contacts.clear()
+            gestureDownTime = 0L
+        }
     }
 
     override fun captureFrame(displayId: Int): ParcelFileDescriptor {
@@ -318,68 +324,120 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         if (contact < 0) return RESULT_INVALID_CONTACT
         synchronized(contacts) {
             val now = SystemClock.uptimeMillis()
-            if (action == MotionEvent.ACTION_DOWN) {
-                contacts.clear()
-                contacts[contact] = TouchPointer(now, x, y)
-            } else if (action == MotionEvent.ACTION_MOVE) {
-                val pointer = contacts[contact] ?: return RESULT_UNKNOWN_CONTACT
-                pointer.x = x
-                pointer.y = y
-            } else if (action == MotionEvent.ACTION_UP) {
-                val pointer = contacts[contact] ?: return RESULT_UNKNOWN_CONTACT
-                pointer.x = x
-                pointer.y = y
+            val current = contacts.values.toList()
+            val kind = when (action) {
+                MotionEvent.ACTION_DOWN -> TouchPointerSequence.Kind.Down
+                MotionEvent.ACTION_MOVE -> TouchPointerSequence.Kind.Move
+                MotionEvent.ACTION_UP -> TouchPointerSequence.Kind.Up
+                else -> return RESULT_UNSUPPORTED_METHOD
             }
-            if (contacts.isEmpty()) return RESULT_NO_ACTIVE_CONTACT
+            val step = TouchPointerSequence.plan(kind, current, contact, x, y)
+            if (!step.ok) {
+                return if (contacts.isEmpty()) RESULT_NO_ACTIVE_CONTACT else RESULT_UNKNOWN_CONTACT
+            }
 
-            val properties = contacts.keys.map { key ->
-                MotionEvent.PointerProperties().apply {
-                    id = key
-                    toolType = MotionEvent.TOOL_TYPE_FINGER
+            if (step.cancelFirst) {
+                if (current.isNotEmpty()) {
+                    val cancelEvent = obtainEvent(
+                        displayId,
+                        now,
+                        MotionEvent.ACTION_CANCEL,
+                        current,
+                        changingContact = -1,
+                    )
+                    val cancelled = cancelEvent != null && injectEvent(cancelEvent, false)
+                    cancelEvent?.recycle()
+                    if (!cancelled) return RESULT_INJECTION_FAILED
+                    contacts.clear()
                 }
-            }.toTypedArray()
-            val coordinates = contacts.values.map { pointer ->
-                MotionEvent.PointerCoords().apply {
-                    clear()
-                    this.x = pointer.x.toFloat()
-                    this.y = pointer.y.toFloat()
-                    pressure = 1.0f
-                    size = 1.0f
-                }
-            }.toTypedArray()
-            val first = contacts.values.first()
-            val eventAction = when {
-                action == MotionEvent.ACTION_DOWN -> MotionEvent.ACTION_DOWN
-                action == MotionEvent.ACTION_MOVE -> MotionEvent.ACTION_MOVE
-                action == MotionEvent.ACTION_UP && contacts.size == 1 -> MotionEvent.ACTION_UP
-                action == MotionEvent.ACTION_UP -> MotionEvent.ACTION_POINTER_UP or
-                    (contacts.keys.indexOf(contact) shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
-                contacts.size == 1 -> MotionEvent.ACTION_DOWN
-                else -> MotionEvent.ACTION_POINTER_DOWN or
-                    (contacts.keys.indexOf(contact) shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+                gestureDownTime = 0L
             }
-            val event = MotionEvent.obtain(
-                first.downTime,
+
+            val event = obtainEvent(
+                displayId,
                 now,
-                eventAction,
-                properties.size,
-                properties,
-                coordinates,
-                0,
-                0,
-                1.0f,
-                1.0f,
-                0,
-                0,
-                InputDevice.SOURCE_TOUCHSCREEN,
-                0,
-            )
-            val displayAssigned = setDisplayId(event, displayId)
-            val injected = displayAssigned && injectEvent(event)
+                step.action,
+                step.pointers,
+                step.changingContact,
+            ) ?: return RESULT_INJECTION_FAILED
+            val waitForFinish = step.action == MotionEvent.ACTION_DOWN ||
+                step.action == MotionEvent.ACTION_POINTER_DOWN
+            val injected = injectEvent(event, waitForFinish)
             event.recycle()
-            if (!displayAssigned) return RESULT_INJECTION_FAILED
-            if (action == MotionEvent.ACTION_UP) contacts.remove(contact)
-            return if (injected) RESULT_OK else RESULT_INJECTION_FAILED
+            if (!injected) return RESULT_INJECTION_FAILED
+
+            contacts.clear()
+            step.pointers.forEach { contacts[it.contact] = it }
+            if (step.removeContact) {
+                contacts.remove(contact)
+                if (contacts.isEmpty()) gestureDownTime = 0L
+            }
+            return RESULT_OK
+        }
+    }
+
+    private fun obtainEvent(
+        displayId: Int,
+        eventTime: Long,
+        action: Int,
+        pointers: List<TouchPointerSequence.Pointer>,
+        changingContact: Int,
+    ): MotionEvent? {
+        if (pointers.isEmpty()) return null
+        if (gestureDownTime == 0L) gestureDownTime = eventTime
+        val actionMasked = action and MotionEvent.ACTION_MASK
+        val index = pointers.indexOfFirst { it.contact == changingContact }
+        val encodedAction = when {
+            actionMasked == MotionEvent.ACTION_POINTER_DOWN || actionMasked == MotionEvent.ACTION_POINTER_UP -> {
+                if (index < 0) return null
+                actionMasked or (index shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+            }
+
+            else -> action
+        }
+        val properties = pointers.map { pointer ->
+            MotionEvent.PointerProperties().apply {
+                id = pointer.contact
+                toolType = MotionEvent.TOOL_TYPE_FINGER
+            }
+        }.toTypedArray()
+        val coordinates = pointers.map { pointer ->
+            MotionEvent.PointerCoords().apply {
+                clear()
+                this.x = pointer.x.toFloat()
+                this.y = pointer.y.toFloat()
+                pressure = if (actionMasked == MotionEvent.ACTION_CANCEL ||
+                    (
+                        pointer.contact == changingContact &&
+                            (actionMasked == MotionEvent.ACTION_POINTER_UP || actionMasked == MotionEvent.ACTION_UP)
+                        )
+                ) {
+                    0.0f
+                } else {
+                    1.0f
+                }
+                size = 1.0f
+            }
+        }.toTypedArray()
+        val event = MotionEvent.obtain(
+            gestureDownTime,
+            eventTime,
+            encodedAction,
+            pointers.size,
+            properties,
+            coordinates,
+            0,
+            0,
+            1.0f,
+            1.0f,
+            0,
+            0,
+            InputDevice.SOURCE_TOUCHSCREEN,
+            0,
+        )
+        return if (setDisplayId(event, displayId)) event else {
+            event.recycle()
+            null
         }
     }
 
@@ -387,10 +445,14 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         val now = SystemClock.uptimeMillis()
         val event = KeyEvent(now, now, action, keyCode, 0)
         if (!setDisplayId(event, displayId)) return RESULT_INJECTION_FAILED
-        return if (injectEvent(event)) RESULT_OK else RESULT_INJECTION_FAILED
+        return if (injectEvent(event, action == KeyEvent.ACTION_DOWN)) {
+            RESULT_OK
+        } else {
+            RESULT_INJECTION_FAILED
+        }
     }
 
-    private fun injectEvent(event: android.view.InputEvent): Boolean {
+    private fun injectEvent(event: android.view.InputEvent, waitForFinish: Boolean): Boolean {
         val manager = android.hardware.input.InputManager::class.java
             .getMethod("getInstance")
             .invoke(null)
@@ -403,7 +465,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             return false
         }
         return try {
-            method.invoke(manager, event, 0) as? Boolean == true
+            method.invoke(manager, event, if (waitForFinish) 2 else 0) as? Boolean == true
         } catch (error: Throwable) {
             android.util.Log.w(
                 "MaaTauriAndroidControl",
@@ -432,6 +494,90 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     private fun shell(vararg args: String): Int {
         return ProcessBuilder(*args).start().waitFor()
+    }
+
+    private fun stabilizeDisplay(displayId: Int, width: Int, height: Int) {
+        val windowManager = windowManager() ?: return
+        val physicalRotation = physicalRotation(windowManager)
+        val displayRotation = displayRotation(windowManager, displayId)
+        if (displayRotation == 0) return
+
+        val methods = windowManager.javaClass.methods
+        methods.firstOrNull { method ->
+            val parameters: Array<Class<*>>? = when (method.name) {
+                "freezeDisplayRotation" -> when (method.parameterTypes.size) {
+                    2 -> arrayOf(Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+                    3 -> arrayOf(
+                        Int::class.javaPrimitiveType,
+                        Int::class.javaPrimitiveType,
+                        String::class.java,
+                    )
+
+                    else -> null
+                }
+
+                "freezeRotation" -> arrayOf(Int::class.javaPrimitiveType)
+                else -> null
+            }
+            parameters?.contentEquals(method.parameterTypes) == true
+        }?.let { method ->
+            runCatching {
+                if (method.parameterTypes.size == 2) {
+                    method.invoke(windowManager, displayId, 0)
+                } else if (method.parameterTypes.size == 3) {
+                    method.invoke(windowManager, displayId, 0, "TTFlow")
+                } else {
+                    method.invoke(windowManager, displayId)
+                }
+            }
+        }
+
+        if (physicalRotation == 0 &&
+            displayRotation(windowManager, displayId) != 0
+        ) {
+            methods.firstOrNull { method ->
+                method.name == "setForcedDisplaySize" &&
+                    method.parameterTypes.contentEquals(
+                        arrayOf(
+                            Int::class.javaPrimitiveType,
+                            Int::class.javaPrimitiveType,
+                            Int::class.javaPrimitiveType,
+                        ),
+                    )
+            }?.let { method ->
+                runCatching { method.invoke(windowManager, displayId, width, height) }
+            }
+        }
+    }
+
+    private fun windowManager(): Any? {
+        val binder = runCatching {
+            android.os.ServiceManager::class.java
+                .getDeclaredMethod("getService", String::class.java)
+                .invoke(null, "window")
+        }.getOrNull() ?: return null
+        return runCatching {
+            val stub = Class.forName("android.view.IWindowManager\$Stub")
+            stub.getMethod("asInterface", android.os.IBinder::class.java).invoke(null, binder)
+        }.getOrNull()
+    }
+
+    private fun physicalRotation(windowManager: Any): Int {
+        return runCatching {
+            val method = windowManager.javaClass.methods.firstOrNull { method ->
+                method.name == "getDefaultDisplayRotation" ||
+                    method.name == "getRotation"
+            } ?: return 0
+            method.invoke(windowManager) as? Int ?: 0
+        }.getOrDefault(0)
+    }
+
+    private fun displayRotation(windowManager: Any, displayId: Int): Int {
+        val display = runCatching {
+            context?.let(ShellIdentityContext::createDisplayManager)
+                ?.getDisplay(displayId)
+        }.getOrNull() ?: return 0
+        return display.rotation
     }
 
     private fun startGameOnDisplay(spec: String, displayId: Int): Int {
@@ -477,10 +623,4 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         const val RESULT_COMMAND_FAILED = -6
         private const val DISPLAY_NONE = -1
     }
-
-    private class TouchPointer(
-        val downTime: Long,
-        var x: Int,
-        var y: Int,
-    )
 }

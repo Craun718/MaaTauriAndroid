@@ -136,7 +136,19 @@ internal class AppLauncher(
                 SystemClock.sleep(POLL_INTERVAL_MS)
                 continue
             }
-            if (task.displayId == displayId) return LaunchLocation.TARGET_DISPLAY
+            if (task.displayId == displayId) {
+                if (task.windowingMode != WINDOWING_MODE_FULLSCREEN && !attemptedFullscreenRelaunch) {
+                    attemptedFullscreenRelaunch = true
+                    android.util.Log.i(
+                        TAG,
+                        "$packageName is windowingMode=${task.windowingMode}; relaunching fullscreen on $displayId",
+                    )
+                    relaunchFullscreen(intent, displayId)
+                    SystemClock.sleep(POLL_INTERVAL_MS)
+                    continue
+                }
+                return LaunchLocation.TARGET_DISPLAY
+            }
 
             if (wrongDisplay != task.displayId) {
                 wrongDisplay = task.displayId
@@ -152,8 +164,13 @@ internal class AppLauncher(
             }
             SystemClock.sleep(POLL_INTERVAL_MS)
         }
-        return if (findTask(packageName)?.displayId == displayId) {
-            LaunchLocation.TARGET_DISPLAY
+        val finalTask = findTask(packageName)
+        return if (finalTask != null && finalTask.displayId == displayId) {
+            if (finalTask.windowingMode == null || finalTask.windowingMode == WINDOWING_MODE_FULLSCREEN) {
+                LaunchLocation.TARGET_DISPLAY
+            } else {
+                LaunchLocation.WRONG_DISPLAY
+            }
         } else {
             val location = LaunchLocation.WRONG_DISPLAY
             if (!attemptedFullscreenRelaunch) {
@@ -197,7 +214,7 @@ internal class AppLauncher(
             .filter { task -> taskMatches(task, packageName) }
             .mapNotNull { task ->
                 val displayId = displayIdOf(task) ?: return@mapNotNull null
-                TaskLocation(task.taskId, displayId)
+                TaskLocation(task.taskId, displayId, windowingModeOf(task))
             }
             .firstOrNull()
     }
@@ -220,6 +237,20 @@ internal class AppLauncher(
             ActivityManager.RunningTaskInfo::class.java.getField("displayId").getInt(task)
         }.onFailure { error ->
             android.util.Log.w(TAG, "RunningTaskInfo.displayId is unavailable", error)
+        }.getOrNull()
+    }
+
+    private fun windowingModeOf(task: ActivityManager.RunningTaskInfo): Int? {
+        val fromMethod = runCatching {
+            task.javaClass.getMethod("getWindowingMode").invoke(task) as? Int
+        }.getOrNull()
+        if (fromMethod != null) return fromMethod
+        return runCatching {
+            ActivityManager.RunningTaskInfo::class.java
+                .getField("windowingMode")
+                .getInt(task)
+        }.onFailure { error ->
+            android.util.Log.v(TAG, "RunningTaskInfo.windowingMode is unavailable", error)
         }.getOrNull()
     }
 
@@ -278,7 +309,7 @@ internal class AppLauncher(
 
     private fun relaunchFullscreen(intent: Intent?, displayId: Int) {
         if (intent == null) return
-        val result = startActivityAsUser(intent, fullscreenOptions())
+        val result = startActivityAsUser(intent, displayOptions(displayId))
         if (result == null || result < START_SUCCESS) {
             startWithAm(intent, displayId)
         }
@@ -420,17 +451,18 @@ internal class AppLauncher(
         }.onFailure { error ->
             android.util.Log.w(TAG, "ActivityOptions.setLaunchDisplayId is unavailable", error)
         }
-        return options.toBundle()
-    }
-
-    private fun fullscreenOptions(): Bundle {
-        val options = ActivityOptions.makeBasic()
-        runCatching {
-            ActivityOptions::class.java
-                .getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-                .invoke(options, WINDOWING_MODE_FULLSCREEN)
-        }.onFailure { error ->
-            android.util.Log.w(TAG, "ActivityOptions.setLaunchWindowingMode is unavailable", error)
+        if (displayId != 0) {
+            runCatching {
+                ActivityOptions::class.java
+                    .getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                    .invoke(options, WINDOWING_MODE_FULLSCREEN)
+            }.onFailure { error ->
+                android.util.Log.w(
+                    TAG,
+                    "ActivityOptions.setLaunchWindowingMode is unavailable",
+                    error,
+                )
+            }
         }
         return options.toBundle()
     }
@@ -454,6 +486,7 @@ internal class AppLauncher(
     private data class TaskLocation(
         val taskId: Int,
         val displayId: Int,
+        val windowingMode: Int?,
     )
 
     private enum class LaunchLocation {

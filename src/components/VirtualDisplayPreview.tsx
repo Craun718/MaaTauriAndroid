@@ -1,0 +1,340 @@
+import { CircleAlert, LoaderCircle } from "lucide-react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { getVirtualDisplayStream, touchVirtualDisplay } from "../lib/api";
+import { useTranslation } from "../lib/i18n";
+import type { VirtualDisplayStatus } from "../lib/types";
+import {
+  VirtualDisplayMoveScheduler,
+  VirtualDisplayPointerSlots,
+  virtualDisplayPoint,
+} from "../lib/virtualDisplayTouch";
+import { useNotificationStore } from "../store/notificationStore";
+
+type StreamConfig = {
+  type: "config";
+  codec: string;
+  width: number;
+  height: number;
+};
+
+type StreamVideoFrame = {
+  displayWidth: number;
+  displayHeight: number;
+  close: () => void;
+};
+
+type StreamDecoder = {
+  state: "unconfigured" | "configured" | "closed";
+  configure: (config: {
+    codec: string;
+    optimizeForLatency: boolean;
+    avc?: { format: "avc" | "annexb" };
+  }) => void;
+  decode: (chunk: unknown) => void;
+  close: () => void;
+};
+
+type WebCodecsGlobal = {
+  VideoDecoder?: new (init: {
+    output: (frame: StreamVideoFrame) => void;
+    error: (error: Error) => void;
+  }) => StreamDecoder;
+  EncodedVideoChunk?: new (init: {
+    type: "key" | "delta";
+    timestamp: number;
+    data: BufferSource;
+  }) => unknown;
+};
+
+export type StreamState =
+  | "connecting"
+  | "ready"
+  | "unavailable"
+  | "unsupported"
+  | "error";
+
+type PreviewTouchAction = 6 | 7 | 8;
+
+export function VirtualDisplayPreview({
+  status,
+  className,
+}: {
+  status: VirtualDisplayStatus;
+  className: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const statusRef = useRef(status);
+  const pointerSlots = useRef(new VirtualDisplayPointerSlots());
+  const lastPoints = useRef(new Map<number, { x: number; y: number }>());
+  const [streamState, setStreamState] = useState<StreamState>("connecting");
+  const { t } = useTranslation();
+  const notify = useNotificationStore((state) => state.notify);
+
+  statusRef.current = status;
+
+  const dispatchTouch = useCallback(
+    async (
+      action: PreviewTouchAction,
+      x: number,
+      y: number,
+      contact: number,
+      visibleFailure: boolean,
+    ): Promise<boolean> => {
+      const current = statusRef.current;
+      if (!current.active) return false;
+      try {
+        const result = await touchVirtualDisplay({
+          contact,
+          displayId: current.displayId,
+          x,
+          y,
+          action,
+        });
+        if (result.accepted) return true;
+        throw new Error(result.message);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (visibleFailure) {
+          notify(message, { tone: "error" });
+        } else {
+          console.error("Virtual display touch failed", error);
+        }
+        return false;
+      }
+    },
+    [notify],
+  );
+
+  const moveScheduler = useRef(
+    new VirtualDisplayMoveScheduler((moves) => {
+      moves.forEach(({ contact, x, y }) => {
+        void dispatchTouch(7, x, y, contact, false);
+      });
+    }),
+  );
+
+  useEffect(() => {
+    if (status.active !== true) return;
+
+    let socket: WebSocket | undefined;
+    let decoder: StreamDecoder | undefined;
+    let disposed = false;
+    setStreamState("connecting");
+
+    async function connect() {
+      const webCodecs = window as unknown as WebCodecsGlobal;
+      const encodedChunkConstructor = webCodecs.EncodedVideoChunk;
+      if (!webCodecs.VideoDecoder || !encodedChunkConstructor) {
+        setStreamState("unsupported");
+        return;
+      }
+
+      const stream = await getVirtualDisplayStream();
+      if (disposed) return;
+      if (!stream.url) {
+        setStreamState("unavailable");
+        return;
+      }
+
+      decoder = new webCodecs.VideoDecoder({
+        output(frame) {
+          const canvas = canvasRef.current;
+          if (!canvas) {
+            frame.close();
+            return;
+          }
+          canvas.width = frame.displayWidth;
+          canvas.height = frame.displayHeight;
+          const context = canvas.getContext("2d");
+          if (!context) {
+            frame.close();
+            return;
+          }
+          context.drawImage(frame as unknown as CanvasImageSource, 0, 0);
+          frame.close();
+        },
+        error() {
+          setStreamState("error");
+        },
+      });
+
+      socket = new WebSocket(stream.url);
+      socket.binaryType = "arraybuffer";
+      socket.onopen = () => {
+        if (!disposed) setStreamState("connecting");
+      };
+      socket.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
+        if (disposed) return;
+
+        if (typeof event.data === "string") {
+          try {
+            const config = JSON.parse(event.data) as StreamConfig;
+            if (
+              config.type !== "config" ||
+              !config.codec ||
+              decoder?.state === "closed"
+            ) {
+              return;
+            }
+            decoder?.configure({
+              codec: config.codec,
+              optimizeForLatency: true,
+              avc: { format: "annexb" },
+            });
+            setStreamState("ready");
+          } catch {
+            setStreamState("error");
+          }
+          return;
+        }
+
+        if (decoder?.state !== "configured") return;
+        try {
+          const view = new DataView(event.data);
+          const flags = view.getUint8(0);
+          const timestamp = Number(view.getBigUint64(1));
+          const chunk = new encodedChunkConstructor({
+            type: flags & 1 ? "key" : "delta",
+            timestamp,
+            data: event.data.slice(9),
+          });
+          decoder.decode(chunk);
+        } catch {
+          setStreamState("error");
+        }
+      };
+      socket.onerror = () => {
+        if (!disposed) setStreamState("error");
+      };
+      socket.onclose = () => {
+        if (!disposed) {
+          setStreamState((current) =>
+            current === "connecting" ? "error" : current,
+          );
+        }
+      };
+    }
+
+    connect().catch(() => {
+      if (!disposed) setStreamState("error");
+    });
+
+    return () => {
+      disposed = true;
+      if (
+        socket?.readyState === WebSocket.OPEN ||
+        socket?.readyState === WebSocket.CONNECTING
+      ) {
+        socket.close();
+      }
+      if (decoder && decoder.state !== "closed") decoder.close();
+    };
+  }, [status.active]);
+
+  useEffect(() => {
+    if (status.active === false) {
+      pointerSlots.current.clear();
+      lastPoints.current.clear();
+      moveScheduler.current.clear();
+      return;
+    }
+
+    return () => {
+      const slots = pointerSlots.current;
+      slots.releaseHeld((contact, x, y) => {
+        void dispatchTouch(8, x, y, contact, false);
+      });
+      lastPoints.current.clear();
+      moveScheduler.current.clear();
+    };
+  }, [dispatchTouch, status.active]);
+
+  function mapPoint(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const canvas = event.currentTarget;
+    const current = statusRef.current;
+    return virtualDisplayPoint(
+      event.clientX - canvas.getBoundingClientRect().left,
+      event.clientY - canvas.getBoundingClientRect().top,
+      { width: canvas.clientWidth, height: canvas.clientHeight },
+      { width: current.width, height: current.height },
+    );
+  }
+
+  function onPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const point = mapPoint(event);
+    if (!point.inside) return;
+    const pointerId = event.pointerId;
+    const contact = pointerSlots.current.acquire(pointerId);
+    if (contact < 0) return;
+    event.currentTarget.setPointerCapture(pointerId);
+    lastPoints.current.set(pointerId, { x: point.x, y: point.y });
+    pointerSlots.current.remember(pointerId, point.x, point.y);
+    void dispatchTouch(6, point.x, point.y, contact, true).then((accepted) => {
+      if (!accepted) {
+        pointerSlots.current.release(pointerId);
+        lastPoints.current.delete(pointerId);
+      }
+    });
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const contact = pointerSlots.current.contact(event.pointerId);
+    if (contact < 0) return;
+    const point = mapPoint(event);
+    const previous = lastPoints.current.get(event.pointerId);
+    if (previous?.x === point.x && previous.y === point.y) return;
+    lastPoints.current.set(event.pointerId, { x: point.x, y: point.y });
+    pointerSlots.current.remember(event.pointerId, point.x, point.y);
+    moveScheduler.current.move({ contact, x: point.x, y: point.y });
+  }
+
+  function onPointerEnd(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const contact = pointerSlots.current.contact(event.pointerId);
+    if (contact < 0) return;
+    const point = mapPoint(event);
+    lastPoints.current.set(event.pointerId, { x: point.x, y: point.y });
+    pointerSlots.current.remember(event.pointerId, point.x, point.y);
+    void dispatchTouch(8, point.x, point.y, contact, true).finally(() => {
+      pointerSlots.current.release(event.pointerId);
+      lastPoints.current.delete(event.pointerId);
+    });
+  }
+
+  const streamLabel = {
+    connecting: t("virtualDisplayStreamConnecting"),
+    ready: "",
+    unavailable: t("virtualDisplayStreamUnavailable"),
+    unsupported: t("virtualDisplayCodecUnsupported"),
+    error: t("virtualDisplayStreamError"),
+  }[streamState];
+
+  return (
+    <div className={`relative overflow-hidden ${className}`}>
+      <canvas
+        ref={canvasRef}
+        className="h-full w-full touch-none object-contain"
+        aria-label={t("virtualDisplay")}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+      />
+      {streamState !== "ready" && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-surface-muted/90 px-3 py-2 text-xs text-ink-muted">
+          {streamState === "connecting" ? (
+            <LoaderCircle size={12} className="animate-spin" />
+          ) : (
+            <CircleAlert size={12} />
+          )}
+          {streamLabel}
+        </div>
+      )}
+    </div>
+  );
+}

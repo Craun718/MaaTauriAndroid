@@ -61,6 +61,19 @@ export async function getVirtualDisplayStream() {
   return invoke<{ url: string | null }>("virtual_display_stream");
 }
 
+export async function touchVirtualDisplay(input: {
+  displayId: number;
+  action: 6 | 7 | 8;
+  x: number;
+  y: number;
+  contact: number;
+}) {
+  return invoke<{ accepted: boolean; code: number; message: string }>(
+    "virtual_display_touch",
+    input,
+  );
+}
+
 export async function getRunStatus() {
   return invoke<RunResult>("run_status");
 }

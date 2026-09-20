@@ -389,6 +389,31 @@ object RuntimeBridge {
     fun virtualDisplayStreamUrl(): String? = VirtualDisplayStreamHost.streamUrl()
 
     @JvmStatic
+    fun dispatchVirtualDisplayTouch(
+        displayId: Int,
+        action: Int,
+        x: Int,
+        y: Int,
+        contact: Int,
+    ): Int {
+        return runCatching {
+            ControlHost.current()?.dispatchInputDetailed(
+                displayId,
+                action,
+                x,
+                y,
+                contact,
+                0,
+                null,
+                null,
+                false,
+            )?.code ?: -7
+        }.onFailure { error ->
+            android.util.Log.w("MaaTauriAndroidControl", "Virtual display touch dispatch failed", error)
+        }.getOrDefault(-7)
+    }
+
+    @JvmStatic
     external fun configureScreen(width: Int, height: Int)
 
     @JvmStatic

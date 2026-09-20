@@ -318,6 +318,14 @@ struct VirtualDisplayStream {
     url: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct VirtualDisplayTouchResult {
+    accepted: bool,
+    code: i32,
+    message: String,
+}
+
 #[tauri::command]
 fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnapshot, AppError> {
     let config_path = app
@@ -703,6 +711,86 @@ fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
     }
 }
 
+#[tauri::command]
+fn virtual_display_touch(
+    display_id: i32,
+    action: i32,
+    x: i32,
+    y: i32,
+    contact: i32,
+) -> Result<VirtualDisplayTouchResult, AppError> {
+    let status = virtual_display_status()?;
+    validate_virtual_display_touch(&status, action, x, y, contact)?;
+
+    #[cfg(target_os = "android")]
+    {
+        let code = call_runtime_bridge_touch(display_id, action, x, y, contact)?;
+        if code == 0 {
+            Ok(VirtualDisplayTouchResult {
+                accepted: true,
+                code,
+                message: "Input accepted".to_string(),
+            })
+        } else {
+            Err(AppError::Message(virtual_display_touch_rejection_message(
+                code,
+            )))
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (display_id, action, x, y, contact);
+        Err(AppError::Message(
+            "The virtual display can only be touched on Android".to_string(),
+        ))
+    }
+}
+
+fn validate_virtual_display_touch(
+    status: &VirtualDisplayStatus,
+    action: i32,
+    x: i32,
+    y: i32,
+    contact: i32,
+) -> Result<(), AppError> {
+    if !status.active {
+        return Err(AppError::Message(
+            "The virtual display is not active".to_string(),
+        ));
+    }
+    if !matches!(action, 6 | 7 | 8) {
+        return Err(AppError::Message(
+            "Only virtual display touch down, move, and up are supported".to_string(),
+        ));
+    }
+    if !(0..=15).contains(&contact) {
+        return Err(AppError::Message(
+            "The virtual display touch contact must be between 0 and 15".to_string(),
+        ));
+    }
+    if x < 0 || y < 0 || x >= status.width || y >= status.height {
+        return Err(AppError::Message(
+            "The virtual display touch coordinates are outside the display".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn virtual_display_touch_rejection_message(code: i32) -> String {
+    match code {
+        -1 => "The virtual display touch contact is invalid".to_string(),
+        -2 => "The virtual display touch contact is not part of the active gesture".to_string(),
+        -3 => "The virtual display touch gesture has no active contacts".to_string(),
+        -4 => "Android rejected the virtual display touch injection".to_string(),
+        -5 => "The virtual display touch method is not supported".to_string(),
+        -6 => "The privileged shell command for the virtual display touch failed".to_string(),
+        -7 => "The privileged control service is unavailable for virtual display touch".to_string(),
+        _ => format!("The virtual display touch command failed with result {code}"),
+    }
+}
+
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
     let bridge_class = crate::runtime::runtime_bridge_class()
@@ -719,6 +807,42 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
         .map_err(|error| AppError::Message(error.to_string()))?;
     result
         .z()
+        .map_err(|error| AppError::Message(error.to_string()))
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_touch(
+    display_id: i32,
+    action: i32,
+    x: i32,
+    y: i32,
+    contact: i32,
+) -> Result<i32, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(
+            bridge_class,
+            "dispatchVirtualDisplayTouch",
+            "(IIIII)I",
+            &[
+                jni::objects::JValue::Int(display_id),
+                jni::objects::JValue::Int(action),
+                jni::objects::JValue::Int(x),
+                jni::objects::JValue::Int(y),
+                jni::objects::JValue::Int(contact),
+            ],
+        )
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    result
+        .i()
         .map_err(|error| AppError::Message(error.to_string()))
 }
 
@@ -1600,6 +1724,52 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "android"))]
+    fn virtual_display_touch_is_unavailable_when_the_display_is_inactive() {
+        let status = virtual_display_status().expect("the desktop status is available");
+        assert!(matches!(
+            virtual_display_touch(12, 6, 0, 0, 15),
+            Err(AppError::Message(message)) if message == "The virtual display is not active"
+        ));
+        assert!(validate_virtual_display_touch(&status, 6, 0, 0, 15).is_err());
+    }
+
+    #[test]
+    fn virtual_display_touch_rejects_invalid_commands() {
+        let status = VirtualDisplayStatus {
+            active: true,
+            display_id: 12,
+            width: 1280,
+            height: 720,
+            frame_count: 0,
+        };
+
+        assert!(validate_virtual_display_touch(&status, 9, 0, 0, 15).is_err());
+        assert!(validate_virtual_display_touch(&status, 6, 0, 0, -1).is_err());
+        assert!(validate_virtual_display_touch(&status, 6, 0, 0, 16).is_err());
+        assert!(validate_virtual_display_touch(&status, 6, -1, 0, 15).is_err());
+        assert!(validate_virtual_display_touch(&status, 6, 1280, 0, 15).is_err());
+        assert!(validate_virtual_display_touch(&status, 6, 0, 720, 15).is_err());
+        assert!(validate_virtual_display_touch(&status, 6, 1279, 719, 15).is_ok());
+    }
+
+    #[test]
+    fn virtual_display_touch_rejections_are_actionable() {
+        assert_eq!(
+            virtual_display_touch_rejection_message(-4),
+            "Android rejected the virtual display touch injection"
+        );
+        assert_eq!(
+            virtual_display_touch_rejection_message(-7),
+            "The privileged control service is unavailable for virtual display touch"
+        );
+        assert_eq!(
+            virtual_display_touch_rejection_message(-99),
+            "The virtual display touch command failed with result -99"
+        );
+    }
+
+    #[test]
     fn virtual_display_rejection_names_the_missing_precondition() {
         assert_eq!(
             virtual_display_rejection_message(2, "Shizuku permission is required"),
@@ -1735,6 +1905,7 @@ pub fn run() {
             stop_virtual_display,
             virtual_display_status,
             virtual_display_stream,
+            virtual_display_touch,
             start_run,
             run_status,
             stop_run,

@@ -2,7 +2,7 @@
     <!-- Base application theme. -->
     <style name="Theme.maa_tauri_android" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Startup backdrop behind the edge-to-edge webview, which paints the same
-             --tt-surface as its body background once React mounts. @color/surface
+             surface color token as its body background once React mounts. @color/surface
              resolves per configuration, so light and dark are covered by this one entry. -->
         <item name="android:windowBackground">@color/surface</item>
     </style>

@@ -294,7 +294,7 @@ export function TasksPage() {
         <div
           role="alertdialog"
           aria-modal="false"
-          className="fixed inset-x-4 bottom-24 z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
+          className="fixed inset-x-4 bottom-[calc(6rem_+_env(safe-area-inset-bottom))] z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
         >
           <p className="text-sm">
             {focusNotice.name

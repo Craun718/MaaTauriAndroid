@@ -11,12 +11,12 @@
 
 ## 系统栏适配（edge-to-edge）
 
-`android:targetSdkVersion` 是 36，从 Android 15 起平台强制 edge-to-edge，而在 Android 16 上 `R.attr#windowOptOutEdgeToEdgeEnforcement` 已废弃停用，**应用无法退出 edge-to-edge**，因此必须自己处理 window insets。
+`android:targetSdkVersion` 是 36，从 Android 15 起平台强制 edge-to-edge，而在 Android 16 上 `R.attr#windowOptOutEdgeToEdgeEnforcement` 已废弃停用，**应用无法退出 edge-to-edge**。
 
-分工是明确的：**insets 由原生负责，前端不要碰。**
+分工是明确的：**insets 由前端负责，原生不要碰。**
 
-- 原生：`MainActivity.insetContainerOf` 把 `systemBars() | displayCutout()` 作为 padding 施加到 WebView 的**父容器**上。监听器刻意不挂在 WebView 自身——`ViewCompat.setOnApplyWindowInsetsListener` 会顶掉该 view 自己的 `onApplyWindowInsets`，而 Chromium 依赖它跟踪软键盘和计算 `env(safe-area-inset-*)`；insets 也原样返回不消费，避免影响输入法。`values/themes.xml` 的 `windowBackground` 取 `@color/surface`（`values-night` 为深色对应值），让系统栏后面的那条留白与 Web 的 `--surface` 同色。
-- 前端：**不要**再用 `env(safe-area-inset-*)` 加 padding。原生已经按 inset 收窄过 WebView 视口，再加一次就是双重叠加（`fixed bottom-0` 的底部导航会整体抬高）。同理，新增页面不要自己补状态栏留白。
+- 原生：只调 `enableEdgeToEdge()`，WebView 铺满整块屏幕（含系统栏区域）。不要再给 WebView 或其容器施加 inset padding，也不要挂 `OnApplyWindowInsetsListener`——`ViewCompat.setOnApplyWindowInsetsListener` 会顶掉 WebView 自己的 `onApplyWindowInsets`，而 Chromium 依赖它跟踪软键盘并计算 `env(safe-area-inset-*)`。原生一旦把 inset pad 掉，Chromium 算出的 env 值就是 0，抽屉这类贴底覆盖层会悬在系统栏上方。`values/themes.xml` 的 `windowBackground` 仍取 `@color/surface`（`values-night` 为深色对应值），用作启动时的闪屏底色。
+- 前端：WebView 视口直达物理屏幕边缘，需要避开系统栏/手势条的 UI 一律用 `env(safe-area-inset-*)` 计算偏移。现有落点：`AppShell` 的 `<main>`（顶部留白、底部滚动余量）与底部 `<nav>`、`BottomDrawer` 面板、`NotificationHost`、`TasksPage` 的 focus 提示。新增 fixed 覆盖层或全屏布局时要自己带上 env 偏移；Tailwind 任意值里 `calc` 的 `+` 两侧空格用 `_` 占位，例如 `pb-[calc(1.25rem_+_env(safe-area-inset-bottom))]`。左右两侧无需专门处理：壳层是 `max-w-md` 居中列，横屏时不会撞进刘海。
 
 改 `--tt-surface`（`src/index.css` 的 `:root`，深色值在同文件的 `prefers-color-scheme` 块里）时记得同步 `res/values{,-night}/colors.xml`，两边一起改。
 

@@ -42,7 +42,7 @@ export function NotificationHost() {
   if (notifications.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 top-4 z-50 mx-auto flex max-w-xs flex-col gap-2">
+    <div className="pointer-events-none fixed inset-x-4 top-[calc(1rem_+_env(safe-area-inset-top))] z-50 mx-auto flex max-w-xs flex-col gap-2">
       {notifications.map((notification) => (
         <NotificationItem
           key={notification.id}

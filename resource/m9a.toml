@@ -17,9 +17,13 @@ maa_dir = "vendor/maa/android"
 
 # 打包内容由 interface.json 推导（见 src-tauri/profiles/README.md）：resource[].path 与
 # import、languages 指向的文件、图标与富文本引用的图片，以及 agent 负载。
-# pi_include 现在只表示「额外再打包这些」，无法删减推导出的集合；M9A 的资源全部能被
-# 协议引用到，所以这里不需要填。白名单曾静默失配——M9A v4.9.0 把 i18n/ 改名为
-# locales/ 后，构建照样通过，包却装不上。
+# pi_include 只表示「额外再打包这些」，无法删减推导出的集合，列出不存在的路径会让
+# 构建失败。M9A 的资源全部能被协议引用到，所以这里不填；
+# pi_exclude 已不再支持——推导出的集合无法被裁剪，写它只会得到一个静默无效的过滤器。
+# 白名单曾静默失配——M9A v4.9.0 把 i18n/ 改名为 locales/ 后，构建照样通过，包却装不上。
+#
+# 需要塞进包里的协议外资产时才用，例如：
+# pi_include = ["assets/extra/说明.pdf"]
 
 # interface.json 声明 1 个 agent，因此这里必须恰好配置 1 个 runtime。
 [agent]

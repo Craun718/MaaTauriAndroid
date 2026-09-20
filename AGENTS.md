@@ -24,6 +24,8 @@
 
 **除非用户明确要求，否则不要自行在本地执行编译或测试。**
 
+构建安装时，如果当前 commit hash 没有 tag 对应，使用 debug 签名打包；只有有 tag 对应的 commit 才使用 release 打包。
+
 本地可用（仅用于开发与格式化，不作为验证手段）：
 
 - `scripts/setup.sh`：初始化子模块、下载 MaaFramework 二进制并构建 agent runtime ZIP。

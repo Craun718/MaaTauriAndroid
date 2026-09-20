@@ -21,6 +21,7 @@ class PiProfileReaderTest {
                 """
                 pi_assets = "../pi"
                 resource_id = "game"
+                app_name = "Game"
                 maa_dir = "../vendor/maa/android"
 
                 [agent]
@@ -43,6 +44,7 @@ class PiProfileReaderTest {
 
         assertEquals(assetsDirectory.canonicalPath, result.assets)
         assertEquals("game", result.resourceId)
+        assertEquals("Game", result.appName)
         assertEquals("../vendor/maa/android", result.maaDir)
         val agent = requireNotNull(result.agent)
         assertEquals(20_000L, agent.timeoutMs)
@@ -54,6 +56,17 @@ class PiProfileReaderTest {
     fun rejectsApplicationIdUnsafeResourceIds() {
         val profile = temporaryFolder.newFile("pi.toml").apply {
             writeText("pi_assets = \".\"\nresource_id = \"../escape\"")
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            PiProfileReader.read(profile)
+        }
+    }
+
+    @Test
+    fun rejectsBlankApplicationNames() {
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText("pi_assets = \".\"\napp_name = \"\"")
         }
 
         assertThrows(IllegalArgumentException::class.java) {

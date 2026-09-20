@@ -14,6 +14,7 @@ data class PiProfile(
      */
     val extraEntries: List<String>,
     val resourceId: String,
+    val appName: String?,
     val maaDir: String,
     val agent: AgentProfile?,
 )
@@ -55,6 +56,7 @@ object PiProfileReader {
             // pi_include now means "also pack this", never "pack only this".
             extraEntries = stringArray(result, "pi_include").orEmpty(),
             resourceId = resourceId(result),
+            appName = optionalString(result, "app_name"),
             maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
             agent = agent,
         )
@@ -118,6 +120,12 @@ object PiProfileReader {
         } && !value[0].isDigit()) {
             "resource_id may contain only lowercase letters, digits, and underscores"
         }
+        return value
+    }
+
+    private fun optionalString(table: TomlTable, key: String): String? {
+        val value = table.getString(key) ?: return null
+        require(value.isNotEmpty()) { "$key must not be empty" }
         return value
     }
 

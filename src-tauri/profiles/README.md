@@ -8,7 +8,7 @@ pi.profile=/absolute/path/to/your-pi-profile.toml
 
 `pi.profile` is read from a Gradle property (`-Ppi.profile`), then `local.properties`, then the `PI_PROFILE` environment variable. `pi_assets` must be the directory containing `interface.json`. The build resolves the pack set from that interface, packs it as `assets/pi.zip`, and the Android runtime unpacks that archive to app-private storage before Tauri starts.
 
-The TOML profile uses snake_case keys (`pi_assets`, `resource_id`, and `maa_dir`). Relative `pi_assets` and `bundle` paths resolve from the profile directory; relative `maa_dir` paths resolve from the repository root.
+The TOML profile uses snake_case keys (`pi_assets`, `resource_id`, `app_name`, and `maa_dir`). Relative `pi_assets` and `bundle` paths resolve from the profile directory; relative `maa_dir` paths resolve from the repository root. The optional `app_name` sets the Android launcher and activity title; when omitted, the build uses `MaaTauriAndroid`.
 
 ### Pack set is derived, not listed
 

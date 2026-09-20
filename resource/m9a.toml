@@ -13,6 +13,8 @@ pi_assets = "m9a"
 
 resource_id = "m9a"
 
+app_name = "M9A"
+
 maa_dir = "vendor/maa/android"
 
 # data/ 是 Agent 直接读取的协议外目录，显式加入 pi_include。

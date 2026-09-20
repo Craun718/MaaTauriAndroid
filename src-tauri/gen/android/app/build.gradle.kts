@@ -47,6 +47,7 @@ val piProfile = piProfileFile?.let(PiProfileReader::read)
 
 val piAssets = piProfile?.assets
 val maaTauriAndroidResourceId = piProfile?.resourceId ?: "fixture"
+val maaTauriAndroidAppName = piProfile?.appName ?: "MaaTauriAndroid"
 val maaTauriAndroidMaaDir = piProfile?.maaDir ?: "vendor/maa/android"
 val maaTauriAndroidMaaDirPath = if (File(maaTauriAndroidMaaDir).isAbsolute) {
     File(maaTauriAndroidMaaDir).normalize()
@@ -248,6 +249,8 @@ extensions.configure<ApplicationExtension> {
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "top.natsuu.mta.$maaTauriAndroidResourceId"
+        resValue("string", "app_name", maaTauriAndroidAppName)
+        resValue("string", "main_activity_title", maaTauriAndroidAppName)
         minSdk = 28
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

@@ -20,6 +20,9 @@ pi_assets = "/absolute/path/to/your-maa-project"
 # applicationId suffix: top.natsuu.mta.<resource_id>
 resource_id = "yourpi"
 
+# Optional Android launcher and activity title.
+app_name = "Your PI"
+
 # Optional. Relative paths resolve from the repository root.
 maa_dir = "vendor/maa/android"
 

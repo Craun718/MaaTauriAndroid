@@ -93,7 +93,7 @@ export function RunActivityTabs({
   ];
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <div
         role="tablist"
         aria-label={t("runActivity")}
@@ -133,14 +133,14 @@ export function RunActivityTabs({
         id={`${groupId}-logs-panel`}
         aria-labelledby={`${groupId}-logs-tab`}
         hidden={activeTab !== "logs"}
-        className="rounded-lg border border-line bg-raised p-3"
+        className="rounded-lg border border-line bg-raised p-2"
       >
         {events.length === 0 ? (
-          <p className="px-1 py-2 text-sm text-ink-muted">{t("noRunLogs")}</p>
+          <p className="px-1 py-1 text-sm text-ink-muted">{t("noRunLogs")}</p>
         ) : (
           <ol
             ref={logListRef}
-            className="max-h-64 space-y-1.5 overflow-y-auto pr-1"
+            className="max-h-56 space-y-1 overflow-y-auto pr-1"
           >
             {events.map((entry) => {
               const runEvent = entry.type === "run" ? entry.event : undefined;

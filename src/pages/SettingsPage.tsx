@@ -45,9 +45,9 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-semibold">{t("settings")}</h1>
-      <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+    <div className="space-y-3">
+      <h1 className="text-xl font-semibold">{t("settings")}</h1>
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <div>
           <h2 id="language-select-label" className="font-medium">
             {t("language")}
@@ -85,7 +85,7 @@ export function SettingsPage() {
               await saveConfiguration(next);
               setLanguageDraft(undefined);
             }}
-            className="h-10 shrink-0 rounded-md bg-accent px-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {t("apply")}
           </button>
@@ -95,6 +95,7 @@ export function SettingsPage() {
         <>
           <ScopedOptions
             title="globalOptions"
+            compact
             names={project.globalOptions}
             values={snapshot.configuration.globalOptionValues}
             onChange={(name, value) =>
@@ -109,6 +110,7 @@ export function SettingsPage() {
           />
           <ScopedOptions
             title="resourceOptions"
+            compact
             names={resource?.options ?? []}
             values={
               snapshot.configuration.resourceOptionValues[
@@ -131,10 +133,10 @@ export function SettingsPage() {
           />
         </>
       )}
-      <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <h2 className="font-medium">{t("runBehavior")}</h2>
         <Checkbox
-          className="min-h-12 gap-3"
+          className="min-h-10 gap-2"
           checked={snapshot?.configuration.forceStopTargetApp ?? false}
           disabled={busy || !snapshot}
           onCheckedChange={(next) => {
@@ -148,11 +150,11 @@ export function SettingsPage() {
         </Checkbox>
       </section>
       {project?.metadata.telemetry?.dsn && (
-        <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+        <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
           <h2 className="font-medium">{t("telemetry")}</h2>
           <p className="text-sm text-ink-muted">{t("telemetryDescription")}</p>
           <Checkbox
-            className="min-h-12 gap-3"
+            className="min-h-10 gap-2"
             checked={snapshot?.configuration.telemetryEnabled ?? false}
             disabled={busy || !snapshot}
             onCheckedChange={(next) => {
@@ -166,7 +168,7 @@ export function SettingsPage() {
           </Checkbox>
         </section>
       )}
-      <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <h2 className="font-medium">{t("diagnostics")}</h2>
         <button
           type="button"
@@ -174,7 +176,7 @@ export function SettingsPage() {
           onClick={() => {
             void exportLogs();
           }}
-          className="flex h-10 items-center justify-center gap-2 rounded-md border border-line px-3 font-semibold disabled:opacity-50"
+          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
         >
           <Download size={16} />
           {exporting ? t("exportingLogs") : t("exportLogs")}
@@ -197,13 +199,13 @@ export function SettingsPage() {
               setCleaning(false);
             }
           }}
-          className="flex h-10 items-center justify-center gap-2 rounded-md border border-red-300 px-3 font-semibold text-red-600 disabled:opacity-50"
+          className="flex h-9 items-center justify-center gap-2 rounded-md border border-red-300 px-2.5 font-semibold text-red-600 disabled:opacity-50"
         >
           <Trash2 size={16} />
           {cleaning ? t("deleting") : t("deleteRuns")}
         </button>
       </section>
-      <PrivilegeStatusCard title="privileges" />
+      <PrivilegeStatusCard title="privileges" compact />
     </div>
   );
 }
@@ -212,11 +214,13 @@ export function SettingsPage() {
  * the setup page so every project-level knob lives in one place. */
 function ScopedOptions({
   title,
+  compact,
   names,
   values,
   onChange,
 }: {
   title: MessageKey;
+  compact?: boolean;
   names: string[];
   values: Record<string, OptionValue>;
   onChange: (name: string, value: OptionValue) => void;
@@ -226,7 +230,7 @@ function ScopedOptions({
   if (names.length === 0) return null;
   const definitions = project?.options ?? {};
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
       <h2 className="font-medium">{t(title)}</h2>
       {visibleOptions(definitions, names, values).map(({ name, depth }) => {
         const option = definitions[name];
@@ -238,6 +242,7 @@ function ScopedOptions({
           >
             <OptionEditor
               option={option}
+              compact={compact}
               value={defaultOptionValue(option, values[name])}
               onChange={(value) => onChange(name, value)}
             />

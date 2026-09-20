@@ -13,6 +13,7 @@ interface SegmentGroupProps {
   label?: ReactNode;
   description?: ReactNode;
   columns?: number;
+  compact?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export function SegmentGroup({
   label,
   description,
   columns = 3,
+  compact = false,
 }: SegmentGroupProps) {
   const groupId = useId();
   const labelId = `${groupId}-label`;
@@ -38,7 +40,11 @@ export function SegmentGroup({
   return (
     <div role="radiogroup" aria-labelledby={label ? labelId : undefined}>
       {(label || description) && (
-        <div className="mb-3 flex min-h-11 flex-wrap items-center justify-between gap-2">
+        <div
+          className={`flex flex-wrap items-center justify-between gap-2 ${
+            compact ? "mb-2 min-h-9" : "mb-3 min-h-11"
+          }`}
+        >
           <div>
             {label && (
               <span id={labelId} className="block font-medium">
@@ -52,7 +58,7 @@ export function SegmentGroup({
         </div>
       )}
       <div
-        className="grid gap-2"
+        className={`grid ${compact ? "gap-1.5" : "gap-2"}`}
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
         {items.map((item) => (
@@ -60,8 +66,14 @@ export function SegmentGroup({
             key={item.value}
             className={
               item.description
-                ? `${itemAppearance} min-h-10 flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left text-sm font-medium`
-                : `${itemAppearance} h-10 rounded-md px-3 text-sm font-medium`
+                ? `${itemAppearance} ${
+                    compact ? "min-h-9" : "min-h-10"
+                  } flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left text-sm font-medium`
+                : `${
+                    compact
+                      ? `${itemAppearance} h-9 rounded-md px-2.5 text-sm font-medium`
+                      : `${itemAppearance} h-10 rounded-md px-2.5 text-sm font-medium`
+                  }`
             }
           >
             <input

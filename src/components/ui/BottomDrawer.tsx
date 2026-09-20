@@ -53,7 +53,7 @@ export function BottomDrawer({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-lg border border-b-0 border-line bg-raised p-4 pb-[calc(1.25rem_+_env(safe-area-inset-bottom))] shadow-lg outline-none"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-lg border border-b-0 border-line bg-raised p-3 pb-[calc(1rem_+_env(safe-area-inset-bottom))] shadow-lg outline-none"
       >
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-medium">{title}</h2>
@@ -61,12 +61,12 @@ export function BottomDrawer({
             type="button"
             onClick={onClose}
             aria-label={t("close")}
-            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <X size={16} />
           </button>
         </div>
-        <div className="mt-2 space-y-1">{children}</div>
+        <div className="mt-1 space-y-1">{children}</div>
       </div>
     </>
   );

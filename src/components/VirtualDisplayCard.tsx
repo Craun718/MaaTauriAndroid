@@ -275,7 +275,7 @@ export function VirtualDisplayCard() {
     : undefined;
 
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <MonitorPlay size={18} className="text-accent" />
@@ -314,7 +314,7 @@ export function VirtualDisplayCard() {
         </button>
       </div>
 
-      <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-line bg-surface-muted">
+      <div className="relative flex aspect-[2/1] w-full items-center justify-center overflow-hidden rounded-md border border-line bg-surface-muted">
         <canvas
           ref={canvasRef}
           className="h-full w-full object-contain"
@@ -341,7 +341,7 @@ export function VirtualDisplayCard() {
             type="button"
             onClick={() => void stopDisplay()}
             disabled={actionPending || refreshing || status === undefined}
-            className="flex h-9 flex-none items-center justify-center gap-2 rounded-md border border-red-500/50 px-3 font-medium text-red-600 disabled:opacity-50 dark:text-red-300"
+            className="flex h-8 flex-none items-center justify-center gap-2 rounded-md border border-red-500/50 px-2.5 font-medium text-red-600 disabled:opacity-50 dark:text-red-300"
           >
             {actionPending ? (
               <LoaderCircle size={14} className="animate-spin" />

@@ -226,8 +226,8 @@ export function TasksPage() {
   }));
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-semibold">{t("tasksAndRun")}</h1>
+    <div className="space-y-3">
+      <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>
       <VirtualDisplayCard />
       <RunPanel onRunStarted={() => setActivityTab("logs")} />
       <RunActivityTabs
@@ -247,7 +247,7 @@ export function TasksPage() {
                 />
               </section>
             )}
-            <section className="space-y-3">
+            <section className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <Tabs
@@ -294,7 +294,7 @@ export function TasksPage() {
         <div
           role="alertdialog"
           aria-modal="false"
-          className="fixed inset-x-4 bottom-[calc(6rem_+_env(safe-area-inset-bottom))] z-50 rounded-lg border border-line bg-raised p-4 shadow-lg"
+          className="fixed inset-x-4 bottom-[calc(6rem_+_env(safe-area-inset-bottom))] z-50 rounded-lg border border-line bg-raised p-3 shadow-lg"
         >
           <p className="text-sm">
             {focusNotice.name
@@ -304,7 +304,7 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setFocusNotice(undefined)}
-            className="mt-3 h-9 w-full rounded-md bg-accent font-semibold text-white"
+            className="mt-2 h-8 w-full rounded-md bg-accent font-semibold text-white"
           >
             {t("focusDismiss")}
           </button>
@@ -337,6 +337,7 @@ function PresetPicker({
       <div className="flex gap-2">
         <Select
           className="min-w-0 flex-1"
+          compact
           labelledBy="preset-select-label"
           items={presets.map((preset) => ({
             value: preset.name,
@@ -348,7 +349,7 @@ function PresetPicker({
         <button
           type="button"
           onClick={() => onApply(active.name)}
-          className="h-10 shrink-0 rounded-md bg-accent px-3 text-sm font-semibold text-white"
+          className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white"
         >
           {applyLabel}
         </button>
@@ -377,7 +378,7 @@ function AddTaskPicker({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <Plus size={14} />
         {addLabel}
@@ -547,7 +548,7 @@ function TaskItem({
         >
           <GripVertical size={14} />
         </button>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
           {hasDetails ? (
             <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
               <button
@@ -589,7 +590,7 @@ function TaskItem({
             </h3>
           )}
           <Checkbox
-            className="h-8 shrink-0 gap-2 text-sm"
+            className="h-7 shrink-0 gap-1.5 text-sm"
             checked={configured.enabled}
             disabled={unavailable}
             onCheckedChange={onEnabledChange}
@@ -612,7 +613,7 @@ function TaskItem({
         </p>
       )}
       {expanded && hasDetails && (
-        <div className="mt-3 space-y-4 border-t border-line pt-4">
+        <div className="mt-2 space-y-2 border-t border-line pt-2">
           <RichDescription text={task.description} />
           {options.map(({ name, depth }) => {
             const option = project.options[name];
@@ -621,11 +622,12 @@ function TaskItem({
               <div
                 key={name}
                 className={
-                  depth > 0 ? "border-l-2 border-line pl-3" : undefined
+                  depth > 0 ? "border-l-2 border-line pl-2" : undefined
                 }
               >
                 <OptionEditor
                   option={option}
+                  compact
                   value={defaultOptionValue(
                     option,
                     configured.optionValues[name],

@@ -12,6 +12,15 @@ export default defineConfig(() => ({
   test: {
     environment: "jsdom",
     setupFiles: "./tests/setup.ts",
+    // Stale git worktrees and the pnpm content-addressable store contain full
+    // copies of this repo; without this exclude Vitest runs their tests too
+    // (against outdated sources) and fails the suite.
+    exclude: [
+      "**/node_modules/**",
+      "**/.worktrees/**",
+      "**/.pnpm-store/**",
+      "**/dist/**",
+    ],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

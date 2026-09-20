@@ -12,6 +12,7 @@ interface TextFieldProps {
   className?: string;
   error?: ReactNode;
   description?: ReactNode;
+  compact?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export function TextField({
   className,
   error,
   description,
+  compact = false,
 }: TextFieldProps) {
   return (
     <label
@@ -39,7 +41,13 @@ export function TextField({
       } ${className ?? ""}`}
     >
       {label && (
-        <span className="mb-1 block text-sm text-base-content/60">{label}</span>
+        <span
+          className={`block text-sm text-base-content/60 ${
+            compact ? "mb-0.5" : "mb-1"
+          }`}
+        >
+          {label}
+        </span>
       )}
       <input
         type={type}
@@ -52,12 +60,20 @@ export function TextField({
         onChange={(event) => onValueChange(event.target.value)}
       />
       {error && (
-        <span className="mt-1.5 block text-[0.8125rem] text-error">
+        <span
+          className={`block text-[0.8125rem] text-error ${
+            compact ? "mt-1" : "mt-1.5"
+          }`}
+        >
           {error}
         </span>
       )}
       {description && (
-        <span className="mt-1.5 block text-[0.8125rem]">{description}</span>
+        <span
+          className={`block text-[0.8125rem] ${compact ? "mt-1" : "mt-1.5"}`}
+        >
+          {description}
+        </span>
       )}
     </label>
   );

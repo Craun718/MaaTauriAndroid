@@ -79,7 +79,13 @@ const actionCopy: Record<PrivilegeAction, MessageKey> = {
 
 const STATUS_POLL_INTERVAL_MS = 500;
 
-export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
+export function PrivilegeStatusCard({
+  title,
+  compact = false,
+}: {
+  title: MessageKey;
+  compact?: boolean;
+}) {
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
   const [status, setStatus] = useState<PrivilegedStatus>();
@@ -162,7 +168,11 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         : ShieldCheck;
 
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+    <section
+      className={`rounded-lg border border-line bg-raised ${
+        compact ? "space-y-2 p-3" : "space-y-3 p-4"
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ShieldCheck size={18} className="text-accent" />
@@ -172,7 +182,9 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
           type="button"
           onClick={() => void refreshStatus()}
           disabled={refreshing || actionPending}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50"
+          className={`flex items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50 ${
+            compact ? "h-7 w-7" : "h-8 w-8"
+          }`}
           aria-label={t("refreshStatus")}
         >
           <RefreshCw
@@ -185,9 +197,9 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
       <div className="flex items-center justify-between gap-3">
         <span className="font-medium">{t("shizuku")}</span>
         <span
-          className={`flex h-8 flex-none items-center gap-2 rounded-md border px-2.5 text-xs font-medium ${
-            copy?.chip ?? "border-line bg-surface-muted text-ink-muted"
-          }`}
+          className={`flex flex-none items-center gap-2 rounded-md border text-xs font-medium ${
+            compact ? "h-7 px-2" : "h-8 px-2.5"
+          } ${copy?.chip ?? "border-line bg-surface-muted text-ink-muted"}`}
         >
           {copy ? (
             <span className={`h-2 w-2 rounded-full ${copy.dot}`} />
@@ -211,7 +223,9 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
           type="button"
           onClick={() => void runPrivilegeAction(action)}
           disabled={actionPending || refreshing}
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
+          className={`flex w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50 ${
+            compact ? "h-8" : "h-9"
+          }`}
         >
           {actionPending ? (
             <LoaderCircle size={14} className="animate-spin" />
@@ -226,7 +240,9 @@ export function PrivilegeStatusCard({ title }: { title: MessageKey }) {
         type="button"
         onClick={() => void runPrivilegeAction("request")}
         disabled={actionPending || refreshing}
-        className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50"
+        className={`flex w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50 ${
+          compact ? "h-8" : "h-9"
+        }`}
       >
         {actionPending ? (
           <LoaderCircle size={14} className="animate-spin" />

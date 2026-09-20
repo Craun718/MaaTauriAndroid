@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex h-full w-full max-w-md flex-col">
       {/* The only scroll container in the app: html/body are locked in index.css so
           the fixed nav below can never be dragged around with the page. */}
-      <main className="flex-1 overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-[calc(7rem_+_env(safe-area-inset-bottom))] pt-[calc(1.25rem_+_env(safe-area-inset-top))]">
+      <main className="flex-1 overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-[calc(4rem_+_env(safe-area-inset-bottom))] pt-[calc(1.25rem_+_env(safe-area-inset-top))]">
         {children}
       </main>
       {/* The webview spans the whole screen (no native inset padding), so this blurred

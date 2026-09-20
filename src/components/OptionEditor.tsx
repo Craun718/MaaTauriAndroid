@@ -11,9 +11,15 @@ interface OptionEditorProps {
   option: OptionDefinition;
   value?: OptionValue;
   onChange: (value: OptionValue) => void;
+  compact?: boolean;
 }
 
-export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
+export function OptionEditor({
+  option,
+  value,
+  onChange,
+  compact = false,
+}: OptionEditorProps) {
   const { t } = useTranslation();
 
   if (option.kind === "switch") {
@@ -27,9 +33,13 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
       // undeclared `default_case` shows the case that will actually run.
       const effective = defaultOptionValue(option, value);
       return (
-        <div className="space-y-2">
+        <div className={compact ? "space-y-1.5" : "space-y-2"}>
           <Checkbox
-            className="min-h-11 gap-3 rounded-md border border-line px-3"
+            className={`${
+              compact
+                ? "min-h-10 gap-2 rounded-md border border-line px-2.5"
+                : "min-h-11 gap-3 rounded-md border border-line px-3"
+            }`}
             checked={effective.type === "single" && effective.case === pair.on}
             onCheckedChange={(next) =>
               onChange({ type: "single", case: next ? pair.on : pair.off })
@@ -52,7 +62,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
     const selected = effective.type === "single" ? effective.case : undefined;
     const selectedCase = option.cases.find((item) => item.name === selected);
     return (
-      <div className="space-y-3">
+      <div className={compact ? "space-y-1.5" : "space-y-3"}>
         <div>
           <p id={`option-label-${option.name}`} className="font-medium">
             {option.label}
@@ -60,6 +70,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
           <RichDescription text={option.description} />
         </div>
         <Select
+          compact={compact}
           labelledBy={`option-label-${option.name}`}
           value={selected}
           items={option.cases.map((item) => ({
@@ -84,6 +95,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
     const selected = value?.type === "single" ? value.case : option.defaultCase;
     return (
       <SegmentGroup
+        compact={compact}
         label={option.label}
         description={
           option.description ? (
@@ -110,18 +122,22 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
     const selected =
       value?.type === "multiple" ? value.cases : option.defaultCases;
     return (
-      <div className="space-y-3">
+      <div className={compact ? "space-y-1.5" : "space-y-3"}>
         <div>
           <p className="font-medium">{option.label}</p>
           <RichDescription text={option.description} />
         </div>
-        <div className="space-y-2">
+        <div className={compact ? "space-y-1.5" : "space-y-2"}>
           {option.cases.map((item) => {
             const checked = selected.includes(item.name);
             return (
               <Checkbox
                 key={item.name}
-                className="min-h-11 gap-3 rounded-md border border-line px-3"
+                className={`${
+                  compact
+                    ? "min-h-10 gap-2 rounded-md border border-line px-2.5"
+                    : "min-h-11 gap-3 rounded-md border border-line px-3"
+                }`}
                 checked={checked}
                 onCheckedChange={(next) => {
                   onChange({
@@ -159,7 +175,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
   }> = option.kind === "input" ? option.inputs : option.hotkeys;
   const values = value?.type === "inputs" ? value.values : {};
   return (
-    <div className="space-y-3">
+    <div className={compact ? "space-y-1.5" : "space-y-3"}>
       <div>
         <p className="font-medium">{option.label}</p>
         <RichDescription text={option.description} />
@@ -170,7 +186,11 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
           return (
             <Checkbox
               key={field.name}
-              className="min-h-11 gap-3 rounded-md border border-line px-3"
+              className={`${
+                compact
+                  ? "min-h-10 gap-2 rounded-md border border-line px-2.5"
+                  : "min-h-11 gap-3 rounded-md border border-line px-3"
+              }`}
               checked={checked}
               onCheckedChange={(next) =>
                 onChange({
@@ -207,6 +227,7 @@ export function OptionEditor({ option, value, onChange }: OptionEditorProps) {
             }
             value={current}
             error={patternError}
+            compact={compact}
             description={
               field.description ? (
                 <RichDescription text={field.description} />

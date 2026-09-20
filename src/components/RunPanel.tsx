@@ -200,13 +200,13 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="space-y-2">
         <button
           type="button"
           aria-expanded={actionsOpen}
           aria-haspopup="dialog"
           onClick={() => setActionsOpen(true)}
-          className="flex h-10 w-full cursor-pointer items-center justify-center rounded-md border border-line text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex h-9 w-full cursor-pointer items-center justify-center rounded-md border border-line text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {t("taskOperations")}
         </button>
@@ -227,7 +227,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
             if (running) void stop();
             else void start();
           }}
-          className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
         >
           {running ? <Square size={16} /> : <Play size={16} />}
           {t(running ? "stop" : "start")}
@@ -239,7 +239,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
             setActionsOpen(false);
             void exportLogs();
           }}
-          className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
         >
           <Download size={16} />
           {exporting ? t("exportingLogs") : t("exportLogs")}
@@ -251,7 +251,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
             setActionsOpen(false);
             void captureScreenshot();
           }}
-          className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
         >
           <Camera size={16} />
           {t("captureScreenshot")}

@@ -9,6 +9,7 @@ interface SelectProps {
   value?: string;
   labelledBy?: string;
   className?: string;
+  compact?: boolean;
 }
 
 /**
@@ -22,12 +23,13 @@ export function Select({
   value,
   labelledBy,
   className,
+  compact = false,
 }: SelectProps) {
   return (
     <span className={`block ${className ?? ""}`}>
       <select
         aria-labelledby={labelledBy}
-        className="select w-full"
+        className={compact ? "select select-sm w-full" : "select w-full"}
         value={value ?? items[0]?.value}
         onChange={(event) => onValueChange(event.target.value)}
       >

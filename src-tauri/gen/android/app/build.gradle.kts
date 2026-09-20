@@ -288,6 +288,7 @@ extensions.configure<ApplicationExtension> {
     buildFeatures {
         buildConfig = true
         aidl = true
+        resValues = true
     }
 
     lint {

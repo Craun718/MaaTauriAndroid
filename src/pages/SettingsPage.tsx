@@ -12,7 +12,12 @@ import {
   defaultOptionValue,
   visibleOptions,
 } from "../lib/options";
-import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
+import type {
+  AppStateSnapshot,
+  OptionValue,
+  UiLanguage,
+  UserConfiguration,
+} from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
@@ -206,6 +211,46 @@ export function SettingsPage() {
         </button>
       </section>
       <PrivilegeStatusCard title="privileges" compact />
+      <AboutSection snapshot={snapshot} />
+    </div>
+  );
+}
+
+/** Versions of the client, the framework, and the loaded Project Interface. */
+function AboutSection({ snapshot }: { snapshot?: AppStateSnapshot }) {
+  const { t } = useTranslation();
+  const project = snapshot?.project;
+  const versions = snapshot?.versions;
+
+  return (
+    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+      <h2 className="font-medium">{t("about")}</h2>
+      <dl className="space-y-2 text-sm">
+        <VersionRow label={t("appName")} value={versions?.appVersion} />
+        <VersionRow
+          label={t("aboutFramework")}
+          value={versions?.frameworkVersion}
+        />
+        {project && (
+          <>
+            <VersionRow label={t("project")} value={project.label} />
+            <VersionRow
+              label={t("projectVersion")}
+              value={project.version ?? t("aboutUnknown")}
+            />
+          </>
+        )}
+      </dl>
+    </section>
+  );
+}
+
+function VersionRow({ label, value }: { label: string; value?: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-ink-muted">{label}</dt>
+      <dd className="font-medium tabular-nums">{value ?? t("aboutUnknown")}</dd>
     </div>
   );
 }

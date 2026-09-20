@@ -7,6 +7,7 @@ mod run_log;
 mod runtime;
 mod secrets;
 mod telemetry;
+mod version;
 
 use domain::loader::ProjectLoader;
 use domain::resolver::{resolve_run, ResolverError};
@@ -39,6 +40,9 @@ struct AppStateSnapshot {
     project: Option<Project>,
     configuration: UserConfiguration,
     project_path: Option<String>,
+    /// Rides along with the snapshot so the About card reflects the project that
+    /// was just loaded, without a second IPC round trip.
+    versions: version::VersionInfo,
 }
 
 struct AppState {
@@ -172,6 +176,7 @@ impl AppState {
         self.persist_configuration()?;
         let project = self.project().expect("the project was just installed");
         configure_telemetry(&project, &configuration);
+        log_loaded_project(&project, &configuration);
         Ok(configuration)
     }
 }
@@ -184,6 +189,21 @@ fn configure_telemetry(project: &Project, configuration: &UserConfiguration) {
         configuration.telemetry_enabled,
     );
     telemetry::tag_project(Some(&project.name), project.version.as_deref());
+}
+
+/// Names the loaded Project Interface, its version, and the resource this run will
+/// use. Logged from `install`, the one funnel both `bootstrap` and `load_project`
+/// pass through, so every project load appears exactly once.
+fn log_loaded_project(project: &Project, configuration: &UserConfiguration) {
+    log::info!(
+        "{}",
+        version::project_line(
+            &project.name,
+            project.version.as_deref(),
+            project.interface_version,
+            configuration.active_resource.as_deref(),
+        )
+    );
 }
 
 fn normalize_configuration(project: &Project, configuration: &mut UserConfiguration) {
@@ -327,7 +347,9 @@ fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnaps
     };
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;
+    let environment = version::environment();
     Ok(AppStateSnapshot {
+        versions: version::VersionInfo::new(environment),
         project: state.project().ok(),
         configuration,
         project_path: bundled_root.map(str::to_string),
@@ -417,7 +439,9 @@ fn load_project(
         project,
         stored,
     )?;
+    let environment = version::environment();
     Ok(AppStateSnapshot {
+        versions: version::VersionInfo::new(environment),
         project: state.project().ok(),
         configuration,
         project_path: Some(path),
@@ -1719,6 +1743,9 @@ pub fn run() {
             let maa_log_dir = root.join("maa-logs");
             let _ = std::fs::create_dir_all(&maa_log_dir);
             runtime::set_maa_log_dir(maa_log_dir);
+            // Plugins are initialized before `setup` runs, so the banner below is
+            // the first record both log targets receive.
+            log::info!("{}", version::banner(version::environment().as_ref()));
             Ok(())
         })
         .run(tauri::generate_context!())

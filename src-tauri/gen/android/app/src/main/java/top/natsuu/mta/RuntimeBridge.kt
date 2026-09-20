@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
+import org.json.JSONObject
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
 
@@ -142,6 +143,28 @@ object RuntimeBridge {
     fun deviceInfo(): String? {
         val context = agentContext ?: return null
         return runCatching { renderDeviceInfo(context) }.getOrNull()
+    }
+
+    /**
+     * The subset of package and device facts the Rust startup banner needs, as
+     * JSON so both sides agree on field names instead of a positional format.
+     */
+    @JvmStatic
+    fun environmentInfo(): String? {
+        val context = agentContext ?: return null
+        return runCatching {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            JSONObject().apply {
+                put("time", DEVICE_TIME_FORMAT.format(java.time.ZonedDateTime.now()))
+                put("device", "${Build.MANUFACTURER} ${Build.MODEL}")
+                put("android", Build.VERSION.RELEASE)
+                put("sdkInt", Build.VERSION.SDK_INT)
+                put("abi", Build.SUPPORTED_ABIS.joinToString())
+                put("versionName", packageInfo.versionName ?: UNKNOWN)
+                put("versionCode", packageInfo.longVersionCode)
+                put("buildType", if (BuildConfig.DEBUG) "debug" else "release")
+            }.toString()
+        }.getOrNull()
     }
 
     private fun renderDeviceInfo(context: Context): String {

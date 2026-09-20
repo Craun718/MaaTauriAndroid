@@ -326,11 +326,22 @@ object VirtualDisplayStreamHost {
 
         private fun offer(frame: QueuedFrame) {
             if (!active.get()) return
-            // A preview must stay current. Dropping to the newest encoded sample is
-            // much better than blocking the encoder on a stalled WebView.
-            while (!queue.offer(frame)) {
+            if (frame.opcode == 1) {
                 queue.clear()
-                if (frame.opcode == 1 || queue.offer(frame)) return
+                queue.offer(frame)
+                requestSyncFrame()
+                return
+            }
+
+            val isKeyFrame = frame.payload.firstOrNull()?.toInt()?.and(FRAME_FLAG_KEY) != 0
+            if (isKeyFrame) {
+                queue.clear()
+                queue.offer(frame)
+                return
+            }
+
+            if (!queue.offer(frame)) {
+                requestSyncFrame()
             }
         }
 

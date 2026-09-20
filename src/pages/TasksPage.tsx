@@ -337,6 +337,7 @@ function PresetPicker({
       <div className="flex gap-2">
         <Select
           className="min-w-0 flex-1"
+          inputClassName="text-sm"
           compact
           labelledBy="preset-select-label"
           items={presets.map((preset) => ({
@@ -533,7 +534,7 @@ function TaskItem({
 
   return (
     <article
-      className={`rounded-lg border p-2 ${
+      className={`rounded-lg border p-2 text-xs ${
         unavailable
           ? "border-line bg-surface-muted opacity-60"
           : "border-line bg-raised"
@@ -590,7 +591,7 @@ function TaskItem({
             </h3>
           )}
           <Checkbox
-            className="h-7 shrink-0 gap-1.5 text-sm"
+            className="h-7 shrink-0 gap-1.5 text-xs"
             checked={configured.enabled}
             disabled={unavailable}
             onCheckedChange={onEnabledChange}
@@ -608,7 +609,7 @@ function TaskItem({
         </button>
       </div>
       {unavailable && (
-        <p className="mt-2 text-sm text-ink-muted">
+        <p className="mt-2 text-xs text-ink-muted">
           {t("requiresOtherController")}
         </p>
       )}

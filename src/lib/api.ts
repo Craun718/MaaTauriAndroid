@@ -78,6 +78,10 @@ export async function touchVirtualDisplay(input: {
   );
 }
 
+export async function pressVirtualDisplayBack() {
+  return invoke<void>("virtual_display_back");
+}
+
 export async function setVirtualDisplayTouchMarkers(enabled: boolean) {
   return invoke<
     Array<{

@@ -87,6 +87,11 @@ const en = {
     "The privileged control unit is starting; try again shortly",
   diagnosticVirtualDisplayRejected:
     "The privileged control service rejected the virtual display",
+  diagnosticVirtualDisplayInactive: "The virtual display is not active",
+  diagnosticVirtualDisplayBackRejected:
+    "Android rejected the virtual display back-key injection",
+  diagnosticVirtualDisplayBackUnavailable:
+    "The privileged control service is unavailable for the virtual display back key",
 
   // Settings, project scope
   noResources: "No resources are declared.",
@@ -314,6 +319,10 @@ const zh: Record<MessageKey, string> = {
     "特权控制单元启动失败；请检查 Shizuku 和应用日志后重试",
   diagnosticControlServiceStarting: "特权控制单元正在启动；请稍后重试",
   diagnosticVirtualDisplayRejected: "特权控制服务拒绝了虚拟屏请求",
+  diagnosticVirtualDisplayInactive: "虚拟屏未启动",
+  diagnosticVirtualDisplayBackRejected: "Android 拒绝了虚拟屏返回键注入",
+  diagnosticVirtualDisplayBackUnavailable:
+    "特权控制服务不可用，无法发送虚拟屏返回键",
 };
 
 const catalog: Record<AppLanguage, Record<MessageKey, string>> = { en, zh };
@@ -386,6 +395,11 @@ const diagnosticKeys: Record<string, MessageKey> = {
     "diagnosticControlServiceStarting",
   "The privileged control service rejected the virtual display":
     "diagnosticVirtualDisplayRejected",
+  "The virtual display is not active": "diagnosticVirtualDisplayInactive",
+  "Android rejected the virtual display back-key injection":
+    "diagnosticVirtualDisplayBackRejected",
+  "The privileged control service is unavailable for the virtual display back key":
+    "diagnosticVirtualDisplayBackUnavailable",
 };
 
 /** Localizes a known backend diagnostic; unknown text passes through unchanged. */

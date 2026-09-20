@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   captureManualScreenshot,
   getRunStatus,
+  pressVirtualDisplayBack,
   resolveCurrent,
   startRun,
   stopRun,
@@ -50,6 +51,14 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     },
     [notify, language],
   );
+
+  const pressBack = useCallback(async () => {
+    try {
+      await pressVirtualDisplayBack();
+    } catch (error) {
+      reportError(error);
+    }
+  }, [reportError]);
 
   // A preparing failure reaches the UI twice: the backend emits the failure
   // run-event before `startRun` rejects, so the catch below and the listener
@@ -258,7 +267,10 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
         </button>
         <button
           type="button"
-          onClick={() => setActionsOpen(false)}
+          onClick={() => {
+            setActionsOpen(false);
+            void pressBack();
+          }}
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
         >
           <Undo2 size={16} />

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bootstrapApp, loadProject, setVirtualDisplayLandscape } from "./api";
+import {
+  bootstrapApp,
+  loadProject,
+  pressVirtualDisplayBack,
+  setVirtualDisplayLandscape,
+} from "./api";
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -88,5 +93,27 @@ describe("virtual display fullscreen orientation", () => {
     expect(invoke).toHaveBeenCalledWith("set_virtual_display_landscape", {
       enabled: false,
     });
+  });
+});
+
+describe("virtual display back key", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("requests a back-key press", async () => {
+    invoke.mockResolvedValue(undefined);
+
+    await expect(pressVirtualDisplayBack()).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith("virtual_display_back");
+  });
+
+  it("propagates a back-key bridge failure", async () => {
+    invoke.mockRejectedValue(new Error("The virtual display is not active"));
+
+    await expect(pressVirtualDisplayBack()).rejects.toThrow(
+      "The virtual display is not active",
+    );
+    expect(invoke).toHaveBeenCalledWith("virtual_display_back");
   });
 });

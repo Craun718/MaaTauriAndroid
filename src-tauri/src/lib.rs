@@ -789,6 +789,42 @@ fn virtual_display_touch(
     }
 }
 
+#[tauri::command]
+fn virtual_display_back() -> Result<(), AppError> {
+    let status = virtual_display_status()?;
+    validate_virtual_display_back(&status)?;
+
+    #[cfg(target_os = "android")]
+    {
+        const KEYCODE_BACK: i32 = 4;
+        const METHOD_KEY_DOWN: i32 = 9;
+        const METHOD_KEY_UP: i32 = 10;
+        for method in [METHOD_KEY_DOWN, METHOD_KEY_UP] {
+            let code = call_runtime_bridge_key(status.display_id, KEYCODE_BACK, method)?;
+            if code != 0 {
+                return Err(AppError::Message(virtual_display_key_rejection_message(
+                    code,
+                )));
+            }
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "android"))]
+    Err(AppError::Message(
+        "The virtual display can only be controlled on Android".to_string(),
+    ))
+}
+
+fn validate_virtual_display_back(status: &VirtualDisplayStatus) -> Result<(), AppError> {
+    if !status.active {
+        return Err(AppError::Message(
+            "The virtual display is not active".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_virtual_display_touch(
     status: &VirtualDisplayStatus,
     action: i32,
@@ -894,6 +930,16 @@ fn call_runtime_bridge_method_with_boolean(
 }
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn virtual_display_key_rejection_message(code: i32) -> String {
+    match code {
+        -4 => "Android rejected the virtual display back-key injection".to_string(),
+        -7 => "The privileged control service is unavailable for the virtual display back key"
+            .to_string(),
+        _ => format!("The virtual display back-key command failed with result {code}"),
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn virtual_display_touch_rejection_message(code: i32) -> String {
     match code {
         -1 => "The virtual display touch contact is invalid".to_string(),
@@ -988,6 +1034,34 @@ fn call_runtime_bridge_touch(
                 jni::objects::JValue::Int(x),
                 jni::objects::JValue::Int(y),
                 jni::objects::JValue::Int(contact),
+            ],
+        )
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    result
+        .i()
+        .map_err(|error| AppError::Message(error.to_string()))
+}
+
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_key(display_id: i32, key_code: i32, method: i32) -> Result<i32, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(
+            bridge_class,
+            "dispatchVirtualDisplayKey",
+            "(III)I",
+            &[
+                jni::objects::JValue::Int(display_id),
+                jni::objects::JValue::Int(key_code),
+                jni::objects::JValue::Int(method),
             ],
         )
         .map_err(|error| AppError::Message(error.to_string()))?;
@@ -1891,7 +1965,32 @@ mod tests {
             virtual_display_touch(12, 6, 0, 0, 15),
             Err(AppError::Message(message)) if message == "The virtual display is not active"
         ));
+        assert!(matches!(
+            virtual_display_back(),
+            Err(AppError::Message(message)) if message == "The virtual display is not active"
+        ));
         assert!(validate_virtual_display_touch(&status, 6, 0, 0, 15).is_err());
+    }
+
+    #[test]
+    fn virtual_display_back_is_valid_before_dispatch() {
+        let status = VirtualDisplayStatus {
+            active: true,
+            display_id: 12,
+            width: 1280,
+            height: 720,
+            frame_count: 0,
+        };
+        assert!(validate_virtual_display_back(&status).is_ok());
+
+        let inactive = VirtualDisplayStatus {
+            active: false,
+            ..status
+        };
+        assert!(matches!(
+            validate_virtual_display_back(&inactive),
+            Err(AppError::Message(message)) if message == "The virtual display is not active"
+        ));
     }
 
     #[test]
@@ -2090,6 +2189,7 @@ pub fn run() {
             virtual_display_stream,
             set_virtual_display_landscape,
             virtual_display_touch,
+            virtual_display_back,
             set_virtual_display_touch_markers,
             start_run,
             run_status,

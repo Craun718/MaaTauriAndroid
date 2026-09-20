@@ -487,6 +487,29 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun dispatchVirtualDisplayKey(
+        displayId: Int,
+        keyCode: Int,
+        method: Int,
+    ): Int {
+        return runCatching {
+            ControlHost.current()?.dispatchInputDetailed(
+                displayId,
+                method,
+                0,
+                0,
+                0,
+                keyCode,
+                null,
+                null,
+                false,
+            )?.code ?: -7
+        }.onFailure { error ->
+            android.util.Log.w("MaaTauriAndroidControl", "Virtual display key dispatch failed", error)
+        }.getOrDefault(-7)
+    }
+
+    @JvmStatic
     external fun configureScreen(width: Int, height: Int)
 
     @JvmStatic

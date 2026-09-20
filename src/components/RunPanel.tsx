@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { Camera, CornerDownLeft, Download, Play, Square } from "lucide-react";
+import { Camera, Download, Play, Square, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   captureManualScreenshot,
@@ -261,7 +261,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
           onClick={() => setActionsOpen(false)}
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
         >
-          <CornerDownLeft size={16} />
+          <Undo2 size={16} />
           {t("back")}
         </button>
       </BottomDrawer>

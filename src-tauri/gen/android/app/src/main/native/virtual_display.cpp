@@ -155,9 +155,8 @@ void on_image_available(void* /*context*/, AImageReader* reader) {
     }
 
     copy_hardware_frame(image);
-    if (!dispatch_preview(image)) {
-        AImage_delete(image);
-    }
+    dispatch_preview(image);
+    AImage_delete(image);
 }
 
 void stop_preview();
@@ -380,7 +379,7 @@ std::mutex g_preview_mutex;
 std::mutex g_render_mutex;
 std::condition_variable g_render_condition;
 std::thread g_render_thread;
-std::queue<AImage*> g_render_queue;
+std::queue<AHardwareBuffer*> g_render_queue;
 ANativeWindow* g_pending_window = nullptr;
 bool g_pending_detach = false;
 std::atomic<bool> g_preview_enabled {false};
@@ -588,7 +587,7 @@ void render_frame(AHardwareBuffer* hardware_buffer) {
 
 void drain_render_queue_locked() {
     while (!g_render_queue.empty()) {
-        AImage_delete(g_render_queue.front());
+        AHardwareBuffer_release(g_render_queue.front());
         g_render_queue.pop();
     }
 }
@@ -596,7 +595,7 @@ void drain_render_queue_locked() {
 void render_loop() {
     ANativeWindow* window = nullptr;
     while (g_render_running.load(std::memory_order_acquire)) {
-        AImage* image = nullptr;
+        AHardwareBuffer* hardware_buffer = nullptr;
         ANativeWindow* next_window = nullptr;
         bool detach = false;
         {
@@ -613,7 +612,7 @@ void render_loop() {
             next_window = g_pending_window;
             g_pending_window = nullptr;
             if (!g_render_queue.empty()) {
-                image = g_render_queue.front();
+                hardware_buffer = g_render_queue.front();
                 g_render_queue.pop();
             }
         }
@@ -632,12 +631,9 @@ void render_loop() {
                 window = nullptr;
             }
         }
-        if (image != nullptr) {
-            AHardwareBuffer* hardware_buffer = nullptr;
-            if (AImage_getHardwareBuffer(image, &hardware_buffer) == AMEDIA_OK) {
-                render_frame(hardware_buffer);
-            }
-            AImage_delete(image);
+        if (hardware_buffer != nullptr) {
+            render_frame(hardware_buffer);
+            AHardwareBuffer_release(hardware_buffer);
         }
     }
 
@@ -662,20 +658,27 @@ bool dispatch_preview(AImage* image) {
     }
     last_dispatch = now;
 
-    AImage* replaced = nullptr;
+    AHardwareBuffer* hardware_buffer = nullptr;
+    if (AImage_getHardwareBuffer(image, &hardware_buffer) != AMEDIA_OK ||
+        hardware_buffer == nullptr) {
+        return false;
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_render_mutex);
         if (!g_preview_enabled.load(std::memory_order_acquire)) {
             return false;
         }
+        AHardwareBuffer* replaced_buffer = nullptr;
         if (!g_render_queue.empty()) {
-            replaced = g_render_queue.front();
+            replaced_buffer = g_render_queue.front();
             g_render_queue.pop();
         }
-        g_render_queue.push(image);
-    }
-    if (replaced != nullptr) {
-        AImage_delete(replaced);
+        AHardwareBuffer_acquire(hardware_buffer);
+        g_render_queue.push(hardware_buffer);
+        if (replaced_buffer != nullptr) {
+            AHardwareBuffer_release(replaced_buffer);
+        }
     }
     g_render_condition.notify_one();
     return true;

@@ -435,26 +435,46 @@ export function VirtualDisplayPreview({
   }[streamState];
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
-      <canvas
-        ref={canvasRef}
-        className={`h-full w-full object-contain ${
-          interactive ? "touch-none" : "pointer-events-none"
-        }`}
-        aria-label={t("virtualDisplay")}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
-      />
-      {status.active && showTouchMarkers && (
-        <div className="pointer-events-none absolute inset-0">
-          <canvas
-            ref={markerCanvasRef}
-            className="h-full w-full object-contain"
-          />
-        </div>
-      )}
+    <div
+      className={`relative flex items-center justify-center overflow-hidden [container-type:size] ${className}`}
+    >
+      <div
+        className={
+          status.width > 0 && status.height > 0
+            ? "relative"
+            : "relative h-full w-full"
+        }
+        style={
+          status.width > 0 && status.height > 0
+            ? {
+                aspectRatio: `${status.width} / ${status.height}`,
+                width: `min(100cqw, ${
+                  (status.width / status.height) * 100
+                }cqh)`,
+              }
+            : undefined
+        }
+      >
+        <canvas
+          ref={canvasRef}
+          className={`h-full w-full object-contain ${
+            interactive ? "touch-none" : "pointer-events-none"
+          }`}
+          aria-label={t("virtualDisplay")}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerEnd}
+          onPointerCancel={onPointerEnd}
+        />
+        {status.active && showTouchMarkers && (
+          <div className="pointer-events-none absolute inset-0">
+            <canvas
+              ref={markerCanvasRef}
+              className="h-full w-full object-contain"
+            />
+          </div>
+        )}
+      </div>
       {streamState !== "ready" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-surface-muted/90 px-3 py-2 text-xs text-ink-muted">
           {streamState === "connecting" ? (

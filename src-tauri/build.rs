@@ -88,7 +88,7 @@ fn maa_framework_version() -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-/// Reads the default out of a `MAAFW_VERSION="${MAAFW_VERSION:-v5.13.1}"`
+/// Reads the default out of a `MAAFW_VERSION="${MAAFW_VERSION:-v5.13.0}"`
 /// assignment. Deliberately a narrow parser instead of sourcing the script:
 /// a build script must not execute repository shell.
 fn parse_env_sh_version(contents: &str) -> Option<String> {

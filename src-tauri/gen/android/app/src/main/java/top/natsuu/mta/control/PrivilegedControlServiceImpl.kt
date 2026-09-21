@@ -24,6 +24,7 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStream
 import kotlin.concurrent.thread
+import kotlin.system.exitProcess
 import top.natsuu.mta.IMaaTauriAndroidControlService
 
 class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAndroidControlService.Stub() {
@@ -182,12 +183,33 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             "Owner process died; force-stopping target packages and releasing the virtual display",
         )
         runDeathCleanup()
+        stopServiceProcess()
+    }
+
+    /**
+     * Shizuku invokes this reserved transaction (see the AIDL comment) when it
+     * unbinds the user service, including after the app process died. The
+     * service has nothing left to do once its owner is gone, so it cleans up
+     * and exits instead of leaking a shell-uid process.
+     */
+    override fun destroy() {
+        android.util.Log.w(
+            "MaaTauriAndroidControl",
+            "Shizuku released the service; running the exit cleanup and stopping the process",
+        )
+        runDeathCleanup()
+        stopServiceProcess()
+    }
+
+    private fun stopServiceProcess() {
+        android.os.Process.killProcess(android.os.Process.myPid())
+        exitProcess(0)
     }
 
     /**
      * Single exit-cleanup entry shared by every teardown path (owner death,
-     * Shizuku destroy). Latched so the binder thread racing onDestroy or unbind
-     * cannot run the cleanup twice.
+     * Shizuku destroy()). Latched so the binder thread racing destroy() or
+     * unbind cannot run the cleanup twice.
      */
     private fun runDeathCleanup() {
         if (!deathCleanupStarted.compareAndSet(false, true)) return

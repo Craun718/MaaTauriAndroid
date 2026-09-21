@@ -6,31 +6,38 @@ import top.natsuu.mta.AgentLaunch;
 import android.os.ParcelFileDescriptor;
 import android.view.Surface;
 
+/**
+ * Transaction ids are pinned explicitly and only ever appended: an app upgrade
+ * may find a privileged service process from the old build still alive, and
+ * both sides talk by transaction code, so inserting or reordering methods
+ * would silently misroute calls. destroy() = 16777114 is the transaction id
+ * the Shizuku server reserves for user services.
+ */
 interface IMaaTauriAndroidControlService {
-    ParcelFileDescriptor captureFrame(int displayId);
-    int startVirtualDisplay(int width, int height, int dpi, in Surface surface);
-    void stopVirtualDisplay();
+    ParcelFileDescriptor captureFrame(int displayId) = 1;
+    int startVirtualDisplay(int width, int height, int dpi, in Surface surface) = 2;
+    void stopVirtualDisplay() = 3;
     int dispatchInput(int displayId, int method, int x, int y, int contact, int keyCode,
-            in @nullable String text, in @nullable String packageName, boolean forceStop);
+            in @nullable String text, in @nullable String packageName, boolean forceStop) = 4;
     InputResult dispatchInputDetailed(int displayId, int method, int x, int y, int contact,
             int keyCode, in @nullable String text, in @nullable String packageName,
-            boolean forceStop);
-    ParcelFileDescriptor capturePng(int displayId);
-    ParcelFileDescriptor deviceInfo();
-    ParcelFileDescriptor displayState();
-    ParcelFileDescriptor logcat(boolean full);
-    void bugreport(int displayId, in ParcelFileDescriptor destination);
-    String bugreportProgress();
-    ParcelFileDescriptor dumpsys();
-    void cancelBugreport();
+            boolean forceStop) = 5;
+    ParcelFileDescriptor capturePng(int displayId) = 6;
+    ParcelFileDescriptor deviceInfo() = 7;
+    ParcelFileDescriptor displayState() = 8;
+    ParcelFileDescriptor logcat(boolean full) = 9;
+    void bugreport(int displayId, in ParcelFileDescriptor destination) = 10;
+    String bugreportProgress() = 11;
+    ParcelFileDescriptor dumpsys() = 12;
+    void cancelBugreport() = 13;
     void prepareAgentRuntime(String descriptorJson, int runtimeIndex,
-            in ParcelFileDescriptor piArchive, in ParcelFileDescriptor runtimeBundle);
+            in ParcelFileDescriptor piArchive, in ParcelFileDescriptor runtimeBundle) = 14;
     AgentLaunch startAgent(int runtimeIndex, int port,
-            String nativeLibraryDir, String executionId, String piEnvironment);
-    void stopAgent(String executionId);
-    void stopAllAgents();
-    int[] setTouchMarkersEnabled(boolean enabled);
-    int protocolVersion();
+            String nativeLibraryDir, String executionId, String piEnvironment) = 15;
+    void stopAgent(String executionId) = 16;
+    void stopAllAgents() = 17;
+    int[] setTouchMarkersEnabled(boolean enabled) = 18;
+    int protocolVersion() = 19;
 
     /**
      * Hands the service a process-lifetime binder token from the app. The service
@@ -38,5 +45,12 @@ interface IMaaTauriAndroidControlService {
      * (hard kill, crash, force-stop) the privileged process can still force-stop
      * the target packages and release the virtual display before exiting.
      */
-    oneway void registerOwner(in IBinder owner);
+    oneway void registerOwner(in IBinder owner) = 20;
+
+    /**
+     * Reserved Shizuku user-service transaction: the server invokes it when it
+     * unbinds the service, including after the app process died. The service runs
+     * its exit cleanup and stops itself instead of leaking a shell-uid process.
+     */
+    oneway void destroy() = 16777114;
 }

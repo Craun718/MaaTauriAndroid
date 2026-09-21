@@ -48,6 +48,14 @@ interface IMaaTauriAndroidControlService {
     oneway void registerOwner(in IBinder owner) = 20;
 
     /**
+     * Reports the app pid once, right after the binder arrives. The service
+     * polls /proc/<pid> as a fallback owner watchdog: linkToDeath on the owner
+     * token is the primary app-death signal, this covers the window before
+     * that recipient is registered (or if its notification is lost).
+     */
+    oneway void heartbeat(int appPid) = 21;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

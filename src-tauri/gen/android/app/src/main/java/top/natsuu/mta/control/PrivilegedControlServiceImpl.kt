@@ -54,8 +54,21 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
      * so we force-stop the target packages and release the virtual display here.
      */
     private val ownerWatch = AtomicReference<OwnerWatch?>(null)
-    private val deathCleanupStarted = AtomicBoolean(false)
-    private val deathCleanupLock = Any()
+    private val ownerWatchLock = Any()
+
+    /**
+     * Exit sequence latch: owner binder death, the Shizuku destroy() hook and
+     * the heartbeat watchdog all funnel into [enterExitSequence]; exactly one
+     * of them runs the cleanup and stops the process.
+     */
+    private val exitSequenceStarted = AtomicBoolean(false)
+    private val heartbeatWatchdog = HeartbeatWatchdog(
+        intervalMs = HEARTBEAT_INTERVAL_MS,
+        processAlive = { pid -> File("/proc/$pid").exists() },
+        onOwnerGone = { pid ->
+            enterExitSequence("Heartbeat watchdog lost the app process (pid=$pid)")
+        },
+    )
 
     private val binder = this
 
@@ -105,6 +118,16 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                 error,
             )
         }
+
+        // Last-resort cleanup for graceful termination (SIGTERM, exitProcess):
+        // SIGKILL-style deaths are covered by the owner death recipient and the
+        // heartbeat watchdog instead.
+        Runtime.getRuntime().addShutdownHook(
+            Thread { runCatching(::exitCleanup) }.apply {
+                name = "maa-control-shutdown-hook"
+            },
+        )
+        heartbeatWatchdog.start()
     }
 
     /**
@@ -125,6 +148,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun stopVirtualDisplay() {
         stopTargetPackages()
+        releaseVirtualDisplay()
+    }
+
+    private fun releaseVirtualDisplay() {
         virtualDisplay.getAndSet(null)?.release()
         synchronized(touchMarkers) {
             touchMarkers.clear()
@@ -154,7 +181,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun registerOwner(owner: IBinder?) {
         if (owner == null) return
-        synchronized(deathCleanupLock) {
+        synchronized(ownerWatchLock) {
             ownerWatch.getAndSet(null)?.let { watch ->
                 // The previous token is usually already dead (its process died);
                 // unlinkToDeath throws in that case and it is safe to ignore.
@@ -178,12 +205,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     private fun handleOwnerDeath() {
-        android.util.Log.w(
-            "MaaTauriAndroidControl",
+        enterExitSequence(
             "Owner process died; force-stopping target packages and releasing the virtual display",
         )
-        runDeathCleanup()
-        stopServiceProcess()
     }
 
     /**
@@ -193,12 +217,13 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
      * and exits instead of leaking a shell-uid process.
      */
     override fun destroy() {
-        android.util.Log.w(
-            "MaaTauriAndroidControl",
+        enterExitSequence(
             "Shizuku released the service; running the exit cleanup and stopping the process",
         )
-        runDeathCleanup()
-        stopServiceProcess()
+    }
+
+    override fun heartbeat(appPid: Int) {
+        heartbeatWatchdog.heartbeat(appPid)
     }
 
     private fun stopServiceProcess() {
@@ -207,19 +232,31 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     /**
-     * Single exit-cleanup entry shared by every teardown path (owner death,
-     * Shizuku destroy()). Latched so the binder thread racing destroy() or
-     * unbind cannot run the cleanup twice.
+     * Single exit path shared by every teardown trigger (owner binder death,
+     * Shizuku destroy(), the heartbeat watchdog). Latched: whichever fires
+     * first runs the cleanup and stops the process; the rest return at once.
      */
-    private fun runDeathCleanup() {
-        if (!deathCleanupStarted.compareAndSet(false, true)) return
-        synchronized(deathCleanupLock) {
-            try {
-                stopVirtualDisplay()
-                stopAllAgents()
-            } catch (error: Throwable) {
-                android.util.Log.w("MaaTauriAndroidControl", "Exit cleanup failed", error)
-            }
+    private fun enterExitSequence(reason: String) {
+        if (!exitSequenceStarted.compareAndSet(false, true)) return
+        android.util.Log.w("MaaTauriAndroidControl", reason)
+        heartbeatWatchdog.stop()
+        exitCleanup()
+        stopServiceProcess()
+    }
+
+    /**
+     * Every step is isolated on purpose: one failing step must not skip the
+     * remaining ones.
+     */
+    private fun exitCleanup() {
+        step("target packages") { stopTargetPackages() }
+        step("virtual display") { releaseVirtualDisplay() }
+        step("agents") { stopAllAgents() }
+    }
+
+    private inline fun step(name: String, action: () -> Unit) {
+        runCatching(action).onFailure { error ->
+            android.util.Log.w("MaaTauriAndroidControl", "Exit cleanup step \"$name\" failed", error)
         }
     }
 
@@ -798,6 +835,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     companion object {
         const val PROTOCOL_VERSION = 6
+        private const val HEARTBEAT_INTERVAL_MS = 5_000L
         private const val TOUCH_MARKER_FIELDS = 5
         private const val TOUCH_MARKER_LIMIT = 256
         const val METHOD_START_GAME = 1

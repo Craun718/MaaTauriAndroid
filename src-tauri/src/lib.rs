@@ -1929,7 +1929,7 @@ mod tests {
 
     #[test]
     fn telemetry_defaults_on_for_first_install_only() {
-        let mut project = project();
+        let project = project();
         let mut first_install = UserConfiguration::default();
         normalize_configuration(&project, &mut first_install);
         assert!(first_install.telemetry_enabled);
@@ -1943,7 +1943,7 @@ mod tests {
 
     #[test]
     fn normalize_configuration_preserves_welcome_fingerprint() {
-        let project = project();
+        let mut project = project();
         project.metadata.welcome_fingerprint = Some("project".to_string());
         let mut configuration = UserConfiguration::default();
         configuration.welcome_fingerprint = Some("acknowledged".to_string());

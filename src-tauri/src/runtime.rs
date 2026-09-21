@@ -1267,7 +1267,7 @@ mod tests {
         sessions.finish("run-1");
         assert_eq!(sessions.status(), RunState::Idle);
         assert!(!sessions.request_stop(Some("run-1")).unwrap());
-        assert!(sessions.begin_preparing("run-2").unwrap());
+        assert!(sessions.begin_preparing("run-2").is_ok());
     }
 
     #[test]
@@ -1276,7 +1276,7 @@ mod tests {
         sessions.begin_preparing("run-1").unwrap();
         sessions.finish("run-1");
 
-        assert!(sessions.begin_preparing("run-2").unwrap());
+        assert!(sessions.begin_preparing("run-2").is_ok());
         let mut stopping_message = None;
         assert!(sessions
             .request_stop_with(Some("run-2"), || stopping_message = Some("stopping"))

@@ -213,7 +213,7 @@ mod tests {
 
         assert!(banner.contains(&row(APP_NAME, APP_VERSION)));
         assert!(banner.contains(&row("Framework", MAA_FRAMEWORK_VERSION)));
-        assert!(banner.contains("Startup time : 2026-01-02 03:04:05.006"));
+        assert!(banner.contains(&row("Startup time", "2026-01-02 03:04:05.006")));
         assert!(banner.contains("Google Pixel 9"));
         assert!(banner.contains(&row("Android", "16 (API 36)")));
         assert!(banner.contains("arm64-v8a"));
@@ -229,7 +229,7 @@ mod tests {
         // app, so the header must carry the package name.
         let banner = banner(None);
         assert!(banner.contains("MaaTauriAndroid"));
-        assert!(banner.contains("unavailable"));
+        assert!(banner.contains(UNKNOWN));
         assert!(banner.contains(&row("Framework", MAA_FRAMEWORK_VERSION)));
     }
 

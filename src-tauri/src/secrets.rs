@@ -346,7 +346,10 @@ mod tests {
                 }],
             }],
             active_run_configuration_id: Some("run".to_string()),
+            show_virtual_display_touches: true,
             welcome_fingerprint: None,
+            welcome_acknowledged_app_version: None,
+            skip_welcome_announcement: false,
         }
     }
 

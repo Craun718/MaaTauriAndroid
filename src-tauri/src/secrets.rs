@@ -319,6 +319,7 @@ mod tests {
             schema_version: 1,
             initialized: true,
             force_stop_target_app: false,
+            close_target_app_after_run: false,
             telemetry_enabled: false,
             ui_language: Default::default(),
             active_resource: None,
@@ -345,7 +346,10 @@ mod tests {
                 }],
             }],
             active_run_configuration_id: Some("run".to_string()),
+            show_virtual_display_touches: true,
             welcome_fingerprint: None,
+            welcome_acknowledged_app_version: None,
+            skip_welcome_announcement: false,
         }
     }
 

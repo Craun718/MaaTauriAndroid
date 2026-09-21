@@ -6,6 +6,7 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Handler
+import android.os.Process
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArrayList
 import rikka.shizuku.Shizuku
@@ -44,7 +45,10 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             completePermissionRequest(false)
             return
         }
-        ControlHost.attach(IMaaTauriAndroidControlService.Stub.asInterface(binder))
+        val service = IMaaTauriAndroidControlService.Stub.asInterface(binder)
+        ControlHost.attach(service)
+        registerOwnerSafely(service)
+        heartbeatSafely(service)
         RuntimeBridge.setControlState(STATE_CONNECTED)
         completeConnectionRequest(true)
         completePermissionRequest(true)
@@ -83,6 +87,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         stopVirtualDisplaySafely()
         stopAgentsSafely()
         if (bound) {
+            destroyServiceSafely()
             Shizuku.unbindUserService(serviceArgs, this, true)
             bound = false
         }
@@ -91,6 +96,54 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         completePermissionRequest(false)
         ControlHost.detach()
         Shizuku.removeBinderReceivedListener(binderReceivedListener)
+    }
+
+    private fun registerOwnerSafely(service: IMaaTauriAndroidControlService?) {
+        if (service == null) return
+        runCatching {
+            service.registerOwner(ControlHost.ownerBinder())
+        }.onFailure { error ->
+            Log.w(
+                "MaaTauriAndroidControl",
+                "Could not register the owner token with the privileged service",
+                error,
+            )
+        }
+    }
+
+    /**
+     * One-shot heartbeat (the MaaFwApp pattern): the privileged service polls
+     * /proc/<pid> so it can run its exit cleanup even while no death recipient
+     * is registered on the owner token yet.
+     */
+    private fun heartbeatSafely(service: IMaaTauriAndroidControlService?) {
+        if (service == null) return
+        runCatching {
+            service.heartbeat(Process.myPid())
+        }.onFailure { error ->
+            Log.w(
+                "MaaTauriAndroidControl",
+                "Could not report the app pid to the privileged service",
+                error,
+            )
+        }
+    }
+
+    /**
+     * Tears the privileged process down explicitly instead of hoping the
+     * Shizuku server does it on unbind: destroy() is idempotent on the service
+     * side, so this stays safe even if the server also calls it afterwards.
+     */
+    private fun destroyServiceSafely() {
+        ControlHost.current()?.let { service ->
+            runCatching { service.destroy() }.onFailure { error ->
+                Log.w(
+                    "MaaTauriAndroidControl",
+                    "Could not destroy the privileged service process",
+                    error,
+                )
+            }
+        }
     }
 
     private fun stopVirtualDisplaySafely() {
@@ -199,7 +252,14 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     companion object {
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 10
+
+        /**
+         * Bumped to 13 for the stopTargetApp AIDL addition. Shizuku compares
+         * this against the running user service and restarts the process on
+         * mismatch, so a pre-update service (without stopTargetApp) never
+         * survives an app update.
+         */
+        private const val SERVICE_VERSION = 13
 
         const val STATE_SHIZUKU_UNAVAILABLE = 1
         const val STATE_PERMISSION_REQUIRED = 2

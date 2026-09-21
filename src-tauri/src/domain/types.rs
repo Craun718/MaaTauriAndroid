@@ -312,6 +312,8 @@ pub struct UserConfiguration {
     #[serde(default)]
     pub force_stop_target_app: bool,
     #[serde(default)]
+    pub close_target_app_after_run: bool,
+    #[serde(default)]
     pub telemetry_enabled: bool,
     #[serde(default = "default_true")]
     pub show_virtual_display_touches: bool,
@@ -335,6 +337,7 @@ impl Default for UserConfiguration {
             schema_version: 1,
             initialized: false,
             force_stop_target_app: false,
+            close_target_app_after_run: false,
             telemetry_enabled: false,
             show_virtual_display_touches: true,
             ui_language: UiLanguage::System,
@@ -356,14 +359,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn legacy_configuration_defaults_force_stop_to_false() {
+    fn legacy_configuration_defaults_target_app_options_to_false() {
         let current = UserConfiguration::default();
         let mut legacy = serde_json::to_value(&current).unwrap();
         legacy.as_object_mut().unwrap().remove("forceStopTargetApp");
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("closeTargetAppAfterRun");
 
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(!parsed.force_stop_target_app);
+        assert!(!parsed.close_target_app_after_run);
     }
 
     #[test]

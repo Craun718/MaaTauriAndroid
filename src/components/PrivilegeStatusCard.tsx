@@ -3,7 +3,6 @@ import {
   ExternalLink,
   LoaderCircle,
   RefreshCw,
-  RotateCw,
   ShieldCheck,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -17,14 +16,13 @@ import { useTranslation } from "../lib/i18n";
 import type { PrivilegedStatus } from "../lib/types";
 import { useNotificationStore } from "../store/notificationStore";
 
-type PrivilegeAction = "request" | "openShizuku" | "retry";
+type PrivilegeAction = "request" | "openShizuku";
 
 const statusCopy: Record<
   PrivilegedStatus["status"],
   {
     label: MessageKey;
     description: MessageKey;
-    action?: PrivilegeAction;
     chip: string;
     dot: string;
   }
@@ -44,37 +42,27 @@ const statusCopy: Record<
   permissionRequired: {
     label: "permissionRequiredStatus",
     description: "shizukuPermissionDescription",
-    action: "request",
     chip: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     dot: "bg-amber-500",
   },
   notInstalled: {
     label: "shizukuOffline",
     description: "shizukuNotInstalledDescription",
-    action: "openShizuku",
     chip: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
     dot: "bg-red-500",
   },
   disconnected: {
     label: "privilegedDisconnected",
     description: "privilegedDisconnectedDescription",
-    action: "retry",
     chip: "border-line bg-surface-muted text-ink-muted",
     dot: "bg-ink-muted",
   },
   error: {
     label: "privilegedError",
     description: "privilegedErrorDescription",
-    action: "retry",
     chip: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
     dot: "bg-red-500",
   },
-};
-
-const actionCopy: Record<PrivilegeAction, MessageKey> = {
-  request: "requestPermission",
-  openShizuku: "openShizuku",
-  retry: "retryConnection",
 };
 
 const STATUS_POLL_INTERVAL_MS = 500;
@@ -91,7 +79,7 @@ export function PrivilegeStatusCard({
   const [status, setStatus] = useState<PrivilegedStatus>();
   const [statusError, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
-  const [actionPending, setActionPending] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PrivilegeAction>();
 
   const refreshStatus = useCallback(async (trackActivity = true) => {
     if (trackActivity) {
@@ -136,8 +124,8 @@ export function PrivilegeStatusCard({
   }, [refreshStatus]);
 
   async function runPrivilegeAction(action: PrivilegeAction) {
-    if (actionPending) return;
-    setActionPending(true);
+    if (pendingAction) return;
+    setPendingAction(action);
     setStatusError(undefined);
     try {
       if (action === "openShizuku") {
@@ -154,18 +142,11 @@ export function PrivilegeStatusCard({
         tone: "error",
       });
     } finally {
-      setActionPending(false);
+      setPendingAction(undefined);
     }
   }
 
   const copy = status ? statusCopy[status.status] : undefined;
-  const action = copy?.action;
-  const ActionIcon =
-    action === "openShizuku"
-      ? ExternalLink
-      : action === "retry"
-        ? RotateCw
-        : ShieldCheck;
 
   return (
     <section
@@ -181,7 +162,7 @@ export function PrivilegeStatusCard({
         <button
           type="button"
           onClick={() => void refreshStatus()}
-          disabled={refreshing || actionPending}
+          disabled={refreshing || pendingAction !== undefined}
           className={`flex items-center justify-center rounded-md border border-line text-ink-muted disabled:opacity-50 ${
             compact ? "h-7 w-7" : "h-8 w-8"
           }`}
@@ -189,7 +170,11 @@ export function PrivilegeStatusCard({
         >
           <RefreshCw
             size="0.875rem"
-            className={refreshing || actionPending ? "animate-spin" : undefined}
+            className={
+              refreshing || pendingAction !== undefined
+                ? "animate-spin"
+                : undefined
+            }
           />
         </button>
       </div>
@@ -218,33 +203,31 @@ export function PrivilegeStatusCard({
         <p className="break-all text-xs text-ink-muted">{status.message}</p>
       )}
 
-      {action && action !== "request" && (
-        <button
-          type="button"
-          onClick={() => void runPrivilegeAction(action)}
-          disabled={actionPending || refreshing}
-          className={`flex w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50 ${
-            compact ? "h-8" : "h-9"
-          }`}
-        >
-          {actionPending ? (
-            <LoaderCircle size="0.875rem" className="animate-spin" />
-          ) : (
-            <ActionIcon size="0.875rem" />
-          )}
-          {t(actionCopy[action])}
-        </button>
-      )}
-
       <button
         type="button"
-        onClick={() => void runPrivilegeAction("request")}
-        disabled={actionPending || refreshing}
+        onClick={() => void runPrivilegeAction("openShizuku")}
+        disabled={pendingAction !== undefined || refreshing}
         className={`flex w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50 ${
           compact ? "h-8" : "h-9"
         }`}
       >
-        {actionPending ? (
+        {pendingAction === "openShizuku" ? (
+          <LoaderCircle size="0.875rem" className="animate-spin" />
+        ) : (
+          <ExternalLink size="0.875rem" />
+        )}
+        {t("openShizuku")}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => void runPrivilegeAction("request")}
+        disabled={pendingAction !== undefined || refreshing}
+        className={`flex w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50 ${
+          compact ? "h-8" : "h-9"
+        }`}
+      >
+        {pendingAction === "request" ? (
           <LoaderCircle size="0.875rem" className="animate-spin" />
         ) : (
           <ShieldCheck size="0.875rem" />

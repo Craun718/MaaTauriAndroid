@@ -188,6 +188,7 @@ export interface UserConfiguration {
   schemaVersion: number;
   initialized: boolean;
   forceStopTargetApp: boolean;
+  closeTargetAppAfterRun: boolean;
   telemetryEnabled: boolean;
   showVirtualDisplayTouches?: boolean;
   uiLanguage?: UiLanguage;

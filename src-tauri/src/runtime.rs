@@ -984,6 +984,15 @@ pub enum RunOutcome {
     },
 }
 
+impl RunOutcome {
+    /// Whether the run executed to its natural end (the MaaFwApp
+    /// "closeAppAfterTask" semantics): completed and failed runs qualify, a
+    /// user stop leaves the device exactly as the user left it.
+    pub fn is_natural_end(&self) -> bool {
+        matches!(self, RunOutcome::Completed | RunOutcome::Failed { .. })
+    }
+}
+
 pub fn run_tasks(
     tasker: &Arc<Tasker>,
     tasks: &[ResolvedTask],
@@ -1044,6 +1053,18 @@ mod tests {
     };
     use std::collections::BTreeMap;
     use std::sync::atomic::AtomicUsize;
+
+    #[test]
+    fn only_natural_run_endings_qualify_for_closing_the_target_app() {
+        assert!(RunOutcome::Completed.is_natural_end());
+        assert!(RunOutcome::Failed {
+            entry: "login".to_string(),
+            task_name: "Login".to_string(),
+            status: MaaStatus::FAILED,
+        }
+        .is_natural_end());
+        assert!(!RunOutcome::Stopped.is_natural_end());
+    }
 
     #[test]
     fn task_pipeline_overrides_are_scoped_to_task() {
@@ -1246,7 +1267,7 @@ mod tests {
         sessions.finish("run-1");
         assert_eq!(sessions.status(), RunState::Idle);
         assert!(!sessions.request_stop(Some("run-1")).unwrap());
-        assert!(sessions.begin_preparing("run-2").unwrap());
+        assert!(sessions.begin_preparing("run-2").is_ok());
     }
 
     #[test]
@@ -1255,7 +1276,7 @@ mod tests {
         sessions.begin_preparing("run-1").unwrap();
         sessions.finish("run-1");
 
-        assert!(sessions.begin_preparing("run-2").unwrap());
+        assert!(sessions.begin_preparing("run-2").is_ok());
         let mut stopping_message = None;
         assert!(sessions
             .request_stop_with(Some("run-2"), || stopping_message = Some("stopping"))

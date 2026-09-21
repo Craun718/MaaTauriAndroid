@@ -1583,15 +1583,7 @@ mod tests {
 
         let snapshot = fs::read_to_string(staging.join("device-info.txt")).unwrap();
         assert!(snapshot.contains("Device      : Pixel 9"));
-        assert!(snapshot.contains(&format!(
-            "{} : {}",
-            crate::version::APP_NAME,
-            crate::version::APP_VERSION
-        )));
-        assert!(snapshot.contains(&format!(
-            "Framework       : {}",
-            crate::version::MAA_FRAMEWORK_VERSION
-        )));
+        assert!(snapshot.contains(crate::version::device_info_rows().as_str()));
         // The collector's payload has no trailing newline; the appended rows must
         // not be glued onto its last line.
         assert!(snapshot.contains("Pixel 9\nMaaTauriAndroid"));

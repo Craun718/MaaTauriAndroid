@@ -1,19 +1,29 @@
 package top.natsuu.mta.control
 
-internal class TargetPackages {
+internal class TargetPackages(private val store: TargetPackageStore? = null) {
     private val packages = LinkedHashSet<String>()
 
     fun add(packageName: String) {
-        if (packageName.isNotEmpty()) {
-            synchronized(packages) {
-                packages.add(packageName)
+        if (packageName.isEmpty()) return
+        synchronized(packages) {
+            if (packages.add(packageName)) {
+                store?.write(packages.toList())
             }
         }
     }
 
     fun remove(packageName: String) {
         synchronized(packages) {
-            packages.remove(packageName)
+            if (packages.remove(packageName)) {
+                store?.write(packages.toList())
+            }
+        }
+    }
+
+    /** Snapshot without clearing; failed stops stay eligible for a retry. */
+    fun peek(): List<String> {
+        synchronized(packages) {
+            return packages.toList()
         }
     }
 
@@ -21,6 +31,7 @@ internal class TargetPackages {
         synchronized(packages) {
             val drained = packages.toList()
             packages.clear()
+            store?.write(emptyList())
             return drained
         }
     }

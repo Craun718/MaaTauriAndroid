@@ -32,7 +32,10 @@ regex = "1"
 walkdir = "2"
 sha2 = "0.10"
 hex = "0.4"
-maa-framework = { version = "=1.24.0", features = ["dynamic"] }
+# crates.io has no maa-framework-sys 5.13.0 release yet; this rev is the
+# official MaaFramework 5.13.0 binding (maa-framework 1.23.0, sys 5.13.0).
+# Move back to a crates.io version once it is published.
+maa-framework = { git = "https://github.com/MaaXYZ/maa-framework-rs", rev = "b1684954b44e618d517a5d4d976ebf5b17cf7a88", features = ["dynamic"] }
 sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 
 [target.'cfg(target_os = "android")'.dependencies]

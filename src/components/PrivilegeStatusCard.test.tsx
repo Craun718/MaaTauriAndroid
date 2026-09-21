@@ -47,6 +47,7 @@ const configuration: UserConfiguration = {
   schemaVersion: 1,
   initialized: true,
   forceStopTargetApp: false,
+  closeTargetAppAfterRun: false,
   telemetryEnabled: false,
   activeResource: undefined,
   globalOptionValues: {},
@@ -181,6 +182,26 @@ describe("PrivilegeStatusCard", () => {
 
     await waitFor(() => expect(openShizuku).toHaveBeenCalledTimes(1));
     expect(getPrivilegedStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps both Shizuku actions available while connected", async () => {
+    getPrivilegedStatus.mockResolvedValue({
+      status: "connected",
+      message: "connected",
+    });
+    openShizuku.mockResolvedValue(undefined);
+
+    renderPrivilegeStatusCard();
+
+    const openButton = await screen.findByRole("button", {
+      name: "Open Shizuku",
+    });
+    await waitFor(() => expect(openButton).toBeEnabled());
+    fireEvent.click(openButton);
+    await waitFor(() => expect(openShizuku).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole("button", { name: "Request Shizuku permission" }),
+    ).toBeEnabled();
   });
 
   it("shows status loading failures", async () => {

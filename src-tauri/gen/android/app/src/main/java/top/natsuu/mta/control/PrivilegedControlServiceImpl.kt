@@ -39,7 +39,12 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     private val agentRuntimeManager = AgentRuntimeManager(
         File("/data/local/tmp/maa-tauri-android"),
     )
-    private val targetPackages = TargetPackages()
+    private val targetPackageStore = TargetPackageStore(
+        File("/data/local/tmp/maa-tauri-android/target_packages"),
+    ) { message ->
+        android.util.Log.w("MaaTauriAndroidControl", message)
+    }
+    private val targetPackages = TargetPackages(targetPackageStore)
 
     /**
      * Death watchdog state. The app hands us a process-lifetime binder token via
@@ -87,6 +92,36 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         shell(*arguments)
     }
 
+    init {
+        // Runs once per service process, before the first client call: the
+        // previous process may have died while games were still recorded as
+        // running. A throwing constructor would break the Shizuku handshake,
+        // so the reap is best-effort and never propagates.
+        runCatching { reapOrphanTargetPackages() }.onFailure { error ->
+            android.util.Log.w(
+                "MaaTauriAndroidControl",
+                "Could not reap orphaned target packages",
+                error,
+            )
+        }
+    }
+
+    /**
+     * Force-stops whatever the previous service process still had recorded as
+     * running, so no game survives an app exit unattended. Failed stops stay
+     * recorded for the owner-death watchdog or the next reap to retry.
+     */
+    private fun reapOrphanTargetPackages() {
+        val orphans = targetPackageStore.read()
+        if (orphans.isEmpty()) return
+        android.util.Log.w(
+            "MaaTauriAndroidControl",
+            "Force-stopping packages left running by the previous service process: $orphans",
+        )
+        orphans.forEach(targetPackages::add)
+        stopTargetPackages()
+    }
+
     override fun stopVirtualDisplay() {
         stopTargetPackages()
         virtualDisplay.getAndSet(null)?.release()
@@ -100,11 +135,17 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     private fun stopTargetPackages() {
-        targetPackages.drain().forEach { packageName ->
-            if (appLauncher.stopPackage(packageName) != RESULT_OK) {
+        // Peek instead of drain: a failed stop keeps its record so the
+        // owner-death watchdog or the next service process can retry it.
+        targetPackages.peek().forEach { packageName ->
+            val stopped = runCatching { appLauncher.stopPackage(packageName) }
+                .getOrDefault(RESULT_COMMAND_FAILED)
+            if (stopped == RESULT_OK) {
+                targetPackages.remove(packageName)
+            } else {
                 android.util.Log.w(
                     "MaaTauriAndroidControl",
-                    "Could not stop the target app before closing the virtual display: $packageName",
+                    "Could not force-stop the target app; it stays recorded for a retry: $packageName",
                 )
             }
         }

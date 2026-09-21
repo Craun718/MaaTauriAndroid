@@ -108,7 +108,8 @@ jobs:
       MAAFW_SCRIPT_REF: f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7
       # Keep in sync with the MaaFramework binaries vendored in vendor/maa/.
       MAAFW_VERSION: v5.13.0
-      MAAFW_CORE_TAG: 3.13.15-maafw5.12.3
+      MAAFW_CORE_REPO: Craun718/MaaAgentCoreAndroid
+      MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
     steps:
       - uses: actions/checkout@v7
         with:
@@ -141,7 +142,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .cache
-          key: m9a-agent-core-3.13.15-maafw5.12.3
+          key: m9a-agent-core-3.13.15-maafw5.13.0
       # Pin the debug keystore. Without this every run generates a fresh one, so
       # each APK is signed with a different key: `adb install -r` then fails with
       # INSTALL_FAILED_UPDATE_INCOMPATIBLE and verifying a build on a device

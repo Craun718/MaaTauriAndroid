@@ -5,7 +5,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env.sh"
 ABI="arm64-v8a"
 OUT_DIST="${REPO_ROOT}/resource/m9a-agent-dist"
 OUT_ZIP="${REPO_ROOT}/resource/m9a-agent-runtime-${ABI}.zip"
-WORK="${REPO_ROOT}/.cache/maafw"
+WORK="${REPO_ROOT}/.cache/maafw/${MAAFW_CORE_REPO}/${MAAFW_CORE_TAG}"
 
 echo "==> Building the ${ABI} Python agent runtime…"
 
@@ -13,8 +13,10 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
 echo "  1/4  fetching build_agent_bundle.py from MaaFwApp…"
-curl -fsSL -o "${TMP}/build_agent_bundle.py" \
-  "https://raw.githubusercontent.com/Aliothmoon/MaaFwApp/${MAAFW_SCRIPT_REF}/scripts/build_agent_bundle.py"
+curl -fsSL \
+  "https://raw.githubusercontent.com/Aliothmoon/MaaFwApp/${MAAFW_SCRIPT_REF}/scripts/build_agent_bundle.py" \
+  | sed "s|CORE_REPO = \"Aliothmoon/MaaAgentCoreAndroid\"|CORE_REPO = \"${MAAFW_CORE_REPO}\"|" \
+  > "${TMP}/build_agent_bundle.py"
 
 echo "  2/4  building the Python core + site-packages bundle…"
 python3 "${TMP}/build_agent_bundle.py" \

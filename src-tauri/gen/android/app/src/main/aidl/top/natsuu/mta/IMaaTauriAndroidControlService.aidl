@@ -31,4 +31,12 @@ interface IMaaTauriAndroidControlService {
     void stopAllAgents();
     int[] setTouchMarkersEnabled(boolean enabled);
     int protocolVersion();
+
+    /**
+     * Hands the service a process-lifetime binder token from the app. The service
+     * links a death recipient to it, so when the app process dies in any way
+     * (hard kill, crash, force-stop) the privileged process can still force-stop
+     * the target packages and release the virtual display before exiting.
+     */
+    oneway void registerOwner(in IBinder owner);
 }

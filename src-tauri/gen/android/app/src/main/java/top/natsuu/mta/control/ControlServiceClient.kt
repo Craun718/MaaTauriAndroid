@@ -44,7 +44,9 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             completePermissionRequest(false)
             return
         }
-        ControlHost.attach(IMaaTauriAndroidControlService.Stub.asInterface(binder))
+        val service = IMaaTauriAndroidControlService.Stub.asInterface(binder)
+        ControlHost.attach(service)
+        registerOwnerSafely(service)
         RuntimeBridge.setControlState(STATE_CONNECTED)
         completeConnectionRequest(true)
         completePermissionRequest(true)
@@ -91,6 +93,19 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         completePermissionRequest(false)
         ControlHost.detach()
         Shizuku.removeBinderReceivedListener(binderReceivedListener)
+    }
+
+    private fun registerOwnerSafely(service: IMaaTauriAndroidControlService?) {
+        if (service == null) return
+        runCatching {
+            service.registerOwner(ControlHost.ownerBinder())
+        }.onFailure { error ->
+            Log.w(
+                "MaaTauriAndroidControl",
+                "Could not register the owner token with the privileged service",
+                error,
+            )
+        }
     }
 
     private fun stopVirtualDisplaySafely() {
@@ -199,7 +214,14 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     companion object {
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 10
+
+        /**
+         * Bumped to 11 for the registerOwner AIDL addition. Shizuku compares this
+         * against the running user service and restarts the process on mismatch,
+         * so a pre-update service (without registerOwner) never survives an app
+         * update.
+         */
+        private const val SERVICE_VERSION = 11
 
         const val STATE_SHIZUKU_UNAVAILABLE = 1
         const val STATE_PERMISSION_REQUIRED = 2

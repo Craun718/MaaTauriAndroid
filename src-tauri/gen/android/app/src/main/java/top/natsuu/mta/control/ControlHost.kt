@@ -1,15 +1,28 @@
 package top.natsuu.mta.control
 
+import android.os.Binder
+import android.os.IBinder
 import android.view.Surface
 import top.natsuu.mta.IMaaTauriAndroidControlService
 
 object ControlHost {
-    @Volatile
-    private var currentService: IMaaTauriAndroidControlService? = null
+    /**
+     * Process-lifetime token: it lives as long as this process does, so its binder
+     * death means the app process died in any way (hard kill, crash, force-stop).
+     * The privileged service links a death recipient to it and runs its exit
+     * cleanup without relying on the graceful onDestroy path.
+     */
+    private val ownerToken: IBinder = Binder()
 
     init {
         System.loadLibrary("maa_tauri_android_control")
     }
+
+    @JvmStatic
+    fun ownerBinder(): IBinder = ownerToken
+
+    @Volatile
+    private var currentService: IMaaTauriAndroidControlService? = null
 
     @JvmStatic
     external fun configure(displayId: Int, width: Int, height: Int)

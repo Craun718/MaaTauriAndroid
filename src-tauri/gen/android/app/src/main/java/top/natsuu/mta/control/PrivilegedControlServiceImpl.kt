@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
+import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.hardware.display.DisplayManager
@@ -39,6 +40,16 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         File("/data/local/tmp/maa-tauri-android"),
     )
     private val targetPackages = TargetPackages()
+
+    /**
+     * Death watchdog state. The app hands us a process-lifetime binder token via
+     * [registerOwner]; when that token dies the app process is gone for good
+     * (hard kill, crash, force-stop) and nobody will run the graceful cleanup,
+     * so we force-stop the target packages and release the virtual display here.
+     */
+    private val ownerWatch = AtomicReference<OwnerWatch?>(null)
+    private val deathCleanupStarted = AtomicBoolean(false)
+    private val deathCleanupLock = Any()
 
     private val binder = this
 
@@ -95,6 +106,56 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                     "MaaTauriAndroidControl",
                     "Could not stop the target app before closing the virtual display: $packageName",
                 )
+            }
+        }
+    }
+
+    override fun registerOwner(owner: IBinder?) {
+        if (owner == null) return
+        synchronized(deathCleanupLock) {
+            ownerWatch.getAndSet(null)?.let { watch ->
+                // The previous token is usually already dead (its process died);
+                // unlinkToDeath throws in that case and it is safe to ignore.
+                runCatching { watch.token.unlinkToDeath(watch.recipient, 0) }
+            }
+            val recipient = IBinder.DeathRecipient {
+                // Skip stale notifications: a reconnect registers a fresh token,
+                // so only the currently registered owner may trigger the cleanup.
+                if (ownerWatch.get()?.token !== owner) return@DeathRecipient
+                handleOwnerDeath()
+            }
+            runCatching { owner.linkToDeath(recipient, 0) }.onFailure { error ->
+                android.util.Log.w(
+                    "MaaTauriAndroidControl",
+                    "Could not watch the owner binder for death",
+                    error,
+                )
+            }
+            ownerWatch.set(OwnerWatch(owner, recipient))
+        }
+    }
+
+    private fun handleOwnerDeath() {
+        android.util.Log.w(
+            "MaaTauriAndroidControl",
+            "Owner process died; force-stopping target packages and releasing the virtual display",
+        )
+        runDeathCleanup()
+    }
+
+    /**
+     * Single exit-cleanup entry shared by every teardown path (owner death,
+     * Shizuku destroy). Latched so the binder thread racing onDestroy or unbind
+     * cannot run the cleanup twice.
+     */
+    private fun runDeathCleanup() {
+        if (!deathCleanupStarted.compareAndSet(false, true)) return
+        synchronized(deathCleanupLock) {
+            try {
+                stopVirtualDisplay()
+                stopAllAgents()
+            } catch (error: Throwable) {
+                android.util.Log.w("MaaTauriAndroidControl", "Exit cleanup failed", error)
             }
         }
     }
@@ -666,6 +727,11 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         }
         return readEnd
     }
+
+    private class OwnerWatch(
+        val token: IBinder,
+        val recipient: IBinder.DeathRecipient,
+    )
 
     companion object {
         const val PROTOCOL_VERSION = 6

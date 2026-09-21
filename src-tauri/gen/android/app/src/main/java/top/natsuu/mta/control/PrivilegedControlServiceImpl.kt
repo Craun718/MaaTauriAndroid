@@ -179,6 +179,24 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         }
     }
 
+    /**
+     * Closes the target app after a run finished naturally (the MaaFwApp
+     * "closeAppAfterTask" pattern). The package list lives here because only
+     * the privileged side knows what was actually launched. Failed stops stay
+     * recorded, so the owner-death watchdog still retries them later.
+     */
+    override fun stopTargetApp(): Boolean {
+        if (targetPackages.peek().isEmpty()) {
+            android.util.Log.i(
+                "MaaTauriAndroidControl",
+                "stopTargetApp skipped: no target app was recorded on the virtual display",
+            )
+            return false
+        }
+        stopTargetPackages()
+        return targetPackages.peek().isEmpty()
+    }
+
     override fun registerOwner(owner: IBinder?) {
         if (owner == null) return
         synchronized(ownerWatchLock) {

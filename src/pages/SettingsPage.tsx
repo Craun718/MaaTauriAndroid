@@ -148,6 +148,19 @@ export function SettingsPage() {
         >
           <span className="font-medium">{t("forceStopTargetApp")}</span>
         </Checkbox>
+        <Checkbox
+          className="min-h-10 gap-2"
+          checked={snapshot?.configuration.closeTargetAppAfterRun ?? false}
+          disabled={busy || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.closeTargetAppAfterRun = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
+          <span className="font-medium">{t("closeTargetAppAfterRun")}</span>
+        </Checkbox>
       </section>
       <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <div>

@@ -56,6 +56,15 @@ interface IMaaTauriAndroidControlService {
     oneway void heartbeat(int appPid) = 21;
 
     /**
+     * Force-stops the target packages recorded on the virtual display during
+     * the run. The privileged side is the only one that knows which apps were
+     * actually launched, so no package name travels from the app. Returns
+     * false when nothing was recorded or a stop failed; failed stops stay
+     * recorded for the owner-death watchdog or exit cleanup to retry.
+     */
+    boolean stopTargetApp() = 22;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

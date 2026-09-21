@@ -99,6 +99,23 @@ object RuntimeBridge {
         return true
     }
 
+    /**
+     * Force-stops the target apps the privileged service recorded while
+     * launching on the virtual display. Called once when a run ends naturally.
+     */
+    @JvmStatic
+    fun stopTargetApp(): Boolean {
+        return runCatching {
+            ControlHost.current()?.stopTargetApp() ?: false
+        }.onFailure { error ->
+            android.util.Log.w(
+                "MaaTauriAndroidControl",
+                "Could not stop the target app after the run",
+                error,
+            )
+        }.getOrDefault(false)
+    }
+
     @JvmStatic
     fun attachControlClient(client: ControlServiceClient) {
         controlClient = client

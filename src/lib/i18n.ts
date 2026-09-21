@@ -143,6 +143,7 @@ const en = {
   loadProject: "Load project",
   runBehavior: "Run behavior",
   forceStopTargetApp: "Force stop target app",
+  closeTargetAppAfterRun: "Close target app after the run",
   touchPreview: "Touch preview",
   touchPreviewDescription:
     "Show touch positions on the virtual display preview.",
@@ -260,6 +261,7 @@ const zh: Record<MessageKey, string> = {
   loadProject: "加载项目",
   runBehavior: "运行行为",
   forceStopTargetApp: "运行前强制停止目标应用",
+  closeTargetAppAfterRun: "运行结束后关闭目标应用",
   touchPreview: "触点预览",
   touchPreviewDescription: "在虚拟屏预览中显示点击的位置。",
   showTouchPositions: "显示点击位置",

@@ -979,6 +979,34 @@ fn stop_run_foreground_service() {
     }
 }
 
+/// Best-effort close of the target apps the privileged service launched on
+/// the virtual display during the run; the outcome is recorded in the log.
+fn stop_target_app_after_run(logger: &run_log::RunLogger) {
+    #[cfg(target_os = "android")]
+    {
+        let stopped = call_runtime_bridge_boolean("stopTargetApp").unwrap_or(false);
+        let _ = logger.append_to_ui(
+            if stopped {
+                run_log::RunEventKind::Task
+            } else {
+                run_log::RunEventKind::Warning
+            },
+            runtime::RunState::Idle,
+            if stopped {
+                "The target app was closed".to_string()
+            } else {
+                "The target app was not closed".to_string()
+            },
+            None,
+            None,
+        );
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = logger;
+    }
+}
+
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean_with_bool(
     method: &'static str,
@@ -1348,6 +1376,7 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     let resolved_for_run = resolved.clone();
     let base_pipeline = resolved.base_pipeline.clone();
     let force_stop_target_app = configuration.force_stop_target_app;
+    let close_target_app_after_run = configuration.close_target_app_after_run;
     let pi_env = if agent_count > 0 {
         Some(agent::pi_environment(
             &resolved,
@@ -1438,6 +1467,10 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         return;
                     }
                 };
+                // MaaFwApp semantics: only natural endings (completed or
+                // failed) close the target app; a user stop changes nothing.
+                let should_close_target_app =
+                    close_target_app_after_run && outcome.is_natural_end();
                 let task_name = if let runtime::RunOutcome::Failed { task_name, .. } = &outcome {
                     Some(task_name.clone())
                 } else {
@@ -1519,6 +1552,9 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                         message,
                     );
                 });
+                if should_close_target_app {
+                    stop_target_app_after_run(&logger_for_run);
+                }
             }
             Ok(Err(error)) => {
                 sessions.finish_with(&run_execution_id, || {

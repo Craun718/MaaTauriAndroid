@@ -254,12 +254,12 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         private const val REQUEST_CODE = 9753
 
         /**
-         * Bumped to 12 for the heartbeat AIDL addition. Shizuku compares this
-         * against the running user service and restarts the process on mismatch,
-         * so a pre-update service (without heartbeat) never survives an app
-         * update.
+         * Bumped to 13 for the stopTargetApp AIDL addition. Shizuku compares
+         * this against the running user service and restarts the process on
+         * mismatch, so a pre-update service (without stopTargetApp) never
+         * survives an app update.
          */
-        private const val SERVICE_VERSION = 12
+        private const val SERVICE_VERSION = 13
 
         const val STATE_SHIZUKU_UNAVAILABLE = 1
         const val STATE_PERMISSION_REQUIRED = 2

@@ -319,6 +319,7 @@ mod tests {
             schema_version: 1,
             initialized: true,
             force_stop_target_app: false,
+            close_target_app_after_run: false,
             telemetry_enabled: false,
             ui_language: Default::default(),
             active_resource: None,

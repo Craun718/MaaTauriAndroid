@@ -47,6 +47,7 @@ const configuration: UserConfiguration = {
   schemaVersion: 1,
   initialized: true,
   forceStopTargetApp: false,
+  closeTargetAppAfterRun: false,
   telemetryEnabled: false,
   activeResource: undefined,
   globalOptionValues: {},

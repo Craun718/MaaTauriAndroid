@@ -179,6 +179,22 @@ export function SettingsPage() {
             {t("touchPreviewDescription")}
           </p>
         </div>
+        <div className="space-y-1">
+          <Checkbox
+            className="min-h-10 gap-2"
+            checked={snapshot?.configuration.showVirtualDisplayFps ?? true}
+            disabled={busy || !snapshot}
+            onCheckedChange={(next) => {
+              if (!snapshot) return;
+              const nextConfiguration = structuredClone(snapshot.configuration);
+              nextConfiguration.showVirtualDisplayFps = next;
+              void saveConfiguration(nextConfiguration);
+            }}
+          >
+            <span className="font-medium">{t("showVirtualDisplayFps")}</span>
+          </Checkbox>
+          <p className="text-sm text-ink-muted">{t("fpsPreviewDescription")}</p>
+        </div>
       </section>
       <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <h2 className="font-medium">{t("diagnostics")}</h2>

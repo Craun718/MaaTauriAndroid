@@ -173,6 +173,50 @@ export interface RunConfiguration {
   tasks: ConfiguredTask[];
 }
 
+export type ScheduleTrigger =
+  | { kind: "fixedTime"; days: number[]; times: string[] }
+  | {
+      kind: "interval";
+      startEpochMs: number;
+      intervalDays: number;
+      intervalHours: number;
+    };
+
+export interface ScheduleRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  runConfigurationId: string;
+  trigger: ScheduleTrigger;
+}
+
+export type ScheduleRuleStatus = ScheduleRule & {
+  nextTriggerEpochMs?: number;
+};
+
+export type ScheduleTriggerResult =
+  | "started"
+  | "duplicate"
+  | "rejectedActive"
+  | "failedValidation"
+  | "failedServiceStart"
+  | "foregroundServiceDenied";
+
+export interface ScheduleTriggerLogEntry {
+  ruleId: string;
+  scheduledEpochMs: number;
+  actualEpochMs: number;
+  result: ScheduleTriggerResult;
+  detail?: string | null;
+}
+
+export interface ScheduleSummary {
+  ruleCount: number;
+  enabledCount: number;
+  nextTriggerEpochMs?: number;
+  lastTrigger?: ScheduleTriggerLogEntry;
+}
+
 /**
  * Language the app interface is rendered in. "system" follows the device locale:
  * Chinese for `zh*` tags, English for everything else.
@@ -191,6 +235,7 @@ export interface UserConfiguration {
   closeTargetAppAfterRun: boolean;
   telemetryEnabled: boolean;
   showVirtualDisplayTouches?: boolean;
+  showVirtualDisplayFps?: boolean;
   uiLanguage?: UiLanguage;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;

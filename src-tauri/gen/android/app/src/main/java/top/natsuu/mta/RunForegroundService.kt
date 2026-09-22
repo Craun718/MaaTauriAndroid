@@ -69,14 +69,19 @@ class RunForegroundService : Service() {
 
     private fun startInForeground() {
         val notification = buildNotification(this, snapshot)
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        }.onFailure { error ->
+            android.util.Log.e(TAG, "Android rejected the run foreground service", error)
+            stopSelf()
         }
     }
 
@@ -128,6 +133,7 @@ class RunForegroundService : Service() {
             get() = running.get()
 
         fun start(context: Context): Boolean {
+            if (!SpecialUseFgsGate.canStart(context)) return false
             appContext = context.applicationContext
             return runCatching {
                 context.startForegroundService(Intent(context, RunForegroundService::class.java))

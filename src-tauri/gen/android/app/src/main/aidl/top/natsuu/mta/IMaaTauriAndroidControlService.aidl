@@ -65,6 +65,17 @@ interface IMaaTauriAndroidControlService {
     boolean stopTargetApp() = 22;
 
     /**
+     * Samples the current game frame rate for the packages recorded on the
+     * virtual display. Returns -1 when nothing is being monitored (no target
+     * package, no matching task, or the device lacks the frame-rate callback);
+     * 0 means the display went silent. The app polls this once a second while
+     * a run is active. Added after 22 without bumping the service version: an
+     * older surviving service process simply fails this call and the app side
+     * falls back to its own frame counter.
+     */
+    float gameFps() = 23;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

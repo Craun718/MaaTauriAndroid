@@ -164,6 +164,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     private fun stopTargetPackages() {
+        // The frame-rate callback tracks a game task; no target package means
+        // nothing to sample. Idempotent, so exit paths can call it freely.
+        GameFpsMonitor.stop()
         // Peek instead of drain: a failed stop keeps its record so the
         // owner-death watchdog or the next service process can retry it.
         targetPackages.peek().forEach { packageName ->
@@ -196,6 +199,26 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         }
         stopTargetPackages()
         return targetPackages.peek().isEmpty()
+    }
+
+    /**
+     * Samples the game frame rate for the recorded target packages. The app
+     * polls this once a second during a run; -1 (UNKNOWN) tells it to fall
+     * back to its own frame counter. A missing transaction (older surviving
+     * service process) surfaces as a binder failure on the app side, not here.
+     */
+    override fun gameFps(): Float {
+        val target = targetPackages.peek().firstOrNull()
+            ?: return GameFpsMonitor.UNKNOWN
+        val taskId = appLauncher.taskIdOf(target)
+        if (taskId == null) {
+            // The game is gone (crashed, stopped, or not launched yet); drop
+            // the callback so a restarted game gets a fresh task id binding.
+            GameFpsMonitor.stop()
+            return GameFpsMonitor.UNKNOWN
+        }
+        GameFpsMonitor.ensureStarted(taskId)
+        return GameFpsMonitor.currentFps()
     }
 
     override fun registerOwner(owner: IBinder?) {

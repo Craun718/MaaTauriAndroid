@@ -5,4 +5,7 @@
     <string name="run_notification_text">自动化任务仍在后台执行</string>
     <string name="run_notification_task_progress">%1$s（%2$d/%3$d）</string>
     <string name="run_notification_progress_fraction">%1$d/%2$d</string>
+    <string name="schedule_notification_channel">定时任务</string>
+    <string name="schedule_notification_title">定时任务正在启动</string>
+    <string name="schedule_notification_text">正在准备后台自动化任务</string>
 </resources>

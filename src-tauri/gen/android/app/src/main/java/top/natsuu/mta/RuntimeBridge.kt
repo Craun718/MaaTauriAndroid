@@ -138,6 +138,14 @@ object RuntimeBridge {
         }.getOrDefault(false)
     }
 
+    @JvmStatic
+    fun syncScheduleAlarms(): Boolean {
+        val context = agentContext ?: return false
+        return runCatching {
+            ScheduleAlarmManager.sync(context)
+        }.isSuccess
+    }
+
     /**
      * Force-stops the target apps the privileged service recorded while
      * launching on the virtual display. Called once when a run ends naturally.
@@ -524,6 +532,19 @@ object RuntimeBridge {
         return ControlHost.virtualDisplayStatus() ?: intArrayOf(0, -1, 0, 0, 0)
     }
 
+    /**
+     * One frame-rate sample from the privileged service, or -1 when unknown.
+     * No log on failure on purpose: an older surviving service process lacks
+     * the gameFps transaction and would fail every second during a run; the
+     * caller treats -1 as its cue to use its own frame counter.
+     */
+    @JvmStatic
+    fun gameFps(): Float {
+        return runCatching {
+            ControlHost.current()?.gameFps() ?: -1f
+        }.getOrDefault(-1f)
+    }
+
     @JvmStatic
     fun virtualDisplayStreamUrl(): String? = VirtualDisplayStreamHost.streamUrl()
 
@@ -601,6 +622,18 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun setBootstrapProjectRoot(projectRoot: String)
+
+    @JvmStatic
+    external fun scheduleRulesJson(): String?
+
+    @JvmStatic
+    external fun recordScheduleForegroundServiceDenied(
+        ruleId: String,
+        scheduledTimeMs: Long,
+    ): Int
+
+    @JvmStatic
+    external fun startScheduledRun(ruleId: String, scheduledTimeMs: Long): Int
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val UNKNOWN = "unknown"

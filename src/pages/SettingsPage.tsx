@@ -50,12 +50,9 @@ export function SettingsPage() {
       <h1 className="text-xl font-semibold">{t("settings")}</h1>
       <UpdateCard />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
-        <div>
-          <h2 id="language-select-label" className="font-medium">
-            {t("language")}
-          </h2>
-          <p className="text-sm text-ink-muted">{t("languageDescription")}</p>
-        </div>
+        <h2 id="language-select-label" className="font-medium">
+          {t("language")}
+        </h2>
         <div className="flex gap-2">
           <Select
             className="min-w-0 flex-1"

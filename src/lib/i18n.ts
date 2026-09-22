@@ -149,8 +149,6 @@ const en = {
   settings: "Settings",
   apply: "Apply",
   language: "Language",
-  languageDescription:
-    "Defaults to the device language: Chinese for Chinese locales, English otherwise.",
   languageSystem: "System",
   languageChinese: "简体中文",
   languageEnglish: "English",
@@ -364,8 +362,6 @@ const zh: Record<MessageKey, string> = {
   settings: "设置",
   apply: "应用",
   language: "语言",
-  languageDescription:
-    "默认跟随设备语言：系统语言为中文时使用中文，否则使用英文。",
   languageSystem: "跟随系统",
   languageChinese: "简体中文",
   languageEnglish: "English",

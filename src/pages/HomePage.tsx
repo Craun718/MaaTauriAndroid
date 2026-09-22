@@ -37,6 +37,13 @@ export function HomePage() {
         </h1>
       </header>
 
+      <ProjectAnnouncements
+        project={project}
+        configuration={snapshot.configuration}
+        appVersion={versions?.appVersion}
+        onSaveConfiguration={saveConfiguration}
+      />
+
       <VersionCard
         title="versions"
         variant="about"
@@ -45,13 +52,6 @@ export function HomePage() {
       />
 
       <PrivilegeStatusCard title="privilegedHost" />
-
-      <ProjectAnnouncements
-        project={project}
-        configuration={snapshot.configuration}
-        appVersion={versions?.appVersion}
-        onSaveConfiguration={saveConfiguration}
-      />
 
       {busy && <p className="text-sm text-ink-muted">{t("saving")}</p>}
     </div>

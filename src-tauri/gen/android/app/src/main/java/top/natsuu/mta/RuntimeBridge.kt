@@ -99,6 +99,45 @@ object RuntimeBridge {
         return true
     }
 
+    /** Rust 侧每个任务开始时推送的一帧进度（JSON，见 run_progress.rs 的 payload 约定） */
+    @JvmStatic
+    fun updateRunProgress(json: String): Boolean {
+        val context = agentContext ?: return false
+        return RunForegroundService.updateProgress(context, json)
+    }
+
+    /** focus 内容首行作为状态句合并进当前进度快照 */
+    @JvmStatic
+    fun updateRunFocusStatus(status: String): Boolean {
+        val context = agentContext ?: return false
+        return RunForegroundService.updateStatus(context, status)
+    }
+
+    /**
+     * Best-effort runtime prompt for POST_NOTIFICATIONS on API 33+. The FGS
+     * starts without the permission (the notification just stays hidden), so
+     * this fires and forgets; once granted, the next throttled notify shows up.
+     */
+    @JvmStatic
+    fun ensureNotificationPermission(): Boolean {
+        val context = agentContext ?: return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        val granted = context.checkSelfPermission(
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) return true
+        val activity = hostActivity?.get() ?: return false
+        return runCatching {
+            mainHandler.post {
+                activity.requestPermissions(
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST,
+                )
+            }
+            true
+        }.getOrDefault(false)
+    }
+
     /**
      * Force-stops the target apps the privileged service recorded while
      * launching on the virtual display. Called once when a run ends naturally.
@@ -565,6 +604,9 @@ object RuntimeBridge {
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val UNKNOWN = "unknown"
+
+    /** RuntimeBridge 内部请求码：目前只有通知权限这一处会发起 requestPermissions */
+    private const val NOTIFICATION_PERMISSION_REQUEST = 2101
     private val DEVICE_TIME_FORMAT =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS (Z)", Locale.US)
 }

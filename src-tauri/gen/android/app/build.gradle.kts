@@ -243,7 +243,7 @@ tasks.named("preBuild") {
 }
 
 extensions.configure<ApplicationExtension> {
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
     namespace = "top.natsuu.mta"
     defaultConfig {

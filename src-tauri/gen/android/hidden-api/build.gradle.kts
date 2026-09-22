@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "top.natsuu.mta.hiddenapi"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 28

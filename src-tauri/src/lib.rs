@@ -4,6 +4,7 @@ mod domain;
 mod focus;
 mod game_fps;
 mod persistence;
+mod run_diagnosis;
 mod run_log;
 mod run_progress;
 mod runtime;
@@ -1462,6 +1463,60 @@ fn call_runtime_bridge_optional_string(method: &'static str) -> Result<Option<St
     Ok(Some(value.to_string_lossy().into_owned()))
 }
 
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_optional_string_with_int(
+    method: &'static str,
+    value: i32,
+) -> Result<Option<String>, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(
+            bridge_class,
+            method,
+            "(I)Ljava/lang/String;",
+            &[jni::objects::JValue::Int(value)],
+        )
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let object = result
+        .l()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    if object.is_null() {
+        return Ok(None);
+    }
+    let value = jni::objects::JString::from(object);
+    let value = env
+        .get_string(&value)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    Ok(Some(value.to_string_lossy().into_owned()))
+}
+
+/// One display-state snapshot for run diagnostics, or `None` when the
+/// privileged service cannot be asked (an older surviving service process, a
+/// binder failure) — the diagnosis then stays silent.
+#[cfg(target_os = "android")]
+fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
+    let raw = call_runtime_bridge_optional_string_with_int(
+        "targetAppState",
+        runtime::active_display_id() as i32,
+    )
+    .ok()
+    .flatten()?;
+    serde_json::from_str(&raw).ok()
+}
+
+#[cfg(not(target_os = "android"))]
+fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
+    None
+}
+
 /// Terminates a run that is still inside `begin_preparing`: appends the
 /// terminal Failure event, resets the execution result to Idle, and reports
 /// telemetry. Must be called from within `MaaSessions::finish_with` so the
@@ -1753,6 +1808,18 @@ async fn start_run_core(
                         let _ = app.emit("run-event", &event);
                     }
                 }
+                if let Err(error) = tasker.add_context_event_sink(Box::new(run_diagnosis::DiagSink))
+                {
+                    if let Ok(event) = logger_for_run.append(
+                        run_log::RunEventKind::Warning,
+                        runtime::RunState::Running,
+                        format!("run diagnosis could not be registered: {error}"),
+                        None,
+                        None,
+                    ) {
+                        let _ = app.emit("run-event", &event);
+                    }
+                }
                 if let Ok(event) = logger_for_run.append(
                     run_log::RunEventKind::Started,
                     runtime::RunState::Running,
@@ -1797,6 +1864,7 @@ async fn start_run_core(
                         &base_pipeline,
                         &task_logger,
                         &report_progress,
+                        &probe_target_app_state,
                     )
                 })
                 .await;
@@ -1846,6 +1914,7 @@ async fn start_run_core(
                         entry,
                         task_name: _,
                         status,
+                        diagnosis,
                     } => {
                         let mut attachment_path = None;
                         match diagnostics::capture_failure_screenshot(
@@ -1867,10 +1936,15 @@ async fn start_run_core(
                                 }
                             }
                         }
+                        let mut message = format!("Maa task {entry} failed: {status}");
+                        if let Some(diagnosis) = &diagnosis {
+                            message.push(' ');
+                            message.push_str(diagnosis);
+                        }
                         (
                             run_log::RunEventKind::Failure,
                             runtime::RunState::Idle,
-                            format!("Maa task {entry} failed: {status}"),
+                            message,
                             "failed",
                             attachment_path,
                         )

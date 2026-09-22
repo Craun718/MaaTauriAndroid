@@ -221,6 +221,39 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return GameFpsMonitor.currentFps()
     }
 
+    /**
+     * Snapshots the controlled display for run diagnostics: the packages
+     * recorded as launched here, whether their tasks still exist and on which
+     * display, the current top package, and the virtual display's liveness.
+     * The app side parses the JSON and turns a task failure into a concrete
+     * cause; a binder-level failure (an older surviving service process)
+     * simply skips diagnostics there.
+     */
+    override fun targetAppState(displayId: Int): String {
+        val targets = targetPackages.peek()
+        val tasks = org.json.JSONObject()
+        for (target in targets) {
+            val location = appLauncher.taskLocationOf(target)
+            val entry = org.json.JSONObject()
+            entry.put("taskId", location?.taskId ?: org.json.JSONObject.NULL)
+            entry.put("displayId", location?.displayId ?: org.json.JSONObject.NULL)
+            tasks.put(target, entry)
+        }
+        val state = org.json.JSONObject()
+        state.put("displayId", displayId)
+        state.put(
+            "displayAlive",
+            displayId == 0 || virtualDisplay.get()?.display?.displayId == displayId,
+        )
+        state.put("targets", org.json.JSONArray(targets))
+        state.put("tasks", tasks)
+        state.put(
+            "topPackage",
+            appLauncher.topPackageOnDisplay(displayId) ?: org.json.JSONObject.NULL,
+        )
+        return state.toString()
+    }
+
     override fun registerOwner(owner: IBinder?) {
         if (owner == null) return
         synchronized(ownerWatchLock) {

@@ -76,6 +76,17 @@ interface IMaaTauriAndroidControlService {
     float gameFps() = 23;
 
     /**
+     * Reports the state of the controlled display for run diagnostics: which
+     * target packages are recorded, whether their tasks still exist and on
+     * which display, what the top package on the display is, and whether the
+     * virtual display is still alive. Returns a JSON string; a binder failure
+     * means the caller skips diagnostics entirely (same fallback contract as
+     * gameFps). Appended after 23 without bumping the service version: an
+     * older surviving service process simply fails this call.
+     */
+    String targetAppState(int displayId) = 24;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

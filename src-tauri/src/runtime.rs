@@ -994,6 +994,10 @@ pub enum RunOutcome {
         entry: String,
         task_name: String,
         status: MaaStatus,
+        /// English diagnosis of why the task failed (see
+        /// `crate::run_diagnosis`), or `None` when the controlled display
+        /// could not be interrogated.
+        diagnosis: Option<String>,
     },
 }
 
@@ -1019,13 +1023,37 @@ fn wait_for_modal_acks(tasker: &Arc<Tasker>) {
     }
 }
 
+/// `state_probe` asks the privileged side for one snapshot of the controlled
+/// display (`crate::run_diagnosis`); on desktop builds and old service
+/// processes it answers `None` and diagnosis stays silent. The snapshot is
+/// consumed before the first task (an empty-display hint) and on a task
+/// failure (the concrete cause).
 pub fn run_tasks(
     tasker: &Arc<Tasker>,
     tasks: &[ResolvedTask],
     base_pipeline: &Value,
     logger: &crate::run_log::RunLogger,
     progress: &dyn Fn(u32, u32, &ResolvedTask),
+    state_probe: &dyn Fn() -> Option<crate::run_diagnosis::TargetAppState>,
 ) -> Result<RunOutcome, RuntimeError> {
+    crate::run_diagnosis::reset_misses();
+    // A soft, informational pre-flight hint. An empty display is a legal
+    // starting point when a task starts the game, so this never refuses to
+    // run — it only points out the "game expected but nothing starts it"
+    // combination while there is still time to tick the right boxes.
+    if state_probe().is_some_and(|state| state.display_alive && state.top_package.is_none()) {
+        logger
+            .append_to_ui(
+                crate::run_log::RunEventKind::Task,
+                RunState::Running,
+                "The controlled display is empty; tasks that expect a running game will fail \
+                 recognition unless a task starts it."
+                    .to_string(),
+                None,
+                None,
+            )
+            .map_err(|error| RuntimeError::Maa(error.to_string()))?;
+    }
     let total = tasks.iter().filter(|task| task.enabled).count() as u32;
     for (index, task) in tasks.iter().filter(|task| task.enabled).enumerate() {
         if tasker.stopping() {
@@ -1065,10 +1093,27 @@ pub fn run_tasks(
                 None,
             )
             .map_err(|error| RuntimeError::Maa(error.to_string()))?;
+        let cause = crate::run_diagnosis::classify(
+            state_probe().as_ref(),
+            &crate::run_diagnosis::missed_nodes(),
+        );
+        let diagnosis = crate::run_diagnosis::render(&cause);
+        if let Some(diagnosis) = &diagnosis {
+            logger
+                .append_to_ui(
+                    crate::run_log::RunEventKind::Warning,
+                    RunState::Running,
+                    diagnosis.clone(),
+                    Some(task_name.clone()),
+                    None,
+                )
+                .map_err(|error| RuntimeError::Maa(error.to_string()))?;
+        }
         return Ok(RunOutcome::Failed {
             entry,
             task_name,
             status,
+            diagnosis,
         });
     }
     Ok(RunOutcome::Completed)
@@ -1091,6 +1136,7 @@ mod tests {
             entry: "login".to_string(),
             task_name: "Login".to_string(),
             status: MaaStatus::FAILED,
+            diagnosis: None,
         }
         .is_natural_end());
         assert!(!RunOutcome::Stopped.is_natural_end());

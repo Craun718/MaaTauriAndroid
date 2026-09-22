@@ -224,6 +224,26 @@ internal class AppLauncher(
             ?.taskId
     }
 
+    /**
+     * The package's most relevant running task together with its display, for
+     * run diagnostics. Null when no task matches or the display id is
+     * unavailable.
+     */
+    internal fun taskLocationOf(packageName: String): TaskLocation? = findTask(packageName)
+
+    /**
+     * The package on top of (frontmost on) the given display, for run
+     * diagnostics. getRunningTasks lists tasks front-to-back, so the first
+     * entry whose display matches is the topmost one. Null when nothing is
+     * running there or the component cannot be read.
+     */
+    internal fun topPackageOnDisplay(displayId: Int): String? {
+        return runningTasks().firstOrNull { task -> displayIdOf(task) == displayId }?.let { task ->
+            componentField(task, "topActivity")?.packageName
+                ?: task.baseIntent?.component?.packageName
+        }
+    }
+
     private fun runningTasks(): List<ActivityManager.RunningTaskInfo> {
         return runCatching {
             activityManager()?.getRunningTasks(TASK_SCAN_LIMIT).orEmpty()
@@ -501,7 +521,7 @@ internal class AppLauncher(
         return ComponentName.unflattenFromString(spec)
     }
 
-    private data class TaskLocation(
+    internal data class TaskLocation(
         val taskId: Int,
         val displayId: Int,
         val windowingMode: Int?,

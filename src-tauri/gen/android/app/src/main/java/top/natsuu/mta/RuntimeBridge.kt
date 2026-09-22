@@ -590,6 +590,19 @@ object RuntimeBridge {
         }.getOrDefault(-1f)
     }
 
+    /**
+     * One display-state snapshot for run diagnostics, or null when the
+     * privileged service cannot be asked. No log on failure on purpose: an
+     * older surviving service process lacks the targetAppState transaction,
+     * and the caller skips diagnostics entirely in that case.
+     */
+    @JvmStatic
+    fun targetAppState(displayId: Int): String? {
+        return runCatching {
+            ControlHost.current()?.targetAppState(displayId)
+        }.getOrNull()
+    }
+
     @JvmStatic
     fun virtualDisplayStreamUrl(): String? = VirtualDisplayStreamHost.streamUrl()
 

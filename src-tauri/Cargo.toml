@@ -37,9 +37,14 @@ hex = "0.4"
 # Move back to a crates.io version once it is published.
 maa-framework = { git = "https://github.com/MaaXYZ/maa-framework-rs", rev = "b1684954b44e618d517a5d4d976ebf5b17cf7a88", features = ["dynamic"] }
 sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+url = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
+
+[dev-dependencies]
+tempfile = "3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

@@ -119,11 +119,23 @@ async fn latest(
         }
     };
     if envelope.code != 0 {
-        let detail = envelope.message.unwrap_or_else(|| {
-            format!("MirrorChyan answered with business code {}", envelope.code)
-        });
-        let failure = business_failure(envelope.code).unwrap_or(UpdateFailure::InvalidResponse);
-        return Err(UpdateError::new(failure, detail));
+        let failure = business_failure(envelope.code);
+        // Known codes surface the upstream message verbatim; unknown codes
+        // carry their number so a new business code stays diagnosable.
+        let detail = match (failure, envelope.message) {
+            (Some(_), Some(message)) => message,
+            (_, Some(message)) => format!(
+                "MirrorChyan answered with unknown business code {}: {message}",
+                envelope.code
+            ),
+            (_, None) => {
+                format!("MirrorChyan answered with business code {}", envelope.code)
+            }
+        };
+        return Err(UpdateError::new(
+            failure.unwrap_or(UpdateFailure::InvalidResponse),
+            detail,
+        ));
     }
     let data = envelope.data.ok_or_else(|| {
         UpdateError::new(

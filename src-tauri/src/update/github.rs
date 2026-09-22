@@ -64,7 +64,9 @@ pub fn parse_repo(raw: &str) -> Option<String> {
     let mut parts = value.split('/');
     let owner = parts.next()?.trim();
     let repo = parts.next()?.trim();
-    if owner.is_empty() || repo.is_empty() {
+    // A dot in the first segment means the value carried a host we did not
+    // strip (GitHub owners cannot contain dots), so nothing usable remains.
+    if owner.is_empty() || repo.is_empty() || owner.contains('.') {
         return None;
     }
     Some(format!("{owner}/{repo}"))
@@ -277,7 +279,10 @@ mod tests {
             release_json(
                 "v1.2.0",
                 r#""prerelease": false, "body": "stable note""#,
-                ""
+                &apk_asset(
+                    "app-arm64-v8a.apk",
+                    Some(&format!("sha256:{}", digest_of(b"stable"))),
+                ),
             ),
             release_json(
                 "v1.3.0-beta.1",
@@ -325,7 +330,9 @@ mod tests {
                 ),
             ),
         );
-        let client = StubClient::new().with_body("page=1", 200, releases.clone());
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases.clone())
+            .with_body("page=2", 200, "[]");
 
         let beta = latest_release(&client, "owner/repo", "beta", "1.0.0")
             .await
@@ -335,7 +342,9 @@ mod tests {
         assert_eq!(beta.size, Some(7));
 
         // The same list on the stable channel means "nothing to do".
-        let client = StubClient::new().with_body("page=1", 200, releases);
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
         let stable = latest_release(&client, "owner/repo", "stable", "1.0.0")
             .await
             .unwrap();
@@ -352,7 +361,9 @@ mod tests {
                 &apk_asset("app.apk", Some("x"))
             ),
         );
-        let client = StubClient::new().with_body("page=1", 200, releases);
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
         let release = latest_release(&client, "owner/repo", "stable", "1.0.0")
             .await
             .unwrap();
@@ -377,7 +388,9 @@ mod tests {
                 ),
             ),
         );
-        let client = StubClient::new().with_body("page=1", 200, releases);
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
         let release = latest_release(&client, "owner/repo", "stable", "0.5.0")
             .await
             .unwrap()
@@ -401,7 +414,9 @@ mod tests {
                 ),
             ),
         );
-        let client = StubClient::new().with_body("page=1", 200, releases);
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
         let release = latest_release(&client, "owner/repo", "stable", "1.0.0")
             .await
             .unwrap()
@@ -420,7 +435,9 @@ mod tests {
                 &apk_asset("app-arm64-v8a.apk", None),
             ),
         );
-        let client = StubClient::new().with_body("page=1", 200, releases);
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
         let error = latest_release(&client, "owner/repo", "stable", "1.0.0")
             .await
             .unwrap_err();
@@ -440,7 +457,9 @@ mod tests {
                 ),
             ),
         );
-        let client = StubClient::new().with_body("page=1", 200, releases);
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
         let error = latest_release(&client, "owner/repo", "stable", "1.0.0")
             .await
             .unwrap_err();

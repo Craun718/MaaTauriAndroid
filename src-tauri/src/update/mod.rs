@@ -933,7 +933,7 @@ mod tests {
         );
         let stream = http::testing::StreamSpec {
             status: 200,
-            content_length: Some(11),
+            content_length: Some(10),
             chunks: vec![Ok(b"github apk".to_vec())],
         };
         let client = Arc::new(

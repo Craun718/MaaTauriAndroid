@@ -164,7 +164,10 @@ impl Drop for PartGuard {
 /// Normalizes `sha256:<64 hex>` or bare 64-hex digests to lowercase hex.
 pub(crate) fn normalize_digest(digest: &str) -> Option<String> {
     let trimmed = digest.trim();
-    let digest = trimmed.strip_prefix("sha256:").unwrap_or(trimmed);
+    let digest = match trimmed.get(..7) {
+        Some(prefix) if prefix.eq_ignore_ascii_case("sha256:") => &trimmed[7..],
+        _ => trimmed,
+    };
     let lower = digest.to_lowercase();
     (lower.len() == 64 && lower.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(lower)
 }

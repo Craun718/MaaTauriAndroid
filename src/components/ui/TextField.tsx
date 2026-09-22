@@ -4,7 +4,7 @@ interface TextFieldProps {
   value: string;
   onValueChange: (value: string) => void;
   label?: ReactNode;
-  type?: "text" | "password";
+  type?: "text" | "password" | "time" | "datetime-local";
   inputMode?: "text" | "numeric";
   placeholder?: string;
   disabled?: boolean;
@@ -53,7 +53,7 @@ export function TextField({
       )}
       <input
         type={type}
-        inputMode={inputMode}
+        inputMode={type === "text" ? inputMode : undefined}
         value={value}
         placeholder={placeholder}
         aria-label={ariaLabel}

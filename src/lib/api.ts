@@ -6,6 +6,9 @@ import type {
   PrivilegedStatus,
   ResolvedRun,
   RunResult,
+  ScheduleRule,
+  ScheduleRuleStatus,
+  ScheduleSummary,
   UserConfiguration,
   VirtualDisplayStatus,
 } from "./types";
@@ -134,4 +137,24 @@ export async function clearDiagnosticData() {
   return invoke<{ deletedRunCount: number; runsDir: string }>(
     "clear_diagnostic_data",
   );
+}
+
+export async function listScheduleRules() {
+  return invoke<Array<ScheduleRuleStatus>>("list_schedule_rules");
+}
+
+export async function saveScheduleRule(rule: ScheduleRule) {
+  return invoke<ScheduleRule>("save_schedule_rule", { rule });
+}
+
+export async function deleteScheduleRule(id: string) {
+  return invoke<void>("delete_schedule_rule", { id });
+}
+
+export async function setScheduleRuleEnabled(id: string, enabled: boolean) {
+  return invoke<ScheduleRule>("set_schedule_rule_enabled", { id, enabled });
+}
+
+export async function getScheduleStatus() {
+  return invoke<ScheduleSummary>("get_schedule_status");
 }

@@ -8,6 +8,7 @@ const resolveCurrent = vi.fn();
 const getPrivilegedStatus = vi.fn();
 const getRunStatus = vi.fn();
 const getVirtualDisplayStatus = vi.fn();
+const getScheduleStatus = vi.fn();
 const updateVirtualDisplayBounds = vi.fn();
 const hideVirtualDisplayPreview = vi.fn();
 
@@ -16,6 +17,7 @@ vi.mock("../src/lib/api", () => ({
   resolveCurrent: () => resolveCurrent(),
   getPrivilegedStatus: () => getPrivilegedStatus(),
   getRunStatus: () => getRunStatus(),
+  getScheduleStatus: () => getScheduleStatus(),
   startVirtualDisplay: vi.fn(),
   stopVirtualDisplay: vi.fn(),
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
@@ -100,6 +102,12 @@ describe("App", () => {
       width: 1280,
       height: 720,
       frameCount: 0,
+    });
+    getScheduleStatus.mockResolvedValue({
+      ruleCount: 0,
+      enabledCount: 0,
+      nextTriggerEpochMs: undefined,
+      lastTrigger: undefined,
     });
     updateVirtualDisplayBounds.mockResolvedValue(undefined);
     hideVirtualDisplayPreview.mockResolvedValue(undefined);

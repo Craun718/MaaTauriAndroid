@@ -5,6 +5,7 @@ mod focus;
 mod persistence;
 mod run_log;
 mod runtime;
+mod schedule;
 mod secrets;
 mod telemetry;
 mod version;
@@ -17,12 +18,23 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+
+#[cfg(target_os = "android")]
+use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
 static BOOTSTRAP_PROJECT_ROOT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
+
+#[cfg(target_os = "android")]
+pub fn android_app_handle() -> Option<&'static AppHandle> {
+    APP_HANDLE.get()
+}
 
 #[cfg(target_os = "android")]
 fn bootstrap_project_root() -> Option<&'static str> {
@@ -54,6 +66,7 @@ struct AppState {
     runs_dir: RwLock<Option<PathBuf>>,
     latest_log: RwLock<Option<Arc<run_log::RunLogger>>>,
     run_storage: tokio::sync::Mutex<()>,
+    schedule_store: RwLock<Option<Arc<schedule::ScheduleStore>>>,
 }
 
 impl Default for AppState {
@@ -67,6 +80,7 @@ impl Default for AppState {
             runs_dir: RwLock::new(None),
             latest_log: RwLock::new(None),
             run_storage: tokio::sync::Mutex::new(()),
+            schedule_store: RwLock::new(None),
         }
     }
 }
@@ -106,6 +120,23 @@ impl AppState {
 
     fn set_runs_dir(&self, path: PathBuf) {
         *self.runs_dir.write().expect("runs directory lock poisoned") = Some(path);
+    }
+
+    fn schedule_store(&self) -> Result<Arc<schedule::ScheduleStore>, AppError> {
+        self.schedule_store
+            .read()
+            .expect("schedule store lock poisoned")
+            .as_ref()
+            .ok_or_else(|| AppError::Message("Schedule storage is not initialized".to_string()))
+            .cloned()
+    }
+
+    fn set_schedule_data_dir(&self, path: PathBuf) {
+        *self
+            .schedule_store
+            .write()
+            .expect("schedule store lock poisoned") =
+            Some(Arc::new(schedule::ScheduleStore::new(path)));
     }
 
     fn set_latest_log(&self, logger: Arc<run_log::RunLogger>) {
@@ -1094,6 +1125,69 @@ fn stop_run_foreground_service() {
     }
 }
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn sync_schedule_alarms() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        if call_runtime_bridge_boolean("syncScheduleAlarms")? {
+            Ok(())
+        } else {
+            Err(AppError::Message(
+                "The Android alarm service rejected the schedule update".to_string(),
+            ))
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+fn list_schedule_rules(
+    state: State<'_, AppState>,
+) -> Result<Vec<schedule::ScheduleRuleStatus>, AppError> {
+    state.schedule_store()?.list().map_err(AppError::from)
+}
+
+#[tauri::command]
+fn save_schedule_rule(
+    state: State<'_, AppState>,
+    rule: schedule::ScheduleRule,
+) -> Result<schedule::ScheduleRule, AppError> {
+    let saved = state.schedule_store()?.save(rule).map_err(AppError::from)?;
+    sync_schedule_alarms()?;
+    Ok(saved)
+}
+
+#[tauri::command]
+fn delete_schedule_rule(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    state
+        .schedule_store()?
+        .delete(&id)
+        .map_err(AppError::from)?;
+    sync_schedule_alarms()
+}
+
+#[tauri::command]
+fn set_schedule_rule_enabled(
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> Result<schedule::ScheduleRule, AppError> {
+    let saved = state
+        .schedule_store()?
+        .set_enabled(&id, enabled)
+        .map_err(AppError::from)?;
+    sync_schedule_alarms()?;
+    Ok(saved)
+}
+
+#[tauri::command]
+fn get_schedule_status(state: State<'_, AppState>) -> Result<schedule::ScheduleSummary, AppError> {
+    state.schedule_store()?.summary().map_err(AppError::from)
+}
+
 /// Best-effort close of the target apps the privileged service launched on
 /// the virtual display during the run; the outcome is recorded in the log.
 fn stop_target_app_after_run(logger: &run_log::RunLogger) {
@@ -1373,9 +1467,40 @@ fn abort_preparing_run(app: &AppHandle, logger: &run_log::RunLogger, message: St
 }
 
 #[tauri::command]
-async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRunStatus, AppError> {
+async fn start_run_core(
+    app: AppHandle,
+    state: &AppState,
+    run_configuration_id: Option<String>,
+    scheduled_trigger: Option<(String, i64)>,
+) -> Result<StartRunStatus, AppError> {
+    if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.clone() {
+        if state.maa.status() != runtime::RunState::Idle {
+            state
+                .schedule_store()?
+                .record_trigger(schedule::ScheduleTriggerLogEntry {
+                    rule_id,
+                    scheduled_epoch_ms,
+                    actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                    result: schedule::ScheduleTriggerResult::RejectedActive,
+                    detail: Some("Another run is active or finishing".to_string()),
+                })?;
+            return Err(AppError::Message("Another run is active".to_string()));
+        }
+    }
     let project = state.project()?;
-    let configuration = state.configuration()?;
+    let mut configuration = state.configuration()?;
+    if let Some(requested_id) = run_configuration_id.as_deref() {
+        if !configuration
+            .run_configurations
+            .iter()
+            .any(|run| run.id == requested_id)
+        {
+            return Err(AppError::Message(
+                "The scheduled run configuration no longer exists".to_string(),
+            ));
+        }
+        configuration.active_run_configuration_id = Some(requested_id.to_string());
+    }
     let resolved = resolve_run(&project, &configuration)?;
     let tasks = resolved
         .tasks
@@ -1385,6 +1510,17 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
         .collect::<Vec<_>>();
     let task_count = tasks.len();
     if task_count == 0 {
+        if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger {
+            state
+                .schedule_store()?
+                .record_trigger(schedule::ScheduleTriggerLogEntry {
+                    rule_id,
+                    scheduled_epoch_ms,
+                    actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                    result: schedule::ScheduleTriggerResult::FailedValidation,
+                    detail: Some("There are no enabled tasks to run".to_string()),
+                })?;
+        }
         return Ok(StartRunStatus {
             execution_id: String::new(),
             message: "There are no enabled tasks to run".to_string(),
@@ -1450,6 +1586,17 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
     // command returns, or every later start and stop stays wedged on the
     // preparing lease and the run controls never return to Idle.
     let fail_preparing = |message: String| -> AppError {
+        if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.as_ref() {
+            if let Ok(store) = state.schedule_store() {
+                let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+                    rule_id: rule_id.clone(),
+                    scheduled_epoch_ms: *scheduled_epoch_ms,
+                    actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                    result: schedule::ScheduleTriggerResult::FailedServiceStart,
+                    detail: Some(message.clone()),
+                });
+            }
+        }
         state.maa.finish_with(&execution_id, || {
             abort_preparing_run(&app, &logger, message.clone());
         });
@@ -1464,9 +1611,24 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
             return Err(fail_preparing(error.to_string()));
         }
         if !call_runtime_bridge_boolean("startRunForegroundService")? {
-            return Err(fail_preparing(
+            if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.as_ref() {
+                if let Ok(store) = state.schedule_store() {
+                    let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+                        rule_id: rule_id.clone(),
+                        scheduled_epoch_ms: *scheduled_epoch_ms,
+                        actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                        result: schedule::ScheduleTriggerResult::ForegroundServiceDenied,
+                        detail: Some("Android rejected the run foreground service".to_string()),
+                    });
+                }
+            }
+            let _ = logger.append(
+                run_log::RunEventKind::Warning,
+                runtime::RunState::Preparing,
                 "The run foreground service could not be started".to_string(),
-            ));
+                None,
+                None,
+            );
         }
         if configuration.show_virtual_display_touches {
             let _ = set_virtual_display_touch_markers(true);
@@ -1705,6 +1867,11 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
         message: "The run is starting".to_string(),
         task_count,
     })
+}
+
+#[tauri::command]
+async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRunStatus, AppError> {
+    start_run_core(app, state.inner(), None, None).await
 }
 
 #[tauri::command]
@@ -1994,6 +2161,8 @@ enum AppError {
     RunLog(#[from] run_log::RunLogError),
     #[error("{0}")]
     Diagnostic(#[from] diagnostics::DiagnosticError),
+    #[error("{0}")]
+    Schedule(#[from] schedule::ScheduleError),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }
@@ -2440,7 +2609,12 @@ pub fn run() {
             export_diagnostics,
             export_logs,
             capture_manual_screenshot,
-            clear_diagnostic_data
+            clear_diagnostic_data,
+            list_schedule_rules,
+            save_schedule_rule,
+            delete_schedule_rule,
+            set_schedule_rule_enabled,
+            get_schedule_status
         ])
         .setup(|app| {
             let state = app.state::<AppState>();
@@ -2449,6 +2623,11 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|error| AppError::Path(error.to_string()))?;
             state.set_runs_dir(root.join("runs"));
+            state.set_schedule_data_dir(root.clone());
+            #[cfg(target_os = "android")]
+            {
+                let _ = APP_HANDLE.set(app.handle().clone());
+            }
             let maa_log_dir = root.join("maa-logs");
             let _ = std::fs::create_dir_all(&maa_log_dir);
             runtime::set_maa_log_dir(maa_log_dir);
@@ -2464,4 +2643,156 @@ pub fn run() {
                 cleanup_virtual_display_on_exit();
             }
         });
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_scheduleRulesJson(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
+    let Some(app) = android_app_handle() else {
+        return std::ptr::null_mut();
+    };
+    let rules = app
+        .state::<AppState>()
+        .schedule_store()
+        .and_then(|store| store.list())
+        .and_then(|rules| serde_json::to_string(&rules).map_err(schedule::ScheduleError::from));
+    match rules {
+        Ok(rules) => match unsafe { jni::JNIEnv::from_raw(env.cast()) } {
+            Ok(mut environment) => match environment.new_string(rules) {
+                Ok(value) => value.into_raw().cast(),
+                Err(_) => std::ptr::null_mut(),
+            },
+            Err(_) => std::ptr::null_mut(),
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[cfg(target_os = "android")]
+fn ensure_background_project(app: &AppHandle, state: &AppState) -> Result<(), AppError> {
+    if state.project().is_ok() {
+        return Ok(());
+    }
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    let config_path = data_dir.join("configuration.json");
+    let Some(root) = bootstrap_project_root() else {
+        return Err(AppError::NoProject);
+    };
+    let project =
+        ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), "zh_cn")?;
+    let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
+    state.install(config_path, None, project, stored)?;
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_recordScheduleForegroundServiceDenied(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    rule_id: *mut std::ffi::c_void,
+    scheduled_time_ms: std::os::raw::c_long,
+) -> std::os::raw::c_int {
+    let Some(app) = android_app_handle() else {
+        return 0;
+    };
+    let Ok(mut environment) = (unsafe { jni::JNIEnv::from_raw(env.cast()) }) else {
+        return 0;
+    };
+    let raw_rule_id = unsafe { jni::objects::JObject::from_raw(rule_id.cast()) };
+    let java_rule_id = jni::objects::JString::from(raw_rule_id);
+    let Ok(rule_id) = environment.get_string(&java_rule_id) else {
+        return 0;
+    };
+    let rule_id = rule_id.to_string_lossy().into_owned();
+    let state = app.state::<AppState>();
+    let recorded = state.schedule_store().and_then(|store| {
+        store.record_trigger(schedule::ScheduleTriggerLogEntry {
+            rule_id,
+            scheduled_epoch_ms: scheduled_time_ms,
+            actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+            result: schedule::ScheduleTriggerResult::ForegroundServiceDenied,
+            detail: Some("Android rejected the schedule foreground service".to_string()),
+        })
+    });
+    i32::from(recorded.is_ok())
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    rule_id: *mut std::ffi::c_void,
+    scheduled_time_ms: std::os::raw::c_long,
+) -> std::os::raw::c_int {
+    let Some(app) = android_app_handle() else {
+        return 0;
+    };
+    let Ok(mut environment) = (unsafe { jni::JNIEnv::from_raw(env.cast()) }) else {
+        return 0;
+    };
+    let raw_rule_id = unsafe { jni::objects::JObject::from_raw(rule_id.cast()) };
+    let java_rule_id = jni::objects::JString::from(raw_rule_id);
+    let rule_id = match environment.get_string(&java_rule_id) {
+        Ok(value) => value.to_string_lossy().into_owned(),
+        None => return 0,
+    };
+    let state = app.state::<AppState>();
+    if ensure_background_project(&app, &state).is_err() {
+        return 0;
+    }
+    let Ok(store) = state.schedule_store() else {
+        return 0;
+    };
+    let Ok(Some(rule)) = store.find(&rule_id) else {
+        return 0;
+    };
+    if !rule.enabled
+        || store
+            .is_duplicate(&rule_id, scheduled_time_ms)
+            .unwrap_or(true)
+    {
+        return 1;
+    }
+    if state.maa.status() != runtime::RunState::Idle {
+        let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+            rule_id,
+            scheduled_epoch_ms: scheduled_time_ms,
+            actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+            result: schedule::ScheduleTriggerResult::RejectedActive,
+            detail: Some("Another run is active or finishing".to_string()),
+        });
+        return 1;
+    }
+    let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+        rule_id: rule_id.clone(),
+        scheduled_epoch_ms: scheduled_time_ms,
+        actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+        result: schedule::ScheduleTriggerResult::Started,
+        detail: None,
+    });
+    let scheduled_app = app.clone();
+    let scheduled_rule_id = rule_id.clone();
+    tauri::async_runtime::block_on(async move {
+        let scheduled_state = scheduled_app.state::<AppState>();
+        let _ = start_run_core(
+            scheduled_app.clone(),
+            scheduled_state.inner(),
+            Some(rule.run_configuration_id),
+            Some((rule_id, scheduled_time_ms)),
+        )
+        .await;
+        let _ = scheduled_state
+            .schedule_store()
+            .map_err(AppError::from)
+            .and_then(|_| sync_schedule_alarms());
+    });
+    1
 }

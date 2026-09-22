@@ -99,6 +99,14 @@ object RuntimeBridge {
         return true
     }
 
+    @JvmStatic
+    fun syncScheduleAlarms(): Boolean {
+        val context = agentContext ?: return false
+        return runCatching {
+            ScheduleAlarmManager.sync(context)
+        }.isSuccess
+    }
+
     /**
      * Force-stops the target apps the privileged service recorded while
      * launching on the virtual display. Called once when a run ends naturally.
@@ -562,6 +570,18 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun setBootstrapProjectRoot(projectRoot: String)
+
+    @JvmStatic
+    external fun scheduleRulesJson(): String?
+
+    @JvmStatic
+    external fun recordScheduleForegroundServiceDenied(
+        ruleId: String,
+        scheduledTimeMs: Long,
+    ): Int
+
+    @JvmStatic
+    external fun startScheduledRun(ruleId: String, scheduledTimeMs: Long): Int
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val UNKNOWN = "unknown"

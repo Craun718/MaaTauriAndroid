@@ -3,4 +3,7 @@
     <string name="run_notification_channel">Maa run</string>
     <string name="run_notification_title">Maa run in progress</string>
     <string name="run_notification_text">The automation task is still running</string>
+    <string name="schedule_notification_channel">Scheduled runs</string>
+    <string name="schedule_notification_title">Scheduled run starting</string>
+    <string name="schedule_notification_text">Preparing the scheduled automation run</string>
 </resources>

@@ -2,6 +2,7 @@ import { Megaphone } from "lucide-react";
 import { useState } from "react";
 import { AnnouncementModal } from "../components/AnnouncementModal";
 import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
+import { ScheduleEntryCard } from "../components/ScheduleEntryCard";
 import { VersionCard } from "../components/VersionCard";
 import {
   acknowledgeAnnouncement,
@@ -52,6 +53,8 @@ export function HomePage() {
       />
 
       <PrivilegeStatusCard title="privilegedHost" />
+
+      <ScheduleEntryCard />
 
       {busy && <p className="text-sm text-ink-muted">{t("saving")}</p>}
     </div>

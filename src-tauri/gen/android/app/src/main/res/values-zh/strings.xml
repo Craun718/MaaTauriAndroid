@@ -3,4 +3,7 @@
     <string name="run_notification_channel">Maa 任务</string>
     <string name="run_notification_title">Maa 任务正在运行</string>
     <string name="run_notification_text">自动化任务仍在后台执行</string>
+    <string name="schedule_notification_channel">定时任务</string>
+    <string name="schedule_notification_title">定时任务正在启动</string>
+    <string name="schedule_notification_text">正在准备后台自动化任务</string>
 </resources>

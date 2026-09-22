@@ -16,6 +16,7 @@ use super::{UpdateError, UpdateFailure};
 /// Progress is reported in whole megabytes, matching MaaFwApp's granularity.
 const PROGRESS_GRANULARITY: u64 = 1024 * 1024;
 
+#[derive(Debug)]
 pub struct DownloadOutcome {
     pub path: PathBuf,
     pub bytes: u64,

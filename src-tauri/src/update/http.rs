@@ -158,6 +158,8 @@ async fn read_capped(mut response: reqwest::Response, url: &str) -> Result<Vec<u
 
 #[cfg(test)]
 pub(crate) mod testing {
+    use std::sync::Mutex;
+
     use super::*;
 
     /// A scripted GET response, matched by URL substring.
@@ -322,7 +324,10 @@ pub(crate) mod testing {
             },
         );
 
-        let response = client.get("https://cdn.test/app.apk", &[]).await.unwrap();
+        let mut response = client
+            .get_stream("https://cdn.test/app.apk", &[])
+            .await
+            .unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(response.content_length, Some(5));
         let mut body = Vec::new();

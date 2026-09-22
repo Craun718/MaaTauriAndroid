@@ -325,7 +325,7 @@ mod tests {
                 ),
             ),
         );
-        let client = StubClient::new().with_body("page=1", 200, releases);
+        let client = StubClient::new().with_body("page=1", 200, releases.clone());
 
         let beta = latest_release(&client, "owner/repo", "beta", "1.0.0")
             .await

@@ -112,27 +112,32 @@ export function UpdateCard() {
               />
             </div>
           </div>
-          {savedPrefs.source !== "github" && (
-            <TextField
-              label={t("updateCdk")}
-              description={t("updateCdkDescription")}
-              placeholder={t("updateCdkPlaceholder")}
-              value={savedPrefs.cdk}
-              onValueChange={(value) => setDraft({ ...savedPrefs, cdk: value })}
-            />
-          )}
-          <div className="flex justify-end">
+          <div className="flex items-end gap-2">
+            {savedPrefs.source !== "github" && (
+              <TextField
+                className="min-w-0 flex-1"
+                label={t("updateCdk")}
+                placeholder={t("updateCdkPlaceholder")}
+                value={savedPrefs.cdk}
+                onValueChange={(value) =>
+                  setDraft({ ...savedPrefs, cdk: value })
+                }
+              />
+            )}
             <button
               type="button"
               disabled={!prefsDirty || prefsBusy}
               onClick={() => {
                 if (savedPrefs) void setPrefs(savedPrefs);
               }}
-              className="h-9 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              className="ml-auto h-11 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
               {t("updateApplyPrefs")}
             </button>
           </div>
+          {savedPrefs.source !== "github" && (
+            <p className="text-[0.8125rem]">{t("updateCdkDescription")}</p>
+          )}
         </>
       )}
       <UpdateStatusView status={status} />

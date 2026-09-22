@@ -152,7 +152,13 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v4
-      - run: sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37"
+      # API 37 ships as the minor-numbered package android-37.0, while AGP
+      # looks the platform up by the bare android-37 hash: symlink it into
+      # place after installing (see flutter/flutter#192478).
+      - name: Install the Android SDK platform
+        run: |
+          sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37.0"
+          ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
 
       - uses: Swatinem/rust-cache@v2.9.2
         with:
@@ -250,7 +256,13 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v4
-      - run: sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37"
+      # API 37 ships as the minor-numbered package android-37.0, while AGP
+      # looks the platform up by the bare android-37 hash: symlink it into
+      # place after installing (see flutter/flutter#192478).
+      - name: Install the Android SDK platform
+        run: |
+          sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37.0"
+          ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
 
       - uses: Swatinem/rust-cache@v2.9.2
         with:

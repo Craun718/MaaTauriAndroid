@@ -853,7 +853,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     companion object {
         const val PROTOCOL_VERSION = 6
-        private const val HEARTBEAT_INTERVAL_MS = 5_000L
+        private const val HEARTBEAT_INTERVAL_MS = 1_000L
         private const val TOUCH_MARKER_FIELDS = 5
         private const val TOUCH_MARKER_LIMIT = 256
         const val METHOD_START_GAME = 1

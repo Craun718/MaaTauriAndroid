@@ -12,20 +12,40 @@ import androidx.annotation.RequiresApi
  * Context. Framework services validate that identity pair, so present the same
  * identity to system_server that MaaFw and shell tools use.
  */
-internal class ShellIdentityContext(base: Context) : ContextWrapper(base) {
-    override fun getPackageName(): String = PACKAGE_NAME
+internal class ShellIdentityContext(
+    base: Context,
+    private val identityPackageName: String,
+    private val identityUid: Int,
+) : ContextWrapper(base) {
+    override fun getPackageName(): String = identityPackageName
 
-    override fun getOpPackageName(): String = PACKAGE_NAME
+    override fun getOpPackageName(): String = identityPackageName
 
     @RequiresApi(Build.VERSION_CODES.S)
     override fun getAttributionSource(): AttributionSource =
-        AttributionSource.Builder(android.os.Process.SHELL_UID)
-            .setPackageName(PACKAGE_NAME)
+        AttributionSource.Builder(identityUid)
+            .setPackageName(identityPackageName)
             .build()
 
     companion object {
         private const val PACKAGE_NAME = "com.android.shell"
         private const val TAG = "MaaTauriAndroidControl"
+
+        /**
+         * Shell services need the shell package and shell UID together. A root
+         * service keeps UID 0 for input injection, but must identify as the
+         * app when calling package-aware framework APIs.
+         */
+        fun forCurrentUid(base: Context): ShellIdentityContext {
+            val currentUid = android.os.Process.myUid()
+            val packageName =
+                if (currentUid == android.os.Process.SHELL_UID) {
+                    PACKAGE_NAME
+                } else {
+                    base.packageName
+                }
+            return ShellIdentityContext(base, packageName, currentUid)
+        }
 
         fun createDisplayManager(context: Context): DisplayManager? = runCatching {
             DisplayManager::class.java

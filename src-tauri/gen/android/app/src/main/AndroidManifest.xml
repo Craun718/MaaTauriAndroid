@@ -46,6 +46,12 @@
             android:multiprocess="false" />
 
         <provider
+            android:name=".control.root.RootServiceBootstrapProvider"
+            android:authorities="${applicationId}.root.bootstrap"
+            android:exported="true"
+            android:multiprocess="false" />
+
+        <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bootstrapApp,
+  getPrivilegedBackend,
   loadProject,
   pressVirtualDisplayBack,
+  setPrivilegedBackend,
   setVirtualDisplayLandscape,
 } from "./api";
 
@@ -92,6 +94,34 @@ describe("virtual display fullscreen orientation", () => {
     );
     expect(invoke).toHaveBeenCalledWith("set_virtual_display_landscape", {
       enabled: false,
+    });
+  });
+});
+
+describe("privileged backend selection", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("reads and switches the selected privileged backend", async () => {
+    invoke.mockResolvedValueOnce("root").mockResolvedValueOnce(undefined);
+
+    await expect(getPrivilegedBackend()).resolves.toBe("root");
+    await expect(setPrivilegedBackend("root")).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenNthCalledWith(1, "get_privileged_backend");
+    expect(invoke).toHaveBeenNthCalledWith(2, "set_privileged_backend", {
+      backend: "root",
+    });
+  });
+
+  it("propagates a failed backend switch", async () => {
+    invoke.mockRejectedValue(new Error("Root access was denied or timed out"));
+
+    await expect(setPrivilegedBackend("root")).rejects.toThrow(
+      "Root access was denied or timed out",
+    );
+    expect(invoke).toHaveBeenCalledWith("set_privileged_backend", {
+      backend: "root",
     });
   });
 });

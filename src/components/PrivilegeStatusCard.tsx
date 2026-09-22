@@ -1,6 +1,7 @@
 import {
   CircleAlert,
   ExternalLink,
+  KeyRound,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
@@ -10,13 +11,15 @@ import {
   getPrivilegedStatus,
   openShizuku,
   requestPrivilegedAccess,
+  setPrivilegedBackend,
 } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
-import type { PrivilegedStatus } from "../lib/types";
+import type { PrivilegedBackend, PrivilegedStatus } from "../lib/types";
 import { useNotificationStore } from "../store/notificationStore";
+import { SegmentGroup } from "./ui/SegmentGroup";
 
-type PrivilegeAction = "request" | "openShizuku";
+type PrivilegeAction = "request" | "openShizuku" | "switch";
 
 const statusCopy: Record<
   PrivilegedStatus["status"],
@@ -67,6 +70,16 @@ const statusCopy: Record<
 
 const STATUS_POLL_INTERVAL_MS = 500;
 
+const rootStatusCopy: Partial<
+  Record<PrivilegedStatus["status"], { description: MessageKey }>
+> = {
+  starting: { description: "rootStartingDescription" },
+  permissionRequired: { description: "rootPermissionDescription" },
+  notInstalled: { description: "rootUnavailableDescription" },
+  disconnected: { description: "rootDisconnectedDescription" },
+  error: { description: "rootErrorDescription" },
+};
+
 export function PrivilegeStatusCard({
   title,
   compact = false,
@@ -80,6 +93,7 @@ export function PrivilegeStatusCard({
   const [statusError, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
   const [pendingAction, setPendingAction] = useState<PrivilegeAction>();
+  const [backendOverride, setBackendOverride] = useState<PrivilegedBackend>();
 
   const refreshStatus = useCallback(async (trackActivity = true) => {
     if (trackActivity) {
@@ -146,7 +160,34 @@ export function PrivilegeStatusCard({
     }
   }
 
-  const copy = status ? statusCopy[status.status] : undefined;
+  const selectedBackend = backendOverride ?? status?.backend ?? "shizuku";
+
+  async function switchBackend(backend: PrivilegedBackend) {
+    if (pendingAction || backend === selectedBackend) return;
+    setPendingAction("switch");
+    setBackendOverride(backend);
+    setStatusError(undefined);
+    try {
+      await setPrivilegedBackend(backend);
+      await refreshStatus();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), {
+        tone: "error",
+      });
+    } finally {
+      setBackendOverride(undefined);
+      setPendingAction(undefined);
+    }
+  }
+
+  const copy = status
+    ? {
+        ...statusCopy[status.status],
+        ...(selectedBackend === "root"
+          ? rootStatusCopy[status.status]
+          : undefined),
+      }
+    : undefined;
 
   return (
     <section
@@ -179,8 +220,25 @@ export function PrivilegeStatusCard({
         </button>
       </div>
 
+      <SegmentGroup
+        label={t("privilegedBackend")}
+        value={selectedBackend}
+        columns={2}
+        compact
+        disabled={pendingAction !== undefined || refreshing}
+        items={[
+          { value: "shizuku", label: t("backendShizuku") },
+          { value: "root", label: t("backendRoot") },
+        ]}
+        onValueChange={(value) =>
+          void switchBackend(value as PrivilegedBackend)
+        }
+      />
+
       <div className="flex items-center justify-between gap-3">
-        <span className="font-medium">{t("shizuku")}</span>
+        <span className="font-medium">
+          {selectedBackend === "root" ? t("backendRoot") : t("backendShizuku")}
+        </span>
         <span
           className={`flex flex-none items-center gap-2 rounded-md border text-xs font-medium ${
             compact ? "h-7 px-2" : "h-8 px-2.5"
@@ -203,21 +261,23 @@ export function PrivilegeStatusCard({
         <p className="break-all text-xs text-ink-muted">{status.message}</p>
       )}
 
-      <button
-        type="button"
-        onClick={() => void runPrivilegeAction("openShizuku")}
-        disabled={pendingAction !== undefined || refreshing}
-        className={`flex w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50 ${
-          compact ? "h-8" : "h-9"
-        }`}
-      >
-        {pendingAction === "openShizuku" ? (
-          <LoaderCircle size="0.875rem" className="animate-spin" />
-        ) : (
-          <ExternalLink size="0.875rem" />
-        )}
-        {t("openShizuku")}
-      </button>
+      {selectedBackend === "shizuku" && (
+        <button
+          type="button"
+          onClick={() => void runPrivilegeAction("openShizuku")}
+          disabled={pendingAction !== undefined || refreshing}
+          className={`flex w-full items-center justify-center gap-2 rounded-md border border-accent font-medium text-accent disabled:opacity-50 ${
+            compact ? "h-8" : "h-9"
+          }`}
+        >
+          {pendingAction === "openShizuku" ? (
+            <LoaderCircle size="0.875rem" className="animate-spin" />
+          ) : (
+            <ExternalLink size="0.875rem" />
+          )}
+          {t("openShizuku")}
+        </button>
+      )}
 
       <button
         type="button"
@@ -230,9 +290,11 @@ export function PrivilegeStatusCard({
         {pendingAction === "request" ? (
           <LoaderCircle size="0.875rem" className="animate-spin" />
         ) : (
-          <ShieldCheck size="0.875rem" />
+          <KeyRound size="0.875rem" />
         )}
-        {t("requestPermission")}
+        {selectedBackend === "root"
+          ? t("requestRootAccess")
+          : t("requestPermission")}
       </button>
 
       {statusError && (

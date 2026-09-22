@@ -618,6 +618,7 @@ static SCREEN_SIZE: AtomicI64 = AtomicI64::new(0);
 static ACTIVE_DISPLAY_ID: AtomicI32 = AtomicI32::new(0);
 static CONTROL_STATE: AtomicI64 = AtomicI64::new(0);
 static CONTROL_MESSAGE: Mutex<Option<String>> = Mutex::new(None);
+static PRIVILEGED_BACKEND_ROOT: AtomicBool = AtomicBool::new(false);
 static RUN_RESULT: Mutex<Option<RunResult>> = Mutex::new(None);
 
 #[cfg(any(target_os = "android", test))]
@@ -655,6 +656,18 @@ pub fn control_state() -> (i64, String) {
         .clone()
         .unwrap_or_else(|| "The privileged control unit is starting".to_string());
     (CONTROL_STATE.load(Ordering::SeqCst), message)
+}
+
+pub fn privileged_backend() -> &'static str {
+    if PRIVILEGED_BACKEND_ROOT.load(Ordering::SeqCst) {
+        "root"
+    } else {
+        "shizuku"
+    }
+}
+
+pub fn set_privileged_backend(backend: &str) {
+    PRIVILEGED_BACKEND_ROOT.store(backend == "root", Ordering::SeqCst);
 }
 
 pub fn clear_run_result() {

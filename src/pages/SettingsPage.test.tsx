@@ -11,11 +11,13 @@ import { useNotificationStore } from "../store/notificationStore";
 import { SettingsPage } from "./SettingsPage";
 
 const getPrivilegedStatus = vi.fn();
+const setPrivilegedBackend = vi.fn();
 const saveConfiguration = vi.fn();
 const exportLogs = vi.fn();
 
 vi.mock("../lib/api", () => ({
   getPrivilegedStatus: () => getPrivilegedStatus(),
+  setPrivilegedBackend: (backend: unknown) => setPrivilegedBackend(backend),
   requestPrivilegedAccess: vi.fn(),
   openShizuku: vi.fn(),
   saveConfiguration: (configuration: unknown) =>
@@ -111,7 +113,9 @@ beforeEach(() => {
   getPrivilegedStatus.mockResolvedValue({
     message: "Connected",
     setupRequired: [],
+    backend: "shizuku",
   });
+  setPrivilegedBackend.mockResolvedValue(undefined);
   saveConfiguration.mockImplementation(async (next: unknown) => next);
 });
 

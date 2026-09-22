@@ -75,7 +75,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     override fun startVirtualDisplay(width: Int, height: Int, dpi: Int, surface: Surface): Int {
         require(width > 0 && height > 0 && dpi > 0) { "invalid virtual display geometry" }
         val baseContext = context ?: return DISPLAY_NONE
-        val displayContext = ShellIdentityContext(baseContext)
+        val displayContext = ShellIdentityContext.forCurrentUid(baseContext)
         stopVirtualDisplay()
 
         // Several DisplayManager flags are hidden from the public SDK. Their numeric
@@ -102,9 +102,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return display.display.displayId
     }
 
-    private val appLauncher = AppLauncher(context?.let(::ShellIdentityContext)) { arguments ->
-        shell(*arguments)
-    }
+    private val appLauncher =
+        AppLauncher(context?.let(ShellIdentityContext::forCurrentUid)) { arguments ->
+            shell(*arguments)
+        }
 
     init {
         // Runs once per service process, before the first client call: the
@@ -817,7 +818,8 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     private fun displayRotation(windowManager: Any, displayId: Int): Int {
         val display = runCatching {
-            context?.let(ShellIdentityContext::createDisplayManager)
+            context?.let(ShellIdentityContext::forCurrentUid)
+                ?.let(ShellIdentityContext::createDisplayManager)
                 ?.getDisplay(displayId)
         }.getOrNull() ?: return 0
         return display.rotation

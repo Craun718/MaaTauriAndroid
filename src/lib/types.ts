@@ -243,13 +243,21 @@ export interface VirtualDisplayStatus {
   frameCount: number;
 }
 
+export type PrivilegedBackend = "shizuku" | "root";
+
 export type PrivilegedStatus =
-  | { status: "starting"; message: string; setupRequired: string[] }
-  | { status: "connected"; message: string }
+  | {
+      status: "starting";
+      message: string;
+      setupRequired: string[];
+      backend: PrivilegedBackend;
+    }
+  | { status: "connected"; message: string; backend: PrivilegedBackend }
   | {
       status: "permissionRequired" | "notInstalled" | "disconnected" | "error";
       message: string;
       setupRequired: string[];
+      backend: PrivilegedBackend;
     };
 
 export interface ResolvedTask {

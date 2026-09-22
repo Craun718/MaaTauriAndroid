@@ -4,6 +4,7 @@ import {
   getPrivilegedBackend,
   loadProject,
   pressVirtualDisplayBack,
+  resolveFocusModal,
   setPrivilegedBackend,
   setVirtualDisplayLandscape,
 } from "./api";
@@ -145,5 +146,18 @@ describe("virtual display back key", () => {
       "The virtual display is not active",
     );
     expect(invoke).toHaveBeenCalledWith("virtual_display_back");
+  });
+});
+
+describe("focus modal acks", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("acknowledges one blocking modal on the backend", async () => {
+    invoke.mockResolvedValue(undefined);
+
+    await expect(resolveFocusModal()).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith("resolve_focus_modal");
   });
 });

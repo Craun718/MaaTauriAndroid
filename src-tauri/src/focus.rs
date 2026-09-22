@@ -3,6 +3,7 @@ use maa_framework::notification::{msg, MaaEvent};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
@@ -41,6 +42,36 @@ struct FocusTemplate {
     content: Option<String>,
     display: Vec<Channel>,
     trace: Option<bool>,
+}
+
+/// Pending `modal` focus messages waiting for the user to confirm them in
+/// the UI. The run loop pauses queue advancement while this is non-zero:
+/// MaaFramework has no pause API, so — mirroring MFAAvalonia — "the
+/// pipeline waits for the user" is implemented as "the task queue stops
+/// advancing" plus a blocking in-app dialog, not as a tasker-level pause.
+static PENDING_MODALS: AtomicUsize = AtomicUsize::new(0);
+
+/// Number of modal focus messages awaiting user confirmation.
+pub fn pending_modals() -> usize {
+    PENDING_MODALS.load(Ordering::SeqCst)
+}
+
+/// Registers a modal focus message; called from the focus sink.
+pub fn request_modal_ack() {
+    PENDING_MODALS.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Acknowledges one modal focus message; no-op when none is pending.
+pub fn resolve_modal_ack() {
+    let _ = PENDING_MODALS.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |pending| {
+        pending.checked_sub(1)
+    });
+}
+
+/// Drops every pending modal ack; used when a run ends so a stale dialog
+/// can never block the next run's queue.
+pub fn clear_pending_modals() {
+    PENDING_MODALS.store(0, Ordering::SeqCst);
 }
 
 /// Handles MaaFramework node notifications carrying a `focus` template:
@@ -89,13 +120,36 @@ impl FocusSink {
                         Channel::Toast => {
                             self.emit("focus-toast", &message, name.as_deref(), content, "toast")
                         }
-                        Channel::Notification | Channel::Dialog | Channel::Modal => self.emit(
+                        Channel::Notification => {
+                            // Deliver through the OS notification center; the
+                            // event only backs the in-app card shown when the
+                            // runtime permission is missing.
+                            self.notify_system(name.as_deref(), content);
+                            self.emit(
+                                "focus-notify",
+                                &message,
+                                name.as_deref(),
+                                content,
+                                channel.name(),
+                            );
+                        }
+                        Channel::Dialog => self.emit(
                             "focus-notify",
                             &message,
                             name.as_deref(),
                             content,
                             channel.name(),
                         ),
+                        Channel::Modal => {
+                            request_modal_ack();
+                            self.emit(
+                                "focus-notify",
+                                &message,
+                                name.as_deref(),
+                                content,
+                                channel.name(),
+                            );
+                        }
                     }
                 }
             }
@@ -128,6 +182,24 @@ impl FocusSink {
             Some(data),
         ) {
             let _ = self.app.emit("run-event", &event);
+        }
+    }
+
+    /// Posts the message to the OS notification center. Android silently
+    /// drops notifications while the POST_NOTIFICATIONS runtime permission
+    /// is missing; the frontend shows an in-app fallback card in that case.
+    fn notify_system(&self, name: Option<&str>, content: &str) {
+        use tauri_plugin_notification::NotificationExt;
+        let title = name.unwrap_or("TTFlow");
+        if let Err(error) = self
+            .app
+            .notification()
+            .builder()
+            .title(title)
+            .body(content)
+            .show()
+        {
+            log::warn!("system notification failed: {error}");
         }
     }
 
@@ -312,7 +384,9 @@ fn parse_legacy_focus(focus: &Value, message: &str) -> Vec<FocusTemplate> {
                 .map_or(first.clone(), |second| format!("{first}: {second}"));
             templates.push(FocusTemplate {
                 content: Some(content),
-                display: vec![Channel::Notification],
+                // The pre-V2 `toast` field always meant an in-app toast; it
+                // predates the OS-level `notification` display channel.
+                display: vec![Channel::Toast],
                 trace: None,
             });
         }
@@ -487,7 +561,25 @@ mod tests {
         assert_eq!(templates.len(), 2);
         assert_eq!(templates[0].display, vec![Channel::Log]);
         assert_eq!(templates[1].content.as_deref(), Some("Title: Body"));
-        assert_eq!(templates[1].display, vec![Channel::Notification]);
+        // Pre-V2 `toast` is an in-app toast, not the OS notification channel.
+        assert_eq!(templates[1].display, vec![Channel::Toast]);
+    }
+
+    #[test]
+    fn modal_acks_count_resolve_and_clear() {
+        clear_pending_modals();
+        assert_eq!(pending_modals(), 0);
+        request_modal_ack();
+        request_modal_ack();
+        assert_eq!(pending_modals(), 2);
+        resolve_modal_ack();
+        assert_eq!(pending_modals(), 1);
+        resolve_modal_ack();
+        resolve_modal_ack(); // extra resolves must not wrap below zero
+        assert_eq!(pending_modals(), 0);
+        request_modal_ack();
+        clear_pending_modals();
+        assert_eq!(pending_modals(), 0);
     }
 
     #[test]

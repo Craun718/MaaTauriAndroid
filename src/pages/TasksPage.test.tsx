@@ -26,12 +26,16 @@ const startRun = vi.fn();
 const stopRun = vi.fn();
 const exportLogs = vi.fn();
 const setVirtualDisplayTouchMarkers = vi.fn();
+const isNotificationGranted = vi.fn();
+const requestNotificationPermission = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
   captureManualScreenshot: () => captureManualScreenshot(),
   exportLogs: () => exportLogs(),
   getRunStatus: () => getRunStatus(),
+  isNotificationGranted: () => isNotificationGranted(),
+  requestNotificationPermission: () => requestNotificationPermission(),
   resolveCurrent: () => resolveCurrent(),
   saveConfiguration: (configuration: unknown) =>
     saveConfiguration(configuration),
@@ -649,7 +653,7 @@ describe("focus notifications", () => {
 
     eventHandlers.handlers["focus-notify"][0]({
       payload: {
-        channel: "modal",
+        channel: "dialog",
         messageType: "Node.Action.Failed",
         name: "NodeA",
         message: "NodeA failed",
@@ -662,6 +666,57 @@ describe("focus notifications", () => {
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
     await waitFor(() =>
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("leaves blocking modal notices to the global modal host", async () => {
+    renderTasksPage();
+
+    eventHandlers.handlers["focus-notify"][0]({
+      payload: {
+        channel: "modal",
+        messageType: "Node.Action.Failed",
+        name: "NodeA",
+        message: "NodeA failed",
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("shows notification notices only while OS notifications are denied", async () => {
+    isNotificationGranted.mockReturnValue(true);
+    const { unmount } = renderTasksPage();
+
+    eventHandlers.handlers["focus-notify"][0]({
+      payload: {
+        channel: "notification",
+        messageType: "Node.Action.Starting",
+        name: "NodeA",
+        message: "NodeA started",
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    unmount();
+
+    isNotificationGranted.mockReturnValue(false);
+    renderTasksPage();
+    eventHandlers.handlers["focus-notify"][1]({
+      payload: {
+        channel: "notification",
+        messageType: "Node.Action.Starting",
+        name: "NodeA",
+        message: "NodeA started",
+      },
+    });
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "NodeA started",
     );
   });
 });

@@ -1799,6 +1799,9 @@ async fn start_run_core(
                     )
                 })
                 .await;
+                // Whatever the outcome, the run is over: a modal dialog left
+                // unconfirmed must never block the next run's queue.
+                focus::clear_pending_modals();
                 let outcome = match result {
                     Ok(Ok(outcome)) => outcome,
                     Ok(Err(error)) => {
@@ -1932,6 +1935,13 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
 fn run_status() -> Result<runtime::RunResult, AppError> {
     runtime::run_result()
         .ok_or_else(|| AppError::Message("No run has been started in this session".to_string()))
+}
+
+/// Acknowledges one `modal` focus message from the UI, releasing the run
+/// queue gate that `run_tasks` waits on.
+#[tauri::command]
+fn resolve_focus_modal() {
+    focus::resolve_modal_ack();
 }
 
 #[tauri::command]
@@ -2621,6 +2631,7 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setPrivilegedBackend(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
@@ -2660,6 +2671,7 @@ pub fn run() {
             start_run,
             run_status,
             stop_run,
+            resolve_focus_modal,
             export_diagnostics,
             export_logs,
             capture_manual_screenshot,

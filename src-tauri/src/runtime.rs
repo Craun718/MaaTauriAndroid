@@ -1006,6 +1006,19 @@ impl RunOutcome {
     }
 }
 
+/// Modal focus messages pause queue advancement until the user confirms
+/// them in the UI. MaaFramework has no pause API, so the in-flight task
+/// keeps running — the gate only holds back the next task. Stopping the
+/// run breaks the wait.
+fn wait_for_modal_acks(tasker: &Arc<Tasker>) {
+    while crate::focus::pending_modals() > 0 {
+        if tasker.stopping() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 pub fn run_tasks(
     tasker: &Arc<Tasker>,
     tasks: &[ResolvedTask],
@@ -1018,6 +1031,7 @@ pub fn run_tasks(
         if tasker.stopping() {
             return Ok(RunOutcome::Stopped);
         }
+        wait_for_modal_acks(tasker);
         progress(index as u32 + 1, total, task);
         logger
             .append_to_ui(

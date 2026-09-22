@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { FocusModalHost } from "./components/FocusModalHost";
 import { useTranslation } from "./lib/i18n";
 import { HomePage } from "./pages/HomePage";
 import { SchedulesPage } from "./pages/SchedulesPage";
@@ -31,6 +32,7 @@ function App() {
         <div aria-live="polite" className="mt-4 min-h-5 text-sm text-ink-muted">
           {busy ? t("working") : ""}
         </div>
+        <FocusModalHost />
       </AppShell>
     </HashRouter>
   );

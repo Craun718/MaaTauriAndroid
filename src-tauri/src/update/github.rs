@@ -115,10 +115,7 @@ pub async fn latest_release(
         version: display.to_string(),
         note: release.body.clone().filter(|body| !body.trim().is_empty()),
         url: asset.browser_download_url.clone(),
-        sha256: asset
-            .digest
-            .clone()
-            .expect("pick_asset returns digested assets"),
+        sha256: asset_digest(asset).expect("pick_asset returns digested assets"),
         size: asset.size,
     }))
 }

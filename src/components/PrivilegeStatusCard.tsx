@@ -6,7 +6,7 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import {
   getPrivilegedStatus,
   openShizuku,
@@ -17,7 +17,7 @@ import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import type { PrivilegedBackend, PrivilegedStatus } from "../lib/types";
 import { useNotificationStore } from "../store/notificationStore";
-import { SegmentGroup } from "./ui/SegmentGroup";
+import { Select } from "./ui/Select";
 
 type PrivilegeAction = "request" | "openShizuku" | "switch";
 
@@ -89,6 +89,7 @@ export function PrivilegeStatusCard({
 }) {
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
+  const backendLabelId = useId();
   const [status, setStatus] = useState<PrivilegedStatus>();
   const [statusError, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
@@ -220,20 +221,24 @@ export function PrivilegeStatusCard({
         </button>
       </div>
 
-      <SegmentGroup
-        label={t("privilegedBackend")}
-        value={selectedBackend}
-        columns={2}
-        compact
-        disabled={pendingAction !== undefined || refreshing}
-        items={[
-          { value: "shizuku", label: t("backendShizuku") },
-          { value: "root", label: t("backendRoot") },
-        ]}
-        onValueChange={(value) =>
-          void switchBackend(value as PrivilegedBackend)
-        }
-      />
+      <div className="space-y-1.5">
+        <p id={backendLabelId} className="text-sm font-medium">
+          {t("privilegedBackend")}
+        </p>
+        <Select
+          labelledBy={backendLabelId}
+          compact
+          disabled={pendingAction !== undefined || refreshing}
+          value={selectedBackend}
+          items={[
+            { value: "shizuku", label: t("backendShizuku") },
+            { value: "root", label: t("backendRoot") },
+          ]}
+          onValueChange={(value) =>
+            void switchBackend(value as PrivilegedBackend)
+          }
+        />
+      </div>
 
       <div className="flex items-center justify-between gap-3">
         <span className="font-medium">

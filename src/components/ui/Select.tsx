@@ -11,6 +11,7 @@ interface SelectProps {
   className?: string;
   inputClassName?: string;
   compact?: boolean;
+  disabled?: boolean;
 }
 
 /**
@@ -26,6 +27,7 @@ export function Select({
   className,
   inputClassName,
   compact = false,
+  disabled = false,
 }: SelectProps) {
   const selectClassName = `${compact ? "select select-sm" : "select"} w-full${
     inputClassName ? ` ${inputClassName}` : ""
@@ -36,6 +38,7 @@ export function Select({
       <select
         aria-labelledby={labelledBy}
         className={selectClassName}
+        disabled={disabled}
         value={value ?? items[0]?.value}
         onChange={(event) => onValueChange(event.target.value)}
       >

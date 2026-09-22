@@ -157,6 +157,25 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun getSelectedPrivilegedBackend(): String {
+        return controlClient?.getSelectedPrivilegedBackend()
+            ?: ControlServiceClient.BACKEND_SHIZUKU
+    }
+
+    @JvmStatic
+    fun switchPrivilegedBackend(backend: String): Boolean {
+        val client = controlClient ?: return false
+        val latch = CountDownLatch(1)
+        val connected = AtomicBoolean(false)
+        thread(name = "ttflow-switch-privileged-backend") {
+            val result = client.switchPrivilegedBackend(backend)
+            connected.set(result)
+            latch.countDown()
+        }
+        return latch.await(20, TimeUnit.SECONDS) && connected.get()
+    }
+
+    @JvmStatic
     fun openShizuku(): Boolean {
         val context = agentContext ?: return false
         val intent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
@@ -534,6 +553,9 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun setControlState(state: Int)
+
+    @JvmStatic
+    external fun setPrivilegedBackend(backend: String)
 
     @JvmStatic
     external fun initializeSecretBridge()

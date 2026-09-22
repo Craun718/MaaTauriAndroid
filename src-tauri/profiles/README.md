@@ -77,4 +77,4 @@ Keep the MaaFramework version of `libMaaAgentClient.so`/`libMaaAgentServer.so` a
 
 The M9A and NarutoMobile jobs in `.github/workflows/ci.yml` perform this workflow and then build the release APK.
 
-> Note: native libraries are pinned to MaaFramework `v5.13.0` by `MAAFW_VERSION`; `MaaAgentCoreAndroid` is pinned to `3.13.15-maafw5.12.3` by `MAAFW_CORE_TAG`, so the bundle's Python `maa` package stays at 5.12.3 — the core's copy wins over the `maafw` pin in `requirements.txt`. The Python agent talks to the native agent libraries over the AgentClient/Server IPC protocol, which stays compatible across patch releases.
+> Note: native libraries are pinned to MaaFramework `v5.13.0` by `MAAFW_VERSION`; our fork `Craun718/MaaAgentCoreAndroid` is pinned to `3.13.15-maafw5.13.0` by `MAAFW_CORE_REPO` and `MAAFW_CORE_TAG`, so the bundle's Python `maa` package stays at 5.13.0 — the core's copy wins over the `maafw` pin in `requirements.txt`. The Python agent talks to the native agent libraries over the AgentClient/Server IPC protocol, which stays compatible across patch releases.

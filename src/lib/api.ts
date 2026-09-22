@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppStateSnapshot,
   LogExport,
+  PrivilegedBackend,
   PrivilegedStatus,
   ResolvedRun,
   RunResult,
@@ -35,6 +36,14 @@ export async function resolveCurrent() {
 
 export async function getPrivilegedStatus() {
   return invoke<PrivilegedStatus>("privileged_status");
+}
+
+export async function getPrivilegedBackend() {
+  return invoke<PrivilegedBackend>("get_privileged_backend");
+}
+
+export async function setPrivilegedBackend(backend: PrivilegedBackend) {
+  return invoke<void>("set_privileged_backend", { backend });
 }
 
 export async function requestPrivilegedAccess() {

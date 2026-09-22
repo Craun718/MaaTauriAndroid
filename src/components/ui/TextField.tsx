@@ -9,6 +9,7 @@ interface TextFieldProps {
   placeholder?: string;
   disabled?: boolean;
   ariaLabel?: string;
+  onBlur?: () => void;
   className?: string;
   error?: ReactNode;
   description?: ReactNode;
@@ -29,6 +30,7 @@ export function TextField({
   placeholder,
   disabled,
   ariaLabel,
+  onBlur,
   className,
   error,
   description,
@@ -58,6 +60,7 @@ export function TextField({
         disabled={disabled}
         className="input w-full"
         onChange={(event) => onValueChange(event.target.value)}
+        onBlur={onBlur}
       />
       {error && (
         <span

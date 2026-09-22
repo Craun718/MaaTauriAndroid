@@ -13,7 +13,7 @@ use domain::loader::ProjectLoader;
 use domain::resolver::{resolve_run, ResolverError};
 use domain::types::{ConfiguredTask, Project, RunConfiguration, UserConfiguration};
 use persistence::{PersistenceError, UserConfigurationStore};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -252,31 +252,61 @@ fn default_run_configuration(project: &Project, name: &str) -> RunConfiguration 
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum PrivilegedBackend {
+    Shizuku,
+    Root,
+}
+
+impl PrivilegedBackend {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Shizuku => "shizuku",
+            Self::Root => "root",
+        }
+    }
+
+    fn parse(value: &str) -> Self {
+        if value == "root" {
+            Self::Root
+        } else {
+            Self::Shizuku
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 enum PrivilegedStatus {
     Starting {
         message: String,
         setup_required: Vec<String>,
+        backend: PrivilegedBackend,
     },
     Connected {
         message: String,
+        backend: PrivilegedBackend,
     },
     PermissionRequired {
         message: String,
         setup_required: Vec<String>,
+        backend: PrivilegedBackend,
     },
     NotInstalled {
         message: String,
         setup_required: Vec<String>,
+        backend: PrivilegedBackend,
     },
     Disconnected {
         message: String,
         setup_required: Vec<String>,
+        backend: PrivilegedBackend,
     },
     Error {
         message: String,
         setup_required: Vec<String>,
+        backend: PrivilegedBackend,
     },
 }
 
@@ -562,30 +592,85 @@ fn resolve_current(state: State<'_, AppState>) -> Result<serde_json::Value, AppE
 #[tauri::command]
 fn privileged_status() -> Result<PrivilegedStatus, AppError> {
     let (state, message) = runtime::control_state();
+    let backend = PrivilegedBackend::parse(runtime::privileged_backend());
     match state {
         3 => Ok(PrivilegedStatus::Connected {
             message: "The privileged control unit is connected".to_string(),
+            backend,
         }),
         2 => Ok(PrivilegedStatus::PermissionRequired {
             message,
-            setup_required: vec!["Grant MaaTauriAndroid access in Shizuku".to_string()],
+            setup_required: privileged_setup_steps(backend, 2),
+            backend,
         }),
         1 => Ok(PrivilegedStatus::NotInstalled {
             message,
-            setup_required: vec!["Install or start Shizuku".to_string()],
+            setup_required: privileged_setup_steps(backend, 1),
+            backend,
         }),
         4 => Ok(PrivilegedStatus::Disconnected {
             message,
-            setup_required: vec!["Restart Shizuku and reopen MaaTauriAndroid".to_string()],
+            setup_required: privileged_setup_steps(backend, 4),
+            backend,
         }),
         5 => Ok(PrivilegedStatus::Error {
             message,
-            setup_required: vec!["Check Shizuku and the Android service logs".to_string()],
+            setup_required: privileged_setup_steps(backend, 5),
+            backend,
         }),
         _ => Ok(PrivilegedStatus::Starting {
             message,
-            setup_required: vec!["Wait for the control unit to connect".to_string()],
+            setup_required: privileged_setup_steps(backend, 0),
+            backend,
         }),
+    }
+}
+
+fn privileged_setup_steps(backend: PrivilegedBackend, state: i64) -> Vec<String> {
+    if backend == PrivilegedBackend::Root {
+        return vec![match state {
+            0 => "Wait for the root control unit to connect".to_string(),
+            4 => "Request root access again".to_string(),
+            5 => "Check the root prompt and the Android service logs".to_string(),
+            _ => "Grant root access in the su prompt".to_string(),
+        }];
+    }
+    vec![match state {
+        0 => "Wait for the control unit to connect".to_string(),
+        1 => "Install or start Shizuku".to_string(),
+        4 => "Restart Shizuku and reopen MaaTauriAndroid".to_string(),
+        5 => "Check Shizuku and the Android service logs".to_string(),
+        _ => "Grant MaaTauriAndroid access in Shizuku".to_string(),
+    }]
+}
+
+#[tauri::command]
+fn get_privileged_backend() -> Result<PrivilegedBackend, AppError> {
+    Ok(PrivilegedBackend::parse(runtime::privileged_backend()))
+}
+
+#[tauri::command]
+fn set_privileged_backend(backend: PrivilegedBackend) -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        if call_runtime_bridge_string_with_string("switchPrivilegedBackend", backend.as_str())? {
+            runtime::set_privileged_backend(backend.as_str());
+            Ok(())
+        } else {
+            Err(AppError::Message(match backend {
+                PrivilegedBackend::Root => "Root access was denied or timed out".to_string(),
+                PrivilegedBackend::Shizuku => {
+                    "The Shizuku control unit could not be connected".to_string()
+                }
+            }))
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Err(AppError::Message(
+            "The privileged backend can only be switched on Android".to_string(),
+        ))
     }
 }
 
@@ -972,6 +1057,36 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
         .map_err(|error| AppError::Message(error.to_string()))
 }
 
+#[cfg(target_os = "android")]
+fn call_runtime_bridge_string_with_string(
+    method: &'static str,
+    value: &str,
+) -> Result<bool, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let java_value = env
+        .new_string(value)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let result = env
+        .call_static_method(
+            bridge_class,
+            method,
+            "(Ljava/lang/String;)Z",
+            &[jni::objects::JValue::Object(&java_value)],
+        )
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    result
+        .z()
+        .map_err(|error| AppError::Message(error.to_string()))
+}
+
 fn stop_run_foreground_service() {
     #[cfg(target_os = "android")]
     {
@@ -1136,8 +1251,9 @@ fn call_runtime_bridge_start_virtual_display(
         // not granted permission yet, that missing precondition is the
         // whole reason the display could not start.
         let (state, status) = runtime::control_state();
+        let backend = PrivilegedBackend::parse(runtime::privileged_backend());
         Err(AppError::Message(virtual_display_rejection_message(
-            state, &status,
+            state, &status, backend,
         )))
     }
 }
@@ -1147,7 +1263,22 @@ fn call_runtime_bridge_start_virtual_display(
 /// is the only available explanation; a connected service keeps the generic
 /// rejection wording.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
-fn virtual_display_rejection_message(state: i64, status: &str) -> String {
+fn virtual_display_rejection_message(
+    state: i64,
+    status: &str,
+    backend: PrivilegedBackend,
+) -> String {
+    if backend == PrivilegedBackend::Root {
+        return match state {
+            // The service is connected, so the refusal happened on its side.
+            3 => "The privileged control service rejected the virtual display".to_string(),
+            4 => "The root control service disconnected; request root access again, then try again"
+                .to_string(),
+            5 => format!("{status}; check the root prompt and the app logs, then try again"),
+            _ => format!("{status}; try again shortly"),
+        };
+    }
+
     match state {
         1 => "Shizuku is unavailable; install or start Shizuku, then try again".to_string(),
         2 => "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again"
@@ -2090,25 +2221,76 @@ mod tests {
     #[test]
     fn virtual_display_rejection_names_the_missing_precondition() {
         assert_eq!(
-            virtual_display_rejection_message(2, "Shizuku permission is required"),
+            virtual_display_rejection_message(
+                2,
+                "Shizuku permission is required",
+                PrivilegedBackend::Shizuku
+            ),
             "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again"
         );
         assert_eq!(
-            virtual_display_rejection_message(1, "Shizuku is unavailable"),
+            virtual_display_rejection_message(
+                1,
+                "Shizuku is unavailable",
+                PrivilegedBackend::Shizuku
+            ),
             "Shizuku is unavailable; install or start Shizuku, then try again"
         );
         assert_eq!(
-            virtual_display_rejection_message(4, "The privileged control unit disconnected"),
+            virtual_display_rejection_message(
+                4,
+                "The privileged control unit disconnected",
+                PrivilegedBackend::Shizuku
+            ),
             "The privileged control service disconnected; restart Shizuku and reopen the app, then try again"
         );
         assert_eq!(
-            virtual_display_rejection_message(5, "The privileged control unit failed to start"),
+            virtual_display_rejection_message(
+                5,
+                "The privileged control unit failed to start",
+                PrivilegedBackend::Shizuku
+            ),
             "The privileged control unit failed to start; check Shizuku and the app logs, then try again"
         );
         assert_eq!(
-            virtual_display_rejection_message(3, "The privileged control unit is connected"),
+            virtual_display_rejection_message(
+                3,
+                "The privileged control unit is connected",
+                PrivilegedBackend::Shizuku
+            ),
             "The privileged control service rejected the virtual display"
         );
+
+        assert_eq!(
+            virtual_display_rejection_message(
+                4,
+                "The privileged control unit disconnected",
+                PrivilegedBackend::Root
+            ),
+            "The root control service disconnected; request root access again, then try again"
+        );
+        assert_eq!(
+            virtual_display_rejection_message(
+                5,
+                "The privileged control unit failed to start",
+                PrivilegedBackend::Root
+            ),
+            "The privileged control unit failed to start; check the root prompt and the app logs, then try again"
+        );
+    }
+
+    #[test]
+    fn privileged_backend_values_are_normalized() {
+        assert_eq!(
+            PrivilegedBackend::parse("shizuku"),
+            PrivilegedBackend::Shizuku
+        );
+        assert_eq!(PrivilegedBackend::parse("root"), PrivilegedBackend::Root);
+        assert_eq!(
+            PrivilegedBackend::parse("unknown"),
+            PrivilegedBackend::Shizuku
+        );
+        assert_eq!(PrivilegedBackend::Root.as_str(), "root");
     }
 }
 
@@ -2178,7 +2360,10 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setControlState(
     _class: *mut std::ffi::c_void,
     state: std::os::raw::c_int,
 ) {
+    let root_backend = runtime::privileged_backend() == "root";
     let message = match state {
+        1 if root_backend => "The root control unit is unavailable".to_string(),
+        2 if root_backend => "Root permission is required".to_string(),
         1 => "Shizuku is unavailable".to_string(),
         2 => "Shizuku permission is required".to_string(),
         3 => "The privileged control unit is connected".to_string(),
@@ -2187,6 +2372,26 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setControlState(
         _ => "The privileged control unit is starting".to_string(),
     };
     runtime::set_control_state(state as i64, message);
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setPrivilegedBackend(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    backend: *mut std::ffi::c_void,
+) {
+    if let Ok(mut env) = unsafe { jni::JNIEnv::from_raw(env.cast()) } {
+        let raw_backend = unsafe { jni::objects::JObject::from_raw(backend.cast()) };
+        let backend = jni::objects::JString::from(raw_backend);
+        match env.get_string(&backend) {
+            Ok(backend) => {
+                let backend = backend.to_string_lossy().into_owned();
+                runtime::set_privileged_backend(&backend);
+            }
+            Err(error) => eprintln!("Failed to read the privileged backend: {error}"),
+        };
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2217,6 +2422,8 @@ pub fn run() {
             resolve_current,
             reset_task_parameters,
             privileged_status,
+            get_privileged_backend,
+            set_privileged_backend,
             request_privileged_access,
             open_shizuku,
             start_virtual_display,

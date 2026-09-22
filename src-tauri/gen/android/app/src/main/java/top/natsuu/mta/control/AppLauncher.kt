@@ -366,7 +366,12 @@ internal class AppLauncher(
                 type == Bundle::class.java -> options
                 type == IBinder::class.java -> null
                 type == String::class.java -> {
-                    val value = if (!seenIntent && stringIndex++ == 0) SHELL_PACKAGE else null
+                    val value =
+                        if (!seenIntent && stringIndex++ == 0) {
+                            context?.packageName ?: SHELL_PACKAGE
+                        } else {
+                            null
+                        }
                     value
                 }
                 type == Int::class.javaPrimitiveType -> {

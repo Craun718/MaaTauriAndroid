@@ -4,6 +4,7 @@ export interface SegmentGroupItem {
   value: string;
   label: string;
   description?: ReactNode;
+  disabled?: boolean;
 }
 
 interface SegmentGroupProps {
@@ -14,6 +15,7 @@ interface SegmentGroupProps {
   description?: ReactNode;
   columns?: number;
   compact?: boolean;
+  disabled?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ export function SegmentGroup({
   description,
   columns = 3,
   compact = false,
+  disabled = false,
 }: SegmentGroupProps) {
   const groupId = useId();
   const labelId = `${groupId}-label`;
@@ -67,12 +70,22 @@ export function SegmentGroup({
             className={
               item.description
                 ? `${itemAppearance} ${
-                    compact ? "min-h-9" : "min-h-10"
-                  } flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left text-sm font-medium`
+                    item.disabled || disabled
+                      ? "cursor-not-allowed opacity-50"
+                      : "cursor-pointer"
+                  } ${compact ? "min-h-9" : "min-h-10"} flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left text-sm font-medium`
                 : `${
                     compact
-                      ? `${itemAppearance} h-9 rounded-md px-2.5 text-sm font-medium`
-                      : `${itemAppearance} h-10 rounded-md px-2.5 text-sm font-medium`
+                      ? `${itemAppearance} ${
+                          item.disabled || disabled
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
+                        } h-9 rounded-md px-2.5 text-sm font-medium`
+                      : `${itemAppearance} ${
+                          item.disabled || disabled
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
+                        } h-10 rounded-md px-2.5 text-sm font-medium`
                   }`
             }
           >
@@ -81,6 +94,7 @@ export function SegmentGroup({
               name={groupId}
               className="sr-only"
               checked={value === item.value}
+              disabled={disabled || item.disabled}
               onChange={() => onValueChange(item.value)}
             />
             <span>{item.label}</span>

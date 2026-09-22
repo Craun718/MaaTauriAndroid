@@ -14,8 +14,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { GripVertical, Plus, SquarePen, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
 import { OptionEditor } from "../components/OptionEditor";
 import { RichDescription } from "../components/RichDescription";
@@ -25,8 +25,10 @@ import {
 } from "../components/RunActivityTabs";
 import { RunPanel } from "../components/RunPanel";
 import { Checkbox } from "../components/ui/Checkbox";
+import { Modal } from "../components/ui/Modal";
 import { Select } from "../components/ui/Select";
 import { Tabs } from "../components/ui/Tabs";
+import { TextField } from "../components/ui/TextField";
 import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
 import { useTranslation } from "../lib/i18n";
 import {
@@ -40,6 +42,7 @@ import type {
   ConfiguredTask,
   OptionValue,
   Project,
+  ResourceDefinition,
   RunConfiguration,
   TaskDefinition,
 } from "../lib/types";
@@ -170,6 +173,14 @@ export function TasksPage() {
     void saveConfiguration(next);
   }
 
+  function switchResource(name: string) {
+    const latest = useAppStore.getState().snapshot;
+    if (!latest?.project) return;
+    const next = structuredClone(latest.configuration);
+    next.activeResource = name;
+    void saveConfiguration(next);
+  }
+
   function createConfiguration() {
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
@@ -211,6 +222,12 @@ export function TasksPage() {
             optionValues: { ...item.optionValues, [name]: value },
           }))
         }
+        onLabelChange={(customLabel) =>
+          updateTask(configured.instanceId, (item) => ({
+            ...item,
+            customLabel,
+          }))
+        }
         onRemove={() => removeTask(configured.instanceId)}
       />
     );
@@ -235,6 +252,11 @@ export function TasksPage() {
         onActiveTabChange={setActivityTab}
         taskList={
           <>
+            <ResourcePicker
+              resources={project.resources}
+              value={resource?.name}
+              onValueChange={switchResource}
+            />
             {project.presets.length > 0 && (
               <section className="space-y-2">
                 <h2 className="font-medium">{t("presets")}</h2>
@@ -311,6 +333,42 @@ export function TasksPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 资源（游戏服务器）选择器。切换后任务可用性、资源选项和运行时加载的
+ * resource bundle 都以该资源为准。
+ */
+function ResourcePicker({
+  resources,
+  value,
+  onValueChange,
+}: {
+  resources: ResourceDefinition[];
+  value?: string;
+  onValueChange: (name: string) => void;
+}) {
+  const { t } = useTranslation();
+  const active =
+    resources.find((resource) => resource.name === value) ?? resources[0];
+  if (!active) return null;
+  return (
+    <section className="space-y-2">
+      <h2 id="resource-select-label" className="font-medium">
+        {t("resource")}
+      </h2>
+      <Select
+        labelledBy="resource-select-label"
+        items={resources.map((resource) => ({
+          value: resource.name,
+          label: resource.label,
+        }))}
+        value={active.name}
+        onValueChange={onValueChange}
+      />
+      <RichDescription text={active.description} />
+    </section>
   );
 }
 
@@ -443,14 +501,12 @@ interface TaskItemProps {
   configured: ConfiguredTask;
   onEnabledChange: (next: boolean) => void;
   onOptionValueChange: (name: string, value: OptionValue) => void;
+  onLabelChange: (label: string | undefined) => void;
   onRemove: () => void;
   dragHandleProps?: Record<string, unknown>;
 }
 
-/**
- * 单个任务卡片：标题与启用开关常驻，详情（说明与选项）收进下拉，
- * 点击标题展开。没有说明也没有选项的任务不渲染下拉箭头。
- */
+/** 单个任务卡片：标题与启用开关常驻，重命名、说明与选项收进模态框。 */
 function TaskItem({
   task,
   project,
@@ -459,11 +515,12 @@ function TaskItem({
   configured,
   onEnabledChange,
   onOptionValueChange,
+  onLabelChange,
   onRemove,
   dragHandleProps,
 }: TaskItemProps) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const unavailable =
     (task.controllers.length > 0 &&
       !task.controllers.includes(controllerName)) ||
@@ -471,175 +528,113 @@ function TaskItem({
   const options = unavailable
     ? []
     : visibleOptions(project.options, task.options, configured.optionValues);
-  const hasDetails = Boolean(task.description) || options.length > 0;
   const label = configured.customLabel ?? task.label;
-  const titleViewportRef = useRef<HTMLSpanElement>(null);
-  const titleContentRef = useRef<HTMLSpanElement>(null);
-  const [animateTitle, setAnimateTitle] = useState(false);
+  const [labelDraft, setLabelDraft] = useState(label);
 
   useEffect(() => {
-    const viewport = titleViewportRef.current;
-    const content = titleContentRef.current;
-    if (!expanded || !viewport || !content) {
-      setAnimateTitle(false);
-      return;
-    }
+    if (detailsOpen) setLabelDraft(label);
+  }, [detailsOpen, label]);
 
-    let animation: Animation | undefined;
-    let disposed = false;
-    const reduceMotionQuery =
-      typeof window.matchMedia === "function"
-        ? window.matchMedia("(prefers-reduced-motion: reduce)")
-        : undefined;
+  function commitLabel() {
+    const normalized = labelDraft.trim();
+    const customLabel =
+      normalized && normalized !== task.label ? normalized : undefined;
+    setLabelDraft(customLabel ?? task.label);
+    if (customLabel !== configured.customLabel) onLabelChange(customLabel);
+  }
 
-    const update = () => {
-      animation?.cancel();
-      animation = undefined;
-      if (disposed) return;
-
-      const overflow = viewport.scrollWidth - viewport.clientWidth;
-      const shouldAnimate = overflow > 1 && !reduceMotionQuery?.matches;
-      setAnimateTitle(shouldAnimate);
-      if (!shouldAnimate) return;
-
-      animation = content.animate(
-        [
-          { transform: "translateX(0)" },
-          { transform: `translateX(-${overflow}px)` },
-        ],
-        {
-          duration: Math.min(12000, Math.max(2800, overflow * 24)),
-          direction: "alternate",
-          easing: "ease-in-out",
-          iterations: Infinity,
-        },
-      );
-    };
-
-    update();
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
-    resizeObserver?.observe(viewport);
-    resizeObserver?.observe(content);
-    reduceMotionQuery?.addEventListener("change", update);
-    void document.fonts?.ready.then(update);
-
-    return () => {
-      disposed = true;
-      animation?.cancel();
-      resizeObserver?.disconnect();
-      reduceMotionQuery?.removeEventListener("change", update);
-    };
-  }, [expanded]);
+  function closeDetails() {
+    commitLabel();
+    setDetailsOpen(false);
+  }
 
   return (
-    <article
-      className={`rounded-lg border p-2 text-xs ${
-        unavailable
-          ? "border-line bg-surface-muted opacity-60"
-          : "border-line bg-raised"
-      }`}
-    >
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label={t("dragReorder")}
-          className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
-          {...dragHandleProps}
-        >
-          <GripVertical size="0.875rem" />
-        </button>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-          {hasDetails ? (
-            <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
-              <button
-                type="button"
-                aria-expanded={expanded}
-                onClick={() => setExpanded((value) => !value)}
-                className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-left"
-              >
-                {expanded ? (
-                  <span
-                    ref={titleViewportRef}
-                    className={`min-w-0 flex-1 whitespace-nowrap ${
-                      animateTitle ? "overflow-hidden" : "overflow-x-auto"
-                    }`}
-                  >
-                    <span
-                      ref={titleContentRef}
-                      className="inline-block whitespace-nowrap"
-                    >
-                      {label}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                    {label}
-                  </span>
-                )}
-                <ChevronDown
-                  size="1rem"
-                  className={`shrink-0 text-ink-muted transition-transform ${
-                    expanded ? "" : "-rotate-90"
-                  }`}
-                />
-              </button>
-            </h3>
-          ) : (
-            <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
-              {label}
-            </h3>
-          )}
-          <Checkbox
-            className="h-7 shrink-0 gap-1.5 text-xs"
-            checked={configured.enabled}
-            disabled={unavailable}
-            onCheckedChange={onEnabledChange}
+    <>
+      <article
+        className={`rounded-lg border p-2 text-xs ${
+          unavailable
+            ? "border-line bg-surface-muted opacity-60"
+            : "border-line bg-raised"
+        }`}
+      >
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={t("dragReorder")}
+            className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
+            {...dragHandleProps}
           >
-            {t("toggleOn")}
-          </Checkbox>
+            <GripVertical size="0.875rem" />
+          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                {label}
+              </span>
+            </h3>
+            <button
+              type="button"
+              aria-label={t("openTaskDetails", { task: label })}
+              aria-haspopup="dialog"
+              onClick={() => setDetailsOpen(true)}
+              className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <SquarePen size="0.875rem" />
+            </button>
+            <Checkbox
+              className="h-7 shrink-0 gap-1.5 text-xs"
+              checked={configured.enabled}
+              disabled={unavailable}
+              onCheckedChange={onEnabledChange}
+            >
+              {t("toggleOn")}
+            </Checkbox>
+          </div>
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={t("removeTask")}
+            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <Trash2 size="0.875rem" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={t("removeTask")}
-          className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <Trash2 size="0.875rem" />
-        </button>
-      </div>
-      {unavailable && (
-        <p className="mt-2 text-xs text-ink-muted">
-          {t("requiresOtherController")}
-        </p>
-      )}
-      {expanded && hasDetails && (
-        <div className="mt-2 space-y-2 border-t border-line pt-2">
-          <RichDescription text={task.description} />
-          {options.map(({ name, depth }) => {
-            const option = project.options[name];
-            if (!option) return null;
-            return (
-              <div
-                key={name}
-                className={
-                  depth > 0 ? "border-l-2 border-line pl-2" : undefined
-                }
-              >
-                <OptionEditor
-                  option={option}
-                  compact
-                  value={defaultOptionValue(
-                    option,
-                    configured.optionValues[name],
-                  )}
-                  onChange={(value) => onOptionValueChange(name, value)}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </article>
+        {unavailable && (
+          <p className="mt-2 text-xs text-ink-muted">
+            {t("requiresOtherController")}
+          </p>
+        )}
+      </article>
+      <Modal open={detailsOpen} onClose={closeDetails} title={label}>
+        <TextField
+          compact
+          label={t("taskName")}
+          value={labelDraft}
+          onValueChange={setLabelDraft}
+          onBlur={commitLabel}
+        />
+        {options.map(({ name, depth }) => {
+          const option = project.options[name];
+          if (!option) return null;
+          return (
+            <div
+              key={name}
+              className={depth > 0 ? "border-l-2 border-line pl-2" : undefined}
+            >
+              <OptionEditor
+                option={option}
+                compact
+                value={defaultOptionValue(
+                  option,
+                  configured.optionValues[name],
+                )}
+                onChange={(value) => onOptionValueChange(name, value)}
+              />
+            </div>
+          );
+        })}
+        <RichDescription text={task.description} />
+      </Modal>
+    </>
   );
 }

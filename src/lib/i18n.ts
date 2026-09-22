@@ -66,7 +66,21 @@ const en = {
     "The privileged control unit is no longer connected. Restart Shizuku if needed, then retry.",
   privilegedErrorDescription:
     "The privileged control unit failed to start. Check Shizuku and the Android service logs, then retry.",
+  privilegedBackend: "Privileged backend",
+  backendShizuku: "Shizuku",
+  backendRoot: "Root",
+  rootStartingDescription:
+    "Requesting root access. Approve the su prompt if it appears.",
+  rootPermissionDescription:
+    "Root access has not been granted. Request access again and approve the su prompt.",
+  rootUnavailableDescription:
+    "Root access is unavailable. Check that the device is rooted and that the su tool grants this app access.",
+  rootDisconnectedDescription:
+    "The root control unit is no longer connected. Request root access again.",
+  rootErrorDescription:
+    "The root control unit failed to start. Check the root prompt and the Android service logs, then retry.",
   requestPermission: "Request Shizuku permission",
+  requestRootAccess: "Request root access",
   openShizuku: "Open Shizuku",
   announcement: "Announcement",
   openAnnouncement: "View announcement",
@@ -107,6 +121,8 @@ const en = {
   newConfiguration: "New configuration",
   configurationLabel: "Configuration {n}",
   dragReorder: "Drag to reorder",
+  openTaskDetails: "Task details: {task}",
+  taskName: "Task name",
   removeTask: "Remove",
   noTasksToAdd: "All tasks are already in this configuration.",
   noRunLogs: "No run activity yet.",
@@ -227,6 +243,8 @@ const zh: Record<MessageKey, string> = {
   newConfiguration: "新建配置",
   configurationLabel: "配置 {n}",
   dragReorder: "拖动排序",
+  openTaskDetails: "任务详情：{task}",
+  taskName: "任务名称",
   removeTask: "移除",
   noTasksToAdd: "所有任务都已添加。",
   noRunLogs: "暂无运行日志。",
@@ -303,7 +321,19 @@ const zh: Record<MessageKey, string> = {
     "特权控制单元已断开。如需要请重启 Shizuku，然后重试。",
   privilegedErrorDescription:
     "特权控制单元启动失败。请检查 Shizuku 和 Android 服务日志，然后重试。",
+  privilegedBackend: "特权后端",
+  backendShizuku: "Shizuku",
+  backendRoot: "Root",
+  rootStartingDescription: "正在请求 root 权限。如出现 su 弹窗，请完成授权。",
+  rootPermissionDescription:
+    "尚未授予 root 权限。请重新请求权限，并在 su 弹窗中完成授权。",
+  rootUnavailableDescription:
+    "root 权限不可用。请确认设备已 root，并且 su 工具允许本应用访问。",
+  rootDisconnectedDescription: "root 控制单元已断开。请重新请求 root 权限。",
+  rootErrorDescription:
+    "root 控制单元启动失败。请检查 root 授权提示和 Android 服务日志，然后重试。",
   requestPermission: "申请 Shizuku 权限",
+  requestRootAccess: "请求 root 权限",
   openShizuku: "打开 Shizuku",
   announcement: "公告",
   openAnnouncement: "查看公告",

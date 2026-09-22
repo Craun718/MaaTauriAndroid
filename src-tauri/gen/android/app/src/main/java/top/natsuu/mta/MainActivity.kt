@@ -39,6 +39,7 @@ class MainActivity : TauriActivity() {
     )
     controlClient = ControlServiceClient(this)
     RuntimeBridge.attachControlClient(controlClient)
+    RuntimeBridge.setPrivilegedBackend(controlClient.getSelectedPrivilegedBackend())
     controlClient.connect()
     super.onCreate(savedInstanceState)
   }

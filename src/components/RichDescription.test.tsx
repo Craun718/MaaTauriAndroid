@@ -19,6 +19,13 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 
 vi.mock("../lib/api", () => ({
   readProjectImage: (path: string) => mocks.readProjectImage(path),
+  getUpdateStatus: vi.fn(async () => undefined),
+  checkForUpdate: vi.fn(async () => undefined),
+  resolveUpdate: vi.fn(async () => undefined),
+  cancelUpdate: vi.fn(async () => undefined),
+  installUpdate: vi.fn(async () => undefined),
+  getUpdatePrefs: vi.fn(async () => undefined),
+  setUpdatePrefs: vi.fn(async () => undefined),
 }));
 
 beforeEach(() => {

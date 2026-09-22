@@ -10,6 +10,7 @@ mod runtime;
 mod schedule;
 mod secrets;
 mod telemetry;
+mod update;
 mod version;
 
 use domain::loader::ProjectLoader;
@@ -2647,6 +2648,7 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState::default())
+        .manage(update::UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             bootstrap,
             load_project,
@@ -2680,7 +2682,14 @@ pub fn run() {
             save_schedule_rule,
             delete_schedule_rule,
             set_schedule_rule_enabled,
-            get_schedule_status
+            get_schedule_status,
+            update::update_get_status,
+            update::update_check,
+            update::update_resolve,
+            update::update_cancel,
+            update::update_install,
+            update::update_get_prefs,
+            update::update_set_prefs
         ])
         .setup(|app| {
             let state = app.state::<AppState>();
@@ -2697,6 +2706,9 @@ pub fn run() {
             let maa_log_dir = root.join("maa-logs");
             let _ = std::fs::create_dir_all(&maa_log_dir);
             runtime::set_maa_log_dir(maa_log_dir);
+            if let Ok(dirs) = update::resolve_dirs(app.handle()) {
+                app.state::<update::UpdateState>().load_prefs(&dirs);
+            }
             // Plugins are initialized before `setup` runs, so the banner below is
             // the first record both log targets receive.
             log::info!("{}", version::banner(version::environment().as_ref()));

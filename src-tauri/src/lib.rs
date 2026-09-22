@@ -2678,11 +2678,12 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_scheduleRulesJson(
     let Some(app) = android_app_handle() else {
         return std::ptr::null_mut();
     };
-    let rules = app
-        .state::<AppState>()
-        .schedule_store()
-        .and_then(|store| store.list())
-        .and_then(|rules| serde_json::to_string(&rules).map_err(schedule::ScheduleError::from));
+    let rules = app.state::<AppState>().schedule_store().and_then(|store| {
+        store
+            .list()
+            .and_then(|rules| serde_json::to_string(&rules).map_err(schedule::ScheduleError::from))
+            .map_err(AppError::from)
+    });
     match rules {
         Ok(rules) => match unsafe { jni::JNIEnv::from_raw(env.cast()) } {
             Ok(mut environment) => match environment.new_string(rules) {
@@ -2737,13 +2738,15 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_recordScheduleForegroun
     let rule_id = rule_id.to_string_lossy().into_owned();
     let state = app.state::<AppState>();
     let recorded = state.schedule_store().and_then(|store| {
-        store.record_trigger(schedule::ScheduleTriggerLogEntry {
-            rule_id,
-            scheduled_epoch_ms: scheduled_time_ms,
-            actual_epoch_ms: chrono::Local::now().timestamp_millis(),
-            result: schedule::ScheduleTriggerResult::ForegroundServiceDenied,
-            detail: Some("Android rejected the schedule foreground service".to_string()),
-        })
+        store
+            .record_trigger(schedule::ScheduleTriggerLogEntry {
+                rule_id,
+                scheduled_epoch_ms: scheduled_time_ms,
+                actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                result: schedule::ScheduleTriggerResult::ForegroundServiceDenied,
+                detail: Some("Android rejected the schedule foreground service".to_string()),
+            })
+            .map_err(AppError::from)
     });
     i32::from(recorded.is_ok())
 }
@@ -2764,10 +2767,10 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
     };
     let raw_rule_id = unsafe { jni::objects::JObject::from_raw(rule_id.cast()) };
     let java_rule_id = jni::objects::JString::from(raw_rule_id);
-    let rule_id = match environment.get_string(&java_rule_id) {
-        Ok(value) => value.to_string_lossy().into_owned(),
-        None => return 0,
+    let Ok(rule_id) = environment.get_string(&java_rule_id) else {
+        return 0;
     };
+    let rule_id = rule_id.to_string_lossy().into_owned();
     let state = app.state::<AppState>();
     if ensure_background_project(&app, &state).is_err() {
         return 0;

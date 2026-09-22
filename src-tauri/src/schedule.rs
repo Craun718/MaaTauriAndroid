@@ -408,7 +408,10 @@ mod tests {
             ..fixed_rule()
         };
         let next = next_trigger_epoch_ms(&rule, after).unwrap();
-        assert_eq!(next, after.timestamp_millis() - 30 * 60_000);
+        // Strictly-future next multiple: 90 minutes into a 1-hour interval
+        // means one completed step plus one, landing 30 minutes from `after`
+        // (matches the FixedTime branch's `> after` semantics).
+        assert_eq!(next, after.timestamp_millis() + 30 * 60_000);
     }
 
     #[test]

@@ -24,10 +24,11 @@ import {
   RunActivityTabs,
 } from "../components/RunActivityTabs";
 import { RunPanel } from "../components/RunPanel";
-import { BottomDrawer } from "../components/ui/BottomDrawer";
 import { Checkbox } from "../components/ui/Checkbox";
+import { Modal } from "../components/ui/Modal";
 import { Select } from "../components/ui/Select";
 import { Tabs } from "../components/ui/Tabs";
+import { TextField } from "../components/ui/TextField";
 import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
 import { useTranslation } from "../lib/i18n";
 import {
@@ -41,6 +42,7 @@ import type {
   ConfiguredTask,
   OptionValue,
   Project,
+  ResourceDefinition,
   RunConfiguration,
   TaskDefinition,
 } from "../lib/types";
@@ -171,6 +173,14 @@ export function TasksPage() {
     void saveConfiguration(next);
   }
 
+  function switchResource(name: string) {
+    const latest = useAppStore.getState().snapshot;
+    if (!latest?.project) return;
+    const next = structuredClone(latest.configuration);
+    next.activeResource = name;
+    void saveConfiguration(next);
+  }
+
   function createConfiguration() {
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
@@ -212,6 +222,12 @@ export function TasksPage() {
             optionValues: { ...item.optionValues, [name]: value },
           }))
         }
+        onLabelChange={(customLabel) =>
+          updateTask(configured.instanceId, (item) => ({
+            ...item,
+            customLabel,
+          }))
+        }
         onRemove={() => removeTask(configured.instanceId)}
       />
     );
@@ -236,6 +252,11 @@ export function TasksPage() {
         onActiveTabChange={setActivityTab}
         taskList={
           <>
+            <ResourcePicker
+              resources={project.resources}
+              value={resource?.name}
+              onValueChange={switchResource}
+            />
             {project.presets.length > 0 && (
               <section className="space-y-2">
                 <h2 className="font-medium">{t("presets")}</h2>
@@ -312,6 +333,42 @@ export function TasksPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 资源（游戏服务器）选择器。切换后任务可用性、资源选项和运行时加载的
+ * resource bundle 都以该资源为准。
+ */
+function ResourcePicker({
+  resources,
+  value,
+  onValueChange,
+}: {
+  resources: ResourceDefinition[];
+  value?: string;
+  onValueChange: (name: string) => void;
+}) {
+  const { t } = useTranslation();
+  const active =
+    resources.find((resource) => resource.name === value) ?? resources[0];
+  if (!active) return null;
+  return (
+    <section className="space-y-2">
+      <h2 id="resource-select-label" className="font-medium">
+        {t("resource")}
+      </h2>
+      <Select
+        labelledBy="resource-select-label"
+        items={resources.map((resource) => ({
+          value: resource.name,
+          label: resource.label,
+        }))}
+        value={active.name}
+        onValueChange={onValueChange}
+      />
+      <RichDescription text={active.description} />
+    </section>
   );
 }
 
@@ -444,14 +501,12 @@ interface TaskItemProps {
   configured: ConfiguredTask;
   onEnabledChange: (next: boolean) => void;
   onOptionValueChange: (name: string, value: OptionValue) => void;
+  onLabelChange: (label: string | undefined) => void;
   onRemove: () => void;
   dragHandleProps?: Record<string, unknown>;
 }
 
-/**
- * 单个任务卡片：标题与启用开关常驻，详情（说明与选项）收进模态框。
- * 没有说明也没有选项的任务不渲染配置按钮。
- */
+/** 单个任务卡片：标题与启用开关常驻，重命名、说明与选项收进模态框。 */
 function TaskItem({
   task,
   project,
@@ -460,6 +515,7 @@ function TaskItem({
   configured,
   onEnabledChange,
   onOptionValueChange,
+  onLabelChange,
   onRemove,
   dragHandleProps,
 }: TaskItemProps) {
@@ -472,8 +528,25 @@ function TaskItem({
   const options = unavailable
     ? []
     : visibleOptions(project.options, task.options, configured.optionValues);
-  const hasDetails = Boolean(task.description) || options.length > 0;
   const label = configured.customLabel ?? task.label;
+  const [labelDraft, setLabelDraft] = useState(label);
+
+  useEffect(() => {
+    if (detailsOpen) setLabelDraft(label);
+  }, [detailsOpen, label]);
+
+  function commitLabel() {
+    const normalized = labelDraft.trim();
+    const customLabel =
+      normalized && normalized !== task.label ? normalized : undefined;
+    setLabelDraft(customLabel ?? task.label);
+    if (customLabel !== configured.customLabel) onLabelChange(customLabel);
+  }
+
+  function closeDetails() {
+    commitLabel();
+    setDetailsOpen(false);
+  }
 
   return (
     <>
@@ -499,17 +572,15 @@ function TaskItem({
                 {label}
               </span>
             </h3>
-            {hasDetails && (
-              <button
-                type="button"
-                aria-label={t("openTaskDetails", { task: label })}
-                aria-haspopup="dialog"
-                onClick={() => setDetailsOpen(true)}
-                className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                <SquarePen size="0.875rem" />
-              </button>
-            )}
+            <button
+              type="button"
+              aria-label={t("openTaskDetails", { task: label })}
+              aria-haspopup="dialog"
+              onClick={() => setDetailsOpen(true)}
+              className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <SquarePen size="0.875rem" />
+            </button>
             <Checkbox
               className="h-7 shrink-0 gap-1.5 text-xs"
               checked={configured.enabled}
@@ -534,37 +605,36 @@ function TaskItem({
           </p>
         )}
       </article>
-      {hasDetails && (
-        <BottomDrawer
-          open={detailsOpen}
-          onClose={() => setDetailsOpen(false)}
-          title={label}
-        >
-          <RichDescription text={task.description} />
-          {options.map(({ name, depth }) => {
-            const option = project.options[name];
-            if (!option) return null;
-            return (
-              <div
-                key={name}
-                className={
-                  depth > 0 ? "border-l-2 border-line pl-2" : undefined
-                }
-              >
-                <OptionEditor
-                  option={option}
-                  compact
-                  value={defaultOptionValue(
-                    option,
-                    configured.optionValues[name],
-                  )}
-                  onChange={(value) => onOptionValueChange(name, value)}
-                />
-              </div>
-            );
-          })}
-        </BottomDrawer>
-      )}
+      <Modal open={detailsOpen} onClose={closeDetails} title={label}>
+        <TextField
+          compact
+          label={t("taskName")}
+          value={labelDraft}
+          onValueChange={setLabelDraft}
+          onBlur={commitLabel}
+        />
+        {options.map(({ name, depth }) => {
+          const option = project.options[name];
+          if (!option) return null;
+          return (
+            <div
+              key={name}
+              className={depth > 0 ? "border-l-2 border-line pl-2" : undefined}
+            >
+              <OptionEditor
+                option={option}
+                compact
+                value={defaultOptionValue(
+                  option,
+                  configured.optionValues[name],
+                )}
+                onChange={(value) => onOptionValueChange(name, value)}
+              />
+            </div>
+          );
+        })}
+        <RichDescription text={task.description} />
+      </Modal>
     </>
   );
 }

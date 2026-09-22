@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.app.ActivityManager
 import android.app.Activity
 import android.content.pm.ActivityInfo
@@ -26,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.lang.ref.WeakReference
 import kotlin.concurrent.thread
 import org.json.JSONObject
+import androidx.core.content.FileProvider
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
 
@@ -185,6 +187,49 @@ object RuntimeBridge {
             context.startActivity(intent)
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * Hands a downloaded APK to the system package installer through
+     * FileProvider. Only installs files that live inside this app's cache
+     * directory, mirroring where the Rust downloader stores updates, and stops
+     * once the installer is launched: whether the install succeeds is decided
+     * by the system UI and the user. Returns a machine-readable code for the
+     * Rust side: "ok", "noContext", "fileInvalid", "installerNotFound", or
+     * "internal".
+     */
+    @JvmStatic
+    fun installUpdateApk(path: String): String {
+        val context = agentContext ?: return "noContext"
+        val file = runCatching { File(path).canonicalFile }.getOrNull()
+        if (file == null || !isInstallableApk(context, file)) return "fileInvalid"
+        return try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, APK_MIME_TYPE)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            "ok"
+        } catch (error: ActivityNotFoundException) {
+            android.util.Log.w("MaaTauriAndroidControl", "No activity can install the APK", error)
+            "installerNotFound"
+        } catch (error: Exception) {
+            android.util.Log.w("MaaTauriAndroidControl", "Could not launch the APK installer", error)
+            "internal"
+        }
+    }
+
+    private fun isInstallableApk(context: Context, file: File): Boolean {
+        if (!file.name.endsWith(".apk", ignoreCase = true)) return false
+        if (!file.isFile || file.length() <= 0L) return false
+        val cacheRoot = runCatching { context.cacheDir.canonicalFile }.getOrNull() ?: return false
+        return file.absolutePath.startsWith(cacheRoot.absolutePath + File.separator)
     }
 
     /**
@@ -565,6 +610,7 @@ object RuntimeBridge {
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val UNKNOWN = "unknown"
+    private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
     private val DEVICE_TIME_FORMAT =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS (Z)", Locale.US)
 }

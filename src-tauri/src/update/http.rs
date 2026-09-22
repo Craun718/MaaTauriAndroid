@@ -200,7 +200,7 @@ pub(crate) mod testing {
         }
 
         fn with_body_script(
-            mut self,
+            self,
             url_contains: &str,
             response: Result<HttpResponse, String>,
         ) -> Self {
@@ -225,7 +225,7 @@ pub(crate) mod testing {
             self.with_body_script(url_contains, Err(error.to_string()))
         }
 
-        pub fn with_stream(mut self, url_contains: &str, spec: StreamSpec) -> Self {
+        pub fn with_stream(self, url_contains: &str, spec: StreamSpec) -> Self {
             self.streams.lock().unwrap().push(StreamScript {
                 url_contains: url_contains.to_string(),
                 response: Ok(spec),
@@ -268,12 +268,14 @@ pub(crate) mod testing {
         ) -> HttpFuture<'a, StreamResponse> {
             Box::pin(async move {
                 self.requested_urls.lock().unwrap().push(url.to_string());
-                let mut streams = self.streams.lock().unwrap();
-                let index = streams
-                    .iter()
-                    .position(|script| url.contains(&script.url_contains))
-                    .ok_or_else(|| format!("the stub has no scripted stream for {url}"))?;
-                let spec = streams.remove(index).response?;
+                let spec = {
+                    let mut streams = self.streams.lock().unwrap();
+                    let index = streams
+                        .iter()
+                        .position(|script| url.contains(&script.url_contains))
+                        .ok_or_else(|| format!("the stub has no scripted stream for {url}"))?;
+                    streams.remove(index).response?
+                };
                 let (tx, rx) = mpsc::channel(8);
                 for chunk in spec.chunks {
                     let _ = tx.send(chunk).await;

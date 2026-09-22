@@ -2,6 +2,7 @@ mod agent;
 mod diagnostics;
 mod domain;
 mod focus;
+mod game_fps;
 mod persistence;
 mod run_log;
 mod runtime;
@@ -1089,6 +1090,25 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
 }
 
 #[cfg(target_os = "android")]
+fn call_runtime_bridge_float(method: &'static str) -> Result<f32, AppError> {
+    let bridge_class = crate::runtime::runtime_bridge_class()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = crate::runtime::java_vm().ok_or_else(|| {
+        AppError::Message("the Java runtime has not been initialized".to_string())
+    })?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let _ = env.exception_clear();
+    let result = env
+        .call_static_method(bridge_class, method, "()F", &[])
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    result
+        .f()
+        .map_err(|error| AppError::Message(error.to_string()))
+}
+
+#[cfg(target_os = "android")]
 fn call_runtime_bridge_string_with_string(
     method: &'static str,
     value: &str,
@@ -1682,6 +1702,10 @@ async fn start_run_core(
     };
     drop(_lifecycle_guard);
     tokio::spawn(async move {
+        // Samples the game frame rate once per second for the whole run: the
+        // low/degraded warnings always go to the run log, and the event feeds
+        // the optional preview badge. The guard stops it on every exit path.
+        let _fps_guard = game_fps::run_guard(&app, logger_for_run.clone());
         let fail = abort_preparing_run;
         let creation = tokio::task::spawn_blocking(move || {
             let agent = agent::prepare_android(agent_count)

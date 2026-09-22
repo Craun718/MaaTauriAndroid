@@ -204,19 +204,32 @@ internal class AppLauncher(
     }
 
     private fun findTask(packageName: String): TaskLocation? {
-        val tasks = runCatching {
-            activityManager()?.getRunningTasks(TASK_SCAN_LIMIT).orEmpty()
-        }.onFailure { error ->
-            android.util.Log.w(TAG, "Could not inspect running tasks", error)
-        }.getOrDefault(emptyList())
-
-        return tasks.asSequence()
+        return runningTasks().asSequence()
             .filter { task -> taskMatches(task, packageName) }
             .mapNotNull { task ->
                 val displayId = displayIdOf(task) ?: return@mapNotNull null
                 TaskLocation(task.taskId, displayId, windowingModeOf(task))
             }
             .firstOrNull()
+    }
+
+    /**
+     * The task id of the package's most relevant running task, independent of
+     * the display it sits on. Used by the frame-rate monitor to rebind the
+     * task FPS callback after the game restarts. Null when no task matches.
+     */
+    internal fun taskIdOf(packageName: String): Int? {
+        return runningTasks()
+            .firstOrNull { task -> taskMatches(task, packageName) }
+            ?.taskId
+    }
+
+    private fun runningTasks(): List<ActivityManager.RunningTaskInfo> {
+        return runCatching {
+            activityManager()?.getRunningTasks(TASK_SCAN_LIMIT).orEmpty()
+        }.onFailure { error ->
+            android.util.Log.w(TAG, "Could not inspect running tasks", error)
+        }.getOrDefault(emptyList())
     }
 
     private fun taskMatches(task: ActivityManager.RunningTaskInfo, packageName: String): Boolean {

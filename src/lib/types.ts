@@ -235,6 +235,7 @@ export interface UserConfiguration {
   closeTargetAppAfterRun: boolean;
   telemetryEnabled: boolean;
   showVirtualDisplayTouches?: boolean;
+  showVirtualDisplayFps?: boolean;
   uiLanguage?: UiLanguage;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;

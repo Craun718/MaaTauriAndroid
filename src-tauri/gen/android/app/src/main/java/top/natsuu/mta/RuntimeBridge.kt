@@ -493,6 +493,19 @@ object RuntimeBridge {
         return ControlHost.virtualDisplayStatus() ?: intArrayOf(0, -1, 0, 0, 0)
     }
 
+    /**
+     * One frame-rate sample from the privileged service, or -1 when unknown.
+     * No log on failure on purpose: an older surviving service process lacks
+     * the gameFps transaction and would fail every second during a run; the
+     * caller treats -1 as its cue to use its own frame counter.
+     */
+    @JvmStatic
+    fun gameFps(): Float {
+        return runCatching {
+            ControlHost.current()?.gameFps() ?: -1f
+        }.getOrDefault(-1f)
+    }
+
     @JvmStatic
     fun virtualDisplayStreamUrl(): String? = VirtualDisplayStreamHost.streamUrl()
 

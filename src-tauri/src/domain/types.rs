@@ -317,6 +317,10 @@ pub struct UserConfiguration {
     pub telemetry_enabled: bool,
     #[serde(default = "default_true")]
     pub show_virtual_display_touches: bool,
+    /// Only gates the on-screen FPS badge; low frame-rate warnings are always
+    /// written to the run log regardless of this switch.
+    #[serde(default = "default_true")]
+    pub show_virtual_display_fps: bool,
     #[serde(default)]
     pub ui_language: UiLanguage,
     pub active_resource: Option<String>,
@@ -340,6 +344,7 @@ impl Default for UserConfiguration {
             close_target_app_after_run: true,
             telemetry_enabled: false,
             show_virtual_display_touches: true,
+            show_virtual_display_fps: true,
             ui_language: UiLanguage::System,
             active_resource: None,
             global_option_values: BTreeMap::new(),
@@ -381,6 +386,20 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(parsed.close_target_app_after_run);
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_the_fps_badge_to_true() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("showVirtualDisplayFps");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert!(parsed.show_virtual_display_fps);
     }
 
     #[test]

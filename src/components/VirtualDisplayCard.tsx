@@ -27,10 +27,14 @@ export function VirtualDisplayCard() {
   const [refreshing, setRefreshing] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [fps, setFps] = useState<number | null>(null);
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
   const showTouchMarkers = useAppStore(
     (state) => state.snapshot?.configuration.showVirtualDisplayTouches ?? true,
+  );
+  const showFps = useAppStore(
+    (state) => state.snapshot?.configuration.showVirtualDisplayFps ?? true,
   );
 
   const refreshStatus = useCallback(async () => {
@@ -67,6 +71,25 @@ export function VirtualDisplayCard() {
       unsubscribe?.();
     };
   }, [refreshStatus]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    listen<{ fps: number | null }>("virtual-display-fps", (event) => {
+      setFps(event.payload.fps ?? null);
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unsubscribe = stop;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     function refreshOnFocus() {
@@ -116,6 +139,21 @@ export function VirtualDisplayCard() {
   }
 
   const active = status?.active === true;
+  // Corner badge on top of the preview. The card copy sizes in rem so it
+  // follows the root font scaling; the fullscreen copy keeps physical px
+  // like the exit button next to it (immersive overlay, see below).
+  const fpsBadge = (fullscreenLayout: boolean) =>
+    active && showFps && fps !== null ? (
+      <div
+        className={`pointer-events-none select-none tabular-nums ${
+          fullscreenLayout
+            ? "absolute left-[12px] top-[12px] rounded-[6px] border border-line bg-raised/90 px-[10px] py-[4px] text-[13px] font-medium text-ink"
+            : "absolute left-2 top-2 rounded-md border border-line bg-raised/90 px-1.5 py-0.5 text-xs font-medium text-ink"
+        }`}
+      >
+        {Math.round(fps)} FPS
+      </div>
+    ) : null;
   const geometry =
     active && status
       ? t("virtualDisplayGeometry", {
@@ -182,12 +220,15 @@ export function VirtualDisplayCard() {
       </div>
 
       {active && status && !fullscreen ? (
-        <VirtualDisplayPreview
-          status={status}
-          showTouchMarkers={showTouchMarkers}
-          interactive={false}
-          className="aspect-[2/1] w-full rounded-md border border-line"
-        />
+        <div className="relative">
+          <VirtualDisplayPreview
+            status={status}
+            showTouchMarkers={showTouchMarkers}
+            interactive={false}
+            className="aspect-[2/1] w-full rounded-md border border-line"
+          />
+          {fpsBadge(false)}
+        </div>
       ) : (
         <div className="aspect-[2/1] w-full rounded-md border border-line bg-surface-muted" />
       )}
@@ -227,6 +268,7 @@ export function VirtualDisplayCard() {
                 showTouchMarkers={showTouchMarkers}
                 className="h-full w-full"
               />
+              {fpsBadge(true)}
             </div>
             <button
               type="button"

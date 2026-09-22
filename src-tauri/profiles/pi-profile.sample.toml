@@ -44,3 +44,15 @@ LD_LIBRARY_PATH = "{bundle}/lib/arm64-v8a"
 MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"
 PYTHONHOME = "{bundle}/python"
 PYTHONPATH = "{pi}"
+
+# Optional. Release signing for the APK produced with this profile. Without it the
+# release build stays unsigned exactly as before; with it the release APK is signed
+# by this keystore, so keep reusing one keystore per distribution — Android refuses
+# to update an app whose signing key changed. Relative paths resolve against this
+# profile file's directory, and the keystore must exist when the build starts.
+# Never commit the keystore or the passwords to the repository.
+# [signing]
+# store_file = "/absolute/path/to/keystore.jks"
+# store_password = "the-store-password"
+# key_alias = "ttflow"
+# key_password = "the-key-password" # optional; defaults to the store password

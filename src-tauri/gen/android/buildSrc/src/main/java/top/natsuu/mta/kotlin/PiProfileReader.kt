@@ -17,6 +17,7 @@ data class PiProfile(
     val appName: String?,
     val maaDir: String,
     val agent: AgentProfile?,
+    val signing: SigningProfile?,
 )
 
 data class AgentProfile(
@@ -31,6 +32,18 @@ data class AgentRuntimeProfile(
     val args: List<String>,
     val workingDir: String,
     val env: Map<String, String>,
+)
+
+/**
+ * Release signing credentials declared by the packager in `[signing]`. Keystores never
+ * live in the repository, so the profile points at a publisher-local file and the path
+ * must exist when the build reads it.
+ */
+data class SigningProfile(
+    val storeFile: String,
+    val storePassword: String,
+    val keyAlias: String,
+    val keyPassword: String,
 )
 
 object PiProfileReader {
@@ -50,6 +63,8 @@ object PiProfileReader {
 
         val agentTable = result.getTable("agent")
         val agent: AgentProfile? = agentTable?.let { table -> readAgent(table, file) }
+        val signingTable = result.getTable("signing")
+        val signing: SigningProfile? = signingTable?.let { table -> readSigning(table, file) }
         return PiProfile(
             file = file,
             assets = requiredPath(result, "pi_assets", file),
@@ -59,6 +74,7 @@ object PiProfileReader {
             appName = optionalString(result, "app_name"),
             maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
             agent = agent,
+            signing = signing,
         )
     }
 
@@ -93,6 +109,20 @@ object PiProfileReader {
                 require(value is String) { "agent environment values must be strings" }
                 value
             } ?: emptyMap(),
+        )
+    }
+
+    private fun readSigning(table: TomlTable, profileFile: File): SigningProfile {
+        val storeFile = File(requiredPath(table, "store_file", profileFile))
+        require(storeFile.isFile) { "signing keystore does not exist: $storeFile" }
+        val storePassword = requiredString(table, "store_password")
+        return SigningProfile(
+            storeFile = storeFile.absolutePath,
+            storePassword = storePassword,
+            keyAlias = requiredString(table, "key_alias"),
+            // Keystores commonly use one password for both the store and its key.
+            keyPassword = table.getString("key_password")?.takeIf(String::isNotEmpty)
+                ?: storePassword,
         )
     }
 

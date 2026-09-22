@@ -110,4 +110,77 @@ class PiProfileReaderTest {
         }
         assertTrue(error.message.orEmpty().contains("pi_exclude"))
     }
+
+    @Test
+    fun readsSigningAndFallsBackToTheStorePassword() {
+        val profileDirectory = temporaryFolder.newFolder("profile")
+        val keystore = temporaryFolder.newFile("release.jks")
+        val profile = profileDirectory.resolve("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+
+                [signing]
+                store_file = "../release.jks"
+                store_password = "store-secret"
+                key_alias = "ttflow"
+                """.trimIndent(),
+            )
+        }
+
+        val signing = requireNotNull(PiProfileReader.read(profile).signing)
+
+        assertEquals(keystore.canonicalFile.absolutePath, signing.storeFile)
+        assertEquals("store-secret", signing.storePassword)
+        assertEquals("ttflow", signing.keyAlias)
+        assertEquals("store-secret", signing.keyPassword)
+    }
+
+    @Test
+    fun readsSigningWithAnAbsoluteKeystoreAndExplicitKeyPassword() {
+        val keystore = temporaryFolder.newFile("release.jks")
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+
+                [signing]
+                store_file = "${keystore.canonicalPath}"
+                store_password = "store-secret"
+                key_alias = "ttflow"
+                key_password = "key-secret"
+                """.trimIndent(),
+            )
+        }
+
+        val signing = requireNotNull(PiProfileReader.read(profile).signing)
+
+        assertEquals(keystore.canonicalFile.absolutePath, signing.storeFile)
+        assertEquals("key-secret", signing.keyPassword)
+    }
+
+    @Test
+    fun rejectsSigningKeystorePathsThatDoNotExist() {
+        val profileDirectory = temporaryFolder.newFolder("profile")
+        val profile = profileDirectory.resolve("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+
+                [signing]
+                store_file = "../missing.jks"
+                store_password = "store-secret"
+                key_alias = "ttflow"
+                """.trimIndent(),
+            )
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            PiProfileReader.read(profile)
+        }
+        assertTrue(error.message.orEmpty().contains("signing keystore does not exist"))
+    }
 }

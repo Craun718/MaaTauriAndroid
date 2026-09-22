@@ -56,6 +56,10 @@ val maaTauriAndroidMaaDirPath = if (File(maaTauriAndroidMaaDir).isAbsolute) {
         .resolve(maaTauriAndroidMaaDir)
         .normalize()
 }
+// Release signing comes from the packager's `[signing]` profile section so a single
+// publisher keystore keeps upgrade signatures stable across builds; profiles without
+// the section keep the previous behavior.
+val piSigning = piProfile?.signing
 
 val piGeneratedDir = layout.buildDirectory.dir("generated/piAssets")
 val piRootDir = piGeneratedDir.map { it.dir("pi") }
@@ -266,6 +270,16 @@ extensions.configure<ApplicationExtension> {
             }
         }
     }
+    if (piSigning != null) {
+        signingConfigs {
+            create("piProfile") {
+                storeFile = File(piSigning.storeFile)
+                storePassword = piSigning.storePassword
+                keyAlias = piSigning.keyAlias
+                keyPassword = piSigning.keyPassword
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -277,6 +291,9 @@ extensions.configure<ApplicationExtension> {
             }
         }
         getByName("release") {
+            if (piSigning != null) {
+                signingConfig = signingConfigs.getByName("piProfile")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

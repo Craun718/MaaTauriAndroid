@@ -253,9 +253,11 @@ function nestedSwitch() {
   });
 }
 
-/** 任务详情收进了下拉，先展开才能摸到选项。 */
-function expandTaskDetails(label: string) {
-  fireEvent.click(screen.getByRole("button", { name: label }));
+/** 任务详情收进模态框，先打开才能摸到选项。 */
+function openTaskDetails(label: string) {
+  fireEvent.click(
+    screen.getByRole("button", { name: `Task details: ${label}` }),
+  );
 }
 
 function selectNestedCase(checked: boolean) {
@@ -279,7 +281,7 @@ function enabledResolvedTasks() {
 describe("nested task options", () => {
   it("renders the option owned by a case that is selected by default", () => {
     renderTasksPage();
-    expandTaskDetails("糖果");
+    openTaskDetails("糖果");
 
     // 吃糖 defaults to Yes, so the option that case owns is reachable — even
     // though the task only declares 吃糖 itself. Both switches are one
@@ -295,7 +297,7 @@ describe("nested task options", () => {
 
   it("reveals the deeper option once its case is selected, and saves it", async () => {
     renderTasksPage();
-    expandTaskDetails("糖果");
+    openTaskDetails("糖果");
 
     selectNestedCase(true);
 
@@ -324,7 +326,7 @@ describe("nested task options", () => {
 
   it("hides the deeper option again when the case is switched off", async () => {
     renderTasksPage();
-    expandTaskDetails("糖果");
+    openTaskDetails("糖果");
     selectNestedCase(true);
     expect(
       await screen.findByRole("textbox", { name: /^次数/ }),
@@ -341,7 +343,7 @@ describe("nested task options", () => {
 
   it("keeps the value typed into a nested option", async () => {
     renderTasksPage();
-    expandTaskDetails("糖果");
+    openTaskDetails("糖果");
     selectNestedCase(true);
     const field = await screen.findByRole("textbox", { name: /^次数/ });
 

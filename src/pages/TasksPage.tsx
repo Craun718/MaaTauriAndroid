@@ -14,8 +14,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { GripVertical, Plus, SquarePen, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
 import { OptionEditor } from "../components/OptionEditor";
 import { RichDescription } from "../components/RichDescription";
@@ -24,6 +24,7 @@ import {
   RunActivityTabs,
 } from "../components/RunActivityTabs";
 import { RunPanel } from "../components/RunPanel";
+import { BottomDrawer } from "../components/ui/BottomDrawer";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
 import { Tabs } from "../components/ui/Tabs";
@@ -448,8 +449,8 @@ interface TaskItemProps {
 }
 
 /**
- * 单个任务卡片：标题与启用开关常驻，详情（说明与选项）收进下拉，
- * 点击标题展开。没有说明也没有选项的任务不渲染下拉箭头。
+ * 单个任务卡片：标题与启用开关常驻，详情（说明与选项）收进模态框。
+ * 没有说明也没有选项的任务不渲染配置按钮。
  */
 function TaskItem({
   task,
@@ -463,7 +464,7 @@ function TaskItem({
   dragHandleProps,
 }: TaskItemProps) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const unavailable =
     (task.controllers.length > 0 &&
       !task.controllers.includes(controllerName)) ||
@@ -473,148 +474,72 @@ function TaskItem({
     : visibleOptions(project.options, task.options, configured.optionValues);
   const hasDetails = Boolean(task.description) || options.length > 0;
   const label = configured.customLabel ?? task.label;
-  const titleViewportRef = useRef<HTMLSpanElement>(null);
-  const titleContentRef = useRef<HTMLSpanElement>(null);
-  const [animateTitle, setAnimateTitle] = useState(false);
-
-  useEffect(() => {
-    const viewport = titleViewportRef.current;
-    const content = titleContentRef.current;
-    if (!expanded || !viewport || !content) {
-      setAnimateTitle(false);
-      return;
-    }
-
-    let animation: Animation | undefined;
-    let disposed = false;
-    const reduceMotionQuery =
-      typeof window.matchMedia === "function"
-        ? window.matchMedia("(prefers-reduced-motion: reduce)")
-        : undefined;
-
-    const update = () => {
-      animation?.cancel();
-      animation = undefined;
-      if (disposed) return;
-
-      const overflow = viewport.scrollWidth - viewport.clientWidth;
-      const shouldAnimate = overflow > 1 && !reduceMotionQuery?.matches;
-      setAnimateTitle(shouldAnimate);
-      if (!shouldAnimate) return;
-
-      animation = content.animate(
-        [
-          { transform: "translateX(0)" },
-          { transform: `translateX(-${overflow}px)` },
-        ],
-        {
-          duration: Math.min(12000, Math.max(2800, overflow * 24)),
-          direction: "alternate",
-          easing: "ease-in-out",
-          iterations: Infinity,
-        },
-      );
-    };
-
-    update();
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
-    resizeObserver?.observe(viewport);
-    resizeObserver?.observe(content);
-    reduceMotionQuery?.addEventListener("change", update);
-    void document.fonts?.ready.then(update);
-
-    return () => {
-      disposed = true;
-      animation?.cancel();
-      resizeObserver?.disconnect();
-      reduceMotionQuery?.removeEventListener("change", update);
-    };
-  }, [expanded]);
 
   return (
-    <article
-      className={`rounded-lg border p-2 text-xs ${
-        unavailable
-          ? "border-line bg-surface-muted opacity-60"
-          : "border-line bg-raised"
-      }`}
-    >
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label={t("dragReorder")}
-          className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
-          {...dragHandleProps}
-        >
-          <GripVertical size="0.875rem" />
-        </button>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-          {hasDetails ? (
+    <>
+      <article
+        className={`rounded-lg border p-2 text-xs ${
+          unavailable
+            ? "border-line bg-surface-muted opacity-60"
+            : "border-line bg-raised"
+        }`}
+      >
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={t("dragReorder")}
+            className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
+            {...dragHandleProps}
+          >
+            <GripVertical size="0.875rem" />
+          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-1">
             <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                {label}
+              </span>
+            </h3>
+            {hasDetails && (
               <button
                 type="button"
-                aria-expanded={expanded}
-                onClick={() => setExpanded((value) => !value)}
-                className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-left"
+                aria-label={t("openTaskDetails", { task: label })}
+                aria-haspopup="dialog"
+                onClick={() => setDetailsOpen(true)}
+                className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
-                {expanded ? (
-                  <span
-                    ref={titleViewportRef}
-                    className={`min-w-0 flex-1 whitespace-nowrap ${
-                      animateTitle ? "overflow-hidden" : "overflow-x-auto"
-                    }`}
-                  >
-                    <span
-                      ref={titleContentRef}
-                      className="inline-block whitespace-nowrap"
-                    >
-                      {label}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                    {label}
-                  </span>
-                )}
-                <ChevronDown
-                  size="1rem"
-                  className={`shrink-0 text-ink-muted transition-transform ${
-                    expanded ? "" : "-rotate-90"
-                  }`}
-                />
+                <SquarePen size="0.875rem" />
               </button>
-            </h3>
-          ) : (
-            <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
-              {label}
-            </h3>
-          )}
-          <Checkbox
-            className="h-7 shrink-0 gap-1.5 text-xs"
-            checked={configured.enabled}
-            disabled={unavailable}
-            onCheckedChange={onEnabledChange}
+            )}
+            <Checkbox
+              className="h-7 shrink-0 gap-1.5 text-xs"
+              checked={configured.enabled}
+              disabled={unavailable}
+              onCheckedChange={onEnabledChange}
+            >
+              {t("toggleOn")}
+            </Checkbox>
+          </div>
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={t("removeTask")}
+            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            {t("toggleOn")}
-          </Checkbox>
+            <Trash2 size="0.875rem" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={t("removeTask")}
-          className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        {unavailable && (
+          <p className="mt-2 text-xs text-ink-muted">
+            {t("requiresOtherController")}
+          </p>
+        )}
+      </article>
+      {hasDetails && (
+        <BottomDrawer
+          open={detailsOpen}
+          onClose={() => setDetailsOpen(false)}
+          title={label}
         >
-          <Trash2 size="0.875rem" />
-        </button>
-      </div>
-      {unavailable && (
-        <p className="mt-2 text-xs text-ink-muted">
-          {t("requiresOtherController")}
-        </p>
-      )}
-      {expanded && hasDetails && (
-        <div className="mt-2 space-y-2 border-t border-line pt-2">
           <RichDescription text={task.description} />
           {options.map(({ name, depth }) => {
             const option = project.options[name];
@@ -638,8 +563,8 @@ function TaskItem({
               </div>
             );
           })}
-        </div>
+        </BottomDrawer>
       )}
-    </article>
+    </>
   );
 }

@@ -123,6 +123,9 @@ impl Default for FpsAdvisor {
 /// Stops the per-second watcher when the run task ends for any reason,
 /// including panics and early returns from the failure branches.
 pub(crate) struct RunGuard {
+    /// Never read; holding it is the point — dropping it stops the watcher
+    /// on every run exit path, including panics.
+    #[allow(dead_code)]
     inner: RunGuardInner,
 }
 

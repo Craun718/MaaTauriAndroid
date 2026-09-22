@@ -2,12 +2,37 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env.sh"
 
+PROJECT="${1:-m9a}"
 ABI="arm64-v8a"
-OUT_DIST="${REPO_ROOT}/resource/m9a-agent-dist"
-OUT_ZIP="${REPO_ROOT}/resource/m9a-agent-runtime-${ABI}.zip"
 WORK="${REPO_ROOT}/.cache/maafw"
 
-echo "==> Building the ${ABI} Python agent runtime…"
+case "${PROJECT}" in
+  m9a)
+    PROJECT_DIR="${REPO_ROOT}/resource/m9a"
+    OUT_DIST="${REPO_ROOT}/resource/m9a-agent-dist"
+    OUT_ZIP="${REPO_ROOT}/resource/m9a-agent-runtime-${ABI}.zip"
+    EXCLUDES=(--exclude pillow)
+    REQUIREMENTS=(--require pillow==11.0.0)
+    ;;
+  narutomobile)
+    PROJECT_DIR="${REPO_ROOT}/resource/narutomobile"
+    OUT_DIST="${REPO_ROOT}/resource/narutomobile-agent-dist"
+    OUT_ZIP="${REPO_ROOT}/resource/narutomobile-agent-runtime-${ABI}.zip"
+    EXCLUDES=(
+      --exclude pillow
+      --exclude win32-setctime
+      --exclude colorama
+      --exclude jeepney
+    )
+    REQUIREMENTS=(--require pillow==11.0.0)
+    ;;
+  *)
+    echo "usage: $0 [m9a|narutomobile]" >&2
+    exit 2
+    ;;
+esac
+
+echo "==> Building the ${PROJECT} ${ABI} Python agent runtime…"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
@@ -20,8 +45,9 @@ echo "  2/4  building the Python core + site-packages bundle…"
 python3 "${TMP}/build_agent_bundle.py" \
   --out "${OUT_DIST}" \
   --abi "${ABI}" \
-  --requirements "${REPO_ROOT}/resource/m9a/requirements.txt" \
-  --exclude pillow --require pillow==11.0.0 \
+  --requirements "${PROJECT_DIR}/requirements.txt" \
+  "${EXCLUDES[@]}" \
+  "${REQUIREMENTS[@]}" \
   --extra-index-url https://chaquo.com/pypi-13.1/ \
   --core-tag "${MAAFW_CORE_TAG}" \
   --work "${WORK}"

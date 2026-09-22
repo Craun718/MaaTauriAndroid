@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       m9a: ${{ steps.filter.outputs.m9a }}
+      narutomobile: ${{ steps.filter.outputs.narutomobile }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -20,6 +21,24 @@ jobs:
             m9a:
               - 'resource/m9a/**'
               - 'resource/m9a.toml'
+              - 'scripts/build-agent-runtime.sh'
+              - 'scripts/env.sh'
+              - 'src/**'
+              - 'src-tauri/profiles/**'
+              - 'src-tauri/src/**'
+              - 'src-tauri/Cargo.toml'
+              - 'src-tauri/Cargo.lock'
+              - 'src-tauri/gen/android/**'
+              - 'vendor/maa/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+            narutomobile:
+              - 'resource/narutomobile/**'
+              - 'resource/narutomobile.toml'
+              - 'scripts/prepare-narutomobile-pi.sh'
+              - 'scripts/build-agent-runtime.sh'
+              - 'scripts/env.sh'
               - 'src/**'
               - 'src-tauri/profiles/**'
               - 'src-tauri/src/**'
@@ -195,5 +214,93 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: m9a-apk-debug
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+  narutomobile-android:
+    needs: changes
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.narutomobile == 'true')
+    runs-on: ubuntu-latest
+    env:
+      # Keep in sync with scripts/env.sh and the M9A job.
+      MAAFW_SCRIPT_REF: f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7
+      MAAFW_VERSION: v5.13.0
+      MAAFW_CORE_TAG: 3.13.15-maafw5.12.3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-36"
+
+      - uses: Swatinem/rust-cache@v2.9.2
+        with:
+          workspaces: src-tauri
+          key: android-aarch64-narutomobile-apk
+      - uses: actions/cache@v6
+        with:
+          path: .cache
+          key: narutomobile-agent-core-3.13.15-maafw5.12.3
+
+      - name: Cache the Android debug keystore
+        uses: actions/cache@v6
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
+      - name: Prepare the NarutoMobile profile
+        run: |
+          scripts/prepare-narutomobile-pi.sh
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "pi.profile=$GITHUB_WORKSPACE/resource/narutomobile.toml"
+          } > src-tauri/gen/android/local.properties
+          {
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+          } >> "$GITHUB_ENV"
+
+      - name: Download MaaFramework and build the agent runtime
+        run: |
+          scripts/fetch-maafw.sh
+          scripts/build-agent-runtime.sh narutomobile
+
+      - name: Run buildSrc tests
+        working-directory: src-tauri/gen/android/buildSrc
+        run: ../gradlew test
+
+      - name: Build the arm64 debug APK
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm tauri android build --target aarch64 --apk --debug
+
+      - name: Upload the agent runtime archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: narutomobile-agent-runtime-arm64-v8a
+          path: resource/narutomobile-agent-runtime-arm64-v8a.zip
+
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: narutomobile-apk-debug
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error

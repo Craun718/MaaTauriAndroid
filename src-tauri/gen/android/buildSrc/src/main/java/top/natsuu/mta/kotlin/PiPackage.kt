@@ -19,7 +19,7 @@ object PiPackage {
     const val INTERFACE_FILE = "interface.json"
 
     /**
-     * Root of the Agent payload. The protocol points `agent[].child_args` at an entrypoint
+     * Root of the Agent payload. The protocol points `agent.child_args` at an entrypoint
      * inside the project (`agent/main.py` for M9A) but never names the directory that has
      * to ship with it, so the Client fixes it here. Upstream's own release builder ships
      * the same `agent` directory whenever `interface.json` declares an agent, see
@@ -115,15 +115,16 @@ object PiPackage {
         }
 
         // An interface that declares `agent` needs the payload its `child_args` run.
-        val agents = objectMapList(document["agent"])
+        val agents = objectMapListOrSingle(document["agent"])
         if (agents.isNotEmpty()) {
             record(AGENT_DIRECTORY, required = true)
             for (agent in agents) {
                 for (argument in stringList(agent["child_args"])) {
                     if (argument.startsWith("-") || URL_SCHEME.containsMatchIn(argument)) continue
                     if (DRIVE_LETTER.containsMatchIn(argument) || argument.startsWith("/")) continue
-                    if (argument.endsWith(".py") && !root.resolve(argument).isFile) {
-                        missing += argument
+                    val normalized = normalize(argument) ?: continue
+                    if (argument.endsWith(".py") && !root.resolve(normalized).isFile) {
+                        missing += normalized
                     }
                 }
             }
@@ -209,8 +210,19 @@ object PiPackage {
         return parsed
     }
 
-    private fun objectMapList(value: Any?): List<Map<*, *>> =
-        (value as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
+    private fun objectMapList(value: Any?): List<Map<*, *>> = when (value) {
+        is List<*> -> value.filterIsInstance<Map<*, *>>()
+        else -> emptyList()
+    }
+
+    /**
+     * `agent` is the one protocol table that may be a single object instead of an array;
+     * MaaFwApp and NarutoMobile both use that shape. Keep the other lists strict.
+     */
+    private fun objectMapListOrSingle(value: Any?): List<Map<*, *>> = when (value) {
+        is Map<*, *> -> listOf(value)
+        else -> objectMapList(value)
+    }
 
     private fun stringList(value: Any?): List<String> = when (value) {
         is String -> listOf(value)

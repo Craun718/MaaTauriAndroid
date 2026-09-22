@@ -180,6 +180,35 @@ class PiPackageTest {
     }
 
     @Test
+    fun packagesAnObjectAgentAndIgnoresAnEntrypointOutsideTheProject() {
+        // NarutoMobile keeps its interface under assets/ and its agent at the repository
+        // root, so the desktop interface names ../agent/main.py. The Android packer
+        // receives an assembled root where agent/ is already top-level.
+        val root = project(
+            """
+            {
+                "interface_version": 2,
+                "name": "demo",
+                "agent": {
+                    "child_exec": "../.venv/Scripts/python.exe",
+                    "child_args": ["-u", "../agent/main.py"]
+                },
+                "resource": [{"name": "base", "path": ["resource/base"]}]
+            }
+            """.trimIndent(),
+            mapOf(
+                "resource/base/pipeline/start.json" to "{}",
+                "agent/main.py" to "print('hi')",
+            ),
+        )
+
+        val plan = PiPackage.plan(root)
+
+        assertTrue(plan.entries.contains("agent"))
+        assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
     fun reportsAnAgentEntrypointThatTheProjectDoesNotContain() {
         val root = project(
             """

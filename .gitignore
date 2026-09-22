@@ -26,8 +26,8 @@ dist-ssr
 .workbuddy-ai/
 .workbuddy/
 
-# M9A agent runtime bundle（构建产物，由 resource/m9a.toml 的 bundle_sha256 锁定）
-resource/m9a-agent-dist/
+# Agent runtime bundles（构建产物，由各 profile 的 bundle 锁定）
+resource/*-agent-dist/
 resource/*.zip
 
 # Downloaded MaaFramework Android binaries (see scripts/fetch-maafw.sh)

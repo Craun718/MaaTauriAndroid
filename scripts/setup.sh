@@ -10,9 +10,12 @@ echo
 echo
 "${SCRIPT_DIR}/fetch-maafw.sh"
 echo
-"${SCRIPT_DIR}/build-agent-runtime.sh"
+"${SCRIPT_DIR}/build-agent-runtime.sh" m9a
+echo
+"${SCRIPT_DIR}/prepare-narutomobile-pi.sh"
+echo
+"${SCRIPT_DIR}/build-agent-runtime.sh" narutomobile
 
 echo
 echo "==> Setup complete. Build the APK with:"
 echo "    pnpm tauri android build --target aarch64 --apk"
-

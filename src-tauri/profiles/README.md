@@ -20,7 +20,7 @@ The base set is never listed. `PiPackage` reads `interface.json` and follows the
 | `import[]` | the task/option/preset files, read to reach nested icons |
 | `languages{}` | the declared translation files |
 | `icon` / `contact` / `license` / `description` / `doc` / `desc` / `welcome`, at any depth and in every imported file | the file when the value names one, including `$Key` lookups and markdown image links |
-| `agent[]` | the `agent` directory holding the `child_args` entrypoint |
+| `agent` (object or array) | the `agent` directory holding the `child_args` entrypoint |
 | — | `data/`, which the Agent reads without the protocol declaring it |
 
 A path the interface declares but the project lacks **fails the build**, because that is exactly how a silent mis-pack ships. M9A v4.9.0 renamed `i18n/` to `locales/`; the old allow-list matched nothing, the build stayed green, and the APK shipped an interface pointing at translation files absent from its own archive — a hard project-load failure on device.
@@ -39,13 +39,16 @@ Changing the profile changes the packaged APK; it is build-time embedding, not a
 
 ## In-repo profiles
 
-When the Project Interface is a submodule of this repository, keep the profile next to it and use relative paths — the same profile then works on every checkout. M9A is set up this way:
+When the Project Interface is a submodule of this repository, keep the profile next to it and use relative paths — the same profile then works on every checkout. M9A and NarutoMobile are set up this way:
 
 - `resource/m9a` — submodule of <https://github.com/MAA1999/M9A.git> tracking `main`, plus its nested `MaaCommonAssets` submodule (OCR models).
 - `resource/m9a.toml` — profile for it, translated from M9A's own `Android/profile.yaml` (`feat/support-android-app` branch).
 - `resource/m9a-agent-runtime-arm64-v8a.zip` — the Python agent runtime. It is a build artifact and is not committed because CI rebuilds it on every run.
+- `resource/narutomobile` — submodule of <https://github.com/duorua/narutomobile.git> tracking `main`.
+- `resource/narutomobile.toml` — profile for it. Its `interface.json` lives in `assets/` and its agent in the repository root, so `scripts/prepare-narutomobile-pi.sh` first assembles the upstream `Android/pi-root/` tree.
+- `resource/narutomobile-agent-runtime-arm64-v8a.zip` — the Python agent runtime. It is a build artifact and is not committed because CI rebuilds it on every run.
 
-Point a checkout at it with `pi.profile=<repo>/resource/m9a.toml`.
+Point a checkout at either one with `pi.profile=<repo>/resource/m9a.toml` or `pi.profile=<repo>/resource/narutomobile.toml`.
 
 ### Agent runtime
 
@@ -62,14 +65,16 @@ Or run the individual steps:
 ```bash
 scripts/fetch-submodules.sh     # M9A + MaaCommonAssets
 scripts/fetch-maafw.sh          # MaaFramework Android binaries → vendor/maa/android/
-scripts/build-agent-runtime.sh  # Python agent runtime ZIP
+scripts/build-agent-runtime.sh m9a           # M9A Python agent runtime ZIP
+scripts/build-agent-runtime.sh narutomobile  # NarutoMobile Python agent runtime ZIP
 python3 resource/m9a/tools/configure.py  # generate OCR model symlinks
+scripts/prepare-narutomobile-pi.sh       # assemble NarutoMobile's PI root
 ```
 
 `pack_agent_bundle.py` is the only supported way to build the archive: it dereferences symlinks, keeps the result below the ZIP64 threshold, and verifies that `lib/arm64-v8a/libMaaAgentClient.so` and `libMaaAgentServer.so` are present.
 
 Keep the MaaFramework version of `libMaaAgentClient.so`/`libMaaAgentServer.so` aligned with the libraries vendored in `vendor/maa/android`.
 
-The M9A job in `.github/workflows/ci.yml` performs this workflow and then builds the release APK.
+The M9A and NarutoMobile jobs in `.github/workflows/ci.yml` perform this workflow and then build the release APK.
 
 > Note: native libraries are pinned to MaaFramework `v5.13.0` by `MAAFW_VERSION`; `MaaAgentCoreAndroid` is pinned to `3.13.15-maafw5.12.3` by `MAAFW_CORE_TAG`, so the bundle's Python `maa` package stays at 5.12.3 — the core's copy wins over the `maafw` pin in `requirements.txt`. The Python agent talks to the native agent libraries over the AgentClient/Server IPC protocol, which stays compatible across patch releases.

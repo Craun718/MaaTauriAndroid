@@ -2,3 +2,7 @@
 	path = resource/m9a
 	url = https://github.com/MAA1999/M9A.git
 	branch = main
+[submodule "resource/narutomobile"]
+	path = resource/narutomobile
+	url = https://github.com/duorua/narutomobile.git
+	branch = main

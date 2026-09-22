@@ -1,0 +1,39 @@
+# NarutoMobile 的 Project Interface profile。
+#
+# 上游把 interface.json 放在 assets/，而 agent/ 在仓库根；自行构建 Android
+# 包时先运行 scripts/prepare-narutomobile-pi.sh，把两者摊平成 Android/pi-root/。
+#
+# 相对路径解析规则（见 src-tauri/profiles/README.md）：
+#   - pi_assets / agent.runtimes[].bundle 相对【本文件所在目录】，即 resource/
+#   - maa_dir 相对【仓库根】
+
+pi_assets = "narutomobile/Android/pi-root"
+
+resource_id = "narutomobile"
+
+app_name = "MAN"
+
+maa_dir = "vendor/maa/android"
+
+# 保留上游 Android 打包配方的额外文件；协议没有声明这些路径。
+pi_include = [
+    "CONTACT",
+    "DISCLAIMER.md",
+    "docs/imgs/logo.png",
+]
+
+[agent]
+timeout_ms = 15000
+
+[[agent.runtimes]]
+bundle = "narutomobile-agent-runtime-arm64-v8a.zip"
+exec = "bin/python3"
+executables = ["bin/python3"]
+args = ["-u", "agent/main.py", "{identifier}"]
+working_dir = "{pi}"
+
+[agent.runtimes.env]
+PYTHONHOME = "{bundle}/prefix"
+PYTHONPATH = "{bundle}/site-packages/pure.zip:{bundle}/site-packages"
+LD_LIBRARY_PATH = "{bundle}/prefix/lib:{bundle}/site-packages/chaquopy/lib:{bundle}/lib/arm64-v8a:{nativeLib}"
+MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"

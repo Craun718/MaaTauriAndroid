@@ -258,6 +258,17 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         val binderFuture = RootServiceBootstrapRegistry.register(token)
         activeRootToken = token
         rootExecutor.execute {
+            val rootStatus = runCatching { Shell.isAppGrantedRoot() }
+            if (rootStatus.getOrNull() != true) {
+                finishRootLaunch(
+                    token,
+                    null,
+                    IllegalStateException("root access was not granted"),
+                    STATE_SHIZUKU_UNAVAILABLE,
+                )
+                return@execute
+            }
+
             val commandResult = runCatching { buildRootStartCommand(token) }
             if (commandResult.isFailure) {
                 finishRootLaunch(token, null, commandResult.exceptionOrNull())
@@ -287,6 +298,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         token: String,
         binder: IBinder?,
         error: Throwable?,
+        failureState: Int = STATE_ERROR,
     ) {
         if (activeRootToken != token) {
             RootServiceBootstrapRegistry.unregister(token)
@@ -297,7 +309,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             rootConnecting.set(false)
             RootServiceBootstrapRegistry.unregister(token)
             killResidualRootService()
-            RuntimeBridge.setControlState(STATE_ERROR)
+            RuntimeBridge.setControlState(failureState)
             Log.w(
                 TAG,
                 "Could not start the root control service",

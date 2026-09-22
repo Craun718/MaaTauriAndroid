@@ -199,6 +199,11 @@ int main(int argc, char **argv) {
     }
 
     LOGFI("launcher start: apk=%s uid=%d keepRoot=%d", args.apk_path, args.uid, args.keep_root);
+    if (args.keep_root && getuid() != 0) {
+        LOGFE("keep-root requested, but the launcher is not running as root (uid=%d)", getuid());
+        return 1;
+    }
+
     if (getuid() == kShellUid) {
         exec_app_process(&args);
         return 1;

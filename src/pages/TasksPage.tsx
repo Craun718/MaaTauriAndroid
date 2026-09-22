@@ -28,6 +28,8 @@ import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
 import { Tabs } from "../components/ui/Tabs";
 import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
+import { isNotificationGranted } from "../lib/api";
+import { focusNoticePresentation } from "../lib/focusNotifications";
 import { useTranslation } from "../lib/i18n";
 import {
   activeController,
@@ -82,7 +84,20 @@ export function TasksPage() {
         payload.name ? `${payload.name}: ${payload.message}` : payload.message,
       );
     });
-    subscribe("focus-notify", (payload) => setFocusNotice(payload));
+    subscribe("focus-notify", (payload) => {
+      void (async () => {
+        const notificationsAllowed =
+          payload.channel === "notification"
+            ? await isNotificationGranted()
+            : false;
+        if (
+          focusNoticePresentation(payload.channel, notificationsAllowed) ===
+          "card"
+        ) {
+          setFocusNotice(payload);
+        }
+      })();
+    });
     return () => {
       disposed = true;
       unsubscribers.forEach((stop) => {

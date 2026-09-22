@@ -1,4 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import {
+  isPermissionGranted,
+  requestPermission,
+} from "@tauri-apps/plugin-notification";
 import type {
   AppStateSnapshot,
   LogExport,
@@ -100,6 +104,31 @@ export async function getRunStatus() {
 
 export async function stopRun(executionId?: string) {
   return invoke<string>("stop_run", { executionId });
+}
+
+/// Acknowledges one blocking (`display: "modal"`) focus message, releasing
+/// the backend queue gate that pauses task advancement.
+export async function resolveFocusModal() {
+  return invoke<void>("resolve_focus_modal");
+}
+
+/// Asks Android for the POST_NOTIFICATIONS runtime permission (once per
+/// install). Backend OS notifications for focus `display: "notification"`
+/// are silently dropped without it.
+export async function requestNotificationPermission() {
+  try {
+    return (await requestPermission()) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+export async function isNotificationGranted() {
+  try {
+    return (await isPermissionGranted()) === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function startRun() {

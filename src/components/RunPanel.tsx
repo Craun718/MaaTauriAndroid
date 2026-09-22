@@ -5,6 +5,7 @@ import {
   captureManualScreenshot,
   getRunStatus,
   pressVirtualDisplayBack,
+  requestNotificationPermission,
   resolveCurrent,
   startRun,
   stopRun,
@@ -176,6 +177,10 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     onRunStarted?.();
     setStarting(true);
     try {
+      // Once-per-install OS prompt (no-op once granted): backend focus
+      // `display: "notification"` messages only reach the OS notification
+      // center with POST_NOTIFICATIONS granted.
+      void requestNotificationPermission();
       const result = await startRun();
       executionIdRef.current = result.executionId;
       setExecutionId(result.executionId);

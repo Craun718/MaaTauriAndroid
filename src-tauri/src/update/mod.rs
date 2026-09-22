@@ -261,6 +261,7 @@ impl UpdateState {
         inner.status = UpdateStatus::new(UpdatePhase::Checking);
 
         let cancelled = Arc::new(AtomicBool::new(false));
+        let task_cancelled = cancelled.clone();
         let state = self.clone();
         let client = self.client.clone();
         let channel = prefs.channel;
@@ -269,7 +270,7 @@ impl UpdateState {
                 CheckSource::MirrorChyan { rid } => check_mirror_chyan(&client, rid, channel).await,
                 CheckSource::Github { repo } => check_github(&client, repo, channel).await,
             };
-            state.finish_check(outcome, cancelled.load(Ordering::Relaxed));
+            state.finish_check(outcome, task_cancelled.load(Ordering::Relaxed));
         });
         inner.task = Some(TaskHandle {
             abort: handle.abort_handle(),
@@ -285,34 +286,33 @@ impl UpdateState {
             return;
         }
         inner.task = None;
-        let status = &mut inner.status;
-        status.downloaded_bytes = None;
-        status.total_bytes = None;
-        status.apk_path = None;
+        inner.status.downloaded_bytes = None;
+        inner.status.total_bytes = None;
+        inner.status.apk_path = None;
         match outcome {
             Ok(Some(checked)) => {
                 inner.pending = Some(checked.pending);
-                status.phase = UpdatePhase::Available;
-                status.latest_version = Some(checked.version);
-                status.release_note = checked.note;
-                status.failure = None;
-                status.failure_detail = None;
+                inner.status.phase = UpdatePhase::Available;
+                inner.status.latest_version = Some(checked.version);
+                inner.status.release_note = checked.note;
+                inner.status.failure = None;
+                inner.status.failure_detail = None;
             }
             Ok(None) => {
                 inner.pending = None;
-                status.phase = UpdatePhase::UpToDate;
-                status.latest_version = Some(status.current_version.clone());
-                status.release_note = None;
-                status.failure = None;
-                status.failure_detail = None;
+                inner.status.phase = UpdatePhase::UpToDate;
+                inner.status.latest_version = Some(inner.status.current_version.clone());
+                inner.status.release_note = None;
+                inner.status.failure = None;
+                inner.status.failure_detail = None;
             }
             Err(error) => {
                 inner.pending = None;
-                status.phase = UpdatePhase::Idle;
-                status.latest_version = None;
-                status.release_note = None;
-                status.failure = Some(error.failure);
-                status.failure_detail = Some(error.detail);
+                inner.status.phase = UpdatePhase::Idle;
+                inner.status.latest_version = None;
+                inner.status.release_note = None;
+                inner.status.failure = Some(error.failure);
+                inner.status.failure_detail = Some(error.detail);
             }
         }
     }
@@ -332,6 +332,7 @@ impl UpdateState {
         };
         let prefs = { self.lock().prefs.clone() };
         let cancelled = Arc::new(AtomicBool::new(false));
+        let task_cancelled = cancelled.clone();
         let state = self.clone();
         let client = self.client.clone();
         let handle = tokio::spawn(async move {
@@ -341,11 +342,11 @@ impl UpdateState {
                 &pending,
                 &prefs.cdk,
                 prefs.channel,
-                &cancelled,
+                &task_cancelled,
                 &dirs,
             )
             .await;
-            state.finish_download(outcome, cancelled.load(Ordering::Relaxed));
+            state.finish_download(outcome, task_cancelled.load(Ordering::Relaxed));
         });
         let mut inner = self.lock();
         inner.task = Some(TaskHandle {

@@ -4,6 +4,7 @@ mod domain;
 mod focus;
 mod persistence;
 mod run_log;
+mod run_progress;
 mod runtime;
 mod secrets;
 mod telemetry;
@@ -1468,6 +1469,9 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 "The run foreground service could not be started".to_string(),
             ));
         }
+        // Best-effort: without POST_NOTIFICATIONS the FGS still runs, the
+        // progress notification just stays hidden until the user grants it.
+        let _ = call_runtime_bridge_boolean("ensureNotificationPermission");
         if configuration.show_virtual_display_touches {
             let _ = set_virtual_display_touch_markers(true);
         }
@@ -1580,7 +1584,33 @@ async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRu
                 let run_tasker = tasker.clone();
                 let task_logger = logger_for_run.clone();
                 let result = tokio::task::spawn_blocking(move || {
-                    runtime::run_tasks(&run_tasker, &tasks, &base_pipeline, &task_logger)
+                    let report_progress =
+                        |done: u32, total: u32, task: &crate::domain::types::ResolvedTask| {
+                            let payload = run_progress::progress_payload(
+                                done,
+                                total,
+                                run_progress::task_progress_label(task),
+                                None,
+                            );
+                            #[cfg(target_os = "android")]
+                            if let Err(error) = call_runtime_bridge_string_with_string(
+                                "updateRunProgress",
+                                &payload,
+                            ) {
+                                log::warn!(
+                                    "Could not update the run progress notification: {error}"
+                                );
+                            }
+                            #[cfg(not(target_os = "android"))]
+                            let _ = payload;
+                        };
+                    runtime::run_tasks(
+                        &run_tasker,
+                        &tasks,
+                        &base_pipeline,
+                        &task_logger,
+                        &report_progress,
+                    )
                 })
                 .await;
                 let outcome = match result {

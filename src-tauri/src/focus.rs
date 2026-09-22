@@ -78,6 +78,11 @@ impl FocusSink {
                 .map(|raw| localize(&substitute(raw, &detail), &self.translations));
 
             if let Some(content) = &content {
+                // The live notification borrows the focus content's first line
+                // as its status sentence; a no-op on non-Android builds.
+                crate::run_progress::push_focus_status(&crate::run_progress::first_status_line(
+                    content,
+                ));
                 for channel in &template.display {
                     match channel {
                         Channel::Log => self.log(&message, name.as_deref(), content),

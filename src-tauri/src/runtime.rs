@@ -1011,11 +1011,14 @@ pub fn run_tasks(
     tasks: &[ResolvedTask],
     base_pipeline: &Value,
     logger: &crate::run_log::RunLogger,
+    progress: &dyn Fn(u32, u32, &ResolvedTask),
 ) -> Result<RunOutcome, RuntimeError> {
-    for task in tasks.iter().filter(|task| task.enabled) {
+    let total = tasks.iter().filter(|task| task.enabled).count() as u32;
+    for (index, task) in tasks.iter().filter(|task| task.enabled).enumerate() {
         if tasker.stopping() {
             return Ok(RunOutcome::Stopped);
         }
+        progress(index as u32 + 1, total, task);
         logger
             .append_to_ui(
                 crate::run_log::RunEventKind::Task,

@@ -25,6 +25,13 @@ vi.mock("../lib/api", () => ({
   loadProject: vi.fn(),
   clearDiagnosticData: vi.fn(),
   exportLogs: () => exportLogs(),
+  getUpdateStatus: vi.fn(async () => undefined),
+  checkForUpdate: vi.fn(async () => undefined),
+  resolveUpdate: vi.fn(async () => undefined),
+  cancelUpdate: vi.fn(async () => undefined),
+  installUpdate: vi.fn(async () => undefined),
+  getUpdatePrefs: vi.fn(async () => undefined),
+  setUpdatePrefs: vi.fn(async () => undefined),
 }));
 
 const project: Project = {

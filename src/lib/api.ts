@@ -6,6 +6,8 @@ import type {
   PrivilegedStatus,
   ResolvedRun,
   RunResult,
+  UpdatePrefs,
+  UpdateStatus,
   UserConfiguration,
   VirtualDisplayStatus,
 } from "./types";
@@ -134,4 +136,32 @@ export async function clearDiagnosticData() {
   return invoke<{ deletedRunCount: number; runsDir: string }>(
     "clear_diagnostic_data",
   );
+}
+
+export async function getUpdateStatus() {
+  return invoke<UpdateStatus>("update_get_status");
+}
+
+export async function checkForUpdate() {
+  return invoke<UpdateStatus>("update_check");
+}
+
+export async function resolveUpdate() {
+  return invoke<UpdateStatus>("update_resolve");
+}
+
+export async function cancelUpdate() {
+  return invoke<UpdateStatus>("update_cancel");
+}
+
+export async function installUpdate() {
+  return invoke<UpdateStatus>("update_install");
+}
+
+export async function getUpdatePrefs() {
+  return invoke<UpdatePrefs>("update_get_prefs");
+}
+
+export async function setUpdatePrefs(prefs: UpdatePrefs) {
+  return invoke<UpdatePrefs>("update_set_prefs", { prefs });
 }

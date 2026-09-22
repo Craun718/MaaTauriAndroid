@@ -1,6 +1,7 @@
 import { Download, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { OptionEditor } from "../components/OptionEditor";
+import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
 import { VersionCard } from "../components/VersionCard";
@@ -47,6 +48,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-3">
       <h1 className="text-xl font-semibold">{t("settings")}</h1>
+      <UpdateCard />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <div>
           <h2 id="language-select-label" className="font-medium">

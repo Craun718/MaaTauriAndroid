@@ -28,6 +28,13 @@ vi.mock("../src/lib/api", () => ({
   stopRun: vi.fn(),
   exportDiagnostics: vi.fn(),
   captureManualScreenshot: vi.fn(),
+  getUpdateStatus: vi.fn(async () => undefined),
+  checkForUpdate: vi.fn(async () => undefined),
+  resolveUpdate: vi.fn(async () => undefined),
+  cancelUpdate: vi.fn(async () => undefined),
+  installUpdate: vi.fn(async () => undefined),
+  getUpdatePrefs: vi.fn(async () => undefined),
+  setUpdatePrefs: vi.fn(async () => undefined),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

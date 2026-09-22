@@ -42,6 +42,13 @@ vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   getVirtualDisplayStream: vi.fn(),
   setVirtualDisplayTouchMarkers: () => setVirtualDisplayTouchMarkers(),
+  getUpdateStatus: vi.fn(async () => undefined),
+  checkForUpdate: vi.fn(async () => undefined),
+  resolveUpdate: vi.fn(async () => undefined),
+  cancelUpdate: vi.fn(async () => undefined),
+  installUpdate: vi.fn(async () => undefined),
+  getUpdatePrefs: vi.fn(async () => undefined),
+  setUpdatePrefs: vi.fn(async () => undefined),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

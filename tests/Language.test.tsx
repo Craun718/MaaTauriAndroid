@@ -19,6 +19,13 @@ vi.mock("../src/lib/api", () => ({
     saveConfiguration(configuration),
   loadProject: vi.fn(),
   clearDiagnosticData: vi.fn(),
+  getUpdateStatus: vi.fn(async () => undefined),
+  checkForUpdate: vi.fn(async () => undefined),
+  resolveUpdate: vi.fn(async () => undefined),
+  cancelUpdate: vi.fn(async () => undefined),
+  installUpdate: vi.fn(async () => undefined),
+  getUpdatePrefs: vi.fn(async () => undefined),
+  setUpdatePrefs: vi.fn(async () => undefined),
 }));
 
 /** A configuration saved before the language field existed has no uiLanguage at all. */

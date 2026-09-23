@@ -55,7 +55,7 @@ MaaTauriAndroid 本身不包含具体业务资源。Android 上要把资源在**
 1. 按 [Project Interface V2 协议](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/zh_cn/3.3-ProjectInterfaceV2%E5%8D%8F%E8%AE%AE.md)写好 `interface.json` 和资源。开发和排查 Pipeline 请用 MaaFramework 提供的调试工具，不要把本应用当调试器。
 2. 拷贝 [`pi-profile.sample.toml`](src-tauri/profiles/pi-profile.sample.toml)，按注释填写资源路径和 agent 运行时，放到本仓库之外。
 3. 在 `src-tauri/gen/android/local.properties` 里写 `pi.profile=<配方的绝对路径>`（或设环境变量 `PI_PROFILE`、Gradle 参数 `-Ppi.profile`）。
-4. 执行 `scripts/setup.sh` 初始化子模块、下载 MaaFramework 并构建 agent runtime，然后出包：
+4. 执行 `scripts/setup.sh` 初始化子模块、下载 MaaFramework 并构建 agent runtime（构建细节见 [Agent runtime 构建](docs/agent-runtime.md)），然后出包：
 
 ```bash
 pnpm tauri android build --target aarch64 --apk --split-per-abi
@@ -68,6 +68,7 @@ pnpm tauri android build --target aarch64 --apk --split-per-abi
 - [Project Interface V2 协议](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/zh_cn/3.3-ProjectInterfaceV2%E5%8D%8F%E8%AE%AE.md)
 - [MaaPracticeBoilerplate](https://github.com/MaaXYZ/MaaPracticeBoilerplate)
 - [打包规则与配方说明](src-tauri/profiles/README.md)
+- [Agent runtime 构建](docs/agent-runtime.md)
 
 ## 从源码构建
 

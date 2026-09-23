@@ -5,7 +5,7 @@ import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
 import { VersionCard } from "../components/VersionCard";
-import { clearDiagnosticData } from "../lib/api";
+import { clearDiagnosticData, restartApp } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import {
@@ -197,6 +197,38 @@ export function SettingsPage() {
       </section>
       <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <h2 className="font-medium">{t("diagnostics")}</h2>
+        <div className="space-y-1">
+          <Checkbox
+            className="min-h-10 gap-2"
+            checked={snapshot?.configuration.debugMode ?? false}
+            disabled={busy || !snapshot}
+            onCheckedChange={(next) => {
+              if (!snapshot) return;
+              // 开启需要重启（对齐 MaaFwApp）：确认后落盘再重启；关闭即时生效不重启
+              if (next && !window.confirm(t("debugModeRestartConfirm"))) return;
+              const nextConfiguration = structuredClone(snapshot.configuration);
+              nextConfiguration.debugMode = next;
+              void (async () => {
+                await saveConfiguration(nextConfiguration);
+                // 保存失败（store 会展示 error）时不重启，避免重启后丢改动
+                if (!next || useAppStore.getState().error) return;
+                try {
+                  await restartApp();
+                } catch (error) {
+                  notify(
+                    error instanceof Error ? error.message : String(error),
+                    {
+                      tone: "error",
+                    },
+                  );
+                }
+              })();
+            }}
+          >
+            <span className="font-medium">{t("debugMode")}</span>
+          </Checkbox>
+          <p className="text-sm text-ink-muted">{t("debugModeDescription")}</p>
+        </div>
         <button
           type="button"
           disabled={exporting}
@@ -218,6 +250,9 @@ export function SettingsPage() {
             try {
               const result = await clearDiagnosticData();
               notify(t("deletedRuns", { count: result.deletedRunCount }));
+              // The restart re-arms the app log file handle that survives a
+              // plain deletion; a failed restart still leaves the cleanup done.
+              await restartApp();
             } catch (error) {
               notify(error instanceof Error ? error.message : String(error), {
                 tone: "error",

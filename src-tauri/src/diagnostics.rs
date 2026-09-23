@@ -379,6 +379,51 @@ pub fn clear_run_directories(runs_dir: &Path) -> Result<usize, DiagnosticError> 
     Ok(deleted)
 }
 
+/// Deletes every entry (file or subdirectory) inside `dir`, keeping the
+/// directory itself. Missing directories count as already empty. Used for the
+/// MaaFramework log directory, whose contents must be removable while the
+/// framework still holds an open handle on the active log file; the handle is
+/// re-armed afterwards via `runtime::reconfigure_maa_logging`.
+pub fn clear_dir_contents(dir: &Path) -> Result<usize, DiagnosticError> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(source) => {
+            return Err(DiagnosticError::Read {
+                path: dir.to_path_buf(),
+                source,
+            })
+        }
+    };
+
+    let mut deleted = 0_usize;
+    for entry in entries {
+        let entry = entry.map_err(|source| DiagnosticError::Read {
+            path: dir.to_path_buf(),
+            source,
+        })?;
+        let path = entry.path();
+        let is_directory = entry
+            .file_type()
+            .map_err(|source| DiagnosticError::Read {
+                path: path.clone(),
+                source,
+            })?
+            .is_dir();
+        if is_directory {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        }
+        .map_err(|source| DiagnosticError::Remove {
+            path: path.clone(),
+            source,
+        })?;
+        deleted += 1;
+    }
+    Ok(deleted)
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticItem {
@@ -1609,5 +1654,28 @@ mod tests {
         assert!(!runs_root.join("run-2").exists());
         assert!(runs_root.join("configuration.json").is_file());
         fs::remove_dir_all(runs_root).unwrap();
+    }
+
+    #[test]
+    fn clear_dir_contents_removes_all_entries_but_keeps_root() {
+        let log_root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-clear-logs-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(log_root.join("nested")).unwrap();
+        fs::write(log_root.join("maafw.log"), b"active log").unwrap();
+        fs::write(log_root.join("maafw.bak.1.log"), b"rotated").unwrap();
+        fs::write(log_root.join("nested").join("error.png"), b"png").unwrap();
+
+        let missing = clear_dir_contents(&log_root.join("missing")).unwrap();
+        let deleted = clear_dir_contents(&log_root).unwrap();
+
+        assert_eq!(missing, 0);
+        assert_eq!(deleted, 3);
+        assert!(!log_root.join("maafw.log").exists());
+        assert!(!log_root.join("maafw.bak.1.log").exists());
+        assert!(!log_root.join("nested").exists());
+        assert!(log_root.is_dir());
+        fs::remove_dir_all(log_root).unwrap();
     }
 }

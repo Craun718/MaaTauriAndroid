@@ -768,6 +768,27 @@ pub fn ensure_control_service(timeout_ms: u64) -> Result<bool, RuntimeError> {
     Ok(connected)
 }
 
+/// Restarts the Android app through the Kotlin bridge, which re-launches the
+/// launcher intent and terminates the process. Tauri's own restart only
+/// respawns the current binary, which the Android app runtime cannot relaunch.
+/// The call never returns when the restart succeeds.
+#[cfg(target_os = "android")]
+pub fn restart_app() -> Result<(), RuntimeError> {
+    let vm = java_vm().ok_or_else(|| RuntimeError::JniBridge("not initialized".to_string()))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| RuntimeError::JniBridge(error.to_string()))?;
+    let restarted = env
+        .call_static_method(runtime_bridge_class()?, "restartApp", "()Z", &[])
+        .and_then(|value| value.z())
+        .map_err(|error| RuntimeError::JniBridge(error.to_string()))?;
+    if restarted {
+        Ok(())
+    } else {
+        Err(RuntimeError::JniBridge("app restart failed".to_string()))
+    }
+}
+
 #[cfg(target_os = "android")]
 struct AndroidJni {
     vm: jni::JavaVM,
@@ -780,6 +801,8 @@ static ANDROID_JNI: std::sync::OnceLock<AndroidJni> = std::sync::OnceLock::new()
 
 static MAA_LOG_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
+static MAA_DEBUG_MODE: AtomicBool = AtomicBool::new(false);
+
 /// Directory MaaFramework writes `maa.log` into; configured from the Tauri
 /// setup so the standalone log export knows where to collect it.
 pub fn set_maa_log_dir(path: PathBuf) {
@@ -788,6 +811,22 @@ pub fn set_maa_log_dir(path: PathBuf) {
 
 pub fn maa_log_dir() -> Option<&'static Path> {
     MAA_LOG_DIR.get().map(PathBuf::as_path)
+}
+
+/// Applies the user-facing debug switch. The app's own log level takes effect
+/// immediately; MaaFramework reads the flag when the next run configures the
+/// framework (see [`configure_framework_logging`]).
+pub fn apply_debug_mode(enabled: bool) {
+    MAA_DEBUG_MODE.store(enabled, Ordering::Relaxed);
+    log::set_max_level(if enabled {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    });
+}
+
+pub fn maa_debug_mode() -> bool {
+    MAA_DEBUG_MODE.load(Ordering::Relaxed)
 }
 
 /// Points MaaFramework's file log at the app-owned directory and saves error
@@ -818,6 +857,19 @@ fn configure_framework_logging() {
             "MaaFramework error screenshots could not be enabled: {error}"
         ));
     }
+    // Debug mode attaches the raw recognition image and debug draws to the
+    // reco details; the maa.log file itself is always written in full detail.
+    if let Err(error) = maa_framework::set_debug_mode(maa_debug_mode()) {
+        warn(format!("MaaFramework debug mode could not be set: {error}"));
+    }
+}
+
+/// Re-applies the framework logging configuration so MaaFramework reopens
+/// `maafw.log` after the log directory was cleared. Setting the `LogDir`
+/// global option again closes the stream that still points at a deleted file
+/// and recreates a fresh log, so no restart is needed.
+pub fn reconfigure_maa_logging() {
+    configure_framework_logging();
 }
 
 pub fn run_result() -> Option<RunResult> {
@@ -1140,6 +1192,17 @@ mod tests {
         }
         .is_natural_end());
         assert!(!RunOutcome::Stopped.is_natural_end());
+    }
+
+    #[test]
+    fn debug_mode_switches_both_the_app_log_level_and_the_framework_flag() {
+        apply_debug_mode(true);
+        assert!(maa_debug_mode());
+        assert_eq!(log::max_level(), log::LevelFilter::Debug);
+
+        apply_debug_mode(false);
+        assert!(!maa_debug_mode());
+        assert_eq!(log::max_level(), log::LevelFilter::Info);
     }
 
     #[test]

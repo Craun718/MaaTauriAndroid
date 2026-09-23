@@ -170,6 +170,10 @@ export async function clearDiagnosticData() {
   );
 }
 
+export async function restartApp() {
+  return invoke("restart_app");
+}
+
 export async function listScheduleRules() {
   return invoke<Array<ScheduleRuleStatus>>("list_schedule_rules");
 }

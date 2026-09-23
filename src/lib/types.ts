@@ -236,6 +236,7 @@ export interface UserConfiguration {
   telemetryEnabled: boolean;
   showVirtualDisplayTouches?: boolean;
   showVirtualDisplayFps?: boolean;
+  debugMode?: boolean;
   uiLanguage?: UiLanguage;
   activeResource?: string;
   globalOptionValues: Record<string, OptionValue>;

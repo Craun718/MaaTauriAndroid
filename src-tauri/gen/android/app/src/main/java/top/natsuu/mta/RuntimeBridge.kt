@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.PowerManager
 import android.os.ParcelFileDescriptor
 import android.os.Looper
+import android.os.Process
 import android.provider.MediaStore
 import android.view.WindowManager
 import java.io.File
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.lang.ref.WeakReference
 import kotlin.concurrent.thread
+import kotlin.system.exitProcess
 import org.json.JSONObject
 import androidx.core.content.FileProvider
 import top.natsuu.mta.control.ControlHost
@@ -68,6 +70,21 @@ object RuntimeBridge {
     fun detachActivity(activity: Activity) {
         if (hostActivity?.get() !== activity) return
         hostActivity = null
+    }
+
+    /**
+     * Restarts the whole app process: the launcher intent is submitted first so
+     * the system brings up a fresh activity, then this process is killed. Used
+     * by the debug-mode toggle; the caller must persist settings first.
+     */
+    @JvmStatic
+    fun restartApp(): Boolean {
+        val context = agentContext ?: return false
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent?.let { context.startActivity(it) }
+        Process.killProcess(Process.myPid())
+        exitProcess(0)
     }
 
     @JvmStatic

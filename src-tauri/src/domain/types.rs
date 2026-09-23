@@ -321,6 +321,10 @@ pub struct UserConfiguration {
     /// written to the run log regardless of this switch.
     #[serde(default = "default_true")]
     pub show_virtual_display_fps: bool,
+    /// User-facing debug switch: unlocks the app's own debug logging and turns
+    /// on MaaFramework's debug mode (recognition snapshots and debug draws).
+    #[serde(default)]
+    pub debug_mode: bool,
     #[serde(default)]
     pub ui_language: UiLanguage,
     pub active_resource: Option<String>,
@@ -345,6 +349,7 @@ impl Default for UserConfiguration {
             telemetry_enabled: false,
             show_virtual_display_touches: true,
             show_virtual_display_fps: true,
+            debug_mode: false,
             ui_language: UiLanguage::System,
             active_resource: None,
             global_option_values: BTreeMap::new(),
@@ -400,6 +405,17 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(parsed.show_virtual_display_fps);
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_debug_mode_to_false() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy.as_object_mut().unwrap().remove("debugMode");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert!(!parsed.debug_mode);
     }
 
     #[test]

@@ -55,7 +55,7 @@ describe("translate", () => {
   it("interpolates named parameters", () => {
     expect(translate("en", "enabledTasks", { count: 3 })).toBe("3 tasks");
     expect(translate("zh", "deletedRuns", { count: 0 })).toBe(
-      "已删除 0 个运行目录",
+      "已删除 0 个运行目录，并清空日志文件",
     );
   });
 

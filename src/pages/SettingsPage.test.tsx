@@ -24,6 +24,7 @@ vi.mock("../lib/api", () => ({
     saveConfiguration(configuration),
   loadProject: vi.fn(),
   clearDiagnosticData: vi.fn(),
+  restartApp: vi.fn(async () => undefined),
   exportLogs: () => exportLogs(),
   getUpdateStatus: vi.fn(async () => undefined),
   checkForUpdate: vi.fn(async () => undefined),
@@ -170,7 +171,7 @@ describe("project scope in settings", () => {
   });
 
   it("shows successful run cleanup as a notification", async () => {
-    const { clearDiagnosticData } = await import("../lib/api");
+    const { clearDiagnosticData, restartApp } = await import("../lib/api");
     vi.mocked(clearDiagnosticData).mockResolvedValue({
       deletedRunCount: 3,
       runsDir: "/data/user/0/app/runs",
@@ -178,11 +179,12 @@ describe("project scope in settings", () => {
     window.confirm = vi.fn(() => true);
     renderSettingsPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete runs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete logs" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Deleted 3 run directories",
+      "Deleted 3 run directories and cleared log files",
     );
+    expect(restartApp).toHaveBeenCalledTimes(1);
   });
 
   it("hides telemetry consent when the interface does not declare it", () => {

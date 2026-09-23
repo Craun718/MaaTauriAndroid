@@ -425,6 +425,7 @@ fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnaps
     };
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;
+    runtime::apply_debug_mode(configuration.debug_mode);
     let environment = version::environment();
     Ok(AppStateSnapshot {
         versions: version::VersionInfo::new(environment),
@@ -538,6 +539,7 @@ fn save_configuration(
     #[cfg(target_os = "android")]
     let _ = set_virtual_display_touch_markers(configuration.show_virtual_display_touches);
     configure_telemetry(&project, &configuration);
+    runtime::apply_debug_mode(configuration.debug_mode);
     Ok(configuration)
 }
 
@@ -2257,7 +2259,26 @@ async fn capture_manual_screenshot(
 }
 
 #[tauri::command]
-async fn clear_diagnostic_data(state: State<'_, AppState>) -> Result<ClearedDiagnostics, AppError> {
+fn restart_app(app: AppHandle) -> Result<(), AppError> {
+    // Tauri's `restart` only respawns the current binary, which works on
+    // desktop; on Android the relaunch must go through the Kotlin bridge.
+    #[cfg(target_os = "android")]
+    {
+        let _ = &app;
+        runtime::restart_app()?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        app.restart();
+    }
+}
+
+#[tauri::command]
+async fn clear_diagnostic_data(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ClearedDiagnostics, AppError> {
     let _storage_guard = state.run_storage.lock().await;
     if state.maa.status() != runtime::RunState::Idle {
         return Err(AppError::Message(
@@ -2270,6 +2291,26 @@ async fn clear_diagnostic_data(state: State<'_, AppState>) -> Result<ClearedDiag
         tokio::task::spawn_blocking(move || diagnostics::clear_run_directories(&cleanup_runs_dir))
             .await
             .map_err(|error| AppError::Message(error.to_string()))??;
+    if let Some(maa_log_dir) = runtime::maa_log_dir().map(Path::to_path_buf) {
+        let cleanup_maa_log_dir = maa_log_dir;
+        tokio::task::spawn_blocking(move || diagnostics::clear_dir_contents(&cleanup_maa_log_dir))
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))??;
+        // MaaFramework keeps a stream open on the deleted log file; setting
+        // the log directory again makes it recreate a fresh `maafw.log`.
+        runtime::reconfigure_maa_logging();
+    }
+    let app_log_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    let cleanup_app_log_dir = app_log_dir;
+    tokio::task::spawn_blocking(move || diagnostics::clear_dir_contents(&cleanup_app_log_dir))
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))??;
+    // The log plugin keeps the active file handle open and only reopens on
+    // rotation (~1 MiB) or restart, so a bounded amount of logs written after
+    // this point may be lost until then; an app restart fully resolves it.
     state.clear_latest_log();
     runtime::clear_run_result();
     Ok(ClearedDiagnostics {
@@ -2715,7 +2756,11 @@ pub fn run() {
                         file_name: Some(run_log::APPLICATION_LOG_FILE_STEM.to_string()),
                     }),
                 ])
-                .level(log::LevelFilter::Info)
+                // The fern dispatch gate is fixed at build time, so it stays at
+                // the loosest level; the user-facing debug switch tightens the
+                // effective level at runtime via `log::set_max_level` (see
+                // `runtime::apply_debug_mode`).
+                .level(log::LevelFilter::Debug)
                 .max_file_size(1_000_000)
                 .rotation_strategy(RotationStrategy::KeepSome(3))
                 .timezone_strategy(TimezoneStrategy::UseLocal)
@@ -2752,6 +2797,7 @@ pub fn run() {
             export_logs,
             capture_manual_screenshot,
             clear_diagnostic_data,
+            restart_app,
             list_schedule_rules,
             save_schedule_rule,
             delete_schedule_rule,
@@ -2780,6 +2826,9 @@ pub fn run() {
             let maa_log_dir = root.join("maa-logs");
             let _ = std::fs::create_dir_all(&maa_log_dir);
             runtime::set_maa_log_dir(maa_log_dir);
+            // The plugin registered its logger at the loosest level; info stays
+            // the default until bootstrap applies the stored debug switch.
+            runtime::apply_debug_mode(false);
             if let Ok(dirs) = update::resolve_dirs(app.handle()) {
                 app.state::<update::UpdateState>().load_prefs(&dirs);
             }

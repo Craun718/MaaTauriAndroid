@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import type { Project, VersionInfo } from "../lib/types";
@@ -8,12 +9,15 @@ export function VersionCard({
   project,
   versions,
   footer,
+  actions,
 }: {
   title: MessageKey;
   variant: "about" | "summary";
   project: Project;
   versions?: VersionInfo;
   footer?: string;
+  /** Rendered between the rows and the footer, e.g. the about links. */
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation();
   const environment = versions?.environment;
@@ -57,6 +61,7 @@ export function VersionCard({
           </>
         )}
       </dl>
+      {actions}
       {footer && <p className="text-center text-xs text-ink-muted">{footer}</p>}
     </section>
   );

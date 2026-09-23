@@ -300,8 +300,8 @@ impl ProjectLoader {
             metadata: ProjectMetadata {
                 title: text(document.get("title")),
                 icon: text(document.get("icon")),
-                contact: text(document.get("contact")),
-                license: text(document.get("license")),
+                contact: description_body(root, document.get("contact"), &translations),
+                license: description_body(root, document.get("license"), &translations),
                 github: document
                     .get("github")
                     .and_then(Value::as_str)
@@ -742,6 +742,74 @@ fn localize(value: Option<&str>, translations: &BTreeMap<String, String>) -> Opt
     }
 }
 
+/// MaaFwApp's description form detection: `./`/`../` prefixes, document
+/// extensions, path separators, or ALL-CAPS simple names (`LICENSE`) point at
+/// a project file; http(s) URLs and everything else stays literal text.
+fn is_file_path(content: &str) -> bool {
+    if content.starts_with("https://") || content.starts_with("http://") {
+        return false;
+    }
+    if content.starts_with("./") || content.starts_with("../") {
+        return true;
+    }
+    let simple_name = !content.is_empty()
+        && content.len() <= 100
+        && content
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '\\'))
+        && !content.bytes().all(|b| b.is_ascii_digit());
+    if !simple_name {
+        return false;
+    }
+    let lower = content.to_ascii_lowercase();
+    if [".md", ".txt", ".json", ".html", ".htm"]
+        .iter()
+        .any(|extension| lower.ends_with(extension))
+    {
+        return true;
+    }
+    let mut chars = content.chars();
+    if chars.next().is_some_and(|c| c.is_ascii_uppercase())
+        && chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    {
+        return true;
+    }
+    content.contains('/') || content.contains('\\')
+}
+
+/// Contact/license bodies follow MaaFwApp's `description` semantics: the
+/// `$i18n` lookup runs first, then a file-path-shaped value is read from the
+/// project root. A missing or unreadable file falls back to the literal text
+/// so a bad reference never fails the project load.
+fn description_body(
+    root: &Path,
+    value: Option<&Value>,
+    translations: &BTreeMap<String, String>,
+) -> Option<String> {
+    let resolved = localize(value.and_then(Value::as_str), translations)?;
+    if !is_file_path(&resolved) {
+        return Some(resolved);
+    }
+    let relative = resolved.strip_prefix("./").unwrap_or(&resolved);
+    Some(read_project_text(root, relative).unwrap_or(resolved))
+}
+
+/// Reads a UTF-8 file inside the project root. Absolute paths and `..` climbs
+/// that would leave the root yield `None` instead of escaping it.
+fn read_project_text(root: &Path, relative: &str) -> Option<String> {
+    let relative = Path::new(relative);
+    let mut depth = 0usize;
+    for component in relative.components() {
+        match component {
+            std::path::Component::ParentDir => depth = depth.checked_sub(1)?,
+            std::path::Component::Normal(_) => depth += 1,
+            std::path::Component::CurDir => {}
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => return None,
+        }
+    }
+    fs::read_to_string(root.join(relative)).ok()
+}
+
 fn normalize_path(root: &Path, relative: &str) -> PathBuf {
     let path = Path::new(relative);
     if path.is_absolute() {
@@ -946,5 +1014,105 @@ mod tests {
         assert_eq!(telemetry.traces_sample_rate, 1.0);
         assert_eq!(telemetry.failure_attachments_sample_rate, 1.0);
         assert!(telemetry.environment.is_none());
+    }
+
+    /// M9A-style interfaces reference contact/license as project files
+    /// (`"contact": "CONTACT"`); the loader materializes their contents.
+    #[test]
+    fn materializes_contact_and_license_file_references_from_the_project_root() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-about-files",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("temp project root should be created");
+        fs::write(root.join("CONTACT"), "QQ group: 123456\n")
+            .expect("contact file should be written");
+        fs::write(root.join("LICENSE"), "# License\n\nGPL-3.0.")
+            .expect("license file should be written");
+        fs::write(
+            root.join("interface.json"),
+            r#"{
+                "interface_version": 2,
+                "name": "profiled",
+                "contact": "CONTACT",
+                "license": "./LICENSE",
+                "resource": [{"name": "base", "path": ["resource/base"]}]
+            }"#,
+        )
+        .expect("interface should be written");
+
+        let project = ProjectLoader::default()
+            .load(root.join("interface.json"), "zh_cn")
+            .expect("interface with about files should load");
+
+        assert_eq!(
+            project.metadata.contact.as_deref(),
+            Some("QQ group: 123456\n")
+        );
+        assert_eq!(
+            project.metadata.license.as_deref(),
+            Some("# License\n\nGPL-3.0.")
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// Plain text stays as-is, and a file-shaped value whose file is missing
+    /// falls back to the literal string instead of failing the load.
+    #[test]
+    fn keeps_literal_contact_and_license_text_without_a_backing_file() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-about-empty",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("temp project root should be created");
+        let project = ProjectLoader::default()
+            .load_value(
+                &root,
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "contact": "QQ群: 669689256",
+                    "license": "MIT",
+                    "github": "https://github.com/owner/repo",
+                    "resource": [{"name": "base", "path": ["resource/base"]}]
+                }),
+                "en_us",
+            )
+            .expect("an interface with literal about text should load");
+
+        assert_eq!(project.metadata.contact.as_deref(), Some("QQ群: 669689256"));
+        assert_eq!(project.metadata.license.as_deref(), Some("MIT"));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// References pointing outside the project root are never read; the body
+    /// falls back to the literal text.
+    #[test]
+    fn ignores_file_references_escaping_the_project_root() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-about-escape",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("temp project root should be created");
+        let project = ProjectLoader::default()
+            .load_value(
+                &root,
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "contact": "../outside.md",
+                    "license": "/etc/LICENSE.md",
+                    "resource": [{"name": "base", "path": ["resource/base"]}]
+                }),
+                "en_us",
+            )
+            .expect("an interface with escaping about references should load");
+
+        assert_eq!(project.metadata.contact.as_deref(), Some("../outside.md"));
+        assert_eq!(project.metadata.license.as_deref(), Some("/etc/LICENSE.md"));
+
+        fs::remove_dir_all(&root).ok();
     }
 }

@@ -108,6 +108,10 @@ export type OptionDefinition =
 export interface ProjectMetadata {
   title?: string;
   github?: string;
+  /** Contact body, materialized from a project file by the loader when the interface references one. */
+  contact?: string;
+  /** License body, materialized from a project file by the loader when the interface references one. */
+  license?: string;
   welcome: string[];
   welcomeFingerprint?: string;
   welcomeErrors?: string[];

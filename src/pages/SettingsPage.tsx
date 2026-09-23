@@ -1,5 +1,6 @@
 import { Download, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
 import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -285,6 +286,7 @@ export function SettingsPage() {
           project={project}
           versions={snapshot?.versions}
           footer={t("aboutSummaryHint")}
+          actions={<AboutLinks metadata={project.metadata} />}
         />
       )}
     </div>

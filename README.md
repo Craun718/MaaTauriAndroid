@@ -104,4 +104,4 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## 致谢
 
-MaaTauriAndroid 使用了 [MaaFramework](https://github.com/MaaXYZ/MaaFramework)、[Tauri](https://github.com/tauri-apps/tauri)、[Shizuku](https://github.com/RikkaApps/Shizuku) 等开源项目。`vendor/maa/` 内的 MaaFramework 二进制保留其原始许可（[vendor/maa/MAA-LICENSE.md](vendor/maa/MAA-LICENSE.md)）；`resource/` 下的资源项目归各自上游所有。
+MaaTauriAndroid 使用了 [MaaFramework](https://github.com/MaaXYZ/MaaFramework)、[Tauri](https://github.com/tauri-apps/tauri)、[Shizuku](https://github.com/RikkaApps/Shizuku) 等开源项目；资源接入与 agent runtime 构建的思路参考了 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)。`vendor/maa/` 内的 MaaFramework 二进制保留其原始许可（[vendor/maa/MAA-LICENSE.md](vendor/maa/MAA-LICENSE.md)）；`resource/` 下的资源项目归各自上游所有。

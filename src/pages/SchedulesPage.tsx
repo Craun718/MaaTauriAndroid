@@ -1,11 +1,11 @@
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDateTime } from "../components/ScheduleEntryCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { DateTimePickerField } from "../components/ui/DateTimePicker";
 import { Select } from "../components/ui/Select";
 import { TextField } from "../components/ui/TextField";
-import { TimePickerField } from "../components/ui/TimePicker";
+import { TimePickerDialog } from "../components/ui/TimePicker";
 import {
   deleteScheduleRule,
   getScheduleStatus,
@@ -53,6 +53,16 @@ function currentTimeValue(date = new Date()): string {
   return `${hour}:${minute}`;
 }
 
+interface TimeEditorState {
+  hour: number;
+  minute: number;
+  originalTime?: string;
+}
+
+function timeValue({ hour, minute }: TimeEditorState): string {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 export function SchedulesPage() {
   const { t, language } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
@@ -60,7 +70,7 @@ export function SchedulesPage() {
   const [rules, setRules] = useState<ScheduleRuleStatus[]>([]);
   const [status, setStatus] = useState<ScheduleSummary>();
   const [draft, setDraft] = useState<ScheduleRule>();
-  const [timeInput, setTimeInput] = useState(() => currentTimeValue());
+  const [timeEditor, setTimeEditor] = useState<TimeEditorState>();
 
   const reload = useCallback(async () => {
     const [nextRules, nextStatus] = await Promise.all([
@@ -88,7 +98,6 @@ export function SchedulesPage() {
   );
 
   function startNewRule() {
-    setTimeInput(currentTimeValue());
     setDraft(
       createScheduleRule(
         snapshot?.configuration.activeRunConfigurationId ??
@@ -145,6 +154,41 @@ export function SchedulesPage() {
           : draft.trigger.days.filter((value) => value !== day),
       },
     });
+  }
+
+  function openAddTime() {
+    const now = currentTimeValue();
+    setTimeEditor({
+      hour: Number(now.slice(0, 2)),
+      minute: Number(now.slice(3, 5)),
+    });
+  }
+
+  function openEditTime(time: string) {
+    setTimeEditor({
+      hour: Number(time.slice(0, 2)),
+      minute: Number(time.slice(3, 5)),
+      originalTime: time,
+    });
+  }
+
+  function confirmTime() {
+    if (!draft || draft.trigger.kind !== "fixedTime" || !timeEditor) return;
+    const nextTime = timeValue(timeEditor);
+    const { originalTime } = timeEditor;
+    const times = originalTime
+      ? draft.trigger.times.map((time) =>
+          time === originalTime ? nextTime : time,
+        )
+      : [...draft.trigger.times, nextTime];
+    setDraft({
+      ...draft,
+      trigger: {
+        ...draft.trigger,
+        times: [...new Set(times)].sort(),
+      },
+    });
+    setTimeEditor(undefined);
   }
 
   return (
@@ -239,66 +283,60 @@ export function SchedulesPage() {
                   </Checkbox>
                 ))}
               </div>
-              <div className="rounded-lg border border-line bg-surface-muted p-2">
-                <div className="flex items-end gap-2">
-                  <TimePickerField
-                    label={t("scheduleTime")}
-                    value={timeInput}
-                    onValueChange={setTimeInput}
-                    className="min-w-0 flex-1"
-                  />
-                  <button
-                    type="button"
-                    aria-label={t("scheduleAddTime")}
-                    title={t("scheduleAddTime")}
-                    disabled={
-                      draft.trigger.kind === "fixedTime" &&
-                      draft.trigger.times.includes(timeInput)
-                    }
-                    className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md bg-accent text-primary-content transition-colors hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
-                    onClick={() => {
-                      if (draft.trigger.kind !== "fixedTime") return;
-                      const trigger = draft.trigger;
-                      setDraft({
-                        ...draft,
-                        trigger: {
-                          ...trigger,
-                          times: [
-                            ...new Set([...trigger.times, timeInput]),
-                          ].sort(),
-                        },
-                      });
-                    }}
-                  >
-                    <Plus size="1.125rem" />
-                  </button>
-                </div>
+              <div className="space-y-2">
+                <span className="block text-sm text-base-content/60">
+                  {t("scheduleTime")}
+                </span>
+                <button
+                  type="button"
+                  onClick={openAddTime}
+                  className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <Plus size="0.875rem" />
+                  {t("scheduleAddTime")}
+                </button>
                 {draft.trigger.times.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="overflow-hidden rounded-lg border border-line">
                     {draft.trigger.times.map((time) => (
-                      <button
+                      <div
                         key={time}
-                        type="button"
-                        aria-label={`${t("scheduleDelete")} ${time}`}
-                        title={`${t("scheduleDelete")} ${time}`}
-                        className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-2.5 text-sm font-medium tabular-nums text-primary transition-colors hover:bg-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        onClick={() => {
-                          if (draft.trigger.kind !== "fixedTime") return;
-                          const trigger = draft.trigger;
-                          setDraft({
-                            ...draft,
-                            trigger: {
-                              ...trigger,
-                              times: trigger.times.filter(
-                                (value) => value !== time,
-                              ),
-                            },
-                          });
-                        }}
+                        className="flex h-11 items-center gap-2 border-t border-line px-2 first:border-t-0"
                       >
-                        {time}
-                        <X size="0.875rem" />
-                      </button>
+                        <span className="px-1 font-medium tabular-nums">
+                          {time}
+                        </span>
+                        <span className="ml-auto flex items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label={`${t("scheduleEdit")} ${time}`}
+                            title={`${t("scheduleEdit")} ${time}`}
+                            onClick={() => openEditTime(time)}
+                            className="flex size-8 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            <Pencil size="0.875rem" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`${t("scheduleDelete")} ${time}`}
+                            title={`${t("scheduleDelete")} ${time}`}
+                            onClick={() => {
+                              if (draft.trigger.kind !== "fixedTime") return;
+                              setDraft({
+                                ...draft,
+                                trigger: {
+                                  ...draft.trigger,
+                                  times: draft.trigger.times.filter(
+                                    (value) => value !== time,
+                                  ),
+                                },
+                              });
+                            }}
+                            className="flex size-8 cursor-pointer items-center justify-center rounded-md text-error transition-colors hover:bg-error/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            <Trash2 size="0.875rem" />
+                          </button>
+                        </span>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -432,6 +470,19 @@ export function SchedulesPage() {
             </article>
           ))}
         </div>
+      )}
+
+      {timeEditor && (
+        <TimePickerDialog
+          value={timeValue(timeEditor)}
+          title={
+            timeEditor.originalTime
+              ? t("scheduleEditTime")
+              : t("scheduleAddTime")
+          }
+          onConfirm={confirmTime}
+          onClose={() => setTimeEditor(undefined)}
+        />
       )}
     </div>
   );

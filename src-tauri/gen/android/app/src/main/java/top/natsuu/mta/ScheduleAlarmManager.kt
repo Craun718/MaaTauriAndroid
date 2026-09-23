@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import java.time.Instant
 import java.io.File
 import org.json.JSONArray
@@ -25,6 +26,8 @@ data class ScheduledTrigger(
 }
 
 object ScheduleAlarmManager {
+    private const val TAG = "TTFlowSchedule"
+
     fun schedulesFromJson(json: String?, now: Instant = Instant.now()): List<ScheduledTrigger> {
         if (json.isNullOrBlank()) return emptyList()
         return runCatching {
@@ -70,17 +73,23 @@ object ScheduleAlarmManager {
         val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             alarmManager.canScheduleExactAlarms()
         if (canUseExact) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                trigger.scheduledAtMs,
-                operation,
-            )
-        } else {
-            alarmManager.setAlarmClock(
-                AlarmManager.AlarmClockInfo(trigger.scheduledAtMs, null),
-                operation,
-            )
+            try {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    trigger.scheduledAtMs,
+                    operation,
+                )
+                return
+            } catch (error: SecurityException) {
+                // Some OEM builds answer the capability check affirmatively and
+                // still reject the exact set; the alarm-clock form needs no grant.
+                Log.w(TAG, "Exact alarm rejected; falling back to the alarm clock", error)
+            }
         }
+        alarmManager.setAlarmClock(
+            AlarmManager.AlarmClockInfo(trigger.scheduledAtMs, null),
+            operation,
+        )
     }
 
     private fun operation(context: Context, ruleId: String): PendingIntent {

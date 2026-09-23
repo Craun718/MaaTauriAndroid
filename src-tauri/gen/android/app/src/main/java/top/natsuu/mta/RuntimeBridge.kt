@@ -145,6 +145,8 @@ object RuntimeBridge {
         val context = agentContext ?: return false
         return runCatching {
             ScheduleAlarmManager.sync(context)
+        }.onFailure { error ->
+            android.util.Log.e("MaaTauriAndroidControl", "Schedule alarm sync failed", error)
         }.isSuccess
     }
 

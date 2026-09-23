@@ -81,7 +81,7 @@ pub async fn latest_release(
     current_version: &str,
 ) -> Result<Option<GithubRelease>, UpdateError> {
     let releases = fetch_releases(client, repo).await?;
-    let current = Version::parse(current_version).ok();
+    let current = super::semver::parse(current_version).ok();
     let mut best: Option<(Version, &Release)> = None;
     for release in &releases {
         if release.draft.unwrap_or(false) {
@@ -90,7 +90,8 @@ pub async fn latest_release(
         if channel != "beta" && release.prerelease.unwrap_or(false) {
             continue;
         }
-        let Ok(version) = Version::parse(release.tag_name.as_deref().unwrap_or_default()) else {
+        let Ok(version) = super::semver::parse(release.tag_name.as_deref().unwrap_or_default())
+        else {
             continue;
         };
         if let Some(current) = &current {

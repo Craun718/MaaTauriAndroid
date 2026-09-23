@@ -257,19 +257,19 @@ mod watcher {
         source: FpsSource,
         advice: Advice,
     ) {
-        let source = match source {
+        let source_description = match source {
             FpsSource::TaskCallback => "the system frame-rate callback",
             FpsSource::FrameCount => "the approximate frame counter",
         };
         let message = match advice.level {
             AdviceLevel::Low => format!(
                 "Low game frame rate: median {:.0} FPS over the last {WINDOW_SIZE} seconds \
-                 (threshold {LOW_FPS:.0} FPS), reported by {source}.",
+                 (threshold {LOW_FPS:.0} FPS), reported by {source_description}.",
                 advice.median_fps,
             ),
             AdviceLevel::Degraded => format!(
                 "Degraded game frame rate: median {:.0} FPS over the last {WINDOW_SIZE} seconds \
-                 (threshold {DEGRADED_FPS:.0} FPS), reported by {source}.",
+                 (threshold {DEGRADED_FPS:.0} FPS), reported by {source_description}.",
                 advice.median_fps,
             ),
         };

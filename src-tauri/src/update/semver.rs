@@ -6,6 +6,35 @@
 
 pub use node_semver::Version;
 
+/// Parses loose release versions after normalizing whitespace, a leading
+/// `v`, and release segments omitted by npm-style tags.
+pub fn parse(input: &str) -> Result<Version, node_semver::SemverError> {
+    let normalized = input
+        .trim()
+        .strip_prefix(['v', 'V'])
+        .unwrap_or(input.trim());
+
+    let (release_and_prerelease, build) = normalized.split_once('+').unwrap_or((normalized, ""));
+    let (release, prerelease) = release_and_prerelease
+        .split_once('-')
+        .unwrap_or((release_and_prerelease, ""));
+    let padded_release = match release.split('.').count() {
+        1 => format!("{release}.0.0"),
+        2 => format!("{release}.0"),
+        _ => release.to_owned(),
+    };
+
+    let version = match prerelease {
+        "" => padded_release,
+        prerelease => format!("{padded_release}-{prerelease}"),
+    };
+    let version = match build {
+        "" => version,
+        build => format!("{version}+{build}"),
+    };
+    Version::parse(&version)
+}
+
 /// Checks a comma-separated constraint list such as `">=1.2.0, <2.0.0"`.
 ///
 /// The explicit `==` spelling is retained for compatibility with tags emitted
@@ -27,26 +56,28 @@ mod tests {
     use super::*;
 
     fn newer(left: &str, right: &str) -> bool {
-        let left = Version::parse(left).expect("left parses");
-        let right = Version::parse(right).expect("right parses");
+        let left = parse(left).expect("left parses");
+        let right = parse(right).expect("right parses");
         left > right
     }
 
     #[test]
     fn parses_loosely_spelled_versions() {
-        assert!(Version::parse(" v1.2 ").is_ok());
-        assert!(Version::parse("1.2.3-beta.1").is_ok());
+        assert!(parse(" v1.2 ").is_ok());
+        assert!(parse("1.2.3-beta.1").is_ok());
+        assert!(parse(" v1.2-beta.1 ").is_ok());
 
         // Build metadata is ignored by semver precedence.
-        assert_eq!(Version::parse("1.2.3+build.5"), Version::parse("1.2.3"));
+        assert_eq!(parse("1.2.3+build.5"), parse("1.2.3"));
+        assert_eq!(parse("v1.2+build.5"), parse("1.2.0"));
     }
 
     #[test]
     fn rejects_unparsable_versions() {
-        assert!(Version::parse("").is_err());
-        assert!(Version::parse("abc").is_err());
-        assert!(Version::parse("1.2.x").is_err());
-        assert!(Version::parse("v").is_err());
+        assert!(parse("").is_err());
+        assert!(parse("abc").is_err());
+        assert!(parse("1.2.x").is_err());
+        assert!(parse("v").is_err());
     }
 
     #[test]
@@ -70,7 +101,7 @@ mod tests {
 
     #[test]
     fn constraints_must_all_hold() {
-        let current = Version::parse("1.4.2").expect("parses");
+        let current = parse("1.4.2").expect("parses");
         assert!(allowed_for(&current, ">=1.2.0, <2.0.0"));
         assert!(!allowed_for(&current, ">=1.5.0, <2.0.0"));
         assert!(allowed_for(&current, "1.4.2"));

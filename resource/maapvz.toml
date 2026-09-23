@@ -1,0 +1,37 @@
+# MAAPVZ Project Interface profile.
+#
+# The upstream repository keeps interface.json in assets/ and the agent at the
+# repository root. scripts/prepare-maapvz-pi.sh first flattens them into
+# Android/pi-root/ and installs the OCR model at the path declared by the PI.
+
+pi_assets = "maapvz/Android/pi-root"
+
+resource_id = "maapvz"
+
+app_name = "MaaPVZ"
+
+maa_dir = "vendor/maa/android"
+
+# The interface stores "MIT" as prose rather than as a file reference, so the
+# upstream license must be included explicitly. The agent also reads its
+# coordinate table from assets/ without declaring that path in the protocol.
+pi_include = [
+    "LICENSE",
+    "assets/resource/coords.json",
+]
+
+[agent]
+timeout_ms = 15000
+
+[[agent.runtimes]]
+bundle = "maapvz-agent-runtime-arm64-v8a.zip"
+exec = "bin/python3"
+executables = ["bin/python3"]
+args = ["-u", "agent/main.py", "{identifier}"]
+working_dir = "{pi}"
+
+[agent.runtimes.env]
+PYTHONHOME = "{bundle}/prefix"
+PYTHONPATH = "{bundle}/site-packages/pure.zip:{bundle}/site-packages"
+LD_LIBRARY_PATH = "{bundle}/prefix/lib:{bundle}/site-packages/chaquopy/lib:{bundle}/lib/arm64-v8a:{nativeLib}"
+MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"

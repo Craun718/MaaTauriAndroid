@@ -26,8 +26,21 @@ case "${PROJECT}" in
     )
     REQUIREMENTS=(--require pillow==11.0.0)
     ;;
+  maapvz)
+    PROJECT_DIR="${REPO_ROOT}/resource/maapvz"
+    OUT_DIST="${REPO_ROOT}/resource/maapvz-agent-dist"
+    OUT_ZIP="${REPO_ROOT}/resource/maapvz-agent-runtime-${ABI}.zip"
+    EXCLUDES=(
+      --exclude pillow
+      --exclude win32-setctime
+      --exclude colorama
+      --exclude jeepney
+      --exclude onnxruntime
+    )
+    REQUIREMENTS=(--require pillow==11.0.0)
+    ;;
   *)
-    echo "usage: $0 [m9a|narutomobile]" >&2
+    echo "usage: $0 [m9a|narutomobile|maapvz]" >&2
     exit 2
     ;;
 esac

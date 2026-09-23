@@ -32,7 +32,7 @@ object PiLauncherIcon {
             localize(interfaceFile, document, declared.substring(1)) ?: return null
         } else {
             declared
-        }
+        }.replace('\\', '/')
         val root = interfaceFile.canonicalFile.parentFile
         val source = File(root, path).canonicalFile
         require(source.path.startsWith("${root.path}${File.separator}")) {

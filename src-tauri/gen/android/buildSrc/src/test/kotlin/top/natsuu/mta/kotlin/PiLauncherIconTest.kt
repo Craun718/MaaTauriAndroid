@@ -42,6 +42,14 @@ class PiLauncherIconTest {
     }
 
     @Test
+    fun resolvesWindowsStyleIconPathsRelativeToTheInterface() {
+        val interfaceFile = writeInterface("""{"icon": ".\\brand\\logo.png"}""")
+        val icon = writeIcon(interfaceFile.parentFile.resolve("brand"))
+
+        assertEquals(icon.canonicalFile, PiLauncherIcon.resolve(interfaceFile)?.canonicalFile)
+    }
+
+    @Test
     fun resolvesIconKeysThroughTheDefaultLanguageLocale() {
         val interfaceFile = writeInterface(
             """

@@ -15,6 +15,10 @@ echo
 "${SCRIPT_DIR}/prepare-narutomobile-pi.sh"
 echo
 "${SCRIPT_DIR}/build-agent-runtime.sh" narutomobile
+echo
+"${SCRIPT_DIR}/prepare-maapvz-pi.sh"
+echo
+"${SCRIPT_DIR}/build-agent-runtime.sh" maapvz
 
 echo
 echo "==> Setup complete. Build the APK with:"

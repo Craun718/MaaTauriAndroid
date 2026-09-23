@@ -6,3 +6,7 @@
 	path = resource/narutomobile
 	url = https://github.com/duorua/narutomobile.git
 	branch = main
+[submodule "resource/maapvz"]
+	path = resource/maapvz
+	url = https://github.com/Maa-Assistant-PVZ-The-best/MAAPVZ.git
+	branch = main

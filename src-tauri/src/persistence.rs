@@ -1,3 +1,4 @@
+use crate::atomic_io::write_atomic;
 use crate::domain::types::{Project, UserConfiguration};
 use crate::secrets::{
     decrypt_configuration_with_manifest, encrypt_configuration_with_manifest, SecretError,
@@ -20,11 +21,6 @@ pub enum PersistenceError {
     },
     #[error("could not write {path}: {source}")]
     Write {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-    #[error("could not replace {path}: {source}")]
-    Replace {
         path: PathBuf,
         source: std::io::Error,
     },
@@ -99,7 +95,6 @@ impl UserConfigurationStore {
                 source,
             })?;
         }
-        let temporary = temporary_path(&self.path);
         let mut persisted_values = configuration.clone();
         let secret_manifest = encrypt_configuration_with_manifest(project, &mut persisted_values)?;
         let bytes = serde_json::to_vec_pretty(&PersistedConfiguration {
@@ -107,25 +102,12 @@ impl UserConfigurationStore {
             secret_manifest: Some(secret_manifest),
         })
         .expect("UserConfiguration must be JSON serializable");
-        fs::write(&temporary, bytes).map_err(|source| PersistenceError::Write {
-            path: temporary.clone(),
-            source,
-        })?;
-        fs::rename(&temporary, &self.path).map_err(|source| PersistenceError::Replace {
+        write_atomic(&self.path, &bytes).map_err(|source| PersistenceError::Write {
             path: self.path.clone(),
             source,
         })?;
         Ok(())
     }
-}
-
-fn temporary_path(path: &Path) -> PathBuf {
-    let mut name = path
-        .file_name()
-        .map(|name| name.to_os_string())
-        .unwrap_or_default();
-    name.push(".tmp");
-    path.with_file_name(name)
 }
 
 #[cfg(test)]

@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::atomic_io::write_atomic;
+
 const TRIGGER_LOG_LIMIT: usize = 200;
 
 fn default_rule_id() -> String {
@@ -198,7 +200,8 @@ impl ScheduleStore {
         let mut document = self.read_trigger_log()?;
         document.entries.insert(0, entry);
         document.entries.truncate(TRIGGER_LOG_LIMIT);
-        write_atomic(&self.log_path, &serde_json::to_vec_pretty(&document)?)
+        write_atomic(&self.log_path, &serde_json::to_vec_pretty(&document)?)?;
+        Ok(())
     }
 
     pub fn is_duplicate(
@@ -228,7 +231,8 @@ impl ScheduleStore {
     }
 
     fn write_rules(&self, document: &ScheduleDocument) -> Result<(), ScheduleError> {
-        write_atomic(&self.rules_path, &serde_json::to_vec_pretty(document)?)
+        write_atomic(&self.rules_path, &serde_json::to_vec_pretty(document)?)?;
+        Ok(())
     }
 }
 
@@ -238,16 +242,6 @@ fn read_document<T: for<'de> Deserialize<'de> + Default>(path: &Path) -> Result<
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(T::default()),
         Err(error) => Err(error.into()),
     }
-}
-
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), ScheduleError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let temporary = path.with_extension("tmp");
-    fs::write(&temporary, bytes)?;
-    fs::rename(&temporary, path)?;
-    Ok(())
 }
 
 pub fn next_trigger_epoch_ms(rule: &ScheduleRule, after: DateTime<Local>) -> Option<i64> {

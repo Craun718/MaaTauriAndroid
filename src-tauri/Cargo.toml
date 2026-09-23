@@ -28,12 +28,15 @@ serde_json = "1"
 serde_yaml = "0.9"
 chrono = "0.4"
 thiserror = "2"
+node-semver = "2.2"
+zip = { version = "9.0.0-pre3", default-features = false }
 tokio = { version = "1", features = ["fs", "macros", "process", "rt-multi-thread", "sync", "time"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 regex = "1"
 walkdir = "2"
 sha2 = "0.10"
 hex = "0.4"
+tempfile = "3"
 # crates.io has no maa-framework-sys 5.13.0 release yet; this rev is the
 # official MaaFramework 5.13.0 binding (maa-framework 1.23.0, sys 5.13.0).
 # Move back to a crates.io version once it is published.
@@ -44,10 +47,6 @@ url = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
-
-[dev-dependencies]
-tempfile = "3"
-
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

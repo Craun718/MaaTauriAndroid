@@ -6,6 +6,8 @@
 
 use std::path::Path;
 
+use crate::atomic_io::write_atomic;
+
 use serde::{Deserialize, Serialize};
 
 pub const PREFS_FILE: &str = "update-prefs.json";
@@ -75,12 +77,8 @@ impl UpdatePrefs {
     /// Saves atomically enough for a two-line JSON file: write beside, rename.
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
-        let staging = dir.join(format!("{PREFS_FILE}.tmp"));
-        std::fs::write(
-            &staging,
-            serde_json::to_string(self).expect("prefs must serialize"),
-        )?;
-        std::fs::rename(&staging, dir.join(PREFS_FILE))
+        let bytes = serde_json::to_vec(self).expect("prefs must serialize");
+        write_atomic(&dir.join(PREFS_FILE), &bytes)
     }
 }
 

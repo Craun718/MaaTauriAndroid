@@ -464,7 +464,7 @@ async fn check_mirror_chyan(
     channel: UpdateChannel,
 ) -> Result<Option<CheckedUpdate>, UpdateError> {
     let release = mirror_chyan::check(client.as_ref(), rid, channel.as_str(), APP_VERSION).await?;
-    let Some(version) = Version::parse(&release.version) else {
+    let Ok(version) = Version::parse(&release.version) else {
         return Err(UpdateError::new(
             UpdateFailure::InvalidResponse,
             format!(
@@ -473,10 +473,8 @@ async fn check_mirror_chyan(
             ),
         ));
     };
-    let current = Version::parse(APP_VERSION);
-    let newer = current
-        .as_ref()
-        .is_none_or(|current| version.is_newer_than(current));
+    let current = Version::parse(APP_VERSION).ok();
+    let newer = current.as_ref().is_none_or(|current| version > *current);
     if !newer {
         return Ok(None);
     }

@@ -1,4 +1,5 @@
 mod agent;
+mod atomic_io;
 mod diagnostics;
 mod domain;
 mod focus;

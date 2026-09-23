@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs::{self, File},
-    io::{self, Read, Seek, Write},
+    io::{self, Read, Write},
 };
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter as ZipFileWriter};
 
 pub const MANIFEST_FILE: &str = "manifest.json";
 pub const CHECKSUMS_FILE: &str = "checksums.sha256";
@@ -1077,16 +1078,10 @@ fn read_parcel_file_descriptor<'local>(
 }
 
 struct ZipWriter {
-    file: File,
-    offset: u64,
-    central: Vec<u8>,
-    entries: u16,
-}
-
-struct ZipEntry {
-    crc32: u32,
-    size: u64,
-    offset: u64,
+    writer: ZipFileWriter<File>,
+    local_offset: u64,
+    central_size: u64,
+    entries: u64,
 }
 
 impl ZipWriter {
@@ -1096,9 +1091,9 @@ impl ZipWriter {
             source,
         })?;
         Ok(Self {
-            file,
-            offset: 0,
-            central: Vec::new(),
+            writer: ZipFileWriter::new(file),
+            local_offset: 0,
+            central_size: 0,
             entries: 0,
         })
     }
@@ -1110,72 +1105,29 @@ impl ZipWriter {
                 source,
             })?
             .len();
-        if size > u32::MAX as u64 || self.offset > u32::MAX as u64 {
+        if size > u32::MAX as u64 || self.local_offset > u32::MAX as u64 {
             return Err(DiagnosticError::TooLarge { path });
         }
+        let name_length = name.as_bytes().len() as u64;
         let mut source = File::open(&path).map_err(|source| DiagnosticError::Read {
             path: path.clone(),
             source,
         })?;
-        let offset = self.offset;
-        let mut crc = Crc32::new();
-        let local_name = name.as_bytes();
-        let header_size = 30 + local_name.len();
-        self.file
-            .seek(io::SeekFrom::Start(offset))
-            .and_then(|_| {
-                self.file.write_all(&[
-                    0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0, 0,
-                ])
-            })
-            .and_then(|_| {
-                self.file.write_all(&[
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    (size & 0xff) as u8,
-                    ((size >> 8) & 0xff) as u8,
-                    ((size >> 16) & 0xff) as u8,
-                    ((size >> 24) & 0xff) as u8,
-                ])
-            })
-            .and_then(|_| {
-                self.file
-                    .write_all(&(local_name.len() as u16).to_le_bytes())
-            })
-            .and_then(|_| self.file.write_all(&[0, 0]))
-            .and_then(|_| self.file.write_all(local_name))
+        self.writer
+            .start_file(
+                name,
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored),
+            )
             .map_err(|source| DiagnosticError::Write {
+                path: path.clone(),
+                source: io::Error::other(source),
+            })?;
+
+        let copied =
+            io::copy(&mut source, &mut self.writer).map_err(|source| DiagnosticError::Write {
                 path: path.clone(),
                 source,
             })?;
-
-        let mut copied = 0_u64;
-        let mut buffer = [0_u8; 64 * 1024];
-        loop {
-            let count = source
-                .read(&mut buffer)
-                .map_err(|source| DiagnosticError::Read {
-                    path: path.clone(),
-                    source,
-                })?;
-            if count == 0 {
-                break;
-            }
-            crc.update(&buffer[..count]);
-            self.file
-                .write_all(&buffer[..count])
-                .map_err(|source| DiagnosticError::Write {
-                    path: path.clone(),
-                    source,
-                })?;
-            copied += count as u64;
-        }
         if copied != size {
             return Err(DiagnosticError::Read {
                 path,
@@ -1183,102 +1135,32 @@ impl ZipWriter {
             });
         }
 
-        self.offset += header_size as u64 + size;
-        let entry = ZipEntry {
-            crc32: crc.finish(),
-            size,
-            offset,
-        };
-        self.central.extend_from_slice(&[
-            0x50, 0x4b, 0x01, 0x02, // signature
-            0x14, 0x00, // version made by
-            0x08, 0x00, // version needed
-            0x00, 0x00, // flags
-            0x00, 0x00, // method: stored
-            0x00, 0x00, 0x00, 0x00, // modification time and date
-        ]);
-        self.central.extend_from_slice(&entry.crc32.to_le_bytes());
-        self.central
-            .extend_from_slice(&(entry.size as u32).to_le_bytes());
-        self.central
-            .extend_from_slice(&(entry.size as u32).to_le_bytes());
-        self.central
-            .extend_from_slice(&(name.len() as u16).to_le_bytes());
-        self.central.extend_from_slice(&[
-            0, 0, // extra length
-            0, 0, // comment length
-            0, 0, // disk number start
-            0, 0, // internal attributes
-            0, 0, 0, 0, // external attributes
-        ]);
-        self.central
-            .extend_from_slice(&(entry.offset as u32).to_le_bytes());
-        self.central.extend_from_slice(name.as_bytes());
-        self.entries = self.entries.saturating_add(1);
-        Ok(())
-    }
-
-    fn finish(mut self) -> Result<(), DiagnosticError> {
-        let central_offset = self.offset;
-        let central_size = self.central.len() as u64;
-        if central_offset + central_size > u32::MAX as u64 {
+        self.entries += 1;
+        self.local_offset += 30 + name_length + copied;
+        self.central_size += 46 + name_length;
+        if self.entries > u16::MAX as u64 || self.local_offset + self.central_size > u32::MAX as u64
+        {
             return Err(DiagnosticError::TooLarge {
                 path: PathBuf::from("diagnostics archive"),
             });
         }
-        self.file
-            .seek(io::SeekFrom::Start(central_offset))
-            .and_then(|_| self.file.write_all(&self.central))
-            .and_then(|_| self.file.write_all(&[0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0]))
-            .and_then(|_| self.file.write_all(&self.entries.to_le_bytes()))
-            .and_then(|_| self.file.write_all(&self.entries.to_le_bytes()))
-            .and_then(|_| self.file.write_all(&(central_size as u32).to_le_bytes()))
-            .and_then(|_| self.file.write_all(&(central_offset as u32).to_le_bytes()))
-            .and_then(|_| self.file.write_all(&[0, 0]))
-            .and_then(|_| self.file.flush())
+        Ok(())
+    }
+
+    fn finish(self) -> Result<(), DiagnosticError> {
+        if self.local_offset + self.central_size > u32::MAX as u64 {
+            return Err(DiagnosticError::TooLarge {
+                path: PathBuf::from("diagnostics archive"),
+            });
+        }
+        self.writer
+            .finish()
             .map_err(|source| DiagnosticError::Write {
                 path: PathBuf::from("diagnostics archive"),
-                source,
+                source: io::Error::other(source),
             })?;
         Ok(())
     }
-}
-
-struct Crc32(u32);
-
-impl Crc32 {
-    fn new() -> Self {
-        Self(0xffff_ffff)
-    }
-
-    fn update(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            self.0 = crc_table()[((self.0 ^ u32::from(*byte)) & 0xff) as usize] ^ (self.0 >> 8);
-        }
-    }
-
-    fn finish(self) -> u32 {
-        !self.0
-    }
-}
-
-fn crc_table() -> &'static [u32; 256] {
-    static TABLE: std::sync::OnceLock<[u32; 256]> = std::sync::OnceLock::new();
-    TABLE.get_or_init(|| {
-        let mut table = [0_u32; 256];
-        for (index, entry) in table.iter_mut().enumerate() {
-            let mut value = index as u32;
-            for _ in 0..8 {
-                value = if value & 1 != 0 {
-                    0xedb8_8320 ^ (value >> 1)
-                } else {
-                    value >> 1
-                };
-            }
-            *entry = value;
-        }
-        table
-    })
 }
 
 #[cfg(test)]

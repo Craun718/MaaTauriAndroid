@@ -16,6 +16,7 @@ import { useNotificationStore } from "../src/store/notificationStore";
 const getPrivilegedStatus = vi.fn();
 const saveConfiguration = vi.fn();
 const clearDiagnosticData = vi.fn();
+const restartApp = vi.fn();
 const resolveCurrent = vi.fn();
 const getRunStatus = vi.fn();
 const captureManualScreenshot = vi.fn();
@@ -25,6 +26,7 @@ vi.mock("../src/lib/api", () => ({
   saveConfiguration: (configuration: unknown) =>
     saveConfiguration(configuration),
   clearDiagnosticData: () => clearDiagnosticData(),
+  restartApp: () => restartApp(),
   resolveCurrent: () => resolveCurrent(),
   getRunStatus: () => getRunStatus(),
   captureManualScreenshot: (executionId?: string) =>
@@ -130,12 +132,15 @@ describe("diagnostic controls", () => {
       </>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete runs" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete logs" }));
 
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(
-      await screen.findByText("Deleted 3 run directories"),
+      await screen.findByText(
+        "Deleted 3 run directories and cleared log files",
+      ),
     ).toBeInTheDocument();
+    expect(restartApp).toHaveBeenCalledTimes(1);
   });
 
   it("captures and displays a manual screenshot", async () => {

@@ -19,6 +19,7 @@ vi.mock("../src/lib/api", () => ({
     saveConfiguration(configuration),
   loadProject: vi.fn(),
   clearDiagnosticData: vi.fn(),
+  restartApp: vi.fn(async () => undefined),
   getUpdateStatus: vi.fn(async () => undefined),
   checkForUpdate: vi.fn(async () => undefined),
   resolveUpdate: vi.fn(async () => undefined),
@@ -123,7 +124,7 @@ describe("language switching", () => {
       render(<SettingsPage />);
       expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "删除运行记录" }),
+        screen.getByRole("button", { name: "删除日志" }),
       ).toBeInTheDocument();
     });
   });

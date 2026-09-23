@@ -98,6 +98,12 @@ const en = {
     "The privileged control unit failed to start; check Shizuku and the app logs, then try again",
   diagnosticControlServiceStarting:
     "The privileged control unit is starting; try again shortly",
+  diagnosticRootAccessDenied: "Root access was denied or timed out",
+  diagnosticShizukuConnectFailed:
+    "The Shizuku control unit could not be connected",
+  diagnosticShizukuPermissionRequestFailed:
+    "The Shizuku permission request failed, was denied, or timed out",
+  diagnosticShizukuOpenFailed: "Shizuku is not installed or cannot be opened",
   diagnosticVirtualDisplayRejected:
     "The privileged control service rejected the virtual display",
   diagnosticVirtualDisplayInactive: "The virtual display is not active",
@@ -440,6 +446,14 @@ const zh: Record<MessageKey, string> = {
   diagnosticControlServiceFailedToStart:
     "特权控制单元启动失败；请检查 Shizuku 和应用日志后重试",
   diagnosticControlServiceStarting: "特权控制单元正在启动；请稍后重试",
+  diagnosticRootAccessDenied:
+    "root 授权被拒绝或已超时；请重试，并在 su 弹窗中选择允许",
+  diagnosticShizukuConnectFailed:
+    "Shizuku 控制服务连接失败；请确认 Shizuku 正在运行后重试",
+  diagnosticShizukuPermissionRequestFailed:
+    "Shizuku 授权请求失败、被拒绝或已超时；请在 Shizuku 的授权弹窗中允许本应用",
+  diagnosticShizukuOpenFailed:
+    "无法打开 Shizuku；请确认它已安装，且未被系统拦截",
   diagnosticVirtualDisplayRejected: "特权控制服务拒绝了虚拟屏请求",
   diagnosticVirtualDisplayInactive: "虚拟屏未启动",
   diagnosticVirtualDisplayBackRejected: "Android 拒绝了虚拟屏返回键注入",
@@ -590,8 +604,9 @@ export interface Translation {
 
 /**
  * Backend diagnostics arrive as fixed English strings. The known run-start
- * failures map onto catalog keys so notifications can follow the interface
- * language; anything unknown is shown as the original backend text.
+ * and privileged-action failures map onto catalog keys so notifications can
+ * follow the interface language; anything unknown is shown as the original
+ * backend text.
  */
 const diagnosticKeys: Record<string, MessageKey> = {
   "Shizuku is unavailable; install or start Shizuku, then try again":
@@ -604,6 +619,12 @@ const diagnosticKeys: Record<string, MessageKey> = {
     "diagnosticControlServiceFailedToStart",
   "The privileged control unit is starting; try again shortly":
     "diagnosticControlServiceStarting",
+  "Root access was denied or timed out": "diagnosticRootAccessDenied",
+  "The Shizuku control unit could not be connected":
+    "diagnosticShizukuConnectFailed",
+  "The Shizuku permission request failed, was denied, or timed out":
+    "diagnosticShizukuPermissionRequestFailed",
+  "Shizuku is not installed or cannot be opened": "diagnosticShizukuOpenFailed",
   "The privileged control service rejected the virtual display":
     "diagnosticVirtualDisplayRejected",
   "The virtual display is not active": "diagnosticVirtualDisplayInactive",

@@ -14,7 +14,7 @@ import {
   setPrivilegedBackend,
 } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
-import { useTranslation } from "../lib/i18n";
+import { localizeDiagnostic, useTranslation } from "../lib/i18n";
 import type { PrivilegedBackend, PrivilegedStatus } from "../lib/types";
 import { useNotificationStore } from "../store/notificationStore";
 import { Select } from "./ui/Select";
@@ -87,7 +87,7 @@ export function PrivilegeStatusCard({
   title: MessageKey;
   compact?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
   const backendLabelId = useId();
   const [status, setStatus] = useState<PrivilegedStatus>();
@@ -153,9 +153,13 @@ export function PrivilegeStatusCard({
         }
       }
     } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), {
-        tone: "error",
-      });
+      notify(
+        localizeDiagnostic(
+          error instanceof Error ? error.message : String(error),
+          language,
+        ),
+        { tone: "error" },
+      );
     } finally {
       setPendingAction(undefined);
     }
@@ -172,9 +176,13 @@ export function PrivilegeStatusCard({
       await setPrivilegedBackend(backend);
       await refreshStatus();
     } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), {
-        tone: "error",
-      });
+      notify(
+        localizeDiagnostic(
+          error instanceof Error ? error.message : String(error),
+          language,
+        ),
+        { tone: "error" },
+      );
     } finally {
       setBackendOverride(undefined);
       setPendingAction(undefined);

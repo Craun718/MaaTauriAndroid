@@ -86,6 +86,32 @@ describe("localizeDiagnostic", () => {
     ).toBe("特权控制服务拒绝了虚拟屏请求");
   });
 
+  it("translates the privileged backend action failures", () => {
+    expect(
+      localizeDiagnostic("Root access was denied or timed out", "zh"),
+    ).toBe("root 授权被拒绝或已超时；请重试，并在 su 弹窗中选择允许");
+    expect(
+      localizeDiagnostic("Root access was denied or timed out", "en"),
+    ).toBe("Root access was denied or timed out");
+    expect(
+      localizeDiagnostic(
+        "The Shizuku control unit could not be connected",
+        "zh",
+      ),
+    ).toBe("Shizuku 控制服务连接失败；请确认 Shizuku 正在运行后重试");
+    expect(
+      localizeDiagnostic(
+        "The Shizuku permission request failed, was denied, or timed out",
+        "zh",
+      ),
+    ).toBe(
+      "Shizuku 授权请求失败、被拒绝或已超时；请在 Shizuku 的授权弹窗中允许本应用",
+    );
+    expect(
+      localizeDiagnostic("Shizuku is not installed or cannot be opened", "zh"),
+    ).toBe("无法打开 Shizuku；请确认它已安装，且未被系统拦截");
+  });
+
   it("passes unknown backend text through unchanged", () => {
     expect(localizeDiagnostic("Maa task Sugar failed: timeout", "zh")).toBe(
       "Maa task Sugar failed: timeout",

@@ -99,12 +99,15 @@ def main() -> int:
         if child.is_dir():
             copy_tree(child, target)
         else:
-            if child.name == "interface.json":
-                strip_jsonc_comments(child, target)
-            else:
-                shutil.copy2(child, target)
+            shutil.copy2(child, target)
 
     copy_tree(AGENT, DEST / "agent")
+
+    # MAAPVZ ships JSONC throughout its interface and task resources, while Gradle's
+    # JsonSlurper only accepts strict JSON. Normalize the assembled tree after copying so
+    # both the resolver and the runtime receive valid JSON without modifying the submodule.
+    for json_file in DEST.rglob("*.json"):
+        strip_jsonc_comments(json_file, json_file)
 
     license_file = SOURCE / "LICENSE"
     if license_file.is_file():

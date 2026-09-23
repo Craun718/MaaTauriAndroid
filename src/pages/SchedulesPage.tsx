@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDateTime } from "../components/ScheduleEntryCard";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -47,6 +47,12 @@ const ERROR_KEYS: Record<string, MessageKey> = {
   intervalInvalid: "scheduleErrorIntervalInvalid",
 };
 
+function currentTimeValue(date = new Date()): string {
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
 export function SchedulesPage() {
   const { t, language } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
@@ -54,7 +60,7 @@ export function SchedulesPage() {
   const [rules, setRules] = useState<ScheduleRuleStatus[]>([]);
   const [status, setStatus] = useState<ScheduleSummary>();
   const [draft, setDraft] = useState<ScheduleRule>();
-  const [timeInput, setTimeInput] = useState("07:00");
+  const [timeInput, setTimeInput] = useState(() => currentTimeValue());
 
   const reload = useCallback(async () => {
     const [nextRules, nextStatus] = await Promise.all([
@@ -82,6 +88,7 @@ export function SchedulesPage() {
   );
 
   function startNewRule() {
+    setTimeInput(currentTimeValue());
     setDraft(
       createScheduleRule(
         snapshot?.configuration.activeRunConfigurationId ??
@@ -232,39 +239,23 @@ export function SchedulesPage() {
                   </Checkbox>
                 ))}
               </div>
-              <div className="flex items-end gap-2">
-                <TimePickerField
-                  label={t("scheduleTime")}
-                  value={timeInput}
-                  onValueChange={setTimeInput}
-                  className="flex-1"
-                />
-                <button
-                  type="button"
-                  className="h-10 rounded-md border border-line px-3 text-sm"
-                  onClick={() => {
-                    if (draft.trigger.kind !== "fixedTime") return;
-                    const trigger = draft.trigger;
-                    setDraft({
-                      ...draft,
-                      trigger: {
-                        ...trigger,
-                        times: [
-                          ...new Set([...trigger.times, timeInput]),
-                        ].sort(),
-                      },
-                    });
-                  }}
-                >
-                  {t("scheduleAddTime")}
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {draft.trigger.times.map((time) => (
+              <div className="rounded-lg border border-line bg-surface-muted p-2">
+                <div className="flex items-end gap-2">
+                  <TimePickerField
+                    label={t("scheduleTime")}
+                    value={timeInput}
+                    onValueChange={setTimeInput}
+                    className="min-w-0 flex-1"
+                  />
                   <button
-                    key={time}
                     type="button"
-                    className="rounded-full border border-line px-3 py-1 text-sm"
+                    aria-label={t("scheduleAddTime")}
+                    title={t("scheduleAddTime")}
+                    disabled={
+                      draft.trigger.kind === "fixedTime" &&
+                      draft.trigger.times.includes(timeInput)
+                    }
+                    className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md bg-accent text-primary-content transition-colors hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
                     onClick={() => {
                       if (draft.trigger.kind !== "fixedTime") return;
                       const trigger = draft.trigger;
@@ -272,16 +263,45 @@ export function SchedulesPage() {
                         ...draft,
                         trigger: {
                           ...trigger,
-                          times: trigger.times.filter(
-                            (value) => value !== time,
-                          ),
+                          times: [
+                            ...new Set([...trigger.times, timeInput]),
+                          ].sort(),
                         },
                       });
                     }}
                   >
-                    {time}
+                    <Plus size="1.125rem" />
                   </button>
-                ))}
+                </div>
+                {draft.trigger.times.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {draft.trigger.times.map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        aria-label={`${t("scheduleDelete")} ${time}`}
+                        title={`${t("scheduleDelete")} ${time}`}
+                        className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-2.5 text-sm font-medium tabular-nums text-primary transition-colors hover:bg-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        onClick={() => {
+                          if (draft.trigger.kind !== "fixedTime") return;
+                          const trigger = draft.trigger;
+                          setDraft({
+                            ...draft,
+                            trigger: {
+                              ...trigger,
+                              times: trigger.times.filter(
+                                (value) => value !== time,
+                              ),
+                            },
+                          });
+                        }}
+                      >
+                        {time}
+                        <X size="0.875rem" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

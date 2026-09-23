@@ -12,13 +12,18 @@ app_name = "MaaPVZ"
 
 maa_dir = "vendor/maa/android"
 
+# pi_include paths are relative to pi_assets, i.e. to the assembled pi-root, and a
+# listed path that does not exist fails the build (see src-tauri/profiles/README.md).
+#
 # The interface stores "MIT" as prose rather than as a file reference, so the
-# upstream license must be included explicitly. The agent also reads its
-# coordinate table from assets/ without declaring that path in the protocol.
-pi_include = [
-    "LICENSE",
-    "assets/resource/coords.json",
-]
+# upstream license file must be added explicitly.
+#
+# coords.json is deliberately absent: upstream keeps it at
+# agent/assets/resource/coords.json, and PiPackage packs the whole agent/ directory
+# because interface.json declares an agent. main.py chdirs to its own directory
+# ({pi}/agent) and loads "./assets/resource/coords.json" from there, so the derived
+# set already covers it and no pi_include entry is needed.
+pi_include = ["LICENSE"]
 
 [agent]
 timeout_ms = 15000

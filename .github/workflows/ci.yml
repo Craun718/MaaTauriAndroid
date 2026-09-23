@@ -227,7 +227,7 @@ jobs:
       - name: Build the arm64 debug APK
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android build --target aarch64 --apk --debug
+          pnpm tauri android build --target aarch64 --apk --debug --split-per-abi
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
@@ -321,7 +321,7 @@ jobs:
       - name: Build the arm64 debug APK
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android build --target aarch64 --apk --debug
+          pnpm tauri android build --target aarch64 --apk --debug --split-per-abi
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
@@ -415,7 +415,7 @@ jobs:
       - name: Build the arm64 debug APK
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android build --target aarch64 --apk --debug
+          pnpm tauri android build --target aarch64 --apk --debug --split-per-abi
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7

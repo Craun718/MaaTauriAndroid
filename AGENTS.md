@@ -41,7 +41,7 @@
 - `pnpm test` / `pnpm build`
 - `cargo test --manifest-path src-tauri/Cargo.toml`
 - `cargo check --manifest-path src-tauri/Cargo.toml --target aarch64-linux-android --features tauri/custom-protocol --lib`
-- `pnpm tauri android build --target aarch64 --apk`
+- `pnpm tauri android build --target aarch64 --apk --split-per-abi`
 
 ## CI 与验证
 

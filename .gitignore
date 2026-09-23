@@ -41,3 +41,6 @@ vendor/maa/android/
 
 # pnpm store
 .pnpm-store/
+
+# worktrees
+.worktrees

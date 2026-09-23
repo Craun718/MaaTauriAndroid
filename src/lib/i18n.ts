@@ -163,12 +163,8 @@ const en = {
   runBehavior: "Run behavior",
   forceStopTargetApp: "Force stop target app",
   closeTargetAppAfterRun: "Close target app after the run",
-  touchPreviewDescription:
-    "Show touch positions on the virtual display preview.",
   showTouchPositions: "Show click positions",
   showVirtualDisplayFps: "Show current frame rate",
-  fpsPreviewDescription:
-    "Show the game's current FPS on the virtual display preview. ",
   telemetry: "Anonymous telemetry",
   telemetryDescription:
     "Share crash and task statistics with the resource author. Debug builds never upload anything, and you can turn this off at any time.",
@@ -386,10 +382,8 @@ const zh: Record<MessageKey, string> = {
   runBehavior: "运行行为",
   forceStopTargetApp: "运行前强制停止目标应用",
   closeTargetAppAfterRun: "运行结束后关闭目标应用",
-  touchPreviewDescription: "在虚拟屏预览中显示点击的位置。",
   showTouchPositions: "显示点击位置",
   showVirtualDisplayFps: "显示当前帧率",
-  fpsPreviewDescription: "在虚拟屏预览上显示游戏当前帧率。",
   telemetry: "匿名遥测",
   telemetryDescription:
     "向资源作者共享崩溃与任务统计数据。调试构建不会上传任何内容，你也可以随时关闭。",

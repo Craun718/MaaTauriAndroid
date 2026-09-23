@@ -34,11 +34,6 @@ class ScheduleExecutionService : Service() {
         controlClient = ControlServiceClient(this)
         RuntimeBridge.attachControlClient(controlClient)
         RuntimeBridge.setPrivilegedBackend(controlClient.getSelectedPrivilegedBackend())
-        controlClient.connect { connected ->
-            if (!connected) {
-                RuntimeBridge.connectPrivilegedService(CONNECT_TIMEOUT_MS)
-            }
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -54,15 +49,19 @@ class ScheduleExecutionService : Service() {
             return START_NOT_STICKY
         }
         ScheduleAlarmManager.sync(this)
-        RuntimeBridge.startScheduledRun(ruleId, scheduledTimeMs)
-        if (RunForegroundService.isRunning) {
-            thread(name = "ttflow-schedule-lifecycle") {
+        thread(name = "ttflow-schedule-execution") {
+            if (!RuntimeBridge.connectPrivilegedService(CONNECT_TIMEOUT_MS)) {
+                android.util.Log.w(
+                    TAG,
+                    "The privileged control service was not connected before the scheduled run",
+                )
+            }
+            RuntimeBridge.startScheduledRun(ruleId, scheduledTimeMs)
+            if (RunForegroundService.isRunning) {
                 while (RunForegroundService.isRunning) {
                     Thread.sleep(1_000)
                 }
-                stopSelf()
             }
-        } else {
             stopSelf()
         }
         return START_NOT_STICKY

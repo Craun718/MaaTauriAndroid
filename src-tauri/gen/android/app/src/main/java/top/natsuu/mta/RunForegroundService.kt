@@ -135,12 +135,18 @@ class RunForegroundService : Service() {
         fun start(context: Context): Boolean {
             if (!SpecialUseFgsGate.canStart(context)) return false
             appContext = context.applicationContext
-            return runCatching {
+            // The submitter may be a scheduled run on another async worker while
+            // ScheduleExecutionService checks this flag from the main thread.
+            // Mark the run before Android asynchronously creates the service.
+            running.set(true)
+            val submitted = runCatching {
                 context.startForegroundService(Intent(context, RunForegroundService::class.java))
                 true
             }.onFailure { error ->
+                running.set(false)
                 android.util.Log.e(TAG, "Could not start the run foreground service", error)
             }.getOrDefault(false)
+            return submitted
         }
 
         fun stop(context: Context) {

@@ -14,10 +14,10 @@
 
 `android:targetSdkVersion` 是 36，从 Android 15 起平台强制 edge-to-edge，而在 Android 16 上 `R.attr#windowOptOutEdgeToEdgeEnforcement` 已废弃停用，**应用无法退出 edge-to-edge**。
 
-分工是明确的：**insets 由前端负责，原生不要碰。**
+分工是明确的：**insets 的布局避让由前端负责，原生不要 pad、不要消耗 inset。**
 
-- 原生：只调 `enableEdgeToEdge()`，WebView 铺满整块屏幕（含系统栏区域）。不要再给 WebView 或其容器施加 inset padding，也不要挂 `OnApplyWindowInsetsListener`——`ViewCompat.setOnApplyWindowInsetsListener` 会顶掉 WebView 自己的 `onApplyWindowInsets`，而 Chromium 依赖它跟踪软键盘并计算 `env(safe-area-inset-*)`。原生一旦把 inset pad 掉，Chromium 算出的 env 值就是 0，抽屉这类贴底覆盖层会悬在系统栏上方。`values/themes.xml` 的 `windowBackground` 指向 `@drawable/startup_backdrop`（surface 色打底、居中 `@mipmap/ic_launcher`，深浅色由 `@color/surface` 的 night 变体自动解析），在系统启动屏退场到 WebView 首帧之间续接图标；该 mipmap 由 `syncPiLauncherIcon` 在构建期用打包的 interface 图标覆盖，前端 dist 里的 `app-icon.png`（index.html 占位图与 favicon）也由同一任务刷新。
-- 前端：WebView 视口直达物理屏幕边缘，需要避开系统栏/手势条的 UI 一律用 `env(safe-area-inset-*)` 计算偏移。现有落点：`AppShell` 根 div（顶部状态栏 inset；**不要**放回滚动容器 `<main>` 上——overflow 裁剪发生在滚动容器的 padding box，padding-top 会让滚动内容滑进状态栏文字底下）与底部 `<nav>`、`BottomDrawer` 面板、`NotificationHost`、`TasksPage` 的 focus 提示（`<main>` 自身只保留底部滚动余量）。新增 fixed 覆盖层或全屏布局时要自己带上 env 偏移；Tailwind 任意值里 `calc` 的 `+` 两侧空格用 `_` 占位，例如 `pb-[calc(1.25rem_+_env(safe-area-inset-bottom))]`。左右两侧无需专门处理：壳层是 `max-w-md` 居中列，横屏时不会撞进刘海。
+- 原生：只调 `enableEdgeToEdge()`，WebView 铺满整块屏幕（含系统栏区域）。不要再给 WebView 或其容器施加 inset padding，也不要挂 `OnApplyWindowInsetsListener`——`ViewCompat.setOnApplyWindowInsetsListener` 会顶掉 WebView 自己的 `onApplyWindowInsets`，而 Chromium 依赖它跟踪软键盘并计算 `env(safe-area-inset-*)`。原生一旦把 inset pad 掉，Chromium 算出的 env 值就是 0，抽屉这类贴底覆盖层会悬在系统栏上方。原生唯一的职责是把数值报给前端：`RuntimeBridge.windowInsets()` 读 `systemBars ∪ displayCutout` 的 top/bottom（物理 px），经 `window_insets` IPC command 交给前端，仅此而已。`values/themes.xml` 的 `windowBackground` 指向 `@drawable/startup_backdrop`（surface 色打底、居中 `@mipmap/ic_launcher`，深浅色由 `@color/surface` 的 night 变体自动解析），在系统启动屏退场到 WebView 首帧之间续接图标；该 mipmap 由 `syncPiLauncherIcon` 在构建期用打包的 interface 图标覆盖，前端 dist 里的 `app-icon.png`（index.html 占位图与 favicon）也由同一任务刷新。
+- 前端：需要避开系统栏/手势条的 UI **一律引用 `var(--tt-safe-top)` / `var(--tt-safe-bottom)`**（`src/index.css` 的 `:root` 定义，默认即 `env(safe-area-inset-*)`），**不要直接写 `env()`**——Android WebView 直到 Chromium M136（全屏 WebView）/ M144（全部）才把系统栏 inset 交给 CSS，老 WebView 上 `env()` 恒为 0，三键导航会直接盖住底部 tab。`src/lib/safe-area.ts` 在启动和 `resize` 时经 `window_insets` IPC 拉原生物理 px 值，把变量覆盖为 `max(env(), 原生值)`。现有落点：`AppShell` 根 div（顶部 inset；**不要**放回滚动容器 `<main>` 上——overflow 裁剪发生在滚动容器的 padding box，padding-top 会让滚动内容滑进状态栏文字底下）与底部 `<nav>`、`BottomDrawer`、`NotificationHost`、`Modal`、`AnnouncementModal`、`TasksPage` 的 focus 提示、`VirtualDisplayCard` 的全屏按钮（`<main>` 自身只保留底部滚动余量）。新增 fixed 覆盖层或全屏布局时要自己带上变量偏移；Tailwind 任意值里 `calc` 的 `+` 两侧空格用 `_` 占位，例如 `pb-[calc(1.25rem_+_var(--tt-safe-bottom))]`。左右两侧无需专门处理：壳层是 `max-w-md` 居中列，横屏时不会撞进刘海。
 
 改 `--tt-surface`（`src/index.css` 的 `:root`，深色值在同文件的 `prefers-color-scheme` 块里）时记得同步 `res/values{,-night}/colors.xml`，两边一起改。
 
@@ -65,7 +65,7 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 
 TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 camelCase 变量；React 组件与类型使用 PascalCase。Rust 提交前运行 `cargo fmt`；错误类型使用 `thiserror`，公共 IPC 数据使用 `serde` 的 camelCase 表示。Tailwind class 应保持语义清晰，避免为一次性样式引入自定义 CSS。
 
-尺寸一律走 rem，不要写 px 定值：应用全屏（平板、桌面、横屏等宽视口）时靠 `src/index.css` 里 `html` 的根字号规则（`clamp(16px, 100vw / 28, 32px)`）把整个 rem 体系等比放大，设计基准宽是 28rem（`max-w-md`）。lucide 图标的 `size` 因此写 rem 字符串（如 `size="1rem"`），不要写回数字（`size={16}` 是固定 px，不会跟随缩放）；`env(safe-area-inset-*)` 与 1px 描边保持物理像素，属例外。
+尺寸一律走 rem，不要写 px 定值：应用全屏（平板、桌面、横屏等宽视口）时靠 `src/index.css` 里 `html` 的根字号规则（`clamp(16px, 100vw / 28, 32px)`）把整个 rem 体系等比放大，设计基准宽是 28rem（`max-w-md`）。lucide 图标的 `size` 因此写 rem 字符串（如 `size="1rem"`），不要写回数字（`size={16}` 是固定 px，不会跟随缩放）；`--tt-safe-top` / `--tt-safe-bottom`（安全区，含 env 兜底与原生上报值）与 1px 描边保持物理像素，属例外。
 
 新增表单控件时优先复用 `src/components/ui/` 里的封装（`Checkbox` / `RadioGroup` / `SegmentGroup` / `TextField` / `Select`），不要在页面里手写原生 `<input>`，也不要绕过封装直接写 daisyUI 组件类：状态样式集中在各封装组件内部（`src/index.css` 只保留原始色板、`@theme` 具名 utility、daisyUI 主题和 `.rich-description`），散落各处会失去统一主题。
 

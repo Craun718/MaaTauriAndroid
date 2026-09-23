@@ -12,8 +12,8 @@ interface BottomDrawerProps {
 /**
  * 底部抽屉：面板从屏幕底部升起，遮罩、Esc 和右上角按钮均可关闭。
  * 打开时把焦点移入面板，读屏用户能直接感知到对话框的出现。
- * WebView 视口直达物理屏幕边缘，面板底部的 env(safe-area-inset-bottom)
- * 让内容避开手势条/导航键（原生不做任何 inset padding，见 AGENTS.md）。
+ * WebView 视口直达物理屏幕边缘，面板底部的 var(--tt-safe-bottom)
+ * 让内容避开手势条/三键导航（原生不做任何 inset padding，见 AGENTS.md）。
  */
 export function BottomDrawer({
   open,
@@ -53,7 +53,7 @@ export function BottomDrawer({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[calc(100dvh-2rem_-_env(safe-area-inset-top))] max-w-md flex-col rounded-t-lg border border-b-0 border-line bg-raised p-3 pb-[calc(1rem_+_env(safe-area-inset-bottom))] shadow-lg outline-none"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[calc(100dvh-2rem_-_var(--tt-safe-top))] max-w-md flex-col rounded-t-lg border border-b-0 border-line bg-raised p-3 pb-[calc(1rem_+_var(--tt-safe-bottom))] shadow-lg outline-none"
       >
         <div className="flex shrink-0 items-center justify-between gap-3">
           <h2 className="font-medium">{title}</h2>

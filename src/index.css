@@ -24,6 +24,15 @@
   --tt-accent: #0f766e;
   --tt-on-accent: #ffffff;
   --tt-danger: #dc2626;
+
+  /*
+   * 安全区 inset,物理像素(与 env() 同单位,不进 rem 体系)。
+   * 默认值即纯 env():桌面或老 WebView 上为 0;Android 上由 lib/safe-area.ts
+   * 经 IPC 覆盖为 max(env(), 原生上报值),老 WebView 的 env() 恒为 0 时由原生值兜底。
+   * 所有避让系统栏的落点一律引用这两个变量,不要再直接写 env()。
+   */
+  --tt-safe-top: env(safe-area-inset-top, 0px);
+  --tt-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @media (prefers-color-scheme: dark) {

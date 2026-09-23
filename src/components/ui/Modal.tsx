@@ -40,7 +40,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         onClick={onClose}
         className="fixed inset-0 z-40 cursor-default bg-black/40"
       />
-      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 pt-[calc(1rem_+_env(safe-area-inset-top))] pb-[calc(1rem_+_env(safe-area-inset-bottom))]">
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 pt-[calc(1rem_+_var(--tt-safe-top))] pb-[calc(1rem_+_var(--tt-safe-bottom))]">
         <div
           ref={panelRef}
           role="dialog"

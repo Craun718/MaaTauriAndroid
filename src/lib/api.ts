@@ -221,3 +221,8 @@ export async function getUpdatePrefs() {
 export async function setUpdatePrefs(prefs: UpdatePrefs) {
   return invoke<UpdatePrefs>("update_set_prefs", { prefs });
 }
+
+/** Physical-pixel insets to keep clear of; null on desktop or without an activity. */
+export async function windowInsets() {
+  return invoke<{ top: number; bottom: number } | null>("window_insets");
+}

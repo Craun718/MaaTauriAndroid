@@ -273,7 +273,7 @@ export function VirtualDisplayCard() {
             <button
               type="button"
               onClick={() => setFullscreen(false)}
-              className="absolute right-[16px] top-[calc(12px_+_env(safe-area-inset-top))] flex h-[36px] w-[36px] items-center justify-center rounded-[6px] border border-line bg-raised text-ink-muted"
+              className="absolute right-[16px] top-[calc(12px_+_var(--tt-safe-top))] flex h-[36px] w-[36px] items-center justify-center rounded-[6px] border border-line bg-raised text-ink-muted"
               aria-label={t("virtualDisplayExitFullscreen")}
             >
               <X size={16} />

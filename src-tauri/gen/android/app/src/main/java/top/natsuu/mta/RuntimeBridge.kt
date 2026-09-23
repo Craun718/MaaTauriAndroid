@@ -18,6 +18,7 @@ import android.os.Looper
 import android.os.Process
 import android.provider.MediaStore
 import android.view.WindowManager
+import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.io.IOException
 import java.time.format.DateTimeFormatter
@@ -357,6 +358,30 @@ object RuntimeBridge {
                 put("versionName", packageInfo.versionName ?: UNKNOWN)
                 put("versionCode", packageInfo.longVersionCode)
                 put("buildType", if (BuildConfig.DEBUG) "debug" else "release")
+            }.toString()
+        }.getOrNull()
+    }
+
+    /**
+     * Physical-pixel top/bottom insets the web layer must keep clear of (system
+     * bars and display cutouts), as JSON. Layout insets stay owned by the web
+     * layer: CSS `env(safe-area-inset-*)` reads zero on older WebViews, so the
+     * frontend pulls these values over IPC and applies them itself. This only
+     * reads numbers - it never pads the webview or consumes insets, which would
+     * break Chromium's own env()/keyboard tracking (see MainActivity).
+     */
+    @JvmStatic
+    fun windowInsets(): String? {
+        val activity = hostActivity?.get() ?: return null
+        val insets = activity.window.decorView.rootWindowInsets ?: return null
+        return runCatching {
+            val bars = WindowInsetsCompat.toWindowInsetsCompat(insets).getInsets(
+                WindowInsetsCompat.Type.systemBars()
+                    or WindowInsetsCompat.Type.displayCutout(),
+            )
+            JSONObject().apply {
+                put("top", bars.top)
+                put("bottom", bars.bottom)
             }.toString()
         }.getOrNull()
     }

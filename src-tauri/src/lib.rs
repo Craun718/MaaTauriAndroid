@@ -402,6 +402,13 @@ struct VirtualDisplayTouchMarker {
     contact: i32,
 }
 
+/// Physical-pixel insets the web layer must keep clear of. `None` lets the
+/// frontend fall back to its CSS `env()` defaults (desktop, or no activity).
+#[tauri::command]
+fn window_insets() -> Option<runtime::WindowInsets> {
+    runtime::window_insets()
+}
+
 #[tauri::command]
 fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnapshot, AppError> {
     let config_path = app
@@ -2773,6 +2780,7 @@ pub fn run() {
         .manage(update::UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             bootstrap,
+            window_insets,
             load_project,
             read_project_image,
             save_configuration,

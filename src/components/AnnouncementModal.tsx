@@ -53,7 +53,7 @@ export function AnnouncementModal({
         aria-modal="true"
         aria-label={t("announcement")}
         tabIndex={-1}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[calc(100dvh-2rem_-_env(safe-area-inset-top))] max-w-md flex-col rounded-t-lg border border-b-0 border-line bg-raised shadow-lg outline-none"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[calc(100dvh-2rem_-_var(--tt-safe-top))] max-w-md flex-col rounded-t-lg border border-b-0 border-line bg-raised shadow-lg outline-none"
       >
         <div className="flex items-center justify-between gap-3 p-3">
           <h2 className="font-medium">{t("announcement")}</h2>
@@ -71,7 +71,7 @@ export function AnnouncementModal({
             <RichDescription key={item} text={item} />
           ))}
         </div>
-        <div className="space-y-3 p-3 pb-[calc(1rem_+_env(safe-area-inset-bottom))]">
+        <div className="space-y-3 p-3 pb-[calc(1rem_+_var(--tt-safe-bottom))]">
           <Checkbox
             checked={remember}
             onCheckedChange={onRememberChange}

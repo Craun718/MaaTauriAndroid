@@ -6,7 +6,7 @@ use maa_framework::{
     common::MaaStatus, controller::Controller, resource::Resource, tasker::Tasker,
     AndroidNativeControllerConfig, AndroidScreenResolution,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
@@ -661,6 +661,31 @@ static CONTROL_STATE: AtomicI64 = AtomicI64::new(0);
 static CONTROL_MESSAGE: Mutex<Option<String>> = Mutex::new(None);
 static PRIVILEGED_BACKEND_ROOT: AtomicBool = AtomicBool::new(false);
 static RUN_RESULT: Mutex<Option<RunResult>> = Mutex::new(None);
+
+/// Top and bottom insets the web layer must keep clear of, in physical pixels.
+///
+/// Android WebView only delivers system-bar and cutout insets to CSS
+/// `env(safe-area-inset-*)` from recent Chromium versions, so the frontend
+/// reads these over IPC and applies them itself (see `src/lib/safe-area.ts`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowInsets {
+    pub top: i32,
+    pub bottom: i32,
+}
+
+/// Reads the insets from the Android shell. `None` on desktop, before the JNI
+/// bridge is attached, or when no activity is alive to report insets.
+#[cfg(target_os = "android")]
+pub fn window_insets() -> Option<WindowInsets> {
+    let json = crate::diagnostics::bridge_string("windowInsets").ok()?;
+    serde_json::from_str(&json).ok()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn window_insets() -> Option<WindowInsets> {
+    None
+}
 
 #[cfg(any(target_os = "android", test))]
 pub fn configure_screen(width: i32, height: i32) {

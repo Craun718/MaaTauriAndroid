@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Startup backdrop behind the edge-to-edge WebView: the surface token plus the
+     launcher icon centered, so the window matches the system splash screen and
+     the WebView placeholder. syncPiLauncherIcon overrides the mipmap with the
+     packaged Project Interface icon at build time, and @color/surface resolves
+     the dark variant on its own, so no night variant of this file is needed. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/surface" />
+    <item>
+        <bitmap
+            android:src="@mipmap/ic_launcher"
+            android:gravity="center" />
+    </item>
+</layer-list>

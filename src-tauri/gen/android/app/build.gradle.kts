@@ -222,6 +222,9 @@ val syncPiLauncherIcon = tasks.register("syncPiLauncherIcon") {
     description = "Generate launcher icons from the Project Interface app icon"
     val outputDir = piLauncherIconResDir
     outputs.dir(outputDir)
+    // Vite empties the dist on every app build; the dist refresh in doLast must
+    // therefore never be skipped as up-to-date.
+    outputs.upToDateWhen { false }
     dependsOn(preparePiArchive)
     if (piProfile != null) {
         inputs.files(piRootDir)
@@ -233,6 +236,15 @@ val syncPiLauncherIcon = tasks.register("syncPiLauncherIcon") {
             val icon = PiLauncherIcon.resolve(piRootDir.get().file("interface.json").asFile)
             if (icon != null) {
                 PiLauncherIcon.generate(icon, resRoot)
+                // The WebView startup placeholder and the favicon reference
+                // /app-icon.png from the Vite dist, which the Tauri CLI packages
+                // after Gradle finishes — refreshing the copy there keeps the
+                // in-app startup icon identical to the launcher icon. The
+                // relative walk is src-tauri/gen/android/app → repo root.
+                val frontendDist = projectDir.resolve("../../../..").resolve("dist")
+                if (frontendDist.isDirectory) {
+                    PiLauncherIcon.writeWebAppIcon(icon, frontendDist.resolve("app-icon.png"))
+                }
             }
         }
     } else {

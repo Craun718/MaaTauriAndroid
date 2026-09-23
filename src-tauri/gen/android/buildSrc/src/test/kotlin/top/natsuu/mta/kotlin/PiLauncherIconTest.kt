@@ -126,4 +126,16 @@ class PiLauncherIconTest {
             assertEquals(size, decoded.height)
         }
     }
+
+    @Test
+    fun writesAWebAppIconForTheFrontendDist() {
+        val source = writeIcon(temporaryFolder.newFolder("pi"), size = 300)
+        val target = temporaryFolder.newFolder("dist").resolve("app-icon.png")
+
+        PiLauncherIcon.writeWebAppIcon(source, target)
+
+        val decoded = requireNotNull(ImageIO.read(target))
+        assertEquals(256, decoded.width)
+        assertEquals(256, decoded.height)
+    }
 }

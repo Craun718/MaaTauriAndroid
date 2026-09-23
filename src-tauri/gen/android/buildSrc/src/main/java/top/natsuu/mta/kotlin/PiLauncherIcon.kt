@@ -60,6 +60,20 @@ object PiLauncherIcon {
         }
     }
 
+    /**
+     * Writes the interface icon as a PNG into the Vite dist, where the WebView
+     * startup placeholder and the favicon pick it up. Gradle cannot rewrite the
+     * packaged frontend itself, but the Tauri CLI packs the dist after Gradle
+     * finishes, so a file refreshed here still ends up inside the APK.
+     */
+    fun writeWebAppIcon(source: File, target: File) {
+        val image = ImageIO.read(source)
+            ?: throw IllegalArgumentException(
+                "unsupported launcher icon image: ${source.invariantSeparatorsPath}",
+            )
+        writePng(fitSquare(image, 256), target)
+    }
+
     // The runtime loader resolves $keys against the default language: zh_cn,
     // then the first declared language. Mirror that for the packaged icon.
     private fun localize(interfaceFile: File, document: Map<*, *>, key: String): String? {

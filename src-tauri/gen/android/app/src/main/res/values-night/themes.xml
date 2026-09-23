@@ -1,7 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.maa_tauri_android" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Dark startup backdrop matching src/index.css. -->
-        <item name="android:windowBackground">@color/surface</item>
+        <!-- Dark startup backdrop matching src/index.css. The drawable's
+             @color/surface layer picks up this configuration's dark value. -->
+        <item name="android:windowBackground">@drawable/startup_backdrop</item>
     </style>
 </resources>

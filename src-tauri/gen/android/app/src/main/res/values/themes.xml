@@ -1,10 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.maa_tauri_android" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Startup backdrop behind the edge-to-edge webview, which paints the same
-             surface color token as its body background once React mounts. @color/surface
-             resolves per configuration, so light and dark are covered by this one entry. -->
-        <item name="android:windowBackground">@color/surface</item>
+        <!-- Startup backdrop behind the edge-to-edge webview: the same surface
+             color token its body paints once React mounts, plus the launcher
+             icon bridging the system splash screen and the WebView's first
+             frame. syncPiLauncherIcon swaps the mipmap for the packaged Project
+             Interface icon; @color/surface resolves per configuration. -->
+        <item name="android:windowBackground">@drawable/startup_backdrop</item>
     </style>
 
     <!-- @color/surface resolves the dark variant from values-night/colors.xml. -->

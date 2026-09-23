@@ -23,6 +23,53 @@ def copy_tree(source: Path, target: Path) -> None:
     shutil.copytree(source, target, ignore=IGNORE, dirs_exist_ok=True)
 
 
+def strip_jsonc_comments(source: Path, target: Path) -> None:
+    """Write JSONC as strict JSON for Groovy's JsonSlurper."""
+    text = source.read_text(encoding="utf-8")
+    output: list[str] = []
+    index = 0
+    in_string = False
+
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            output.append(char)
+            if char == "\\" and index + 1 < len(text):
+                output.append(text[index + 1])
+                index += 2
+                continue
+            if char == '"':
+                in_string = False
+            index += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            output.append(char)
+            index += 1
+            continue
+
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "/":
+            output.append("  ")
+            index += 2
+            while index < len(text) and text[index] != "\n":
+                index += 1
+            continue
+
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "*":
+            end = text.find("*/", index + 2)
+            if end < 0:
+                raise ValueError(f"unterminated block comment in {source}")
+            output.append(" " * (end + 2 - index))
+            index = end + 2
+            continue
+
+        output.append(char)
+        index += 1
+
+    target.write_text("".join(output), encoding="utf-8")
+
+
 def main() -> int:
     interface = ASSETS / "interface.json"
     if not interface.is_file():
@@ -52,7 +99,10 @@ def main() -> int:
         if child.is_dir():
             copy_tree(child, target)
         else:
-            shutil.copy2(child, target)
+            if child.name == "interface.json":
+                strip_jsonc_comments(child, target)
+            else:
+                shutil.copy2(child, target)
 
     copy_tree(AGENT, DEST / "agent")
 

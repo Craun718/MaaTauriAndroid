@@ -99,52 +99,56 @@ export function DateTimePickerField({
         onClose={() => setOpen(false)}
         title={t("scheduleIntervalStart")}
       >
-        <div className="grid grid-cols-5 gap-2 pt-2">
-          <p className="text-center text-sm text-base-content/60">
-            {t("pickerYear")}
-          </p>
-          <p className="text-center text-sm text-base-content/60">
-            {t("pickerMonth")}
-          </p>
-          <p className="text-center text-sm text-base-content/60">
-            {t("pickerDay")}
-          </p>
-          <p className="text-center text-sm text-base-content/60">
-            {t("pickerHour")}
-          </p>
-          <p className="text-center text-sm text-base-content/60">
-            {t("pickerMinute")}
-          </p>
-          <WheelPicker
-            items={years.map(String)}
-            value={years.indexOf(parts.year)}
-            onValueChange={(index) => update({ year: years[index] })}
-            ariaLabel={t("pickerYear")}
-          />
-          <WheelPicker
-            items={range(1, 12).map(pad)}
-            value={parts.month - 1}
-            onValueChange={(index) => update({ month: index + 1 })}
-            ariaLabel={t("pickerMonth")}
-          />
-          <WheelPicker
-            items={days.map(String)}
-            value={parts.day - 1}
-            onValueChange={(index) => update({ day: index + 1 })}
-            ariaLabel={t("pickerDay")}
-          />
-          <WheelPicker
-            items={range(0, 23).map(pad)}
-            value={parts.hour}
-            onValueChange={(index) => update({ hour: index })}
-            ariaLabel={t("pickerHour")}
-          />
-          <WheelPicker
-            items={MINUTE_ITEMS}
-            value={parts.minute}
-            onValueChange={(index) => update({ minute: index })}
-            ariaLabel={t("pickerMinute")}
-          />
+        <div className="space-y-3 pt-2">
+          <div className="grid grid-cols-3 gap-2">
+            <p className="text-center text-sm text-base-content/60">
+              {t("pickerYear")}
+            </p>
+            <p className="text-center text-sm text-base-content/60">
+              {t("pickerMonth")}
+            </p>
+            <p className="text-center text-sm text-base-content/60">
+              {t("pickerDay")}
+            </p>
+            <WheelPicker
+              items={years.map(String)}
+              value={years.indexOf(parts.year)}
+              onValueChange={(index) => update({ year: years[index] })}
+              ariaLabel={t("pickerYear")}
+            />
+            <WheelPicker
+              items={range(1, 12).map(pad)}
+              value={parts.month - 1}
+              onValueChange={(index) => update({ month: index + 1 })}
+              ariaLabel={t("pickerMonth")}
+            />
+            <WheelPicker
+              items={days.map(String)}
+              value={parts.day - 1}
+              onValueChange={(index) => update({ day: index + 1 })}
+              ariaLabel={t("pickerDay")}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <p className="text-center text-sm text-base-content/60">
+              {t("pickerHour")}
+            </p>
+            <p className="text-center text-sm text-base-content/60">
+              {t("pickerMinute")}
+            </p>
+            <WheelPicker
+              items={range(0, 23).map(pad)}
+              value={parts.hour}
+              onValueChange={(index) => update({ hour: index })}
+              ariaLabel={t("pickerHour")}
+            />
+            <WheelPicker
+              items={MINUTE_ITEMS}
+              value={parts.minute}
+              onValueChange={(index) => update({ minute: index })}
+              ariaLabel={t("pickerMinute")}
+            />
+          </div>
         </div>
         <div className="mt-3 flex justify-end gap-2">
           <button

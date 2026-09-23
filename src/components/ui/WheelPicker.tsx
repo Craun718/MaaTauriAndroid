@@ -87,7 +87,7 @@ export function WheelPicker({
             role="option"
             aria-selected={index === value}
             onClick={() => scrollToIndex(index, "smooth")}
-            className={`flex h-8 shrink-0 snap-center cursor-pointer items-center justify-center text-lg tabular-nums ${
+            className={`flex h-8 w-full shrink-0 snap-center cursor-pointer items-center justify-center text-lg tabular-nums ${
               index === value ? "font-medium text-ink" : "text-ink-muted"
             }`}
           >

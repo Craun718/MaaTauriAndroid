@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDateTime } from "../components/ScheduleEntryCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { DateTimePickerField } from "../components/ui/DateTimePicker";
-import { SegmentGroup } from "../components/ui/SegmentGroup";
 import { Select } from "../components/ui/Select";
 import { TextField } from "../components/ui/TextField";
 import { TimePickerField } from "../components/ui/TimePicker";
@@ -180,9 +179,15 @@ export function SchedulesPage() {
             }
             labelledBy="schedule-run-configuration"
           />
-          <SegmentGroup
-            label={t("scheduleTriggerType")}
-            columns={2}
+          <span
+            id="schedule-trigger-type"
+            className="block text-sm text-base-content/60"
+          >
+            {t("scheduleTriggerType")}
+          </span>
+          <Select
+            className="mt-1"
+            labelledBy="schedule-trigger-type"
             value={draft.trigger.kind}
             items={[
               { value: "fixedTime", label: t("scheduleFixedTime") },

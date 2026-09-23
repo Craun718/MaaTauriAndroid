@@ -39,7 +39,11 @@ pub struct ScheduleRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ScheduleTrigger {
     FixedTime {
         days: Vec<u32>,

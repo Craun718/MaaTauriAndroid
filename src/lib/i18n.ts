@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useAppStore } from "../store/appStore";
-import type { UiLanguage } from "./types";
+import type { RunEvent, UiLanguage } from "./types";
 
 /** Language the interface actually renders in, after resolving "system". */
 export type AppLanguage = "zh" | "en";
@@ -111,6 +111,12 @@ const en = {
     "Android rejected the virtual display back-key injection",
   diagnosticVirtualDisplayBackUnavailable:
     "The privileged control service is unavailable for the virtual display back key",
+  diagnosticGameFpsLow:
+    "Low game frame rate: median {medianFps} FPS over the last {windowSeconds} seconds (threshold {thresholdFps} FPS), reported by {source}.",
+  diagnosticGameFpsDegraded:
+    "Game frame rate is low: median {medianFps} FPS over the last {windowSeconds} seconds.",
+  diagnosticGameFpsSourceCallback: "the system frame-rate callback",
+  diagnosticGameFpsSourceCounter: "the approximate frame counter",
 
   // Settings, project scope
   noResources: "No resources are declared.",
@@ -470,6 +476,12 @@ const zh: Record<MessageKey, string> = {
   diagnosticVirtualDisplayBackRejected: "Android 拒绝了虚拟屏返回键注入",
   diagnosticVirtualDisplayBackUnavailable:
     "特权控制服务不可用，无法发送虚拟屏返回键",
+  diagnosticGameFpsLow:
+    "游戏帧率过低：最近 {windowSeconds} 秒的中位数为 {medianFps} FPS（阈值 {thresholdFps} FPS），数据来自{source}。",
+  diagnosticGameFpsDegraded:
+    "游戏帧率较低：最近 {windowSeconds} 秒的中位数为 {medianFps} FPS。",
+  diagnosticGameFpsSourceCallback: "系统帧率回调",
+  diagnosticGameFpsSourceCounter: "近似帧计数器",
 
   scheduleTitle: "定时任务",
   scheduleDescription: "按固定时间或重复间隔自动启动任务。",
@@ -658,6 +670,47 @@ export function localizeDiagnostic(
 ): string {
   const key = diagnosticKeys[message];
   return key ? translate(language, key) : message;
+}
+
+/**
+ * Runtime warnings stay in the exported backend log in English. Known events
+ * also carry structured values so the live UI can render the interface locale.
+ */
+export function localizeRunEvent(
+  event: RunEvent,
+  language: AppLanguage,
+): string {
+  const data = event.data;
+  if (data?.diagnostic === "gameFps") {
+    const level =
+      data.level === "low"
+        ? "diagnosticGameFpsLow"
+        : data.level === "degraded"
+          ? "diagnosticGameFpsDegraded"
+          : undefined;
+    if (
+      level &&
+      typeof data.windowSeconds === "number" &&
+      typeof data.medianFps === "number" &&
+      typeof data.thresholdFps === "number"
+    ) {
+      const source =
+        data.source === "taskCallback"
+          ? translate(language, "diagnosticGameFpsSourceCallback")
+          : data.source === "frameCounter"
+            ? translate(language, "diagnosticGameFpsSourceCounter")
+            : undefined;
+      if (source) {
+        return translate(language, level, {
+          windowSeconds: Math.round(data.windowSeconds),
+          medianFps: Math.round(data.medianFps),
+          thresholdFps: Math.round(data.thresholdFps),
+          source,
+        });
+      }
+    }
+  }
+  return localizeDiagnostic(event.message, language);
 }
 
 /** Translated strings for the current configuration, re-rendering when it changes. */

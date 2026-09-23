@@ -273,12 +273,29 @@ mod watcher {
                 advice.median_fps,
             ),
         };
+        let data = serde_json::json!({
+            "diagnostic": "gameFps",
+            "level": match advice.level {
+                AdviceLevel::Low => "low",
+                AdviceLevel::Degraded => "degraded",
+            },
+            "windowSeconds": WINDOW_SIZE,
+            "medianFps": advice.median_fps,
+            "thresholdFps": match advice.level {
+                AdviceLevel::Low => LOW_FPS,
+                AdviceLevel::Degraded => DEGRADED_FPS,
+            },
+            "source": match source {
+                FpsSource::TaskCallback => "taskCallback",
+                FpsSource::FrameCount => "frameCounter",
+            },
+        });
         if let Ok(event) = logger.append(
             crate::run_log::RunEventKind::Warning,
             crate::runtime::RunState::Running,
             message,
             None,
-            None,
+            Some(data),
         ) {
             let _ = app.emit("run-event", &event);
         }

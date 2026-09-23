@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   isChineseLocale,
   localizeDiagnostic,
+  localizeRunEvent,
   projectLanguage,
   resolveLanguage,
   translate,
 } from "./i18n";
+import type { RunEvent } from "./types";
 
 describe("isChineseLocale", () => {
   it("matches every Chinese tag Android and the desktop webviews report", () => {
@@ -116,5 +118,44 @@ describe("localizeDiagnostic", () => {
     expect(localizeDiagnostic("Maa task Sugar failed: timeout", "zh")).toBe(
       "Maa task Sugar failed: timeout",
     );
+  });
+});
+
+describe("localizeRunEvent", () => {
+  const event: RunEvent = {
+    executionId: "run-1",
+    sequence: 1,
+    atUnixMs: 0,
+    kind: "warning",
+    state: "Running",
+    message: "Game frame rate is low: median 30 FPS over the last 15 seconds.",
+    data: {
+      diagnostic: "gameFps",
+      level: "degraded",
+      windowSeconds: 15,
+      medianFps: 30.4,
+      thresholdFps: 50,
+      source: "taskCallback",
+    },
+  };
+
+  it("renders known runtime warnings with structured event data", () => {
+    expect(localizeRunEvent(event, "en")).toBe(event.message);
+    expect(localizeRunEvent(event, "zh")).toBe(
+      "游戏帧率较低：最近 15 秒的中位数为 30 FPS。",
+    );
+  });
+
+  it("falls back to diagnostic localization or the backend text", () => {
+    expect(
+      localizeRunEvent(
+        {
+          ...event,
+          message: "Maa task Sugar failed: timeout",
+          data: { diagnostic: "gameFps" },
+        },
+        "zh",
+      ),
+    ).toBe("Maa task Sugar failed: timeout");
   });
 });

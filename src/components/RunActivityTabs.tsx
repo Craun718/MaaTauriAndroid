@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useEffect, useId, useRef } from "react";
-import { useTranslation } from "../lib/i18n";
+import { localizeRunEvent, useTranslation } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { RunEvent } from "../lib/types";
 import { type RunLogEntry, useRunLogStore } from "../store/runLogStore";
@@ -73,7 +73,7 @@ export function RunActivityTabs({
 }) {
   useRunEvents();
   const events = useRunLogStore((state) => state.entries);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const groupId = useId();
   const logListRef = useRef<HTMLOListElement>(null);
   const lastEntry = events.at(-1);
@@ -152,7 +152,9 @@ export function RunActivityTabs({
                 entry.type === "run" ? entry.event.atUnixMs : entry.atUnixMs;
               const taskName = runEvent?.taskName;
               const message =
-                entry.type === "run" ? entry.event.message : entry.message;
+                entry.type === "run"
+                  ? localizeRunEvent(entry.event, language)
+                  : entry.message;
               const displayMessage = taskName
                 ? `${taskName}: ${message}`
                 : message;

@@ -10,7 +10,11 @@ import {
   startRun,
   stopRun,
 } from "../lib/api";
-import { localizeDiagnostic, useTranslation } from "../lib/i18n";
+import {
+  localizeDiagnostic,
+  localizeRunEvent,
+  useTranslation,
+} from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { ResolvedRun, RunEvent } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
@@ -136,7 +140,7 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       setExecutionId(payload.executionId);
       if (payload.kind === "screenshot") return;
       if (payload.kind === "failure" || payload.kind === "warning") {
-        const diagnostic = localizeDiagnostic(payload.message, language);
+        const diagnostic = localizeRunEvent(payload, language);
         const message = payload.taskName
           ? `${payload.taskName}: ${diagnostic}`
           : diagnostic;

@@ -1258,7 +1258,7 @@ mod tests {
         assert!(zip
             .windows(19)
             .any(|window| window == b"device-info-payload"));
-        assert!(zip.windows(19).any(|window| window == b"logs/app/mta.log"));
+        assert!(zip.windows(16).any(|window| window == b"logs/app/mta.log"));
         assert!(zip.windows(12).any(|window| window == b"app log line"));
         fs::remove_file(output).unwrap();
         fs::remove_dir_all(log_root).unwrap();

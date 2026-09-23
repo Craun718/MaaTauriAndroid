@@ -48,7 +48,8 @@ object ScheduleAlarmManager {
         val previousRules = schedulesFromJson(stateFile.readTextOrNull()).map { it.ruleId }
         schedules.forEach { schedule(context, alarmManager, it) }
         (previousRules - schedules.map { it.ruleId }.toSet()).forEach {
-            alarmManager.cancel(operation(context, it))
+            // PendingIntent equality ignores extras, so the placeholder time is fine here.
+            alarmManager.cancel(operation(context, it, 0L))
         }
         runCatching {
             stateFile.writeText(JSONArray(schedules.map { rule ->
@@ -65,11 +66,11 @@ object ScheduleAlarmManager {
 
     fun cancel(context: Context, ruleId: String) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        alarmManager.cancel(operation(context, ruleId))
+        alarmManager.cancel(operation(context, ruleId, 0L))
     }
 
     private fun schedule(context: Context, alarmManager: AlarmManager, trigger: ScheduledTrigger) {
-        val operation = operation(context, trigger.ruleId)
+        val operation = operation(context, trigger.ruleId, trigger.scheduledAtMs)
         val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             alarmManager.canScheduleExactAlarms()
         if (canUseExact) {
@@ -92,10 +93,11 @@ object ScheduleAlarmManager {
         )
     }
 
-    private fun operation(context: Context, ruleId: String): PendingIntent {
+    private fun operation(context: Context, ruleId: String, scheduledAtMs: Long): PendingIntent {
         val intent = Intent(context, ScheduleReceiver::class.java)
             .setAction(ScheduleReceiver.ACTION_SCHEDULE_TRIGGER)
             .putExtra(ScheduleReceiver.EXTRA_RULE_ID, ruleId)
+            .putExtra(ScheduleReceiver.EXTRA_SCHEDULED_TIME_MS, scheduledAtMs)
         return PendingIntent.getBroadcast(
             context,
             requestCode(ruleId),

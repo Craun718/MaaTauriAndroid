@@ -33,7 +33,8 @@ pub struct ScheduleRule {
     #[serde(default = "default_true")]
     pub enabled: bool,
     pub run_configuration_id: String,
-    #[serde(flatten)]
+    // Nested (not flattened) so the wire shape matches the frontend's
+    // `ScheduleRule.trigger` discriminated union exactly.
     pub trigger: ScheduleTrigger,
 }
 
@@ -470,5 +471,51 @@ mod tests {
         assert!(store.find(&saved.id)?.is_none());
         std::fs::remove_dir_all(dir).ok();
         Ok(())
+    }
+
+    #[test]
+    fn wire_format_nests_the_trigger_for_the_frontend() {
+        // The frontend models the trigger as a nested discriminated union
+        // (`ScheduleRule.trigger.kind`); the IPC payload must round-trip
+        // exactly that shape, with no `kind` leaking to the rule top level.
+        let rule = fixed_rule();
+        let json = serde_json::to_value(&rule).expect("serialize rule");
+        assert!(json.get("trigger").is_some(), "trigger must be nested");
+        assert!(json.get("kind").is_none(), "kind must stay inside trigger");
+
+        let fixed_json = serde_json::json!({
+            "id": "rule",
+            "name": "Daily",
+            "enabled": true,
+            "runConfigurationId": "run",
+            "trigger": {
+                "kind": "fixedTime",
+                "days": [1, 2, 3, 4, 5, 6, 7],
+                "times": ["12:00"],
+            },
+        });
+        let parsed: ScheduleRule =
+            serde_json::from_value(fixed_json).expect("parse frontend fixedTime rule");
+        match parsed.trigger {
+            ScheduleTrigger::FixedTime { days, times } => {
+                assert_eq!(days, vec![1, 2, 3, 4, 5, 6, 7]);
+                assert_eq!(times, vec!["12:00".to_string()]);
+            }
+            ScheduleTrigger::Interval { .. } => panic!("unexpected trigger variant"),
+        }
+
+        let interval_json = serde_json::json!({
+            "id": "rule-2",
+            "runConfigurationId": "run",
+            "trigger": {
+                "kind": "interval",
+                "startEpochMs": 1_000,
+                "intervalDays": 1,
+                "intervalHours": 0,
+            },
+        });
+        let parsed: ScheduleRule =
+            serde_json::from_value(interval_json).expect("parse frontend interval rule");
+        assert!(matches!(parsed.trigger, ScheduleTrigger::Interval { .. }));
     }
 }

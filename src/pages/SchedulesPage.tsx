@@ -2,9 +2,11 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDateTime } from "../components/ScheduleEntryCard";
 import { Checkbox } from "../components/ui/Checkbox";
+import { DateTimePickerField } from "../components/ui/DateTimePicker";
 import { SegmentGroup } from "../components/ui/SegmentGroup";
 import { Select } from "../components/ui/Select";
 import { TextField } from "../components/ui/TextField";
+import { TimePickerField } from "../components/ui/TimePicker";
 import {
   deleteScheduleRule,
   getScheduleStatus,
@@ -16,8 +18,6 @@ import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import {
   createScheduleRule,
-  dateTimeLocalToEpochMs,
-  epochMsToDateTimeLocal,
   scheduleRuleErrors,
   scheduleTriggerResultKey,
 } from "../lib/schedules";
@@ -129,7 +129,7 @@ export function SchedulesPage() {
   }
 
   function toggleDay(day: number, checked: boolean) {
-    if (!draft || draft.trigger.kind !== "fixedTime") return;
+    if (draft?.trigger.kind !== "fixedTime") return;
     setDraft({
       ...draft,
       trigger: {
@@ -228,8 +228,7 @@ export function SchedulesPage() {
                 ))}
               </div>
               <div className="flex items-end gap-2">
-                <TextField
-                  type="time"
+                <TimePickerField
                   label={t("scheduleTime")}
                   value={timeInput}
                   onValueChange={setTimeInput}
@@ -282,17 +281,16 @@ export function SchedulesPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              <TextField
-                type="datetime-local"
+              <DateTimePickerField
                 label={t("scheduleIntervalStart")}
-                value={epochMsToDateTimeLocal(draft.trigger.startEpochMs)}
-                onValueChange={(value) => {
+                value={draft.trigger.startEpochMs}
+                onValueChange={(startEpochMs) => {
                   if (draft.trigger.kind !== "interval") return;
                   setDraft({
                     ...draft,
                     trigger: {
                       ...draft.trigger,
-                      startEpochMs: dateTimeLocalToEpochMs(value),
+                      startEpochMs,
                     },
                   });
                 }}

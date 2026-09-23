@@ -4,7 +4,7 @@ interface TextFieldProps {
   value: string;
   onValueChange: (value: string) => void;
   label?: ReactNode;
-  type?: "text" | "password" | "time" | "datetime-local";
+  type?: "text" | "password";
   inputMode?: "text" | "numeric";
   placeholder?: string;
   disabled?: boolean;

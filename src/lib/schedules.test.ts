@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   createScheduleRule,
-  dateTimeLocalToEpochMs,
-  epochMsToDateTimeLocal,
+  dateTimePartsToEpochMs,
+  daysInMonth,
+  epochMsToDateTimeParts,
   scheduleRuleErrors,
   scheduleTriggerResultKey,
 } from "./schedules";
@@ -37,7 +38,7 @@ describe("schedule rules", () => {
     expect(scheduleRuleErrors(interval)).toEqual([]);
   });
 
-  it("rejects zero intervals and local time input", () => {
+  it("rejects zero intervals", () => {
     const rule: ScheduleRule = {
       ...createScheduleRule("run"),
       name: "Every hour",
@@ -49,15 +50,35 @@ describe("schedule rules", () => {
       },
     };
     expect(scheduleRuleErrors(rule)).toContain("intervalInvalid");
-    expect(dateTimeLocalToEpochMs("not-a-date")).toBe(-1);
   });
 
-  it("round-trips local input values and derives message keys", () => {
-    const epochMs = Date.UTC(2026, 0, 2, 3, 4);
-    const local = epochMsToDateTimeLocal(epochMs);
-    expect(local).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  it("round-trips local date-time parts and derives message keys", () => {
+    const epochMs = new Date(2026, 0, 2, 3, 4).getTime();
+    expect(epochMsToDateTimeParts(epochMs)).toEqual({
+      year: 2026,
+      month: 1,
+      day: 2,
+      hour: 3,
+      minute: 4,
+    });
+    expect(
+      dateTimePartsToEpochMs({
+        year: 2026,
+        month: 1,
+        day: 2,
+        hour: 3,
+        minute: 4,
+      }),
+    ).toBe(epochMs);
     expect(scheduleTriggerResultKey("rejectedActive")).toBe(
       "scheduleResultRejectedActive",
     );
+  });
+
+  it("derives month lengths including leap years", () => {
+    expect(daysInMonth(2026, 1)).toBe(31);
+    expect(daysInMonth(2026, 2)).toBe(28);
+    expect(daysInMonth(2024, 2)).toBe(29);
+    expect(daysInMonth(2026, 4)).toBe(30);
   });
 });

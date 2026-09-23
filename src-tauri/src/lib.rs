@@ -424,6 +424,8 @@ fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnaps
             ProjectLoader::default().load_embedded(fixture, translations, "zh_cn")?
         }
     };
+    #[cfg(target_os = "android")]
+    runtime::validate_ocr_models(&project.root, &project.resources)?;
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;
     runtime::apply_debug_mode(configuration.debug_mode);

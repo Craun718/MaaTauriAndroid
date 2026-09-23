@@ -1,5 +1,5 @@
 use crate::agent::AgentSession;
-use crate::domain::types::ResolvedTask;
+use crate::domain::types::{ResolvedTask, ResourceDefinition};
 #[cfg(target_os = "android")]
 use jni::objects::{GlobalRef, JClass, JString};
 use maa_framework::{
@@ -21,6 +21,8 @@ pub enum RuntimeError {
     JniBridge(String),
     #[error("the control unit is not connected")]
     ControlDisconnected,
+    #[error("OCR model is incomplete: {0}")]
+    OcrModelIncomplete(String),
     #[error("screen dimensions are unavailable")]
     ScreenSizeUnavailable,
     #[error("MaaFramework error: {0}")]
@@ -576,6 +578,45 @@ pub fn android_controller_config(
         display_id: Some(display_id),
         force_stop: Some(force_stop),
     })
+}
+
+const OCR_MODEL_FILES: [&str; 3] = ["det.onnx", "rec.onnx", "keys.txt"];
+
+/// Verifies every declared Project Interface resource can supply the OCR model
+/// before the app starts a run. Multiple bundles may split the files across
+/// resource paths, matching how MaaFramework loads the bundles in sequence.
+pub fn validate_ocr_models(
+    project_root: &str,
+    resources: &[ResourceDefinition],
+) -> Result<(), RuntimeError> {
+    for resource in resources {
+        let model_dirs: Vec<PathBuf> = resource
+            .paths
+            .iter()
+            .map(|path| resource_path(project_root, path).join("model").join("ocr"))
+            .collect();
+        let missing_files: Vec<&str> = OCR_MODEL_FILES
+            .into_iter()
+            .filter(|file| {
+                !model_dirs
+                    .iter()
+                    .any(|directory| directory.join(file).is_file())
+            })
+            .collect();
+        if !missing_files.is_empty() {
+            let directories = model_dirs
+                .iter()
+                .map(|directory| directory.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(RuntimeError::OcrModelIncomplete(format!(
+                "{} is missing {}",
+                directories,
+                missing_files.join(", ")
+            )));
+        }
+    }
+    Ok(())
 }
 
 pub fn task_pipeline(base: &Value, task: Option<&ResolvedTask>) -> Value {
@@ -1269,6 +1310,87 @@ mod tests {
 
         assert!(matches!(first, Err(RuntimeError::Maa(message)) if message == "load failed"));
         assert!(matches!(second, Err(RuntimeError::Maa(message)) if message == "load failed"));
+    }
+
+    #[test]
+    fn ocr_model_validation_accepts_files_across_resource_paths() {
+        let root = std::env::temp_dir().join(format!("ttflow-ocr-{}", uuid::Uuid::new_v4()));
+        let base = root.join("base/model/ocr");
+        let extra = root.join("extra/model/ocr");
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::create_dir_all(&extra).unwrap();
+        std::fs::write(base.join("det.onnx"), b"det").unwrap();
+        std::fs::write(extra.join("rec.onnx"), b"rec").unwrap();
+        std::fs::write(extra.join("keys.txt"), b"keys").unwrap();
+
+        let result = validate_ocr_models(
+            &root.to_string_lossy(),
+            &[ResourceDefinition {
+                name: "official".to_string(),
+                label: "Official".to_string(),
+                description: None,
+                paths: vec!["base".to_string(), "extra".to_string()],
+                controllers: Vec::new(),
+                options: Vec::new(),
+                hash: None,
+                raw: serde_json::Value::Null,
+            }],
+        );
+
+        assert!(result.is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ocr_model_validation_rejects_a_missing_directory() {
+        let root = std::env::temp_dir().join(format!("ttflow-ocr-{}", uuid::Uuid::new_v4()));
+
+        let error = validate_ocr_models(
+            &root.to_string_lossy(),
+            &[ResourceDefinition {
+                name: "official".to_string(),
+                label: "Official".to_string(),
+                description: None,
+                paths: vec!["base".to_string()],
+                controllers: Vec::new(),
+                options: Vec::new(),
+                hash: None,
+                raw: serde_json::Value::Null,
+            }],
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, RuntimeError::OcrModelIncomplete(_)));
+        assert!(error.to_string().contains("det.onnx"));
+        assert!(error.to_string().contains("rec.onnx"));
+        assert!(error.to_string().contains("keys.txt"));
+    }
+
+    #[test]
+    fn ocr_model_validation_rejects_a_partial_model() {
+        let root = std::env::temp_dir().join(format!("ttflow-ocr-{}", uuid::Uuid::new_v4()));
+        let model = root.join("base/model/ocr");
+        std::fs::create_dir_all(&model).unwrap();
+        std::fs::write(model.join("det.onnx"), b"det").unwrap();
+        std::fs::write(model.join("keys.txt"), b"keys").unwrap();
+
+        let error = validate_ocr_models(
+            &root.to_string_lossy(),
+            &[ResourceDefinition {
+                name: "official".to_string(),
+                label: "Official".to_string(),
+                description: None,
+                paths: vec!["base".to_string()],
+                controllers: Vec::new(),
+                options: Vec::new(),
+                hash: None,
+                raw: serde_json::Value::Null,
+            }],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("rec.onnx"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

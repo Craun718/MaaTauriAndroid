@@ -39,7 +39,7 @@ pub fn configure(telemetry: Option<&TelemetryConfig>, user_enabled: bool) {
     ENABLED.store(true, Ordering::SeqCst);
     TRACING.store(config.tracing, Ordering::SeqCst);
     let options = sentry::ClientOptions {
-        release: Some(format!("ttflow@{}", env!("CARGO_PKG_VERSION")).into()),
+        release: Some(format!("mta@{}", env!("CARGO_PKG_VERSION")).into()),
         environment: config.environment.clone().map(std::borrow::Cow::Owned),
         traces_sample_rate: config.traces_sample_rate.clamp(0.0, 1.0) as f32,
         ..Default::default()

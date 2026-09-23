@@ -1239,7 +1239,7 @@ mod tests {
         };
         let log_root = std::env::temp_dir().join(format!("log-root-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&log_root).unwrap();
-        fs::write(log_root.join("ttflow.log"), b"app log line\n").unwrap();
+        fs::write(log_root.join("mta.log"), b"app log line\n").unwrap();
         let roots = vec![LogExportRoot {
             entry: "logs/app".to_string(),
             path: log_root.clone(),
@@ -1258,9 +1258,7 @@ mod tests {
         assert!(zip
             .windows(19)
             .any(|window| window == b"device-info-payload"));
-        assert!(zip
-            .windows(19)
-            .any(|window| window == b"logs/app/ttflow.log"));
+        assert!(zip.windows(19).any(|window| window == b"logs/app/mta.log"));
         assert!(zip.windows(12).any(|window| window == b"app log line"));
         fs::remove_file(output).unwrap();
         fs::remove_dir_all(log_root).unwrap();

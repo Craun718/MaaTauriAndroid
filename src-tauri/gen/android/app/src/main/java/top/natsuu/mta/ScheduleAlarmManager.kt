@@ -26,7 +26,7 @@ data class ScheduledTrigger(
 }
 
 object ScheduleAlarmManager {
-    private const val TAG = "TTFlowSchedule"
+    private const val TAG = "MTASchedule"
 
     fun schedulesFromJson(json: String?, now: Instant = Instant.now()): List<ScheduledTrigger> {
         if (json.isNullOrBlank()) return emptyList()

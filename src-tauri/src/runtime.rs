@@ -1314,7 +1314,7 @@ mod tests {
 
     #[test]
     fn ocr_model_validation_accepts_files_across_resource_paths() {
-        let root = std::env::temp_dir().join(format!("ttflow-ocr-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
         let base = root.join("base/model/ocr");
         let extra = root.join("extra/model/ocr");
         std::fs::create_dir_all(&base).unwrap();
@@ -1343,7 +1343,7 @@ mod tests {
 
     #[test]
     fn ocr_model_validation_rejects_a_missing_directory() {
-        let root = std::env::temp_dir().join(format!("ttflow-ocr-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
 
         let error = validate_ocr_models(
             &root.to_string_lossy(),
@@ -1368,7 +1368,7 @@ mod tests {
 
     #[test]
     fn ocr_model_validation_rejects_a_partial_model() {
-        let root = std::env::temp_dir().join(format!("ttflow-ocr-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
         let model = root.join("base/model/ocr");
         std::fs::create_dir_all(&model).unwrap();
         std::fs::write(model.join("det.onnx"), b"det").unwrap();

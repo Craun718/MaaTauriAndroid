@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
-/* 只要组件样式，不要内置主题：主题由下面的 "ttflow" 自定义主题提供。 */
+/* 只要组件样式，不要内置主题：主题由下面的 "maa-tauri-android" 自定义主题提供。 */
 @plugin "daisyui" {
   themes: false;
 }
 
 /*
  * 原始色板：全项目唯一的颜色真相源。
- * 下面 @theme 与 daisyUI 的 "ttflow" 主题都引用这些变量，所以改色只需要动这一处。
+ * 下面 @theme 与 daisyUI 的 "maa-tauri-android" 主题都引用这些变量，所以改色只需要动这一处。
  * 深色跟随系统 prefers-color-scheme，因此 daisyUI 主题不需要单独的 --prefersdark 变体，
  * 变量翻转后它的组件（input / select / checkbox / radio / tabs）会一起跟着变。
  *
@@ -67,7 +67,7 @@
  * --size-field 决定 input/select/tabs 高度（*10 即 2.75rem，即原来的 h-11 触屏目标）。
  */
 @plugin "daisyui/theme" {
-  name: "ttflow";
+  name: "maa-tauri-android";
   default: true;
 
   --color-base-100: var(--tt-raised);

@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const APPLICATION_LOG_FILE_STEM: &str = "ttflow";
-pub const RUN_EVENT_LOG_FILE_STEM: &str = "ttflow-run";
-pub const RUN_EVENT_TARGET: &str = "ttflow::run";
+pub const APPLICATION_LOG_FILE_STEM: &str = "mta";
+pub const RUN_EVENT_LOG_FILE_STEM: &str = "mta-run";
+pub const RUN_EVENT_TARGET: &str = "mta::run";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunLogError {

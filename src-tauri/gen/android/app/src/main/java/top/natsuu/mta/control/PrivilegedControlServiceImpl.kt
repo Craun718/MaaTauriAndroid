@@ -90,7 +90,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         val display = displayContext
             .let(ShellIdentityContext::createDisplayManager)
             ?.createVirtualDisplay(
-                "TTFlowVirtualDisplay",
+                "MTAVirtualDisplay",
                 width,
                 height,
                 dpi,
@@ -825,7 +825,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                 if (method.parameterTypes.size == 2) {
                     method.invoke(windowManager, displayId, 0)
                 } else if (method.parameterTypes.size == 3) {
-                    method.invoke(windowManager, displayId, 0, "TTFlow")
+                    method.invoke(windowManager, displayId, 0, "MaaTauriAndroid")
                 } else {
                     method.invoke(windowManager, displayId)
                 }

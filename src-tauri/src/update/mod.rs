@@ -978,7 +978,7 @@ mod tests {
         let client = Arc::new(StubClient::new());
         let state = UpdateState::with_client(client);
         // Simulate a completed download without the network.
-        let apk_path = env.dirs.download_dir.join("ttflow-9.9.9-abcdef.apk");
+        let apk_path = env.dirs.download_dir.join("mta-9.9.9-abcdef.apk");
         std::fs::create_dir_all(&env.dirs.download_dir).unwrap();
         std::fs::write(&apk_path, b"apk").unwrap();
         {

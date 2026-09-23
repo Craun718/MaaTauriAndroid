@@ -127,11 +127,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=MAAFW_VERSION");
     println!("cargo:rustc-env=MAAFW_VERSION={}", maa_framework_version());
     println!(
-        "cargo:rustc-env=TTFLOW_APP_TAG={}",
+        "cargo:rustc-env=MTA_APP_TAG={}",
         tag_or_short_hash(&root).unwrap_or_else(|| "unknown".to_string())
     );
     println!(
-        "cargo:rustc-env=TTFLOW_RESOURCE_TAG={}",
+        "cargo:rustc-env=MTA_RESOURCE_TAG={}",
         tag_or_short_hash(&root.join("resource/m9a")).unwrap_or_default()
     );
     watch_git_history(&root);

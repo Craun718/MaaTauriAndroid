@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pack a MaaFwApp agent runtime bundle into a TTFlow-compatible ZIP.
+"""Pack a MaaFwApp agent runtime bundle into a MaaTauriAndroid-compatible ZIP.
 
 `AgentRuntimeManager`/`ZipSafety` impose two hard requirements that this script
 enforces, because a plain `zip`/`shutil.make_archive` call can silently violate

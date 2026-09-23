@@ -124,7 +124,7 @@ class PiProfileReaderTest {
                 [signing]
                 store_file = "../release.jks"
                 store_password = "store-secret"
-                key_alias = "ttflow"
+                key_alias = "mta"
                 """.trimIndent(),
             )
         }
@@ -133,7 +133,7 @@ class PiProfileReaderTest {
 
         assertEquals(keystore.canonicalFile.absolutePath, signing.storeFile)
         assertEquals("store-secret", signing.storePassword)
-        assertEquals("ttflow", signing.keyAlias)
+        assertEquals("mta", signing.keyAlias)
         assertEquals("store-secret", signing.keyPassword)
     }
 
@@ -149,7 +149,7 @@ class PiProfileReaderTest {
                 [signing]
                 store_file = "${keystore.canonicalPath}"
                 store_password = "store-secret"
-                key_alias = "ttflow"
+                key_alias = "mta"
                 key_password = "key-secret"
                 """.trimIndent(),
             )
@@ -173,7 +173,7 @@ class PiProfileReaderTest {
                 [signing]
                 store_file = "../missing.jks"
                 store_password = "store-secret"
-                key_alias = "ttflow"
+                key_alias = "mta"
                 """.trimIndent(),
             )
         }

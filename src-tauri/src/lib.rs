@@ -2387,7 +2387,7 @@ mod tests {
 
     #[test]
     fn project_asset_path_allows_images_inside_the_project() {
-        let root = std::env::temp_dir().join(format!("ttflow-asset-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("mta-asset-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(root.join("images")).unwrap();
         std::fs::write(root.join("images/example.png"), b"png").unwrap();
 
@@ -2399,7 +2399,7 @@ mod tests {
 
     #[test]
     fn project_asset_path_rejects_unsafe_and_non_image_paths() {
-        let root = std::env::temp_dir().join(format!("ttflow-asset-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("mta-asset-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(root.join("images")).unwrap();
         std::fs::write(root.join("images/example.png"), b"png").unwrap();
 

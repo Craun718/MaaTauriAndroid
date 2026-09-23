@@ -235,7 +235,7 @@ object RuntimeBridge {
         val client = controlClient ?: return false
         val latch = CountDownLatch(1)
         val connected = AtomicBoolean(false)
-        thread(name = "ttflow-switch-privileged-backend") {
+        thread(name = "mta-switch-privileged-backend") {
             val result = client.switchPrivilegedBackend(backend)
             connected.set(result)
             latch.countDown()

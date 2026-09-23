@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble MAAPVZ's assets and agent into a TTFlow-compatible PI root."""
+"""Assemble MAAPVZ's assets and agent into a MaaTauriAndroid-compatible PI root."""
 
 from __future__ import annotations
 

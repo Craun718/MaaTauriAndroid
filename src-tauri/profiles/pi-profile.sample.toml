@@ -54,5 +54,5 @@ PYTHONPATH = "{pi}"
 # [signing]
 # store_file = "/absolute/path/to/keystore.jks"
 # store_password = "the-store-password"
-# key_alias = "ttflow"
+# key_alias = "mta"
 # key_password = "the-key-password" # optional; defaults to the store password

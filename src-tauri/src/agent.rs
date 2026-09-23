@@ -286,7 +286,7 @@ pub fn start_session(
 }
 
 const PI_INTERFACE_VERSION: &str = "v2.6.0";
-const PI_CLIENT_NAME: &str = "TTFlow";
+const PI_CLIENT_NAME: &str = "MaaTauriAndroid";
 
 /// Maps the UI setting to the Project Interface locale. System follows the
 /// language the project was loaded in, which the frontend derives from the OS.
@@ -855,7 +855,7 @@ mod tests {
             &BTreeMap::from([("resource-description".to_string(), "官方资源".to_string())]),
         );
         assert_eq!(environment["PI_INTERFACE_VERSION"], "v2.6.0");
-        assert_eq!(environment["PI_CLIENT_NAME"], "TTFlow");
+        assert_eq!(environment["PI_CLIENT_NAME"], "MaaTauriAndroid");
         assert_eq!(environment["PI_CLIENT_VERSION"], env!("CARGO_PKG_VERSION"));
         assert_eq!(environment["PI_CLIENT_LANGUAGE"], "zh_cn");
         assert_eq!(environment["PI_VERSION"], "0.1.0");

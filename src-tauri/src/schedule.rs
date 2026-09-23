@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn corrupted_documents_report_an_error() {
-        let dir = std::env::temp_dir().join(format!("ttflow-schedule-bad-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("mta-schedule-bad-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("schedules.json"), b"{").unwrap();
         let store = ScheduleStore::new(&dir);
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn persistence_round_trips_and_deduplicates_triggers() -> Result<(), ScheduleError> {
-        let dir = std::env::temp_dir().join(format!("ttflow-schedule-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("mta-schedule-{}", Uuid::new_v4()));
         let store = ScheduleStore::new(&dir);
         let saved = store.save(fixed_rule())?;
         assert_eq!(store.list()?.len(), 1);

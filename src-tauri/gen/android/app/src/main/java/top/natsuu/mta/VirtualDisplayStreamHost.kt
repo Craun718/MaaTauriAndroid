@@ -115,7 +115,7 @@ object VirtualDisplayStreamHost {
                 return surface
             } catch (error: Exception) {
                 stopInternal()
-                android.util.Log.e("TTFlowVirtualDisplay", "Could not start the display stream", error)
+                android.util.Log.e("MTAVirtualDisplay", "Could not start the display stream", error)
                 return null
             }
         }
@@ -182,7 +182,7 @@ object VirtualDisplayStreamHost {
             } catch (_: IOException) {
                 if (running.get()) {
                     android.util.Log.e(
-                        "TTFlowVirtualDisplay",
+                        "MTAVirtualDisplay",
                         "Virtual display stream accept loop failed",
                     )
                     stopInternal()
@@ -208,7 +208,7 @@ object VirtualDisplayStreamHost {
             } catch (error: IllegalStateException) {
                 if (running.get()) {
                     android.util.Log.e(
-                        "TTFlowVirtualDisplay",
+                        "MTAVirtualDisplay",
                         "Virtual display stream encoder failed",
                         error,
                     )
@@ -368,7 +368,7 @@ object VirtualDisplayStreamHost {
             } catch (error: Exception) {
                 if (active.get()) {
                     android.util.Log.e(
-                        "TTFlowVirtualDisplay",
+                        "MTAVirtualDisplay",
                         "Virtual display stream writer failed",
                         error,
                     )
@@ -478,7 +478,7 @@ object VirtualDisplayStreamHost {
             } catch (error: Exception) {
                 if (active.get()) {
                     android.util.Log.w(
-                        "TTFlowVirtualDisplay",
+                        "MTAVirtualDisplay",
                         "Virtual display stream reader failed",
                         error,
                     )

@@ -20,14 +20,14 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Tag HEAD was built from, resolved by `build.rs`; a checkout with no tag on
 /// HEAD falls back to the short commit hash.
-pub const APP_TAG: &str = env!("TTFLOW_APP_TAG");
+pub const APP_TAG: &str = env!("MTA_APP_TAG");
 
 /// Tag (or short commit hash) of the `resource/m9a` Project Interface checkout.
 /// Empty when the submodule is absent, so consumers hide the row.
-pub const RESOURCE_TAG: &str = env!("TTFLOW_RESOURCE_TAG");
+pub const RESOURCE_TAG: &str = env!("MTA_RESOURCE_TAG");
 
-/// The application's formal name (`productName` in `tauri.conf.json`); TTFlow is
-/// the informal codename and stays out of user-facing surfaces.
+/// The application's formal name (`productName` in `tauri.conf.json`). The
+/// same name is used throughout the application and user-facing surfaces.
 pub const APP_NAME: &str = "MaaTauriAndroid";
 
 /// Placeholder used whenever a version is genuinely unknown, matching MaaFwApp.

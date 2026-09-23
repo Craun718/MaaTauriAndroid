@@ -3,11 +3,12 @@
 ## 项目结构
 
 - `src/`：React 前端源码。`pages/` 存放页面，`components/` 存放可复用 UI，`lib/` 存放 Tauri IPC 与工具函数，`store/` 存放 Zustand 状态。
-- `src/components/ui/`：daisyUI（`daisyui`，纯 CSS 的 Tailwind 插件，无运行时 JS）封装层。控件外观由 daisyUI 的组件类（`input` / `select` / `checkbox` / `radio` / `tabs` 等）提供，颜色、圆角、尺寸来自 `src/index.css` 里 `"ttflow"` 主题的 token；各封装组件只负责把调用处的 props 映射到这些类，页面/组件只写布局 class。daisyUI 没有对应组件的形态（如卡片式单选）才用它的语义 token（`border-base-300` / `bg-base-100` / `text-primary`）组合，不要新引入第二套组件库。
+- `src/components/ui/`：daisyUI（`daisyui`，纯 CSS 的 Tailwind 插件，无运行时 JS）封装层。控件外观由 daisyUI 的组件类（`input` / `select` / `checkbox` / `radio` / `tabs` 等）提供，颜色、圆角、尺寸来自 `src/index.css` 里 `"maa-tauri-android"` 主题的 token；各封装组件只负责把调用处的 props 映射到这些类，页面/组件只写布局 class。daisyUI 没有对应组件的形态（如卡片式单选）才用它的语义 token（`border-base-300` / `bg-base-100` / `text-primary`）组合，不要新引入第二套组件库。
 - `src-tauri/src/`：Rust 后端。领域加载/解析逻辑在 `domain/`，Maa 运行时在 `runtime.rs`，配置持久化在 `persistence.rs`，敏感数据处理在 `secrets.rs`。
 - `src-tauri/gen/android/`：Android Shell、JNI 桥接、Shizuku 控制服务与 Gradle 工程。
 - `src-tauri/fixtures/`：嵌入式测试项目数据。
 - `vendor/maa/`：vendored MaaFramework 二进制与许可文件；不要修改二进制内容。
+- `resource/m9a/`、`resource/narutomobile/`、`resource/maapvz/`：git submodule，指向外部代码库；**不要修改其中的任何内容**。需要改上游行为时改本仓库的代码，submodule 只做 checkout 到指定 commit（`scripts/setup.sh` / `git submodule update`）。
 
 ## 系统栏适配（edge-to-edge）
 
@@ -71,7 +72,7 @@ TypeScript/React 使用 2 空格缩进、函数组件、显式返回类型和 ca
 颜色分两层，改色只需要动 `src/index.css` 里 `:root` 的 `--tt-*` 原始色板一处：
 
 - 项目自己的具名 utility（`bg-surface` / `bg-raised` / `bg-surface-muted` / `text-ink` / `text-ink-muted` / `border-line` / `bg-accent`）来自 `@theme`，定义在 `src/index.css` 的 `@theme` 块；
-- daisyUI 组件的语义 token（`bg-base-100` / `text-base-content` / `border-base-300` / `text-primary` / `text-error` 等）由 `@plugin "daisyui/theme"` 的 `"ttflow"` 主题提供，其取值同样引用 `--tt-*`。
+- daisyUI 组件的语义 token（`bg-base-100` / `text-base-content` / `border-base-300` / `text-primary` / `text-error` 等）由 `@plugin "daisyui/theme"` 的 `"maa-tauri-android"` 主题提供，其取值同样引用 `--tt-*`。
 
 两套名字指向同一批原始变量，取值必然一致；写新组件时按「daisyUI 有对应组件就用它的类，没有就用它的语义 token」来选。不要写 `bg-[var(--color-*)]` 任意值或硬编码十六进制。深色由 `prefers-color-scheme` 覆盖 `--tt-*` 同名变量实现，所以 daisyUI 主题不需要单独的 `--prefersdark` 变体，也不要引入 `data-theme` 切换。
 

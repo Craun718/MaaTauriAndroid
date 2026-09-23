@@ -10,7 +10,7 @@ interface CheckboxProps {
 
 /**
  * daisyUI 复选框。外观（边框、选中态、焦点环）由 .checkbox / .checkbox-primary 提供，
- * 颜色与圆角来自 index.css 里 "ttflow" 主题的 token；className 只负责调用处的布局。
+ * 颜色与圆角来自 index.css 里 "maa-tauri-android" 主题的 token；className 只负责调用处的布局。
  * 原生 input 直接承载选中态，因此读屏与 Testing Library 都能直接命中它。
  */
 export function Checkbox({

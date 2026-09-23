@@ -17,7 +17,7 @@ public final class RootServiceStarter {
 
     private static final String TAG = "MaaTauriAndroidControl";
 
-    /** Reserved Shizuku user-service transaction; TTFlow pins destroy() there too. */
+    /** Reserved Shizuku user-service transaction; MaaTauriAndroid pins destroy() there too. */
     private static final int DESTROY_TRANSACTION_CODE = 16777114;
 
     // linkToDeath only watches a BinderProxy while something holds a strong

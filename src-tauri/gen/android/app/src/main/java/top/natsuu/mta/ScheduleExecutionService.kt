@@ -49,7 +49,7 @@ class ScheduleExecutionService : Service() {
             return START_NOT_STICKY
         }
         ScheduleAlarmManager.sync(this)
-        thread(name = "ttflow-schedule-execution") {
+        thread(name = "mta-schedule-execution") {
             if (!RuntimeBridge.connectPrivilegedService(CONNECT_TIMEOUT_MS)) {
                 android.util.Log.w(
                     TAG,
@@ -112,8 +112,8 @@ class ScheduleExecutionService : Service() {
     )
 
     companion object {
-        private const val TAG = "TTFlowSchedule"
-        private const val CHANNEL_ID = "ttflow-schedule"
+        private const val TAG = "MTASchedule"
+        private const val CHANNEL_ID = "mta-schedule"
         private const val NOTIFICATION_ID = 2
         private const val CONNECT_TIMEOUT_MS = 15_000L
 

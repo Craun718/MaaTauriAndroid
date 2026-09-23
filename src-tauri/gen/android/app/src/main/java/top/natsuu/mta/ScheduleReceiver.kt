@@ -22,7 +22,7 @@ class ScheduleReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        private const val TAG = "TTFlowSchedule"
+        private const val TAG = "MTASchedule"
         const val ACTION_SCHEDULE_TRIGGER = "top.natsuu.mta.action.SCHEDULE_TRIGGER"
         const val EXTRA_RULE_ID = "ruleId"
         const val EXTRA_SCHEDULED_TIME_MS = "scheduledTimeMs"

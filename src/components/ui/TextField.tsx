@@ -18,7 +18,7 @@ interface TextFieldProps {
 
 /**
  * daisyUI 文本输入。输入框外观（边框、焦点环、禁用态、高度）由 .input 提供，
- * 高度与圆角来自 "ttflow" 主题的 --size-field / --radius-field；
+ * 高度与圆角来自 "maa-tauri-android" 主题的 --size-field / --radius-field；
  * className 作用于外层 <label> 容器。
  */
 export function TextField({

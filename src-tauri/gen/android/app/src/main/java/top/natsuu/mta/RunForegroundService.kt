@@ -98,7 +98,7 @@ class RunForegroundService : Service() {
     }
 
     companion object {
-        private const val TAG = "TTFlowRun"
+        private const val TAG = "MTARun"
         private const val CHANNEL_ID = "maa-run"
         private const val NOTIFICATION_ID = 1
 

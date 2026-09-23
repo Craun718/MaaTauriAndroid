@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "==> TTFlow setup"
+echo "==> MaaTauriAndroid setup"
 echo
 
 "${SCRIPT_DIR}/fetch-submodules.sh"

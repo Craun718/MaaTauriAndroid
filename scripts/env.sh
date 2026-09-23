@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared configuration for TTFlow setup scripts.
+# Shared configuration for MaaTauriAndroid setup scripts.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

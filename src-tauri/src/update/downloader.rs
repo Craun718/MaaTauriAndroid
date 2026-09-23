@@ -43,7 +43,7 @@ pub async fn download_apk(
     std::fs::create_dir_all(destination_dir)
         .map_err(|error| storage_error("create the update directory", error))?;
 
-    let file_name = format!("ttflow-{}-{}.apk", safe_label(version_label), &digest[..16]);
+    let file_name = format!("mta-{}-{}.apk", safe_label(version_label), &digest[..16]);
     let destination = destination_dir.join(&file_name);
     let staging = destination_dir.join(format!("{file_name}.part"));
 
@@ -251,7 +251,7 @@ mod tests {
             .file_name()
             .unwrap()
             .to_string_lossy()
-            .starts_with("ttflow-1.2.3-"));
+            .starts_with("mta-1.2.3-"));
         // No staging litter remains.
         let leftovers: Vec<_> = std::fs::read_dir(temp.path())
             .unwrap()
@@ -368,7 +368,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let destination = temp
             .path()
-            .join(format!("ttflow-1.2.3-{}.apk", &digest_of(b"cached")[..16]));
+            .join(format!("mta-1.2.3-{}.apk", &digest_of(b"cached")[..16]));
         std::fs::write(&destination, b"cached").unwrap();
         // No scripted stream: any network attempt would fail the test.
         let client = StubClient::new();

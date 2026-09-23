@@ -29,7 +29,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     private var bound = false
     private val mainHandler = Handler(context.mainLooper)
     private val rootExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "ttflow-root-control").apply { isDaemon = true }
+        Thread(runnable, "mta-root-control").apply { isDaemon = true }
     }
     private var permissionListener: Shizuku.OnRequestPermissionResultListener? = null
     private var permissionResultCallback: ((Boolean) -> Unit)? = null

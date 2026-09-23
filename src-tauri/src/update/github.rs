@@ -19,7 +19,7 @@ const PAGE_SIZE: usize = 100;
 const MAX_PAGES: usize = 3;
 
 /// Asset-name markers that mean "this APK runs on this device", in preference
-/// order. TTFlow only ships arm64 builds.
+/// order. MaaTauriAndroid only ships arm64 builds.
 pub const ABI_TAGS: [&str; 3] = ["arm64-v8a", "arm64", "aarch64"];
 
 /// Headers for the REST API: browser UA plus the versioned JSON accept set.

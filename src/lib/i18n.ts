@@ -9,6 +9,7 @@ const en = {
   // Bottom navigation
   navHome: "Home",
   navTasks: "Tasks",
+  navRuns: "Runs",
   navSettings: "Settings",
 
   // Shared
@@ -329,6 +330,7 @@ export type MessageKey = keyof typeof en;
 const zh: Record<MessageKey, string> = {
   navHome: "首页",
   navTasks: "任务",
+  navRuns: "运行记录",
   navSettings: "设置",
 
   working: "处理中",

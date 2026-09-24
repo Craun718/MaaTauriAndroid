@@ -1,4 +1,4 @@
-import { Home, ListChecks, Settings } from "lucide-react";
+import { History, Home, ListChecks, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "../lib/i18n";
@@ -9,6 +9,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigation = [
     { to: "/", label: t("navHome"), icon: Home },
     { to: "/tasks", label: t("navTasks"), icon: ListChecks },
+    { to: "/runs", label: t("navRuns"), icon: History },
     { to: "/settings", label: t("navSettings"), icon: Settings },
   ];
 

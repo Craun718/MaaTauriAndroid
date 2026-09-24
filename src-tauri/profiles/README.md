@@ -157,7 +157,7 @@ scripts/build-agent-runtime.sh narutomobile
 scripts/build-agent-runtime.sh maapvz
 ```
 
-脚本先按 `MAAFW_SCRIPT_REF` 从 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) 取 `build_agent_bundle.py`，再把 `CORE_REPO` 替换成 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)，组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，最后交给 `pack_agent_bundle.py` 出 ZIP。
+组装与打包都走仓库内的通用工具：`scripts/build_agent_bundle.py`（vendored 自 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)，AGPL-3.0，来源 commit 见文件头，许可见 [../../scripts/MAA-FWAPP-LICENSE.md](../../scripts/MAA-FWAPP-LICENSE.md)）组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，`src-tauri/profiles/pack_agent_bundle.py` 出 ZIP；`--core-repo` / `--core-tag` 由 `scripts/env.sh` 传入（默认 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)）。
 
 `src-tauri/profiles/pack_agent_bundle.py` 是构建 **Python** agent 压缩包的唯一受支持方式：
 

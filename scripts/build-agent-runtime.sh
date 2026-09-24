@@ -50,30 +50,25 @@ echo "==> Building the ${PROJECT} ${ABI} Python agent runtime…"
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
-echo "  1/4  fetching build_agent_bundle.py from MaaFwApp…"
-curl -fsSL \
-  "https://raw.githubusercontent.com/Aliothmoon/MaaFwApp/${MAAFW_SCRIPT_REF}/scripts/build_agent_bundle.py" \
-  | sed "s|CORE_REPO = \"Aliothmoon/MaaAgentCoreAndroid\"|CORE_REPO = \"${MAAFW_CORE_REPO}\"|" \
-  > "${TMP}/build_agent_bundle.py"
-
-echo "  2/4  building the Python core + site-packages bundle…"
-python3 "${TMP}/build_agent_bundle.py" \
+echo "  1/3  building the Python core + site-packages bundle…"
+python3 "${REPO_ROOT}/scripts/build_agent_bundle.py" \
   --out "${OUT_DIST}" \
   --abi "${ABI}" \
   --requirements "${PROJECT_DIR}/requirements.txt" \
   "${EXCLUDES[@]}" \
   "${REQUIREMENTS[@]}" \
   --extra-index-url https://chaquo.com/pypi-13.1/ \
+  --core-repo "${MAAFW_CORE_REPO}" \
   --core-tag "${MAAFW_CORE_TAG}" \
   --work "${WORK}"
 
 VENDOR_DIR="${REPO_ROOT}/vendor/maa/android/${ABI}"
 if [ -f "${VENDOR_DIR}/libMaaAgentClient.so" ]; then
-  echo "  3/4  reusing agent libraries from vendor/maa/android/${ABI}/…"
+  echo "  2/3  reusing agent libraries from vendor/maa/android/${ABI}/…"
   mkdir -p "${TMP}/agent-libs"
   cp "${VENDOR_DIR}/libMaaAgentClient.so" "${VENDOR_DIR}/libMaaAgentServer.so" "${TMP}/agent-libs/"
 else
-  echo "  3/4  downloading MaaFW agent libraries…"
+  echo "  2/3  downloading MaaFW agent libraries…"
   curl -fsSL -o "${TMP}/maafw-android.zip" \
     "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAAFW_VERSION}/MAA-android-aarch64-${MAAFW_VERSION}.zip"
   unzip -j -q "${TMP}/maafw-android.zip" \
@@ -81,7 +76,7 @@ else
     -d "${TMP}/agent-libs"
 fi
 
-echo "  4/4  packing the archive…"
+echo "  3/3  packing the archive…"
 python3 "${REPO_ROOT}/src-tauri/profiles/pack_agent_bundle.py" \
   "${OUT_DIST}/${ABI}/bundle" \
   "${TMP}/agent-libs" \

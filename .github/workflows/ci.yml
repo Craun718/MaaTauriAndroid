@@ -23,6 +23,7 @@ jobs:
               - 'resource/m9a/**'
               - 'resource/m9a.toml'
               - 'scripts/build-agent-runtime.sh'
+              - 'scripts/build_agent_bundle.py'
               - 'scripts/env.sh'
               - 'src/**'
               - 'src-tauri/profiles/**'
@@ -39,6 +40,7 @@ jobs:
               - 'resource/narutomobile.toml'
               - 'scripts/prepare-narutomobile-pi.sh'
               - 'scripts/build-agent-runtime.sh'
+              - 'scripts/build_agent_bundle.py'
               - 'scripts/env.sh'
               - 'src/**'
               - 'src-tauri/profiles/**'
@@ -56,6 +58,7 @@ jobs:
               - 'scripts/prepare-maapvz-pi.sh'
               - 'scripts/prepare-maapvz-pi.py'
               - 'scripts/build-agent-runtime.sh'
+              - 'scripts/build_agent_bundle.py'
               - 'scripts/env.sh'
               - 'src/**'
               - 'src-tauri/profiles/**'
@@ -139,13 +142,11 @@ jobs:
     if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.m9a == 'true')
     runs-on: ubuntu-latest
     env:
-      # Pinned commit of Aliothmoon/MaaFwApp whose scripts/build_agent_bundle.py
-      # builds the Python agent runtime (verified byte-identical to the local
-      # reference clone; refresh the pin when updating the bundle).
-      MAAFW_SCRIPT_REF: f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7
+      # The Python agent runtime is built by the vendored script
+      # scripts/build_agent_bundle.py (AGPL-3.0, from MaaFwApp);
+      # MAAFW_CORE_REPO defaults to scripts/env.sh.
       # Keep in sync with the MaaFramework binaries vendored in vendor/maa/.
       MAAFW_VERSION: v5.13.0
-      MAAFW_CORE_REPO: Craun718/MaaAgentCoreAndroid
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
     steps:
       - uses: actions/checkout@v7
@@ -209,6 +210,7 @@ jobs:
 
       - name: Download MaaFramework and build the agent runtime
         run: |
+          python3 scripts/build_agent_bundle.py --help >/dev/null
           scripts/fetch-maafw.sh
           scripts/build-agent-runtime.sh
 
@@ -248,7 +250,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
-      MAAFW_SCRIPT_REF: f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7
       MAAFW_VERSION: v5.13.0
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
     steps:
@@ -311,6 +312,7 @@ jobs:
 
       - name: Download MaaFramework and build the agent runtime
         run: |
+          python3 scripts/build_agent_bundle.py --help >/dev/null
           scripts/fetch-maafw.sh
           scripts/build-agent-runtime.sh narutomobile
 
@@ -342,7 +344,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
-      MAAFW_SCRIPT_REF: f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7
       MAAFW_VERSION: v5.13.0
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
     steps:
@@ -405,6 +406,7 @@ jobs:
 
       - name: Download MaaFramework and build the agent runtime
         run: |
+          python3 scripts/build_agent_bundle.py --help >/dev/null
           scripts/fetch-maafw.sh
           scripts/build-agent-runtime.sh maapvz
 

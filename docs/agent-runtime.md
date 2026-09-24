@@ -36,14 +36,13 @@ scripts/build-agent-runtime.sh maapvz
 
 runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 
-## 流水线四步
+## 流水线三步
 
-`scripts/build-agent-runtime.sh` 做四件事：
+`scripts/build-agent-runtime.sh` 做三件事：
 
-1. **取打包脚本**：从 MaaFwApp 下载钉定 commit（`MAAFW_SCRIPT_REF`）的 `scripts/build_agent_bundle.py`，并把其中的 `CORE_REPO` 替换为本仓库的 fork（`MAAFW_CORE_REPO`）。
-2. **组装 Python 核心 + site-packages**：`build_agent_bundle.py` 从 MaaAgentCoreAndroid 的 release 下载预编译核心（CPython + 标准库 + `maa` 包，钉 `MAAFW_CORE_TAG`，缓存在 `.cache/maafw/`），再用资源项目自己的 `requirements.txt` 装依赖——Android 轮子来自 Chaquopy 索引（`--extra-index-url https://chaquo.com/pypi-13.1/`），装完剪掉排除列表里的包，纯 Python 的收进 `pure.zip`。
-3. **备 agent 库**：`libMaaAgentClient.so` / `libMaaAgentServer.so` 优先复用 `vendor/maa/android/arm64-v8a/` 里已铺好的；没有就从 MaaFramework release（钉 `MAAFW_VERSION`）下载。**两个来源必须是同一版本**，这是 bundle 与壳内 MaaFramework 对齐的关键。
-4. **打包**：`src-tauri/profiles/pack_agent_bundle.py` 把 bundle 目录和两个 `.so` 打成上述约束的 ZIP，并校验 `lib/arm64-v8a/` 里两个 `.so` 齐全。
+1. **组装 Python 核心 + site-packages**：仓库内 `scripts/build_agent_bundle.py`（vendored 自 MaaFwApp，AGPL-3.0，来源 commit 见文件头；升级脚本时手动同步副本并同步头注释）从 MaaAgentCoreAndroid 的 release 下载预编译核心（CPython + 标准库 + `maa` 包，仓库与版本由 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG` 钉定，缓存在 `.cache/maafw/`），再用资源项目自己的 `requirements.txt` 装依赖——Android 轮子来自 Chaquopy 索引（`--extra-index-url https://chaquo.com/pypi-13.1/`），装完剪掉排除列表里的包，纯 Python 的收进 `pure.zip`。
+2. **备 agent 库**：`libMaaAgentClient.so` / `libMaaAgentServer.so` 优先复用 `vendor/maa/android/arm64-v8a/` 里已铺好的；没有就从 MaaFramework release（钉 `MAAFW_VERSION`）下载。**两个来源必须是同一版本**，这是 bundle 与壳内 MaaFramework 对齐的关键。
+3. **打包**：`src-tauri/profiles/pack_agent_bundle.py` 把 bundle 目录和两个 `.so` 打成上述约束的 ZIP，并校验 `lib/arm64-v8a/` 里两个 `.so` 齐全。
 
 ## 版本钉定
 
@@ -54,7 +53,6 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 | `MAAFW_VERSION` | `v5.13.0` | MaaFramework 原生库版本（`vendor/maa` 与兜底下载） |
 | `MAAFW_CORE_REPO` | `Craun718/MaaAgentCoreAndroid` | 预编译 Python 核心的来源 fork |
 | `MAAFW_CORE_TAG` | `3.13.15-maafw5.13.0` | 核心版本（对应 MaaFW 5.13.0） |
-| `MAAFW_SCRIPT_REF` | `f4f6f22…` | `build_agent_bundle.py` 在 MaaFwApp 上的钉定 commit |
 
 对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC，patch 版本间保持兼容。
 
@@ -72,19 +70,20 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 
 ## 给下游：为自己的资源构建
 
-`build-agent-runtime.sh` 目前只认仓库内三个项目。外部资源项目自行集成时，照搬四步流水线即可——`build_agent_bundle.py`（来自 MaaFwApp）和 `pack_agent_bundle.py` 都是通用命令行工具：
+`build-agent-runtime.sh` 目前只认仓库内三个项目。外部资源项目自行集成时，照搬三步流水线即可——`build_agent_bundle.py`（仓库内 vendored 副本）和 `pack_agent_bundle.py` 都是通用命令行工具：
 
 ```bash
-# 1-2. 组装你的 bundle（requirements 用你资源项目的）
-python3 build_agent_bundle.py \
+# 1. 组装你的 bundle（requirements 用你资源项目的）
+python3 scripts/build_agent_bundle.py \
   --out <你的-dist 目录> --abi arm64-v8a \
   --requirements <你的资源>/requirements.txt \
   --extra-index-url https://chaquo.com/pypi-13.1/ \
-  --core-tag <MaaAgentCoreAndroid 的 tag> --work <缓存目录>
+  --core-repo <MaaAgentCoreAndroid 仓库> --core-tag <对应的 tag> \
+  --work <缓存目录>
 
-# 3. 准备与壳内 vendor/maa 同版本的 libMaaAgentClient.so / libMaaAgentServer.so
+# 2. 准备与壳内 vendor/maa 同版本的 libMaaAgentClient.so / libMaaAgentServer.so
 
-# 4. 打包（脚本不挑项目，任何 bundle 目录都能打）
+# 3. 打包（脚本不挑项目，任何 bundle 目录都能打）
 python3 pack_agent_bundle.py \
   <你的-dist>/arm64-v8a/bundle <agent-libs 目录> <你的-runtime>.zip
 ```

@@ -1918,71 +1918,87 @@ async fn start_run_core(
                 } else {
                     None
                 };
-                let (kind, state, message, outcome_label, attachment_path) = match outcome {
-                    runtime::RunOutcome::Completed => (
-                        run_log::RunEventKind::Completed,
-                        runtime::RunState::Idle,
-                        "The run completed".to_string(),
-                        "completed",
-                        None,
-                    ),
-                    runtime::RunOutcome::Stopped => (
-                        run_log::RunEventKind::Cancelled,
-                        runtime::RunState::Idle,
-                        "The run was stopped".to_string(),
-                        "stopped",
-                        None,
-                    ),
-                    runtime::RunOutcome::Failed {
-                        entry,
-                        task_name: _,
-                        status,
-                        diagnosis,
-                    } => {
-                        let mut attachment_path = None;
-                        match diagnostics::capture_failure_screenshot(
-                            logger_for_run.run_dir(),
-                            &entry,
-                        ) {
-                            Err(error) => {
-                                let _ = logger_for_run.append(
-                                    run_log::RunEventKind::Failure,
-                                    runtime::RunState::Running,
-                                    format!("failure screenshot could not be captured: {error}"),
-                                    None,
-                                    Some(serde_json::json!({ "taskEntry": entry })),
-                                );
-                            }
-                            Ok(path) => {
-                                if telemetry::sample(attachment_rate) {
-                                    attachment_path = Some(path);
+                let (kind, state, message, data, telemetry_message, outcome_label, attachment_path) =
+                    match outcome {
+                        runtime::RunOutcome::Completed => {
+                            let message = "The run completed".to_string();
+                            (
+                                run_log::RunEventKind::Completed,
+                                runtime::RunState::Idle,
+                                message.clone(),
+                                None,
+                                message,
+                                "completed",
+                                None,
+                            )
+                        }
+                        runtime::RunOutcome::Stopped => {
+                            let message = "The run was stopped".to_string();
+                            (
+                                run_log::RunEventKind::Cancelled,
+                                runtime::RunState::Idle,
+                                message.clone(),
+                                None,
+                                message,
+                                "stopped",
+                                None,
+                            )
+                        }
+                        runtime::RunOutcome::Failed {
+                            entry,
+                            task_name: _,
+                            status,
+                            diagnosis,
+                        } => {
+                            let mut attachment_path = None;
+                            match diagnostics::capture_failure_screenshot(
+                                logger_for_run.run_dir(),
+                                &entry,
+                            ) {
+                                Err(error) => {
+                                    let _ = logger_for_run.append(
+                                        run_log::RunEventKind::Failure,
+                                        runtime::RunState::Running,
+                                        format!(
+                                            "failure screenshot could not be captured: {error}"
+                                        ),
+                                        None,
+                                        Some(serde_json::json!({ "taskEntry": entry })),
+                                    );
+                                }
+                                Ok(path) => {
+                                    if telemetry::sample(attachment_rate) {
+                                        attachment_path = Some(path);
+                                    }
                                 }
                             }
+                            let (message, data) =
+                                runtime::task_failed_event(&entry, &status, diagnosis.as_deref());
+                            let telemetry_message = match &diagnosis {
+                                Some(diagnosis) => format!("{message} {diagnosis}"),
+                                None => message.clone(),
+                            };
+                            (
+                                run_log::RunEventKind::Failure,
+                                runtime::RunState::Idle,
+                                message,
+                                data,
+                                telemetry_message,
+                                "failed",
+                                attachment_path,
+                            )
                         }
-                        let mut message = format!("Maa task {entry} failed: {status}");
-                        if let Some(diagnosis) = &diagnosis {
-                            message.push(' ');
-                            message.push_str(diagnosis);
-                        }
-                        (
-                            run_log::RunEventKind::Failure,
-                            runtime::RunState::Idle,
-                            message,
-                            "failed",
-                            attachment_path,
-                        )
-                    }
-                };
+                    };
                 sessions.finish_with(&run_execution_id, || {
                     stop_run_foreground_service();
                     if let Ok(event) =
-                        logger_for_run.append(kind, state, message.clone(), task_name, None)
+                        logger_for_run.append(kind, state, message.clone(), task_name, data)
                     {
                         let _ = app.emit("run-event", &event);
                     }
                     telemetry::run_event(
                         outcome_label,
-                        &message,
+                        &telemetry_message,
                         attachment_path
                             .and_then(|path| path.to_str().map(str::to_string))
                             .as_deref(),

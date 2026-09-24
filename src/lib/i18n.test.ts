@@ -114,9 +114,21 @@ describe("localizeDiagnostic", () => {
     ).toBe("无法打开 Shizuku；请确认它已安装，且未被系统拦截");
   });
 
-  it("passes unknown backend text through unchanged", () => {
+  it("collapses task-abort messages to a short localized notice", () => {
     expect(localizeDiagnostic("Maa task Sugar failed: timeout", "zh")).toBe(
-      "Maa task Sugar failed: timeout",
+      "任务异常中止",
+    );
+    expect(localizeDiagnostic("Maa task Sugar failed: timeout", "en")).toBe(
+      "The task aborted abnormally",
+    );
+    expect(localizeDiagnostic("Maa task StartUp failed: Failed", "zh")).toBe(
+      "任务异常中止",
+    );
+  });
+
+  it("passes unknown backend text through unchanged", () => {
+    expect(localizeDiagnostic("Pipeline exploded", "zh")).toBe(
+      "Pipeline exploded",
     );
   });
 });
@@ -156,6 +168,6 @@ describe("localizeRunEvent", () => {
         },
         "zh",
       ),
-    ).toBe("Maa task Sugar failed: timeout");
+    ).toBe("任务异常中止");
   });
 });

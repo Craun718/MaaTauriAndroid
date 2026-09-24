@@ -1128,6 +1128,19 @@ impl RunOutcome {
     }
 }
 
+/// The user-facing failure event. The frontend gets a short, self-contained
+/// message; the full diagnosis travels in the event payload (logged to the
+/// background logs and expanded in run history) instead of the live feed.
+pub fn task_failed_event(
+    entry: &str,
+    status: &MaaStatus,
+    diagnosis: Option<&str>,
+) -> (String, Option<Value>) {
+    let message = format!("Maa task {entry} failed: {status}");
+    let data = diagnosis.map(|diagnosis| serde_json::json!({ "diagnosis": diagnosis }));
+    (message, data)
+}
+
 /// Modal focus messages pause queue advancement until the user confirms
 /// them in the UI. MaaFramework has no pause API, so the in-flight task
 /// keeps running — the gate only holds back the next task. Stopping the
@@ -1212,17 +1225,6 @@ pub fn run_tasks(
             &crate::run_diagnosis::missed_nodes(),
         );
         let diagnosis = crate::run_diagnosis::render(&cause);
-        if let Some(diagnosis) = &diagnosis {
-            logger
-                .append_to_ui(
-                    crate::run_log::RunEventKind::Warning,
-                    RunState::Running,
-                    diagnosis.clone(),
-                    Some(task_name.clone()),
-                    None,
-                )
-                .map_err(|error| RuntimeError::Maa(error.to_string()))?;
-        }
         return Ok(RunOutcome::Failed {
             entry,
             task_name,
@@ -1254,6 +1256,26 @@ mod tests {
         }
         .is_natural_end());
         assert!(!RunOutcome::Stopped.is_natural_end());
+    }
+
+    #[test]
+    fn task_failure_event_keeps_diagnosis_out_of_the_short_message() {
+        let (message, data) = task_failed_event(
+            "StartUp",
+            &MaaStatus::FAILED,
+            Some("recognition matched nothing; last unmatched nodes: CandyCancel"),
+        );
+        assert_eq!(message, "Maa task StartUp failed: Failed");
+        assert_eq!(
+            data,
+            Some(serde_json::json!({
+                "diagnosis": "recognition matched nothing; last unmatched nodes: CandyCancel"
+            }))
+        );
+
+        let (message, data) = task_failed_event("StartUp", &MaaStatus::FAILED, None);
+        assert_eq!(message, "Maa task StartUp failed: Failed");
+        assert_eq!(data, None);
     }
 
     #[test]

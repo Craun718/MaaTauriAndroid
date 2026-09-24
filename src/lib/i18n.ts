@@ -222,6 +222,7 @@ const en = {
   runHistoryOutcomeFailed: "Failed",
   runHistoryOutcomeInterrupted: "Incomplete",
   runHistoryMissing: "No readable record for this run",
+  runTaskAborted: "The task aborted abnormally",
   privileges: "Privileges",
   about: "About",
   appName: "MaaTauriAndroid",
@@ -472,6 +473,7 @@ const zh: Record<MessageKey, string> = {
   runHistoryOutcomeFailed: "失败",
   runHistoryOutcomeInterrupted: "未完成",
   runHistoryMissing: "该轮没有可读的运行记录",
+  runTaskAborted: "任务异常中止",
   privileges: "权限",
   about: "关于",
   appName: "MaaTauriAndroid",
@@ -697,8 +699,9 @@ export interface Translation {
 /**
  * Backend diagnostics arrive as fixed English strings. The known run-start
  * and privileged-action failures map onto catalog keys so notifications can
- * follow the interface language; anything unknown is shown as the original
- * backend text.
+ * follow the interface language; generic "Maa task … failed: …" task-abort
+ * messages collapse to a short localized notice. Anything unknown is shown
+ * as the original backend text.
  */
 const diagnosticKeys: Record<string, MessageKey> = {
   "Shizuku is unavailable; install or start Shizuku, then try again":
@@ -726,13 +729,23 @@ const diagnosticKeys: Record<string, MessageKey> = {
     "diagnosticVirtualDisplayBackUnavailable",
 };
 
-/** Localizes a known backend diagnostic; unknown text passes through unchanged. */
+const TASK_ABORT_PATTERN = /^Maa task \S+ failed: /;
+
+/**
+ * Localizes a known backend diagnostic. Task failures collapse to the short
+ * localized notice (details live in the run history/logs); unknown text
+ * passes through unchanged.
+ */
 export function localizeDiagnostic(
   message: string,
   language: AppLanguage,
 ): string {
   const key = diagnosticKeys[message];
-  return key ? translate(language, key) : message;
+  if (key) return translate(language, key);
+  if (TASK_ABORT_PATTERN.test(message)) {
+    return translate(language, "runTaskAborted");
+  }
+  return message;
 }
 
 /**

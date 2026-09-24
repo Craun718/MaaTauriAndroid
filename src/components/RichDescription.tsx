@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import { readProjectImage } from "../lib/api";
 
 const sanitizeSchema = {
@@ -120,7 +121,8 @@ interface RichDescriptionProps {
 }
 
 /**
- * Interface `description` renderer: Markdown plus the subset of inline HTML the
+ * Interface `description` renderer: GFM Markdown (tables and strikethrough —
+ * contact files like M9A's are tables) plus the subset of inline HTML the
  * project schema documents, sanitized before it ever reaches the WebView.
  */
 export function RichDescription({ text, className }: RichDescriptionProps) {
@@ -132,6 +134,7 @@ export function RichDescription({ text, className }: RichDescriptionProps) {
       }
     >
       <Markdown
+        remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
         components={{ a: MarkdownLink, img: MarkdownImage }}
       >

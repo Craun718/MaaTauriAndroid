@@ -59,6 +59,29 @@ describe("RichDescription", () => {
     expect(screen.getByText("two").closest("li")).toBeInTheDocument();
   });
 
+  it("renders GFM tables and strikethrough", () => {
+    render(
+      <RichDescription
+        text={
+          "| 平台 | 链接 |\n" +
+          "| :---: | :---: |\n" +
+          "| 官网 | [1999.fan](https://1999.fan) |\n\n" +
+          "~~gone~~"
+        }
+      />,
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "平台" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "1999.fan" })).toHaveAttribute(
+      "href",
+      "https://1999.fan",
+    );
+    expect(screen.getByText("gone").tagName).toBe("DEL");
+  });
+
   it("renders whitelisted inline HTML", () => {
     render(
       <RichDescription

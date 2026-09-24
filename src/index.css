@@ -255,6 +255,25 @@
     background: transparent;
   }
 
+  .rich-description table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    margin: 0.25rem 0;
+    border-collapse: collapse;
+    overflow-x: auto;
+  }
+
+  .rich-description th,
+  .rich-description td {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--color-line);
+  }
+
+  .rich-description th {
+    font-weight: 600;
+  }
+
   .rich-description img {
     max-width: 100%;
   }

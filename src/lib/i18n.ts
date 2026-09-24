@@ -149,6 +149,7 @@ const en = {
   applyPreset: "Apply",
   toggleOn: "On",
   requiresOtherController: "Requires a different controller or resource.",
+  taskConfigLocked: "Task configuration is locked while a run is in progress.",
 
   // Run controls
   taskOperations: "Task actions",
@@ -396,6 +397,7 @@ const zh: Record<MessageKey, string> = {
   applyPreset: "启用",
   toggleOn: "启用",
   requiresOtherController: "需要其他控制器或资源。",
+  taskConfigLocked: "任务运行中，任务配置已锁定，仅可查看详情。",
 
   taskOperations: "任务操作",
   start: "开始",

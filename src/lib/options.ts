@@ -211,3 +211,48 @@ export function activeController(
 export function projectOption(project: Project | undefined, name: string) {
   return project?.options[name];
 }
+
+export interface OptionValueSummaryRow {
+  label: string;
+  detail?: string;
+}
+
+function caseLabel(option: OptionDefinition, caseName?: string) {
+  if (!caseName) return undefined;
+  if (option.kind === "input" || option.kind === "hotkey") return undefined;
+  return option.cases.find((item) => item.name === caseName)?.label ?? caseName;
+}
+
+/**
+ * The current values of an option as plain text, for read-only rendering.
+ *
+ * Mirrors the effective values the resolver would use (`defaultOptionValue`),
+ * so an untouched option reports what will actually run: a select without
+ * `default_case` falls back to its first case, a checkbox reports its defaults.
+ * A Yes/No switch reads like the boolean it is: the label of whichever case is
+ * active. Input-style options (input / hotkey) emit one row per field.
+ */
+export function optionValueSummary(
+  option: OptionDefinition,
+  value?: OptionValue,
+): OptionValueSummaryRow[] {
+  const effective = defaultOptionValue(option, value);
+  if (option.kind === "select" || option.kind === "switch") {
+    const selected = effective.type === "single" ? effective.case : undefined;
+    return [{ label: option.label, detail: caseLabel(option, selected) }];
+  }
+  if (option.kind === "checkbox") {
+    const selected = effective.type === "multiple" ? effective.cases : [];
+    const detail = selected
+      .map((name) => caseLabel(option, name))
+      .filter((label): label is string => Boolean(label))
+      .join(", ");
+    return [{ label: option.label, detail: detail || undefined }];
+  }
+  const fields = option.kind === "input" ? option.inputs : option.hotkeys;
+  const values = effective.type === "inputs" ? effective.values : {};
+  return fields.map((field) => ({
+    label: field.label,
+    detail: values[field.name] ?? field.default ?? "",
+  }));
+}

@@ -28,7 +28,14 @@ import { BottomDrawer } from "./ui/BottomDrawer";
  * and keeping them apart meant showing the same tasks twice. The individual
  * actions live in a bottom drawer opened by the standalone "task actions" button.
  */
-export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
+export function RunPanel({
+  onRunStarted,
+  onRunActiveChange,
+}: {
+  onRunStarted?: () => void;
+  /** Reports whether a run is active (`Preparing` / `Running` / `Stopping`). */
+  onRunActiveChange?: (active: boolean) => void;
+}) {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
   const { t, language } = useTranslation();
@@ -172,10 +179,15 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
     };
   }, [notify, notifyOnce, reportError, language]);
 
+  const running = Boolean(executionId) && runState !== "Idle";
+
+  useEffect(() => {
+    onRunActiveChange?.(running);
+  }, [running, onRunActiveChange]);
+
   if (!snapshot?.project) return null;
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
-  const running = Boolean(executionId) && runState !== "Idle";
 
   async function start() {
     onRunStarted?.();
@@ -188,6 +200,9 @@ export function RunPanel({ onRunStarted }: { onRunStarted?: () => void }) {
       const result = await startRun();
       executionIdRef.current = result.executionId;
       setExecutionId(result.executionId);
+      // The first run-event may trail the invoke response, so the task list
+      // locks as soon as the backend has accepted the run.
+      setRunState("Preparing");
       notify(result.message);
     } catch (error) {
       await reportStartFailure(error);

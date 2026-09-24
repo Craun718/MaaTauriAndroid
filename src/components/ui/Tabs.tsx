@@ -10,6 +10,8 @@ interface TabsProps {
   items: TabsItem[];
   value?: string;
   onValueChange?: (value: string) => void;
+  /** 禁用全部标签切换：选中项保持可读，点击与键盘导航不生效。 */
+  disabled?: boolean;
   /** 无障碍名称，描述整组标签的用途。 */
   ariaLabel?: string;
 }
@@ -22,7 +24,13 @@ interface TabsProps {
  * 每个面板以 .tab-content 紧随其 tab 出现，内容会被一直挂在 DOM 里；而本封装需要按需挂载。
  * 键盘行为（roving tabindex + 左右方向键 / Home / End）因此由本组件自己实现。
  */
-export function Tabs({ items, value, onValueChange, ariaLabel }: TabsProps) {
+export function Tabs({
+  items,
+  value,
+  onValueChange,
+  disabled = false,
+  ariaLabel,
+}: TabsProps) {
   const active = value ?? items[0]?.value;
   const groupId = useId();
   const listRef = useRef<HTMLDivElement>(null);
@@ -34,6 +42,7 @@ export function Tabs({ items, value, onValueChange, ariaLabel }: TabsProps) {
   };
 
   const selectAt = (index: number) => {
+    if (disabled) return;
     const item = items[index];
     if (!item) return;
     onValueChange?.(item.value);
@@ -61,10 +70,14 @@ export function Tabs({ items, value, onValueChange, ariaLabel }: TabsProps) {
                 id={`${groupId}-tab-${index}`}
                 aria-selected={selected}
                 aria-controls={selected ? `${groupId}-panel` : undefined}
-                tabIndex={selected ? 0 : -1}
+                tabIndex={selected && !disabled ? 0 : -1}
                 className={`tab${selected ? " tab-active" : ""}`}
-                onClick={() => onValueChange?.(item.value)}
+                disabled={disabled}
+                onClick={() => {
+                  if (!disabled) onValueChange?.(item.value);
+                }}
                 onKeyDown={(event) => {
+                  if (disabled) return;
                   if (event.key === "ArrowRight") {
                     event.preventDefault();
                     selectAt((index + 1) % items.length);

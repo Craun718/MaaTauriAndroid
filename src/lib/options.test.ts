@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { selectedCaseNames, switchCases, visibleOptions } from "./options";
+import {
+  optionValueSummary,
+  selectedCaseNames,
+  switchCases,
+  visibleOptions,
+} from "./options";
 import type { OptionDefinition, OptionValue } from "./types";
 
 const applicability = { controllers: [], resources: [] };
@@ -254,5 +259,106 @@ describe("switchCases", () => {
     expect(switchCases(twoCases(["Yes", "No", "Maybe"]))).toBeUndefined();
     expect(switchCases(twoCases(["Yes"]))).toBeUndefined();
     expect(switchCases(count)).toBeUndefined();
+  });
+});
+
+describe("optionValueSummary", () => {
+  it("reports the effective case label of an unset select or switch", () => {
+    expect(optionValueSummary(sugar)).toEqual([
+      { label: "eatSugar", detail: "No" },
+    ]);
+    expect(optionValueSummary(definitions.plain)).toEqual([
+      { label: "plain", detail: "a" },
+    ]);
+  });
+
+  it("reports the stored case for select and switch values", () => {
+    expect(optionValueSummary(sugar, single("Yes"))).toEqual([
+      { label: "eatSugar", detail: "Yes" },
+    ]);
+  });
+
+  it("joins the selected cases of a checkbox", () => {
+    const checkbox: OptionDefinition = {
+      kind: "checkbox",
+      name: "mode",
+      label: "Mode",
+      cases: [
+        { name: "a", label: "A", options: [] },
+        { name: "b", label: "B", options: [] },
+      ],
+      defaultCases: ["a"],
+      applicability,
+    };
+
+    expect(optionValueSummary(checkbox)).toEqual([
+      { label: "Mode", detail: "A" },
+    ]);
+    expect(
+      optionValueSummary(checkbox, { type: "multiple", cases: ["a", "b"] }),
+    ).toEqual([{ label: "Mode", detail: "A, B" }]);
+  });
+
+  it("omits the detail when a checkbox selects nothing", () => {
+    const none: OptionDefinition = {
+      kind: "checkbox",
+      name: "mode",
+      label: "Mode",
+      cases: [{ name: "a", label: "A", options: [] }],
+      defaultCases: [],
+      applicability,
+    };
+
+    expect(optionValueSummary(none)).toEqual([{ label: "Mode" }]);
+  });
+
+  it("emits one row per input field with stored or default values", () => {
+    expect(optionValueSummary(count)).toEqual([{ label: "Value", detail: "" }]);
+    expect(
+      optionValueSummary(count, {
+        type: "inputs",
+        values: { value: "42" },
+      }),
+    ).toEqual([{ label: "Value", detail: "42" }]);
+  });
+
+  it("uses the field default for an empty input", () => {
+    const withDefault: OptionDefinition = {
+      kind: "input",
+      name: "field",
+      label: "Field",
+      inputs: [
+        {
+          name: "value",
+          label: "Value",
+          default: "7",
+          pipelineType: "int",
+          password: false,
+        },
+      ],
+      applicability,
+    };
+
+    expect(optionValueSummary(withDefault)).toEqual([
+      { label: "Value", detail: "7" },
+    ]);
+  });
+
+  it("emits one row per hotkey", () => {
+    const hotkeys: OptionDefinition = {
+      kind: "hotkey",
+      name: "hotkeys",
+      label: "Hotkeys",
+      hotkeys: [
+        { name: "attack", label: "Attack", default: "J" },
+        { name: "dodge", label: "Dodge" },
+      ],
+      applicability,
+    };
+
+    expect(optionValueSummary(hotkeys)).toEqual([
+      { label: "Attack", detail: "J" },
+      { label: "Dodge", detail: "" },
+    ]);
   });
 });

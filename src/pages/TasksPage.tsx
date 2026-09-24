@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { listen } from "@tauri-apps/api/event";
-import { GripVertical, Plus, SquarePen, Trash2 } from "lucide-react";
+import { Eye, GripVertical, Plus, SquarePen, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
 import { OptionEditor } from "../components/OptionEditor";
@@ -37,6 +37,7 @@ import {
   activeController,
   activeResource,
   defaultOptionValue,
+  optionValueSummary,
   visibleOptions,
 } from "../lib/options";
 import type {
@@ -66,6 +67,7 @@ export function TasksPage() {
   const [focusNotice, setFocusNotice] = useState<FocusNotice>();
   const [selectedPreset, setSelectedPreset] = useState<string>();
   const [activityTab, setActivityTab] = useState<RunActivityTab>("tasks");
+  const [runActive, setRunActive] = useState(false);
   const notify = useNotificationStore((state) => state.notify);
 
   useEffect(() => {
@@ -125,6 +127,7 @@ export function TasksPage() {
     );
 
   function mutateActiveRun(mutate: (run: RunConfiguration) => void) {
+    if (runActive) return;
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
     const next = structuredClone(latest.configuration);
@@ -181,6 +184,7 @@ export function TasksPage() {
   }
 
   function switchConfiguration(id: string) {
+    if (runActive) return;
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
     const next = structuredClone(latest.configuration);
@@ -189,6 +193,7 @@ export function TasksPage() {
   }
 
   function switchResource(name: string) {
+    if (runActive) return;
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
     const next = structuredClone(latest.configuration);
@@ -197,6 +202,7 @@ export function TasksPage() {
   }
 
   function createConfiguration() {
+    if (runActive) return;
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
     const next = structuredClone(latest.configuration);
@@ -237,6 +243,7 @@ export function TasksPage() {
             optionValues: { ...item.optionValues, [name]: value },
           }))
         }
+        locked={runActive}
         onLabelChange={(customLabel) =>
           updateTask(configured.instanceId, (item) => ({
             ...item,
@@ -261,16 +268,23 @@ export function TasksPage() {
     <div className="space-y-3">
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>
       <VirtualDisplayCard />
-      <RunPanel onRunStarted={() => setActivityTab("logs")} />
+      <RunPanel
+        onRunStarted={() => setActivityTab("logs")}
+        onRunActiveChange={setRunActive}
+      />
       <RunActivityTabs
         activeTab={activityTab}
         onActiveTabChange={setActivityTab}
         taskList={
           <>
+            {runActive && (
+              <p className="text-sm text-ink-muted">{t("taskConfigLocked")}</p>
+            )}
             <ResourcePicker
               resources={project.resources}
               value={resource?.name}
               onValueChange={switchResource}
+              disabled={runActive}
             />
             {project.presets.length > 0 && (
               <section className="space-y-2">
@@ -281,6 +295,7 @@ export function TasksPage() {
                   onValueChange={setSelectedPreset}
                   onApply={(name) => void applyPreset(name)}
                   applyLabel={t("applyPreset")}
+                  disabled={runActive}
                 />
               </section>
             )}
@@ -291,6 +306,7 @@ export function TasksPage() {
                     items={configTabItems}
                     value={activeRun?.id}
                     onValueChange={switchConfiguration}
+                    disabled={runActive}
                     ariaLabel={t("tasksAndRun")}
                   />
                 </div>
@@ -298,7 +314,8 @@ export function TasksPage() {
                   type="button"
                   onClick={createConfiguration}
                   aria-label={t("newConfiguration")}
-                  className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  disabled={runActive}
+                  className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   <Plus size="1rem" />
                 </button>
@@ -322,6 +339,7 @@ export function TasksPage() {
                 onAdd={addTask}
                 addLabel={t("addTask")}
                 emptyLabel={t("noTasksToAdd")}
+                disabled={runActive}
               />
             </section>
           </>
@@ -359,10 +377,12 @@ function ResourcePicker({
   resources,
   value,
   onValueChange,
+  disabled = false,
 }: {
   resources: ResourceDefinition[];
   value?: string;
   onValueChange: (name: string) => void;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const active =
@@ -381,6 +401,7 @@ function ResourcePicker({
         }))}
         value={active.name}
         onValueChange={onValueChange}
+        disabled={disabled}
       />
       <RichDescription text={active.description} />
     </section>
@@ -397,12 +418,14 @@ function PresetPicker({
   onValueChange,
   onApply,
   applyLabel,
+  disabled = false,
 }: {
   presets: ConfigurationTemplate[];
   value?: string;
   onValueChange: (name: string) => void;
   onApply: (name: string) => void;
   applyLabel: string;
+  disabled?: boolean;
 }) {
   const active = presets.find((preset) => preset.name === value) ?? presets[0];
   return (
@@ -423,7 +446,8 @@ function PresetPicker({
         <button
           type="button"
           onClick={() => onApply(active.name)}
-          className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white"
+          disabled={disabled}
+          className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-50"
         >
           {applyLabel}
         </button>
@@ -439,25 +463,35 @@ function AddTaskPicker({
   onAdd,
   addLabel,
   emptyLabel,
+  disabled = false,
 }: {
   available: TaskDefinition[];
   onAdd: (task: TaskDefinition) => void;
   addLabel: string;
   emptyLabel: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
   return (
     <div className="space-y-2">
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!disabled) setOpen((value) => !value);
+        }}
         aria-expanded={open}
-        className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        disabled={disabled}
+        className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-line text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
       >
         <Plus size="0.875rem" />
         {addLabel}
       </button>
-      {open && (
+      {!disabled && open && (
         <div className="space-y-1 rounded-lg border border-line bg-surface-muted p-2">
           {available.length === 0 ? (
             <p className="px-2 py-1 text-sm text-ink-muted">{emptyLabel}</p>
@@ -514,6 +548,8 @@ interface TaskItemProps {
   controllerName: string;
   resourceName: string;
   configured: ConfiguredTask;
+  /** 运行中：任务配置只读，只能查看详情。 */
+  locked?: boolean;
   onEnabledChange: (next: boolean) => void;
   onOptionValueChange: (name: string, value: OptionValue) => void;
   onLabelChange: (label: string | undefined) => void;
@@ -528,6 +564,7 @@ function TaskItem({
   controllerName,
   resourceName,
   configured,
+  locked = false,
   onEnabledChange,
   onOptionValueChange,
   onLabelChange,
@@ -573,14 +610,16 @@ function TaskItem({
         }`}
       >
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label={t("dragReorder")}
-            className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
-            {...dragHandleProps}
-          >
-            <GripVertical size="0.875rem" />
-          </button>
+          {!locked && (
+            <button
+              type="button"
+              aria-label={t("dragReorder")}
+              className="flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-ink-muted active:cursor-grabbing"
+              {...dragHandleProps}
+            >
+              <GripVertical size="0.875rem" />
+            </button>
+          )}
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <h3 className="flex min-h-7 min-w-0 flex-1 items-center font-medium">
               <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
@@ -594,12 +633,12 @@ function TaskItem({
               onClick={() => setDetailsOpen(true)}
               className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
-              <SquarePen size="0.875rem" />
+              {locked ? <Eye size="0.875rem" /> : <SquarePen size="0.875rem" />}
             </button>
             <Checkbox
               className="h-7 shrink-0 gap-1.5 text-xs"
               checked={configured.enabled}
-              disabled={unavailable}
+              disabled={unavailable || locked}
               onCheckedChange={onEnabledChange}
             >
               {t("toggleOn")}
@@ -609,7 +648,8 @@ function TaskItem({
             type="button"
             onClick={onRemove}
             aria-label={t("removeTask")}
-            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            disabled={locked}
+            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
           >
             <Trash2 size="0.875rem" />
           </button>
@@ -621,34 +661,71 @@ function TaskItem({
         )}
       </article>
       <Modal open={detailsOpen} onClose={closeDetails} title={label}>
-        <TextField
-          compact
-          label={t("taskName")}
-          value={labelDraft}
-          onValueChange={setLabelDraft}
-          onBlur={commitLabel}
-        />
-        {options.map(({ name, depth }) => {
-          const option = project.options[name];
-          if (!option) return null;
-          return (
-            <div
-              key={name}
-              className={depth > 0 ? "border-l-2 border-line pl-2" : undefined}
-            >
-              <OptionEditor
-                option={option}
-                compact
-                value={defaultOptionValue(
-                  option,
-                  configured.optionValues[name],
-                )}
-                onChange={(value) => onOptionValueChange(name, value)}
-              />
-            </div>
-          );
-        })}
-        <RichDescription text={task.description} />
+        {locked ? (
+          <>
+            <p className="text-sm text-ink-muted">
+              {t("taskName")}: <span className="text-ink">{label}</span>
+            </p>
+            {options.map(({ name, depth }) => {
+              const option = project.options[name];
+              if (!option) return null;
+              return (
+                <div
+                  key={name}
+                  className={
+                    depth > 0 ? "border-l-2 border-line pl-2" : undefined
+                  }
+                >
+                  {optionValueSummary(
+                    option,
+                    configured.optionValues[name],
+                  ).map((row) => (
+                    <div key={row.label} className="space-y-0.5">
+                      <p className="text-sm font-medium">{row.label}</p>
+                      {row.detail && (
+                        <p className="text-sm text-ink-muted">{row.detail}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            <RichDescription text={task.description} />
+          </>
+        ) : (
+          <>
+            <TextField
+              compact
+              label={t("taskName")}
+              value={labelDraft}
+              onValueChange={setLabelDraft}
+              onBlur={commitLabel}
+            />
+            {options.map(({ name, depth }) => {
+              const option = project.options[name];
+              if (!option) return null;
+              return (
+                <div
+                  key={name}
+                  className={
+                    depth > 0 ? "border-l-2 border-line pl-2" : undefined
+                  }
+                >
+                  <OptionEditor
+                    option={option}
+                    compact
+                    value={defaultOptionValue(
+                      option,
+                      configured.optionValues[name],
+                    )}
+                    onChange={(value) => onOptionValueChange(name, value)}
+                  />
+                </div>
+              );
+            })}
+            <RichDescription text={task.description} />
+          </>
+        )}
       </Modal>
     </>
   );

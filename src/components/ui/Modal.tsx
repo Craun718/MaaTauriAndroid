@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "../../lib/i18n";
 
 interface ModalProps {
@@ -31,7 +32,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <>
       <button
         type="button"
@@ -65,6 +66,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

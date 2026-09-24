@@ -1,5 +1,7 @@
 package top.natsuu.mta
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
@@ -39,6 +41,9 @@ object RuntimeBridge {
         System.loadLibrary("maa_tauri_android_lib")
     }
 
+    private const val RESTART_REQUEST_CODE = 0x4D54524C
+    private const val RESTART_DELAY_MS = 250L
+
     @Volatile
     private var agentContext: Context? = null
 
@@ -74,16 +79,37 @@ object RuntimeBridge {
     }
 
     /**
-     * Restarts the whole app process: the launcher intent is submitted first so
-     * the system brings up a fresh activity, then this process is killed. Used
-     * by the debug-mode toggle; the caller must persist settings first.
+     * Restarts the whole app process. The launcher intent is registered with
+     * AlarmManager before this process is killed, so the system delivers it
+     * after the old task/process is gone; starting it directly from here can
+     * only hit onNewIntent on the existing singleTask activity and leave the
+     * relaunch to OEM prestart heuristics. Used by the debug-mode toggle; the
+     * caller must persist settings first.
      */
     @JvmStatic
     fun restartApp(): Boolean {
         val context = agentContext ?: return false
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent?.let { context.startActivity(it) }
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return false
+        val launch = PendingIntent.getActivity(
+            context,
+            RESTART_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val triggerAtMs = System.currentTimeMillis() + RESTART_DELAY_MS
+        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            alarmManager.canScheduleExactAlarms()
+        if (canUseExact) {
+            try {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, launch)
+            } catch (_: SecurityException) {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMs, launch)
+            }
+        } else {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMs, launch)
+        }
         Process.killProcess(Process.myPid())
         exitProcess(0)
     }

@@ -51,6 +51,7 @@ import type {
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
+import { useRunLogStore } from "../store/runLogStore";
 
 interface FocusNotice {
   channel: string;
@@ -69,6 +70,7 @@ export function TasksPage() {
   const [activityTab, setActivityTab] = useState<RunActivityTab>("tasks");
   const [runActive, setRunActive] = useState(false);
   const notify = useNotificationStore((state) => state.notify);
+  const resetRunLog = useRunLogStore((state) => state.resetRunLog);
 
   useEffect(() => {
     let disposed = false;
@@ -269,7 +271,10 @@ export function TasksPage() {
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>
       <VirtualDisplayCard />
       <RunPanel
-        onRunStarted={() => setActivityTab("logs")}
+        onRunStarted={() => {
+          resetRunLog();
+          setActivityTab("logs");
+        }}
         onRunActiveChange={setRunActive}
       />
       <RunActivityTabs

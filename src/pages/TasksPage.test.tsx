@@ -245,7 +245,7 @@ beforeEach(() => {
     notifications: [],
     seenKeys: new Set<string>(),
   });
-  useRunLogStore.setState({ entries: [] });
+  useRunLogStore.setState({ entries: [], executionId: undefined });
   captureManualScreenshot.mockResolvedValue({
     executionId: "run-1",
     path: "/data/user/0/top.natsuu.mta.m/runs/run-1/screens/manual-1.png",

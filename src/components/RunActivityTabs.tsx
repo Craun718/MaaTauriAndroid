@@ -1,9 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
-import { ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
-import { Link } from "react-router-dom";
 import { localizeRunEvent, useTranslation } from "../lib/i18n";
-import { canAcceptRunEvent } from "../lib/runEvents";
 import type { RunEvent } from "../lib/types";
 import { type RunLogEntry, useRunLogStore } from "../store/runLogStore";
 import { RichDescription } from "./RichDescription";
@@ -14,18 +11,16 @@ export type RunActivityTab = ActivityTab;
 
 /** Collects backend run activity even while the task list tab is selected. */
 function useRunEvents(): void {
-  const executionIdRef = useRef<string | undefined>(undefined);
-
   useEffect(() => {
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
 
     listen<RunEvent>("run-event", (event) => {
       const next = event.payload;
-      if (!canAcceptRunEvent(executionIdRef.current, next.executionId)) return;
-      executionIdRef.current = next.executionId;
       if (next.kind === "screenshot") return;
 
+      // The store opens a fresh session on the next Preparing event, so this
+      // listener does not need to pin the component to one execution.
       useRunLogStore.getState().appendRunEvent(next);
     })
       .then((stop) => {
@@ -223,13 +218,6 @@ export function RunActivityTabs({
             })}
           </ol>
         )}
-        <Link
-          to="/runs"
-          className="mt-2 flex items-center justify-between border-t border-line px-1 pt-2 text-sm font-medium text-accent"
-        >
-          {t("runHistoryTitle")}
-          <ChevronRight size="1rem" />
-        </Link>
       </div>
     </section>
   );

@@ -268,20 +268,20 @@ export function VirtualDisplayCard() {
       >
         <p className="text-sm">{t("virtualDisplayStopWarning")}</p>
         <p className="text-xs text-ink-muted">{t("virtualDisplayStopHint")}</p>
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={() => setConfirmStopOpen(false)}
-            className="h-10 rounded-md border border-line px-3"
-          >
-            {t("cancel")}
-          </button>
+        <div className="flex justify-center gap-2 pt-2">
           <button
             type="button"
             onClick={confirmStopDisplay}
-            className="h-10 rounded-md border border-red-500/50 px-3 font-medium text-red-600 dark:text-red-300"
+            className="h-10 min-w-20 rounded-md border border-red-500/50 px-3 font-medium text-red-600 dark:text-red-300"
           >
             {t("confirm")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmStopOpen(false)}
+            className="h-10 min-w-20 rounded-md border border-line px-3"
+          >
+            {t("cancel")}
           </button>
         </div>
       </Modal>

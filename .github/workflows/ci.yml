@@ -212,7 +212,11 @@ jobs:
         run: |
           python3 scripts/build_agent_bundle.py --help >/dev/null
           scripts/fetch-maafw.sh
-          scripts/build-agent-runtime.sh
+          scripts/build-agent-runtime.sh \
+            --project-dir resource/m9a \
+            --out resource/m9a-agent-runtime-arm64-v8a.zip \
+            --exclude pillow \
+            --require pillow==11.0.0
 
       # buildSrc is its own Gradle build: there is no gradlew at the repository
       # root, and the Android settings.gradle applies tauri.settings.gradle,
@@ -314,7 +318,14 @@ jobs:
         run: |
           python3 scripts/build_agent_bundle.py --help >/dev/null
           scripts/fetch-maafw.sh
-          scripts/build-agent-runtime.sh narutomobile
+          scripts/build-agent-runtime.sh \
+            --project-dir resource/narutomobile \
+            --out resource/narutomobile-agent-runtime-arm64-v8a.zip \
+            --exclude pillow \
+            --exclude win32-setctime \
+            --exclude colorama \
+            --exclude jeepney \
+            --require pillow==11.0.0
 
       - name: Run buildSrc tests
         working-directory: src-tauri/gen/android/buildSrc
@@ -408,7 +419,15 @@ jobs:
         run: |
           python3 scripts/build_agent_bundle.py --help >/dev/null
           scripts/fetch-maafw.sh
-          scripts/build-agent-runtime.sh maapvz
+          scripts/build-agent-runtime.sh \
+            --project-dir resource/maapvz \
+            --out resource/maapvz-agent-runtime-arm64-v8a.zip \
+            --exclude pillow \
+            --exclude win32-setctime \
+            --exclude colorama \
+            --exclude jeepney \
+            --exclude onnxruntime \
+            --require pillow==11.0.0
 
       - name: Run buildSrc tests
         working-directory: src-tauri/gen/android/buildSrc

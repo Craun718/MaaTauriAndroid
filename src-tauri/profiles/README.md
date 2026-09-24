@@ -152,9 +152,11 @@ bundle ZIP 有硬性约束，任何语言的 agent 都躲不开：
 用仓库脚本组运行时，不要自己拼一套 CPython。Python 内核来自 MaaAgentCoreAndroid 的预编译 core，本地只叠资源项目的依赖：
 
 ```bash
-scripts/build-agent-runtime.sh m9a
-scripts/build-agent-runtime.sh narutomobile
-scripts/build-agent-runtime.sh maapvz
+scripts/build-agent-runtime.sh \
+  --project-dir resource/m9a \
+  --out resource/m9a-agent-runtime-arm64-v8a.zip \
+  --exclude pillow \
+  --require pillow==11.0.0
 ```
 
 组装与打包都走仓库内的通用工具：`scripts/build_agent_bundle.py`（vendored 自 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)，AGPL-3.0，来源 commit 见文件头，许可见 [../../scripts/MAA-FWAPP-LICENSE.md](../../scripts/MAA-FWAPP-LICENSE.md)）组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，`src-tauri/profiles/pack_agent_bundle.py` 出 ZIP；`--core-repo` / `--core-tag` 由 `scripts/env.sh` 传入（默认 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)）。

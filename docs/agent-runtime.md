@@ -29,10 +29,14 @@
 
 ```bash
 scripts/setup.sh                        # 全量：子模块 + MaaFramework + 三个 runtime
-scripts/build-agent-runtime.sh m9a      # 也可单跑某一个
-scripts/build-agent-runtime.sh narutomobile
-scripts/build-agent-runtime.sh maapvz
+scripts/build-agent-runtime.sh \
+  --project-dir resource/m9a \
+  --out resource/m9a-agent-runtime-arm64-v8a.zip \
+  --exclude pillow \
+  --require pillow==11.0.0              # 也可单跑某一个
 ```
+
+`build-agent-runtime.sh` 是通用脚本：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置三个项目的完整调用参数见下文「仓库内置项目的构建参数」。
 
 runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 
@@ -56,9 +60,9 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 
 对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC，patch 版本间保持兼容。
 
-## 三个内置项目的差异
+## 仓库内置项目的构建参数
 
-各资源只差 `requirements.txt` 与排除/重钉列表（脚本内的 `EXCLUDES` / `REQUIREMENTS`）：
+各资源只差 `requirements.txt` 与排除/重钉列表。预设不再内置在脚本里，参数由调用方（`scripts/setup.sh` 与 CI）传入：
 
 | 项目 | 重钉 | 排除 |
 |:---|:---|:---|
@@ -70,23 +74,18 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 
 ## 给下游：为自己的资源构建
 
-`build-agent-runtime.sh` 目前只认仓库内三个项目。外部资源项目自行集成时，照搬三步流水线即可——`build_agent_bundle.py`（仓库内 vendored 副本）和 `pack_agent_bundle.py` 都是通用命令行工具：
+`build-agent-runtime.sh` 对任何资源项目都是直接可用的通用脚本（内部组装与打包分别由 `scripts/build_agent_bundle.py` 和 `src-tauri/profiles/pack_agent_bundle.py` 完成，`--help` 可看全部参数）：
 
 ```bash
-# 1. 组装你的 bundle（requirements 用你资源项目的）
-python3 scripts/build_agent_bundle.py \
-  --out <你的-dist 目录> --abi arm64-v8a \
-  --requirements <你的资源>/requirements.txt \
-  --extra-index-url https://chaquo.com/pypi-13.1/ \
-  --core-repo <MaaAgentCoreAndroid 仓库> --core-tag <对应的 tag> \
-  --work <缓存目录>
-
-# 2. 准备与壳内 vendor/maa 同版本的 libMaaAgentClient.so / libMaaAgentServer.so
-
-# 3. 打包（脚本不挑项目，任何 bundle 目录都能打）
-python3 pack_agent_bundle.py \
-  <你的-dist>/arm64-v8a/bundle <agent-libs 目录> <你的-runtime>.zip
+scripts/build-agent-runtime.sh \
+  --project-dir <你的资源目录> \
+  --out /tmp/你的-runtime-arm64-v8a.zip \
+  [--requirements <文件>] \
+  [--exclude pkg]... [--require spec]... \
+  [--abi arm64-v8a] [--extra-index-url url]... [--work <缓存目录>]
 ```
+
+核心（CPython + 标准库 + `maa` 包）默认取 `scripts/env.sh` 钉定的 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG`，需要对齐壳内 MaaFramework 版本时用同名环境变量覆盖。
 
 然后在配方里把 `[[agent.runtimes]]` 的 `bundle` 指向产出的 ZIP，条数与 PI 的 `agent[]` 一一对应。PI 没声明 agent 时，配方里的 `agent` 整段删掉即可。
 

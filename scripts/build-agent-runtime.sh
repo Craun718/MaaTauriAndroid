@@ -1,63 +1,117 @@
 #!/usr/bin/env bash
+# Build a Python agent runtime ZIP for any MaaFramework PI project. The
+# prebuilt Python core (CPython + stdlib + the maa package) is pinned by
+# scripts/env.sh; only the project's own dependencies are layered on top.
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env.sh"
 
-PROJECT="${1:-m9a}"
 ABI="arm64-v8a"
-WORK="${REPO_ROOT}/.cache/maafw/${MAAFW_CORE_REPO}/${MAAFW_CORE_TAG}"
+PROJECT_DIR=""
+REQUIREMENTS=""
+OUT_ZIP=""
+DIST=""
+WORK=""
+NO_DEPS=0
+EXCLUDES=()
+REQUIRES=()
+EXTRA_INDEXES=()
 
-case "${PROJECT}" in
-  m9a)
-    PROJECT_DIR="${REPO_ROOT}/resource/m9a"
-    OUT_DIST="${REPO_ROOT}/resource/m9a-agent-dist"
-    OUT_ZIP="${REPO_ROOT}/resource/m9a-agent-runtime-${ABI}.zip"
-    EXCLUDES=(--exclude pillow)
-    REQUIREMENTS=(--require pillow==11.0.0)
-    ;;
-  narutomobile)
-    PROJECT_DIR="${REPO_ROOT}/resource/narutomobile"
-    OUT_DIST="${REPO_ROOT}/resource/narutomobile-agent-dist"
-    OUT_ZIP="${REPO_ROOT}/resource/narutomobile-agent-runtime-${ABI}.zip"
-    EXCLUDES=(
-      --exclude pillow
-      --exclude win32-setctime
-      --exclude colorama
-      --exclude jeepney
-    )
-    REQUIREMENTS=(--require pillow==11.0.0)
-    ;;
-  maapvz)
-    PROJECT_DIR="${REPO_ROOT}/resource/maapvz"
-    OUT_DIST="${REPO_ROOT}/resource/maapvz-agent-dist"
-    OUT_ZIP="${REPO_ROOT}/resource/maapvz-agent-runtime-${ABI}.zip"
-    EXCLUDES=(
-      --exclude pillow
-      --exclude win32-setctime
-      --exclude colorama
-      --exclude jeepney
-      --exclude onnxruntime
-    )
-    REQUIREMENTS=(--require pillow==11.0.0)
-    ;;
-  *)
-    echo "usage: $0 [m9a|narutomobile|maapvz]" >&2
-    exit 2
-    ;;
-esac
+usage() {
+  cat >&2 <<'EOF'
+usage: scripts/build-agent-runtime.sh --project-dir DIR --out ZIP [options]
 
-echo "==> Building the ${PROJECT} ${ABI} Python agent runtime…"
+Build a Python agent runtime ZIP for a MaaFramework PI project. The prebuilt
+Python core comes from MAAFW_CORE_REPO / MAAFW_CORE_TAG (see scripts/env.sh);
+only the project's own dependencies are installed on top.
+
+required:
+  --project-dir DIR   resource project root (contains requirements.txt)
+  --out ZIP           output runtime archive, e.g. /tmp/my-agent-runtime-arm64-v8a.zip
+
+options:
+  --requirements FILE   requirements file; default <project-dir>/requirements.txt
+  --dist DIR            intermediate bundle root; default <out dir>/<project basename>-agent-dist
+  --abi ABI             target ABI; default arm64-v8a
+  --exclude PKG         package to prune from site-packages; repeatable
+  --require SPEC        extra dependency spec, unfiltered; repeatable, e.g. pillow==11.0.0
+  --extra-index-url URL extra pip index; repeatable (chaquo.com/pypi-13.1 is always included)
+  --no-deps             pass through to build_agent_bundle.py (requirements is a full lock)
+  --work DIR            core download/unpack cache; default .cache/maafw/<repo>/<tag>
+  -h, --help            show this help
+EOF
+  exit "${1:-2}"
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --project-dir)      PROJECT_DIR="${2:?--project-dir needs a value}"; shift 2 ;;
+    --requirements)     REQUIREMENTS="${2:?--requirements needs a value}"; shift 2 ;;
+    --out)              OUT_ZIP="${2:?--out needs a value}"; shift 2 ;;
+    --dist)             DIST="${2:?--dist needs a value}"; shift 2 ;;
+    --abi)              ABI="${2:?--abi needs a value}"; shift 2 ;;
+    --exclude)          EXCLUDES+=(--exclude "${2:?--exclude needs a value}"); shift 2 ;;
+    --require)          REQUIRES+=(--require "${2:?--require needs a value}"); shift 2 ;;
+    --extra-index-url)  EXTRA_INDEXES+=(--extra-index-url "${2:?--extra-index-url needs a value}"); shift 2 ;;
+    --no-deps)          NO_DEPS=1; shift ;;
+    --work)             WORK="${2:?--work needs a value}"; shift 2 ;;
+    -h|--help)          usage 0 ;;
+    *)                  usage ;;
+  esac
+done
+
+resolve() {
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    *)  printf '%s\n' "${REPO_ROOT}/$1" ;;
+  esac
+}
+
+[ -n "${PROJECT_DIR}" ] || usage
+[ -n "${OUT_ZIP}" ] || usage
+
+PROJECT_DIR="$(resolve "${PROJECT_DIR}")"
+OUT_ZIP="$(resolve "${OUT_ZIP}")"
+if [ -n "${REQUIREMENTS}" ]; then
+  REQUIREMENTS="$(resolve "${REQUIREMENTS}")"
+else
+  REQUIREMENTS="${PROJECT_DIR}/requirements.txt"
+fi
+if [ -n "${DIST}" ]; then
+  DIST="$(resolve "${DIST}")"
+else
+  DIST="$(dirname "${OUT_ZIP}")/$(basename "${PROJECT_DIR}")-agent-dist"
+fi
+WORK="$(resolve "${WORK:-.cache/maafw/${MAAFW_CORE_REPO}/${MAAFW_CORE_TAG}}")"
+
+if [ ! -d "${PROJECT_DIR}" ]; then
+  echo "error: project directory missing: ${PROJECT_DIR}" >&2
+  exit 2
+fi
+if [ ! -f "${REQUIREMENTS}" ]; then
+  echo "error: requirements file missing: ${REQUIREMENTS}" >&2
+  exit 2
+fi
+
+echo "==> Building the Python ${ABI} agent runtime for ${PROJECT_DIR}…"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
+NO_DEPS_ARGS=()
+if [ "${NO_DEPS}" -eq 1 ]; then
+  NO_DEPS_ARGS=(--no-deps)
+fi
+
 echo "  1/3  building the Python core + site-packages bundle…"
 python3 "${REPO_ROOT}/scripts/build_agent_bundle.py" \
-  --out "${OUT_DIST}" \
+  --out "${DIST}" \
   --abi "${ABI}" \
-  --requirements "${PROJECT_DIR}/requirements.txt" \
+  --requirements "${REQUIREMENTS}" \
   "${EXCLUDES[@]}" \
-  "${REQUIREMENTS[@]}" \
+  "${REQUIRES[@]}" \
   --extra-index-url https://chaquo.com/pypi-13.1/ \
+  "${EXTRA_INDEXES[@]}" \
+  "${NO_DEPS_ARGS[@]}" \
   --core-repo "${MAAFW_CORE_REPO}" \
   --core-tag "${MAAFW_CORE_TAG}" \
   --work "${WORK}"
@@ -78,7 +132,7 @@ fi
 
 echo "  3/3  packing the archive…"
 python3 "${REPO_ROOT}/src-tauri/profiles/pack_agent_bundle.py" \
-  "${OUT_DIST}/${ABI}/bundle" \
+  "${DIST}/${ABI}/bundle" \
   "${TMP}/agent-libs" \
   "${OUT_ZIP}"
 

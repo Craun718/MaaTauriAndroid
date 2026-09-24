@@ -263,7 +263,7 @@ export function RunPanel({
           className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
         >
           {running ? <Square size="1rem" /> : <Play size="1rem" />}
-          {t(running ? "stop" : "start")}
+          {t(running ? "stopTask" : "start")}
         </button>
         <button
           type="button"

@@ -439,7 +439,7 @@ describe("run configuration tabs and flat task list", () => {
     );
     const drawer = await screen.findByRole("dialog", { name: "Task actions" });
     expect(
-      await within(drawer).findByRole("button", { name: "Stop" }),
+      await within(drawer).findByRole("button", { name: "Stop task" }),
     ).toBeEnabled();
   });
 
@@ -481,7 +481,7 @@ describe("run configuration tabs and flat task list", () => {
     );
     const drawer = await screen.findByRole("dialog", { name: "Task actions" });
     fireEvent.click(
-      await within(drawer).findByRole("button", { name: "Stop" }),
+      await within(drawer).findByRole("button", { name: "Stop task" }),
     );
 
     await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));

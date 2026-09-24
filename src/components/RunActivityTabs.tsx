@@ -1,5 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
+import { ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
+import { Link } from "react-router-dom";
 import { localizeRunEvent, useTranslation } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { RunEvent } from "../lib/types";
@@ -221,6 +223,13 @@ export function RunActivityTabs({
             })}
           </ol>
         )}
+        <Link
+          to="/runs"
+          className="mt-2 flex items-center justify-between border-t border-line px-1 pt-2 text-sm font-medium text-accent"
+        >
+          {t("runHistoryTitle")}
+          <ChevronRight size="1rem" />
+        </Link>
       </div>
     </section>
   );

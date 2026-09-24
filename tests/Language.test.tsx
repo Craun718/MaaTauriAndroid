@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppStateSnapshot } from "../src/lib/types";
 import { SettingsPage } from "../src/pages/SettingsPage";
@@ -99,7 +100,11 @@ describe("language switching", () => {
 
   it("follows a non-Chinese device when no choice is stored", () => {
     withDeviceLocale("en-US", () => {
-      render(<SettingsPage />);
+      render(
+        <MemoryRouter>
+          <SettingsPage />
+        </MemoryRouter>,
+      );
       expect(
         screen.getByRole("heading", { name: "Settings" }),
       ).toBeInTheDocument();
@@ -108,7 +113,11 @@ describe("language switching", () => {
 
   it("follows a Chinese device when no choice is stored", () => {
     withDeviceLocale("zh-Hans-CN", () => {
-      render(<SettingsPage />);
+      render(
+        <MemoryRouter>
+          <SettingsPage />
+        </MemoryRouter>,
+      );
       expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
     });
   });
@@ -121,7 +130,11 @@ describe("language switching", () => {
           configuration: { ...snapshot.configuration, uiLanguage: "zh" },
         },
       });
-      render(<SettingsPage />);
+      render(
+        <MemoryRouter>
+          <SettingsPage />
+        </MemoryRouter>,
+      );
       expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "删除日志" }),
@@ -131,7 +144,11 @@ describe("language switching", () => {
 
   it("persists a new choice and switches the interface over", async () => {
     withDeviceLocale("en-US", () => {
-      render(<SettingsPage />);
+      render(
+        <MemoryRouter>
+          <SettingsPage />
+        </MemoryRouter>,
+      );
       fireEvent.change(screen.getByRole("combobox", { name: "Language" }), {
         target: { value: "zh" },
       });

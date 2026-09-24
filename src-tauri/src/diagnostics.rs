@@ -1397,7 +1397,7 @@ mod tests {
         ));
         let run_dir = runs_root.join("run-1");
         fs::create_dir_all(run_dir.join("logs")).unwrap();
-        crate::run_log::RunLogger::create(&runs_root, "run-1").unwrap();
+        crate::run_log::RunLogger::create(&runs_root, "run-1", 0).unwrap();
         fs::create_dir_all(run_dir.join("screens")).unwrap();
         fs::write(
             run_dir.join("screens/failure.png"),

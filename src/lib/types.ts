@@ -360,6 +360,15 @@ export interface RunResult {
   message: string;
 }
 
+/** One persisted run: metadata read from the JSONL file name, no file content. */
+export interface RunHistoryEntry {
+  executionId: string;
+  fileName: string;
+  startedAtUnixMs: number;
+  sizeBytes: number;
+  taskCount: number;
+}
+
 export interface DiagnosticItem {
   name: string;
   present: boolean;

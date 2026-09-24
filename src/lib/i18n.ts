@@ -47,6 +47,10 @@ const en = {
   virtualDisplayStreamError: "Stream error",
   virtualDisplayFullscreen: "Fullscreen",
   virtualDisplayExitFullscreen: "Exit fullscreen",
+  virtualDisplayStopTitle: "Stop virtual display",
+  virtualDisplayStopWarning:
+    "This will close the virtual display and the running app.",
+  virtualDisplayStopHint: "To stop the task, use the task action panel.",
   displayId: "Display ID: {id}",
   permissionGranted: "Granted",
   permissionRequiredStatus: "Required",
@@ -87,6 +91,7 @@ const en = {
   openAnnouncement: "View announcement",
   hideAnnouncementOnLaunch: "Don't show this announcement again",
   confirm: "Confirm",
+  cancel: "Cancel",
 
   // Known backend diagnostics, localized when shown as notifications
   diagnosticShizukuUnavailable:
@@ -368,6 +373,9 @@ const zh: Record<MessageKey, string> = {
   virtualDisplayStreamError: "画面流出错",
   virtualDisplayFullscreen: "全屏",
   virtualDisplayExitFullscreen: "退出全屏",
+  virtualDisplayStopTitle: "停止虚拟屏",
+  virtualDisplayStopWarning: "当前操作会关闭虚拟屏以及正在运行的应用。",
+  virtualDisplayStopHint: "如需停止任务请在任务操作面板操作。",
   displayId: "Display ID：{id}",
 
   noResources: "未声明资源。",
@@ -508,6 +516,7 @@ const zh: Record<MessageKey, string> = {
   openAnnouncement: "查看公告",
   hideAnnouncementOnLaunch: "下次启动不再展示",
   confirm: "确认",
+  cancel: "取消",
 
   diagnosticShizukuUnavailable: "Shizuku 不可用；请安装或启动 Shizuku 后重试",
   diagnosticShizukuPermissionRequired:

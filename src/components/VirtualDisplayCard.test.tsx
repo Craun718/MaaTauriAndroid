@@ -137,6 +137,8 @@ describe("VirtualDisplayCard", () => {
     renderVirtualDisplayCard();
     const stop = await screen.findByRole("button", { name: "Stop" });
     fireEvent.click(stop);
+    const confirm = await screen.findByRole("button", { name: "Confirm" });
+    fireEvent.click(confirm);
 
     expect(stopRun).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(stopVirtualDisplay).toHaveBeenCalledTimes(1));
@@ -156,6 +158,8 @@ describe("VirtualDisplayCard", () => {
     const stop = await screen.findByRole("button", { name: "Stop" });
     await waitFor(() => expect(stop).toBeEnabled());
     fireEvent.click(stop);
+    const confirm = await screen.findByRole("button", { name: "Confirm" });
+    fireEvent.click(confirm);
 
     expect(await screen.findByText("Stop failed")).toBeInTheDocument();
   });

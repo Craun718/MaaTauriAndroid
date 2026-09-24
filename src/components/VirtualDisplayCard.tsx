@@ -19,6 +19,7 @@ import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
+import { Modal } from "./ui/Modal";
 import { VirtualDisplayPreview } from "./VirtualDisplayPreview";
 
 export function VirtualDisplayCard() {
@@ -27,6 +28,7 @@ export function VirtualDisplayCard() {
   const [refreshing, setRefreshing] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [confirmStopOpen, setConfirmStopOpen] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
@@ -138,6 +140,11 @@ export function VirtualDisplayCard() {
     }
   }
 
+  function confirmStopDisplay() {
+    setConfirmStopOpen(false);
+    void stopDisplay();
+  }
+
   const active = status?.active === true;
   // Corner badge on top of the preview. The card copy sizes in rem so it
   // follows the root font scaling; the fullscreen copy keeps physical px
@@ -240,7 +247,7 @@ export function VirtualDisplayCard() {
           </p>
           <button
             type="button"
-            onClick={() => void stopDisplay()}
+            onClick={() => setConfirmStopOpen(true)}
             disabled={actionPending || refreshing || status === undefined}
             className="flex h-8 flex-none items-center justify-center gap-2 rounded-md border border-red-500/50 px-2.5 font-medium text-red-600 disabled:opacity-50 dark:text-red-300"
           >
@@ -253,6 +260,31 @@ export function VirtualDisplayCard() {
           </button>
         </div>
       )}
+
+      <Modal
+        open={confirmStopOpen}
+        onClose={() => setConfirmStopOpen(false)}
+        title={t("virtualDisplayStopTitle")}
+      >
+        <p className="text-sm">{t("virtualDisplayStopWarning")}</p>
+        <p className="text-xs text-ink-muted">{t("virtualDisplayStopHint")}</p>
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setConfirmStopOpen(false)}
+            className="h-10 rounded-md border border-line px-3"
+          >
+            {t("cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={confirmStopDisplay}
+            className="h-10 rounded-md border border-red-500/50 px-3 font-medium text-red-600 dark:text-red-300"
+          >
+            {t("confirm")}
+          </button>
+        </div>
+      </Modal>
 
       {fullscreen &&
         active &&

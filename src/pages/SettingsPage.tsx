@@ -28,10 +28,12 @@ export function SettingsPage() {
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const reinstallResources = useAppStore((state) => state.reinstallResources);
   const busy = useAppStore((state) => state.busy);
+  const saving = useAppStore((state) => state.saving);
   const notify = useNotificationStore((state) => state.notify);
   const { t } = useTranslation();
   const [cleaning, setCleaning] = useState(false);
   const [reinstalling, setReinstalling] = useState(false);
+  const [restartPending, setRestartPending] = useState(false);
   const { exportLogs, exporting } = useLogExport();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
 
@@ -75,7 +77,8 @@ export function SettingsPage() {
           <button
             type="button"
             disabled={
-              busy ||
+              saving ||
+              restartPending ||
               !snapshot ||
               languageDraft === undefined ||
               languageDraft === snapshot.configuration.uiLanguage
@@ -140,7 +143,7 @@ export function SettingsPage() {
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.forceStopTargetApp ?? false}
-          disabled={busy || !snapshot}
+          disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
             if (!snapshot) return;
             const nextConfiguration = structuredClone(snapshot.configuration);
@@ -153,7 +156,7 @@ export function SettingsPage() {
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.closeTargetAppAfterRun ?? true}
-          disabled={busy || !snapshot}
+          disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
             if (!snapshot) return;
             const nextConfiguration = structuredClone(snapshot.configuration);
@@ -166,7 +169,7 @@ export function SettingsPage() {
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.showVirtualDisplayTouches ?? true}
-          disabled={busy || !snapshot}
+          disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
             if (!snapshot) return;
             const nextConfiguration = structuredClone(snapshot.configuration);
@@ -179,7 +182,7 @@ export function SettingsPage() {
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.showVirtualDisplayFps ?? true}
-          disabled={busy || !snapshot}
+          disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
             if (!snapshot) return;
             const nextConfiguration = structuredClone(snapshot.configuration);
@@ -196,18 +199,19 @@ export function SettingsPage() {
           <Checkbox
             className="min-h-10 gap-2"
             checked={snapshot?.configuration.debugMode ?? false}
-            disabled={busy || !snapshot}
+            disabled={restartPending || !snapshot}
             onCheckedChange={(next) => {
               if (!snapshot) return;
               // 开启需要重启（对齐 MaaFwApp）：确认后落盘再重启；关闭即时生效不重启
               if (next && !window.confirm(t("debugModeRestartConfirm"))) return;
               const nextConfiguration = structuredClone(snapshot.configuration);
               nextConfiguration.debugMode = next;
+              setRestartPending(true);
               void (async () => {
-                await saveConfiguration(nextConfiguration);
-                // 保存失败（store 会展示 error）时不重启，避免重启后丢改动
-                if (!next || useAppStore.getState().error) return;
                 try {
+                  await saveConfiguration(nextConfiguration);
+                  // 保存失败（store 会展示 error）时不重启，避免重启后丢改动
+                  if (!next || useAppStore.getState().error) return;
                   await restartApp();
                 } catch (error) {
                   notify(
@@ -216,6 +220,8 @@ export function SettingsPage() {
                       tone: "error",
                     },
                   );
+                } finally {
+                  setRestartPending(false);
                 }
               })();
             }}
@@ -226,7 +232,9 @@ export function SettingsPage() {
         </div>
         <button
           type="button"
-          disabled={busy || reinstalling || !snapshot}
+          disabled={
+            busy || saving || restartPending || reinstalling || !snapshot
+          }
           onClick={async () => {
             setReinstalling(true);
             await reinstallResources();
@@ -250,7 +258,7 @@ export function SettingsPage() {
         </button>
         <button
           type="button"
-          disabled={busy || cleaning || !snapshot}
+          disabled={busy || saving || restartPending || cleaning || !snapshot}
           onClick={async () => {
             const confirmed = window.confirm(t("deleteRunsConfirm"));
             if (!confirmed) return;
@@ -282,7 +290,7 @@ export function SettingsPage() {
           <Checkbox
             className="min-h-10 gap-2"
             checked={snapshot?.configuration.telemetryEnabled ?? false}
-            disabled={busy || !snapshot}
+            disabled={restartPending || !snapshot}
             onCheckedChange={(next) => {
               if (!snapshot) return;
               const nextConfiguration = structuredClone(snapshot.configuration);

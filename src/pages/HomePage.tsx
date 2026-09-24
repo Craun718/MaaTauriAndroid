@@ -15,7 +15,7 @@ import { useAppStore } from "../store/appStore";
 
 export function HomePage() {
   const snapshot = useAppStore((state) => state.snapshot);
-  const busy = useAppStore((state) => state.busy);
+  const saving = useAppStore((state) => state.saving);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const { t } = useTranslation();
 
@@ -56,7 +56,7 @@ export function HomePage() {
 
       <ScheduleEntryCard />
 
-      {busy && <p className="text-sm text-ink-muted">{t("saving")}</p>}
+      {saving && <p className="text-sm text-ink-muted">{t("saving")}</p>}
     </div>
   );
 }

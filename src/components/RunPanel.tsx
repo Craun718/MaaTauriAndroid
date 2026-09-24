@@ -38,6 +38,7 @@ export function RunPanel({
 }) {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
+  const saving = useAppStore((state) => state.saving);
   const { t, language } = useTranslation();
   const [run, setRun] = useState<ResolvedRun>();
   const [status, setStatus] = useState<string>();
@@ -253,7 +254,10 @@ export function RunPanel({
         <button
           type="button"
           disabled={
-            (running ? false : enabled.length === 0) || busy || starting
+            (running ? false : enabled.length === 0) ||
+            busy ||
+            saving ||
+            starting
           }
           onClick={() => {
             setActionsOpen(false);

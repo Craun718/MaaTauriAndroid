@@ -13,6 +13,7 @@ import { useAppStore } from "./store/appStore";
 function App() {
   const bootstrap = useAppStore((state) => state.bootstrap);
   const busy = useAppStore((state) => state.busy);
+  const saving = useAppStore((state) => state.saving);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -32,7 +33,7 @@ function App() {
         </Routes>
         {/* 常驻占位：busy 文案出现/消失时内容高度不变，避免整页抖动。 */}
         <div aria-live="polite" className="mt-4 min-h-5 text-sm text-ink-muted">
-          {busy ? t("working") : ""}
+          {busy || saving ? t("working") : ""}
         </div>
         <FocusModalHost />
       </AppShell>

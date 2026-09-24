@@ -76,4 +76,52 @@ describe("runLogStore", () => {
 
     expect(useRunLogStore.getState().entries).toHaveLength(1);
   });
+
+  it("hydrates persisted events for the latest run", () => {
+    useRunLogStore
+      .getState()
+      .hydrateRunEvents([
+        runEvent("run-1", 1, "started"),
+        runEvent("run-1", 2, "task"),
+        runEvent("run-1", 3, "screenshot"),
+      ]);
+
+    expect(useRunLogStore.getState().executionId).toBe("run-1");
+    expect(
+      runEntries(useRunLogStore.getState().entries).map(
+        (entry) => entry.event.sequence,
+      ),
+    ).toEqual([1, 2]);
+  });
+
+  it("merges history with live events that arrived first", () => {
+    useRunLogStore.getState().appendRunEvent(runEvent("run-1", 2));
+
+    useRunLogStore
+      .getState()
+      .hydrateRunEvents([
+        runEvent("run-1", 1, "started"),
+        runEvent("run-1", 2, "task"),
+        runEvent("run-1", 3, "task"),
+      ]);
+
+    expect(
+      runEntries(useRunLogStore.getState().entries).map(
+        (entry) => entry.event.sequence,
+      ),
+    ).toEqual([1, 2, 3]);
+  });
+
+  it("ignores history for a different active execution", () => {
+    useRunLogStore.getState().appendRunEvent(runEvent("run-2", 1, "preparing"));
+
+    useRunLogStore.getState().hydrateRunEvents([runEvent("run-1", 1)]);
+
+    expect(useRunLogStore.getState().executionId).toBe("run-2");
+    expect(
+      runEntries(useRunLogStore.getState().entries).map(
+        (entry) => entry.event.executionId,
+      ),
+    ).toEqual(["run-2"]);
+  });
 });

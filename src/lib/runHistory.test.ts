@@ -4,6 +4,7 @@ import {
   formatDuration,
   runDurationMs,
   runEventCategory,
+  runHistoryDateGroups,
   runOutcome,
   runTasks,
 } from "./runHistory";
@@ -115,3 +116,50 @@ describe("formatDuration", () => {
     expect(formatDuration(-5)).toBe("0:00");
   });
 });
+
+describe("runHistoryDateGroups", () => {
+  it("groups runs from the same local calendar day and keeps order", () => {
+    const groups = runHistoryDateGroups(
+      [
+        entry("run-2", new Date(2026, 8, 25, 23, 0).getTime()),
+        entry("run-1", new Date(2026, 8, 25, 1, 0).getTime()),
+        entry("run-0", new Date(2026, 8, 24, 1, 0).getTime()),
+      ],
+      "en",
+    );
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].dateKey).toBe("2026-09-25");
+    expect(groups[0].entries.map(({ executionId }) => executionId)).toEqual([
+      "run-2",
+      "run-1",
+    ]);
+    expect(groups[1].dateKey).toBe("2026-09-24");
+    expect(groups[1].entries[0].executionId).toBe("run-0");
+  });
+
+  it("keeps invalid timestamps in their own group", () => {
+    const groups = runHistoryDateGroups(
+      [
+        entry("run-1", Number.NaN),
+        entry("run-0", new Date(2026, 8, 25).getTime()),
+      ],
+      "zh",
+    );
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].dateKey).toBe("");
+    expect(groups[0].label).toBe("—");
+    expect(groups[0].entries[0].executionId).toBe("run-1");
+  });
+});
+
+function entry(executionId: string, startedAtUnixMs: number) {
+  return {
+    executionId,
+    fileName: "run_20260925_000000_1.jsonl",
+    startedAtUnixMs,
+    sizeBytes: 0,
+    taskCount: 1,
+  };
+}

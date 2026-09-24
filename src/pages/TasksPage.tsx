@@ -281,7 +281,7 @@ export function TasksPage() {
         activeTab={activityTab}
         onActiveTabChange={setActivityTab}
         taskList={
-          <>
+          <div className="space-y-3">
             {runActive && (
               <p className="text-sm text-ink-muted">{t("taskConfigLocked")}</p>
             )}
@@ -347,7 +347,7 @@ export function TasksPage() {
                 disabled={runActive}
               />
             </section>
-          </>
+          </div>
         }
       />
       {focusNotice && (

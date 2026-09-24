@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useEffect, useId, useRef } from "react";
+import { listRunHistory, readRunHistory } from "../lib/api";
 import { localizeRunEvent, useTranslation } from "../lib/i18n";
 import type { RunEvent } from "../lib/types";
 import { type RunLogEntry, useRunLogStore } from "../store/runLogStore";
@@ -59,6 +60,31 @@ function logLabel(
   return labels[logCategory(entry)];
 }
 
+/** Shows persisted history again after a reload, then keeps appending live events. */
+function useLatestRunHistory(enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    const sessionEpoch = useRunLogStore.getState().sessionEpoch;
+
+    void (async () => {
+      const latest = (await listRunHistory()).at(0);
+      if (!latest) return;
+      const events = await readRunHistory(latest.executionId);
+      if (
+        !cancelled &&
+        useRunLogStore.getState().sessionEpoch === sessionEpoch
+      ) {
+        useRunLogStore.getState().hydrateRunEvents(events);
+      }
+    })().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+}
+
 export function RunActivityTabs({
   taskList,
   activeTab,
@@ -70,6 +96,7 @@ export function RunActivityTabs({
 }) {
   useRunEvents();
   const events = useRunLogStore((state) => state.entries);
+  useLatestRunHistory(events.length === 0);
   const { t, language } = useTranslation();
   const groupId = useId();
   const logListRef = useRef<HTMLOListElement>(null);
@@ -152,9 +179,10 @@ export function RunActivityTabs({
                 entry.type === "run"
                   ? localizeRunEvent(entry.event, language)
                   : entry.message;
-              const displayMessage = taskName
-                ? `${taskName}: ${message}`
-                : message;
+              const displayMessage =
+                taskName && category !== "focus"
+                  ? `${taskName}: ${message}`
+                  : message;
               return (
                 <li
                   key={

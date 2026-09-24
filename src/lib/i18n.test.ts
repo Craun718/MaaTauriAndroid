@@ -66,8 +66,8 @@ describe("translate", () => {
   });
 
   it("returns plain strings unchanged", () => {
-    expect(translate("en", "start")).toBe("Start");
-    expect(translate("zh", "start")).toBe("开始");
+    expect(translate("en", "startRun")).toBe("Start run");
+    expect(translate("zh", "startRun")).toBe("开始运行");
   });
 });
 

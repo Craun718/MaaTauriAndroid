@@ -388,6 +388,17 @@ object RuntimeBridge {
         }.getOrNull()
     }
 
+    /** Reinstalls the bundled Project Interface and returns its new root. */
+    @JvmStatic
+    fun reinstallProjectInterface(): String? {
+        val context = agentContext ?: return null
+        return runCatching {
+            PiInstaller.reinstall(context)?.absolutePath
+        }.onFailure { error ->
+            android.util.Log.w("MaaTauriAndroidProject", "Project Interface reinstall failed", error)
+        }.getOrNull()
+    }
+
     /**
      * Physical-pixel top/bottom insets the web layer must keep clear of (system
      * bars and display cutouts), as JSON. Layout insets stay owned by the web

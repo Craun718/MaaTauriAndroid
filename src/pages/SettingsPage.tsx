@@ -1,4 +1,4 @@
-import { Download, Trash2 } from "lucide-react";
+import { Download, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
@@ -26,10 +26,12 @@ function isUiLanguage(value: string): value is UiLanguage {
 export function SettingsPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
+  const reinstallResources = useAppStore((state) => state.reinstallResources);
   const busy = useAppStore((state) => state.busy);
   const notify = useNotificationStore((state) => state.notify);
   const { t } = useTranslation();
   const [cleaning, setCleaning] = useState(false);
+  const [reinstalling, setReinstalling] = useState(false);
   const { exportLogs, exporting } = useLogExport();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
 
@@ -222,6 +224,19 @@ export function SettingsPage() {
           </Checkbox>
           <p className="text-sm text-ink-muted">{t("debugModeDescription")}</p>
         </div>
+        <button
+          type="button"
+          disabled={busy || reinstalling || !snapshot}
+          onClick={async () => {
+            setReinstalling(true);
+            await reinstallResources();
+            setReinstalling(false);
+          }}
+          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+        >
+          <RefreshCw size="1rem" />
+          {reinstalling ? t("reinstallingResources") : t("reinstallResources")}
+        </button>
         <button
           type="button"
           disabled={exporting}

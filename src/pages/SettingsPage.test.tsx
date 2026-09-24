@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotificationHost } from "../components/ui/NotificationHost";
 import type {
@@ -27,6 +26,7 @@ vi.mock("../lib/api", () => ({
   clearDiagnosticData: vi.fn(),
   restartApp: vi.fn(async () => undefined),
   exportLogs: () => exportLogs(),
+  reinstallResources: vi.fn(async () => undefined),
   getUpdateStatus: vi.fn(async () => undefined),
   checkForUpdate: vi.fn(async () => undefined),
   resolveUpdate: vi.fn(async () => undefined),
@@ -130,10 +130,10 @@ beforeEach(() => {
 
 function renderSettingsPage() {
   return render(
-    <MemoryRouter>
+    <>
       <NotificationHost />
       <SettingsPage />
-    </MemoryRouter>,
+    </>,
   );
 }
 
@@ -186,6 +186,21 @@ describe("project scope in settings", () => {
       "Deleted 3 run directories and cleared log files",
     );
     expect(restartApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("reinstalls resources from the diagnostics card", async () => {
+    const { reinstallResources } = await import("../lib/api");
+    vi.mocked(reinstallResources).mockResolvedValue({
+      project,
+      configuration,
+    });
+    renderSettingsPage();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Re-extract resources" }),
+    );
+
+    await waitFor(() => expect(reinstallResources).toHaveBeenCalledTimes(1));
   });
 
   it("hides telemetry consent when the interface does not declare it", () => {

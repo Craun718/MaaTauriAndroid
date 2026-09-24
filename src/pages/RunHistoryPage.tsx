@@ -1,5 +1,6 @@
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { RichDescription } from "../components/RichDescription";
 import { formatDateTime } from "../components/ScheduleEntryCard";
 import {
   cleanupRunHistory,
@@ -14,9 +15,11 @@ import {
   formatDuration,
   isTerminalEvent,
   type RunEventCategory,
+  type RunHistoryDateGroup,
   type RunOutcome,
   runDurationMs,
   runEventCategory,
+  runHistoryDateGroups,
   runOutcome,
   runTasks,
 } from "../lib/runHistory";
@@ -120,41 +123,94 @@ export function RunHistoryPage() {
         </p>
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => (
-            <div
-              key={entry.executionId}
-              className="flex items-center gap-2 rounded-md border border-line bg-raised p-3 transition-colors hover:bg-surface-muted"
-            >
-              <button
-                type="button"
-                onClick={() => setSelected(entry)}
-                className="min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                <p className="truncate font-medium">
-                  {formatDateTime(entry.startedAtUnixMs, language)}
-                </p>
-                <p className="text-sm text-ink-muted">
-                  {t("runHistoryTaskCount", { count: entry.taskCount })} ·{" "}
-                  {formatBytes(entry.sizeBytes)}
-                </p>
-              </button>
-              <button
-                type="button"
-                aria-label={t("runHistoryDelete")}
-                title={t("runHistoryDelete")}
-                onClick={(clickEvent) => {
-                  clickEvent.stopPropagation();
-                  void remove(entry);
-                }}
-                className="flex size-8 flex-none cursor-pointer items-center justify-center rounded-md text-error transition-colors hover:bg-error/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                <Trash2 size="1rem" />
-              </button>
-            </div>
+          {runHistoryDateGroups(entries, language).map((group) => (
+            <RunHistoryDayAccordion
+              key={group.dateKey || group.entries[0].executionId}
+              group={group}
+              onSelect={setSelected}
+              onRemove={(entry) => void remove(entry)}
+            />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+function RunHistoryDayAccordion({
+  group,
+  onSelect,
+  onRemove,
+}: {
+  group: RunHistoryDateGroup;
+  onSelect: (entry: RunHistoryEntry) => void;
+  onRemove: (entry: RunHistoryEntry) => void;
+}) {
+  const { t, language } = useTranslation();
+  const [open, setOpen] = useState(
+    group.entries.some(
+      (entry) =>
+        new Date(entry.startedAtUnixMs).toDateString() ===
+        new Date().toDateString(),
+    ),
+  );
+  const timeFormat = new Intl.DateTimeFormat(
+    language === "zh" ? "zh-CN" : "en-US",
+    { timeStyle: "short" },
+  );
+
+  return (
+    <section className="overflow-hidden rounded-md border border-line bg-raised">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{group.label}</span>
+          <span className="block text-sm text-ink-muted">
+            {t("runHistoryRunCount", { count: group.entries.length })}
+          </span>
+        </span>
+        <ChevronDown
+          size="1.25rem"
+          className={`flex-none text-ink-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open ? (
+        <ul className="divide-y divide-line border-t border-line">
+          {group.entries.map((entry) => (
+            <li key={entry.executionId}>
+              <div className="flex items-center gap-2 p-3 transition-colors hover:bg-surface-muted">
+                <button
+                  type="button"
+                  onClick={() => onSelect(entry)}
+                  className="min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <p className="truncate font-medium">
+                    {timeFormat.format(new Date(entry.startedAtUnixMs))}
+                  </p>
+                  <p className="text-sm text-ink-muted">
+                    {t("runHistoryTaskCount", { count: entry.taskCount })} ·{" "}
+                    {formatBytes(entry.sizeBytes)}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("runHistoryDelete")}
+                  title={t("runHistoryDelete")}
+                  onClick={() => onRemove(entry)}
+                  className="flex size-8 flex-none cursor-pointer items-center justify-center rounded-md text-error transition-colors hover:bg-error/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <Trash2 size="1rem" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
@@ -268,7 +324,31 @@ function RunHistoryDetail({
                     {t(CATEGORY_KEYS[category])}
                   </span>
                 </div>
-                {event.data != null ? (
+                {category === "focus" ? (
+                  <div className="flex min-w-0 flex-1 items-start gap-1">
+                    <RichDescription
+                      text={message}
+                      className="min-w-0 flex-1 break-words"
+                    />
+                    {event.data != null && (
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-label={t("runHistoryEventDetails")}
+                        title={t("runHistoryEventDetails")}
+                        onClick={() =>
+                          setExpandedKey(expanded ? undefined : key)
+                        }
+                        className="flex size-6 flex-none cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <ChevronDown
+                          size="1rem"
+                          className={expanded ? "rotate-180" : undefined}
+                        />
+                      </button>
+                    )}
+                  </div>
+                ) : event.data != null ? (
                   <button
                     type="button"
                     aria-expanded={expanded}

@@ -5,7 +5,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotificationHost } from "../components/ui/NotificationHost";
 import type {
@@ -47,6 +46,8 @@ vi.mock("../lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   getVirtualDisplayStream: vi.fn(),
   setVirtualDisplayTouchMarkers: () => setVirtualDisplayTouchMarkers(),
+  listRunHistory: vi.fn(async () => []),
+  readRunHistory: vi.fn(async () => []),
   getUpdateStatus: vi.fn(async () => undefined),
   checkForUpdate: vi.fn(async () => undefined),
   resolveUpdate: vi.fn(async () => undefined),
@@ -74,10 +75,10 @@ const applicability = { controllers: [], resources: [] };
 
 function renderTasksPage() {
   return render(
-    <MemoryRouter>
+    <>
       <TasksPage />
       <NotificationHost />
-    </MemoryRouter>,
+    </>,
   );
 }
 
@@ -412,7 +413,7 @@ describe("run configuration tabs and flat task list", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Task actions" }),
     );
-    const start = await screen.findByRole("button", { name: "Start" });
+    const start = await screen.findByRole("button", { name: "Start run" });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
 
@@ -439,7 +440,7 @@ describe("run configuration tabs and flat task list", () => {
     );
     const drawer = await screen.findByRole("dialog", { name: "Task actions" });
     expect(
-      await within(drawer).findByRole("button", { name: "Stop task" }),
+      await within(drawer).findByRole("button", { name: "Stop run" }),
     ).toBeEnabled();
   });
 
@@ -481,7 +482,7 @@ describe("run configuration tabs and flat task list", () => {
     );
     const drawer = await screen.findByRole("dialog", { name: "Task actions" });
     fireEvent.click(
-      await within(drawer).findByRole("button", { name: "Stop task" }),
+      await within(drawer).findByRole("button", { name: "Stop run" }),
     );
 
     await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));
@@ -544,7 +545,7 @@ describe("run configuration tabs and flat task list", () => {
 
     expect(screen.getByText("The run started")).toBeInTheDocument();
     const logs = screen.getByText("The run started").closest("ol");
-    expect(logs).toHaveTextContent("NodeA: NodeA started");
+    expect(logs).toHaveTextContent("NodeA started");
     expect(screen.getByText("agent says ready")).toBeInTheDocument();
     expect(screen.getAllByText("Status")).toHaveLength(1);
     expect(screen.getAllByText("Focus")).toHaveLength(1);
@@ -806,7 +807,7 @@ describe("run failure notifications", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Task actions" }),
     );
-    const start = await screen.findByRole("button", { name: "Start" });
+    const start = await screen.findByRole("button", { name: "Start run" });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
     await waitFor(() => expect(startRun).toHaveBeenCalledTimes(1));

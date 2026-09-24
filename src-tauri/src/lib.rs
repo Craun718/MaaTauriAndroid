@@ -1477,6 +1477,62 @@ fn call_runtime_bridge_optional_string(method: &'static str) -> Result<Option<St
 }
 
 #[cfg(target_os = "android")]
+async fn reinstall_project_interface(app: &AppHandle) -> Result<AppStateSnapshot, AppError> {
+    let state: State<'_, AppState> = app.state();
+    if state.maa.status() != runtime::RunState::Idle {
+        return Err(AppError::Message(
+            "a run is active; stop it before reinstalling resources".to_string(),
+        ));
+    }
+    let _storage_guard = state.run_storage.lock().await;
+    let root =
+        call_runtime_bridge_optional_string("reinstallProjectInterface")?.ok_or_else(|| {
+            AppError::Message(
+                "the packaged Project Interface resources are unavailable".to_string(),
+            )
+        })?;
+    reload_project(&root, "zh_cn", app).await
+}
+
+#[cfg(target_os = "android")]
+async fn reload_project(
+    root: &str,
+    language: &str,
+    app: &AppHandle,
+) -> Result<AppStateSnapshot, AppError> {
+    let state: State<'_, AppState> = app.state();
+    let config_path = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?
+        .join("configuration.json");
+    let project =
+        ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), language)?;
+    runtime::validate_ocr_models(&project.root, &project.resources)?;
+    let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
+    let configuration = state.install(config_path, None, project, stored)?;
+    runtime::apply_debug_mode(configuration.debug_mode);
+    Ok(AppStateSnapshot {
+        versions: version::VersionInfo::new(version::environment()),
+        project: state.project().ok(),
+        configuration,
+        project_path: Some(root.to_string()),
+    })
+}
+
+#[cfg(not(target_os = "android"))]
+fn reinstall_project_interface(_app: &AppHandle) -> Result<AppStateSnapshot, AppError> {
+    Err(AppError::Message(
+        "resource reinstall is only available on Android".to_string(),
+    ))
+}
+
+#[tauri::command]
+async fn reinstall_resources(app: AppHandle) -> Result<AppStateSnapshot, AppError> {
+    reinstall_project_interface(&app).await
+}
+
+#[cfg(target_os = "android")]
 fn call_runtime_bridge_optional_string_with_int(
     method: &'static str,
     value: i32,
@@ -2896,6 +2952,7 @@ pub fn run() {
             export_logs,
             capture_manual_screenshot,
             clear_diagnostic_data,
+            reinstall_resources,
             restart_app,
             list_run_history,
             read_run_history,

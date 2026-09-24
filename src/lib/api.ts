@@ -172,6 +172,10 @@ export async function clearDiagnosticData() {
   );
 }
 
+export async function reinstallResources() {
+  return invoke<AppStateSnapshot>("reinstall_resources");
+}
+
 export async function restartApp() {
   return invoke("restart_app");
 }

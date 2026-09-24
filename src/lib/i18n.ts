@@ -158,9 +158,9 @@ const en = {
 
   // Run controls
   taskOperations: "Task actions",
-  start: "Start",
+  startRun: "Start run",
   stop: "Stop",
-  stopTask: "Stop task",
+  stopRun: "Stop run",
   captureScreenshot: "Shot",
   back: "Back",
   screenshotSavedNotice: "Screenshot saved to this run.",
@@ -187,6 +187,8 @@ const en = {
   close: "Close",
   dismissNotification: "Dismiss notification",
   diagnostics: "Diagnostics",
+  reinstallResources: "Re-extract resources",
+  reinstallingResources: "Re-extracting",
   debugMode: "Debug mode",
   debugModeRestartConfirm:
     "Enabling debug mode restarts the app: app debug logging starts, MaaFramework attaches recognition snapshots and debug draws, and a running task is interrupted. Restart now?",
@@ -206,6 +208,7 @@ const en = {
   runHistoryBack: "Back to run list",
   runHistoryEmpty: "No run records yet",
   runHistoryTaskCount: "{count} tasks",
+  runHistoryRunCount: "{count} runs",
   runHistoryDelete: "Delete this record",
   runHistoryDeleteConfirm:
     "Delete this run record? The saved log file will be removed with it.",
@@ -217,6 +220,7 @@ const en = {
   runHistoryTasks: "Tasks",
   runHistoryDuration: "Duration",
   runHistoryEndedAt: "Ended at",
+  runHistoryEventDetails: "Event details",
   runHistoryOutcomeCompleted: "Completed",
   runHistoryOutcomeCancelled: "Stopped",
   runHistoryOutcomeFailed: "Failed",
@@ -410,9 +414,9 @@ const zh: Record<MessageKey, string> = {
   taskConfigLocked: "任务运行中，任务配置已锁定，仅可查看详情。",
 
   taskOperations: "任务操作",
-  start: "开始",
+  startRun: "开始运行",
   stop: "停止",
-  stopTask: "停止任务",
+  stopRun: "停止运行",
   captureScreenshot: "截图",
   back: "返回",
   screenshotSavedNotice: "截图已保存到本次运行记录。",
@@ -438,6 +442,8 @@ const zh: Record<MessageKey, string> = {
   close: "关闭",
   dismissNotification: "关闭通知",
   diagnostics: "诊断",
+  reinstallResources: "重新解压资源",
+  reinstallingResources: "解压中",
   debugMode: "调试模式",
   debugModeRestartConfirm:
     "启用调试模式需要重启应用：重启后将记录应用调试日志，MaaFramework 会附带识别原图与调试绘制，正在运行的任务会被中断。现在重启吗？",
@@ -457,6 +463,7 @@ const zh: Record<MessageKey, string> = {
   runHistoryBack: "返回运行列表",
   runHistoryEmpty: "还没有运行记录",
   runHistoryTaskCount: "{count} 项任务",
+  runHistoryRunCount: "{count} 次运行",
   runHistoryDelete: "删除这条记录",
   runHistoryDeleteConfirm:
     "要删除这条运行记录吗？其中保存的日志文件会一并删除。",
@@ -468,6 +475,7 @@ const zh: Record<MessageKey, string> = {
   runHistoryTasks: "任务",
   runHistoryDuration: "耗时",
   runHistoryEndedAt: "结束时间",
+  runHistoryEventDetails: "事件详情",
   runHistoryOutcomeCompleted: "已完成",
   runHistoryOutcomeCancelled: "已停止",
   runHistoryOutcomeFailed: "失败",

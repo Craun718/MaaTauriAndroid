@@ -3,6 +3,7 @@ import {
   bootstrapApp,
   applyPreset as invokeApplyPreset,
   loadProject as invokeLoadProject,
+  reinstallResources as invokeReinstallResources,
   saveConfiguration as invokeSaveConfiguration,
 } from "../lib/api";
 import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
@@ -14,6 +15,7 @@ interface AppStore {
   error?: string;
   dismissedWelcomeFingerprint?: string;
   bootstrap: () => Promise<void>;
+  reinstallResources: () => Promise<void>;
   loadProject: (path: string, language?: string) => Promise<void>;
   applyPreset: (presetName: string) => Promise<void>;
   saveConfiguration: (configuration: UserConfiguration) => Promise<void>;
@@ -40,6 +42,15 @@ export const useAppStore = create<AppStore>((set) => ({
     set({ busy: true, error: undefined });
     try {
       set({ snapshot: await bootstrapApp(), busy: false });
+    } catch (error) {
+      set({ error: message(error), busy: false });
+      reportError(error);
+    }
+  },
+  async reinstallResources() {
+    set({ busy: true, error: undefined });
+    try {
+      set({ snapshot: await invokeReinstallResources(), busy: false });
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);

@@ -4,6 +4,7 @@ import {
   getPrivilegedBackend,
   loadProject,
   pressVirtualDisplayBack,
+  reinstallResources,
   resolveFocusModal,
   setPrivilegedBackend,
   setVirtualDisplayLandscape,
@@ -70,6 +71,27 @@ describe("version-aware app state snapshots", () => {
     await expect(loadProject("/tmp/broken", "zh_cn")).rejects.toThrow(
       "unsupported Project Interface version",
     );
+  });
+});
+
+describe("resource reinstall", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("requests the backend reinstall command", async () => {
+    const snapshot = { configuration: {} };
+    invoke.mockResolvedValue(snapshot);
+
+    await expect(reinstallResources()).resolves.toBe(snapshot);
+    expect(invoke).toHaveBeenCalledWith("reinstall_resources");
+  });
+
+  it("propagates a failed reinstall", async () => {
+    invoke.mockRejectedValue(new Error("a run is active"));
+
+    await expect(reinstallResources()).rejects.toThrow("a run is active");
+    expect(invoke).toHaveBeenCalledWith("reinstall_resources");
   });
 });
 

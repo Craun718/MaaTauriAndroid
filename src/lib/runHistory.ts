@@ -1,4 +1,5 @@
-import type { RunEvent } from "./types";
+import type { AppLanguage } from "./i18n";
+import type { RunEvent, RunHistoryEntry } from "./types";
 
 /** Derived from the last terminal event; no terminal event means the
  * process died mid-run (killed, crash, battery), not a user stop. */
@@ -73,4 +74,60 @@ export function formatDuration(ms: number): string {
   const seconds = totalSeconds % 60;
   const tail = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   return hours > 0 ? `${hours}:${tail}` : tail.replace(/^0/, "");
+}
+
+export interface RunHistoryDateGroup {
+  /** Stable key for React; empty for entries without a valid timestamp. */
+  dateKey: string;
+  label: string;
+  entries: RunHistoryEntry[];
+}
+
+/** Local-calendar-day key, or an empty key when the timestamp is invalid. */
+function runHistoryDateKey(startedAtUnixMs: number): string {
+  if (!Number.isFinite(startedAtUnixMs)) return "";
+  const date = new Date(startedAtUnixMs);
+  if (!Number.isFinite(date.getTime())) return "";
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/** Groups the newest-first history into local days, preserving entry order. */
+export function runHistoryDateGroups(
+  entries: RunHistoryEntry[],
+  language: AppLanguage,
+): RunHistoryDateGroup[] {
+  const groups: RunHistoryDateGroup[] = [];
+  const groupsByKey = new Map<string, RunHistoryDateGroup>();
+
+  for (const entry of entries) {
+    const dateKey = runHistoryDateKey(entry.startedAtUnixMs);
+    let group = groupsByKey.get(dateKey);
+    if (!group) {
+      group = {
+        dateKey,
+        label: dateKey
+          ? formatRunHistoryDay(entry.startedAtUnixMs, language)
+          : "—",
+        entries: [],
+      };
+      groupsByKey.set(dateKey, group);
+      groups.push(group);
+    }
+    group.entries.push(entry);
+  }
+
+  return groups;
+}
+
+/** Month and day only: individual runs already show the time. */
+export function formatRunHistoryDay(
+  startedAtUnixMs: number,
+  language: AppLanguage,
+): string {
+  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(startedAtUnixMs));
 }

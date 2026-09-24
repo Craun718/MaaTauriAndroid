@@ -49,6 +49,19 @@ object PiInstaller {
         }
     }
 
+    /** Re-extracts the packaged archive even when the install marker matches. */
+    fun reinstall(context: Context): File? {
+        val root = File(context.filesDir, ROOT_NAME)
+        val marker = root.resolve(MARKER_NAME)
+        val installed = install(context)
+        return if (installed != null && marker.isFile) {
+            marker.delete()
+            install(context)
+        } else {
+            installed
+        }
+    }
+
     private fun currentMarker(context: Context): String {
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         return packageInfo.lastUpdateTime.toString()

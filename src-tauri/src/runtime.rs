@@ -1160,17 +1160,13 @@ pub fn run_tasks(
     // run — it only points out the "game expected but nothing starts it"
     // combination while there is still time to tick the right boxes.
     if state_probe().is_some_and(|state| state.display_alive && state.top_package.is_none()) {
-        logger
-            .append_to_ui(
-                crate::run_log::RunEventKind::Task,
-                RunState::Running,
-                "The controlled display is empty; tasks that expect a running game will fail \
-                 recognition unless a task starts it."
-                    .to_string(),
-                None,
-                None,
-            )
-            .map_err(|error| RuntimeError::Maa(error.to_string()))?;
+        // This stays diagnostic context in the application log only; it is
+        // not written to the user-facing task log (live feed or run history).
+        log::info!(
+            target: crate::run_log::RUN_EVENT_TARGET,
+            "The controlled display is empty; tasks that expect a running game will fail \
+             recognition unless a task starts it."
+        );
     }
     let total = tasks.iter().filter(|task| task.enabled).count() as u32;
     for (index, task) in tasks.iter().filter(|task| task.enabled).enumerate() {

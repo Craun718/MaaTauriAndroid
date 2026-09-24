@@ -6,6 +6,7 @@ mod focus;
 mod game_fps;
 mod persistence;
 mod run_diagnosis;
+mod run_history;
 mod run_log;
 mod run_progress;
 mod runtime;
@@ -1620,7 +1621,11 @@ async fn start_run_core(
     let execution_id = Uuid::new_v4().to_string();
     let runs_dir = state.runs_dir()?;
     let _lifecycle_guard = state.run_storage.lock().await;
-    let logger = Arc::new(run_log::RunLogger::create(&runs_dir, &execution_id)?);
+    let logger = Arc::new(run_log::RunLogger::create(
+        &runs_dir,
+        &execution_id,
+        task_count,
+    )?);
     let initial_event = logger.append(
         run_log::RunEventKind::Preparing,
         runtime::RunState::Preparing,
@@ -1832,12 +1837,18 @@ async fn start_run_core(
                         let _ = app.emit("run-event", &event);
                     }
                 }
+                // The enabled task labels travel with the Started event so
+                // the run history detail page can show the task snapshot.
+                let task_labels: Vec<String> = tasks
+                    .iter()
+                    .map(|task| run_progress::task_progress_label(task).to_string())
+                    .collect();
                 if let Ok(event) = logger_for_run.append(
                     run_log::RunEventKind::Started,
                     runtime::RunState::Running,
                     "The run started".to_string(),
                     None,
-                    None,
+                    Some(serde_json::json!({ "tasks": task_labels })),
                 ) {
                     let _ = app.emit("run-event", &event);
                 }
@@ -2329,6 +2340,63 @@ async fn clear_diagnostic_data(
     })
 }
 
+#[tauri::command]
+fn list_run_history(state: &AppState) -> Result<Vec<run_history::RunHistoryEntry>, AppError> {
+    Ok(run_history::list(&state.runs_dir()?))
+}
+
+#[tauri::command]
+fn read_run_history(
+    state: &AppState,
+    execution_id: String,
+) -> Result<Vec<run_log::RunEvent>, AppError> {
+    Ok(run_history::read(&state.runs_dir()?, &execution_id)?)
+}
+
+#[tauri::command]
+async fn delete_run_history(
+    state: State<'_, AppState>,
+    execution_id: String,
+) -> Result<bool, AppError> {
+    let runs_dir = state.runs_dir()?;
+    // Holding the storage lock closes the race against a starting run:
+    // `start_run_core` sets `latest_log` while still holding this lock, so a
+    // run that is about to write history is always seen as active here.
+    let _storage_guard = state.run_storage.lock().await;
+    let latest = state.latest_log().ok();
+    if run_history::is_active_run(
+        latest.as_deref().map(|logger| logger.execution_id()),
+        state.maa.status(),
+        &execution_id,
+    ) {
+        return Err(AppError::Message(
+            "cannot delete the running record".to_string(),
+        ));
+    }
+    Ok(run_history::delete(&runs_dir, &execution_id)?)
+}
+
+#[tauri::command]
+async fn cleanup_run_history(
+    state: State<'_, AppState>,
+    keep_days: Option<u32>,
+) -> Result<usize, AppError> {
+    let runs_dir = state.runs_dir()?;
+    let latest = state.latest_log().ok();
+    let latest_execution_id = latest
+        .as_deref()
+        .map(|logger| logger.execution_id().to_string());
+    let status = state.maa.status();
+    let _storage_guard = state.run_storage.lock().await;
+    Ok(run_history::cleanup(
+        &runs_dir,
+        keep_days.unwrap_or(run_history::DEFAULT_KEEP_DAYS),
+        |execution_id| {
+            run_history::is_active_run(latest_execution_id.as_deref(), status, execution_id)
+        },
+    )?)
+}
+
 #[derive(Debug, thiserror::Error)]
 enum AppError {
     #[error("project has not been loaded")]
@@ -2349,6 +2417,8 @@ enum AppError {
     Runtime(#[from] runtime::RuntimeError),
     #[error("{0}")]
     RunLog(#[from] run_log::RunLogError),
+    #[error("{0}")]
+    RunHistory(#[from] run_history::RunHistoryError),
     #[error("{0}")]
     Diagnostic(#[from] diagnostics::DiagnosticError),
     #[error("{0}")]
@@ -2809,6 +2879,10 @@ pub fn run() {
             capture_manual_screenshot,
             clear_diagnostic_data,
             restart_app,
+            list_run_history,
+            read_run_history,
+            delete_run_history,
+            cleanup_run_history,
             list_schedule_rules,
             save_schedule_rule,
             delete_schedule_rule,

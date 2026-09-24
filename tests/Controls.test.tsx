@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RunPanel } from "../src/components/RunPanel";
 import { NotificationHost } from "../src/components/ui/NotificationHost";
@@ -104,7 +105,11 @@ describe("diagnostic controls", () => {
   });
 
   it("saves the force-stop preference", async () => {
-    render(<SettingsPage />);
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    );
     const toggle = await screen.findByRole("checkbox", {
       name: "Force stop target app",
     });
@@ -126,10 +131,10 @@ describe("diagnostic controls", () => {
       runsDir: "/runs",
     });
     render(
-      <>
+      <MemoryRouter>
         <SettingsPage />
         <NotificationHost />
-      </>,
+      </MemoryRouter>,
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete logs" }));

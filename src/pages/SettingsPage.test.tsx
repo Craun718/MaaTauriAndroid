@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotificationHost } from "../components/ui/NotificationHost";
 import type {
@@ -129,10 +130,10 @@ beforeEach(() => {
 
 function renderSettingsPage() {
   return render(
-    <>
+    <MemoryRouter>
       <NotificationHost />
       <SettingsPage />
-    </>,
+    </MemoryRouter>,
   );
 }
 

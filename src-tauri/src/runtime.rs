@@ -448,7 +448,7 @@ fn wait_for_tasker_idle(tasker: &Tasker, timeout: Duration) -> bool {
     true
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RunState {
     Idle,
     Preparing,

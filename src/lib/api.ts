@@ -9,6 +9,8 @@ import type {
   PrivilegedBackend,
   PrivilegedStatus,
   ResolvedRun,
+  RunEvent,
+  RunHistoryEntry,
   RunResult,
   ScheduleRule,
   ScheduleRuleStatus,
@@ -172,6 +174,22 @@ export async function clearDiagnosticData() {
 
 export async function restartApp() {
   return invoke("restart_app");
+}
+
+export async function listRunHistory() {
+  return invoke<Array<RunHistoryEntry>>("list_run_history");
+}
+
+export async function readRunHistory(executionId: string) {
+  return invoke<Array<RunEvent>>("read_run_history", { executionId });
+}
+
+export async function deleteRunHistory(executionId: string) {
+  return invoke<boolean>("delete_run_history", { executionId });
+}
+
+export async function cleanupRunHistory(keepDays?: number) {
+  return invoke<number>("cleanup_run_history", { keepDays });
 }
 
 export async function listScheduleRules() {

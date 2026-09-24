@@ -4,6 +4,7 @@ import { AppShell } from "./components/AppShell";
 import { FocusModalHost } from "./components/FocusModalHost";
 import { useTranslation } from "./lib/i18n";
 import { HomePage } from "./pages/HomePage";
+import { RunHistoryPage } from "./pages/RunHistoryPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -25,6 +26,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/schedules" element={<SchedulesPage />} />
+          <Route path="/runs" element={<RunHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

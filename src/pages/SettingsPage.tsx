@@ -1,5 +1,6 @@
-import { Download, Trash2 } from "lucide-react";
+import { ChevronRight, Download, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
 import { UpdateCard } from "../components/UpdateCard";
@@ -222,6 +223,13 @@ export function SettingsPage() {
           </Checkbox>
           <p className="text-sm text-ink-muted">{t("debugModeDescription")}</p>
         </div>
+        <Link
+          to="/runs"
+          className="flex h-9 items-center justify-between rounded-md border border-line px-2.5 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {t("runHistoryTitle")}
+          <ChevronRight size="1rem" className="text-ink-muted" />
+        </Link>
         <button
           type="button"
           disabled={exporting}

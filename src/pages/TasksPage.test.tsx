@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotificationHost } from "../components/ui/NotificationHost";
 import type {
@@ -73,10 +74,10 @@ const applicability = { controllers: [], resources: [] };
 
 function renderTasksPage() {
   return render(
-    <>
+    <MemoryRouter>
       <TasksPage />
       <NotificationHost />
-    </>,
+    </MemoryRouter>,
   );
 }
 

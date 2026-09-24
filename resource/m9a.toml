@@ -13,6 +13,8 @@ pi_assets = "m9a"
 
 resource_id = "m9a"
 
+mirrorchyan_rid = "M9A"
+
 app_name = "M9A"
 
 maa_dir = "vendor/maa/android"

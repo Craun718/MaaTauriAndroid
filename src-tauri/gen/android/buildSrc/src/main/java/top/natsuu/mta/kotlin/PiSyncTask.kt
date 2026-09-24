@@ -5,8 +5,10 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -26,6 +28,10 @@ abstract class PiSyncTask : DefaultTask() {
 
     @get:Input
     abstract val extraEntries: ListProperty<String>
+
+    @get:Input
+    @get:Optional
+    abstract val mirrorchyanRid: Property<String>
 
     @get:OutputDirectory
     abstract val destination: DirectoryProperty
@@ -49,6 +55,10 @@ abstract class PiSyncTask : DefaultTask() {
         target.mkdirs()
         for (entry in plan.entries) {
             copy(source.resolve(entry), target.resolve(entry))
+        }
+        if (mirrorchyanRid.isPresent) {
+            val rid = mirrorchyanRid.get()
+            PiMetadataOverride.mirrorchyanRid(target.resolve(PiPackage.INTERFACE_FILE), rid)
         }
     }
 

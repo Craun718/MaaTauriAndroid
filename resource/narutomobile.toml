@@ -11,6 +11,8 @@ pi_assets = "narutomobile/Android/pi-root"
 
 resource_id = "narutomobile"
 
+mirrorchyan_rid = "MaaAutoNaruto"
+
 app_name = "MAN"
 
 maa_dir = "vendor/maa/android"

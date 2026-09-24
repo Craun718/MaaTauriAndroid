@@ -41,9 +41,12 @@ pi_assets = "/path/to/your-pi"
 
 resource_id = "yourpi"   # 拼成 top.natsuu.mta.yourpi
 app_name = "Your PI"
+# mirrorchyan_rid = "your-mirrorchyan-id"  # 可选；不写则用 interface.json 的值
 ```
 
 `resource_id` 只收小写字母、数字、下划线，且不能以数字开头；省略时是 `fixture`。可选的 `app_name` 设置 Android 桌面图标名称和 Activity 标题；省略时构建使用 `MaaTauriAndroid`。`maa_dir` 缺省为 `vendor/maa/android`，它是打包进 `jniLibs` 的 MaaFramework 库目录。
+
+可选的 `mirrorchyan_rid` 设置 MirrorChyan 更新资源 ID。构建时如果 profile 写了这个字段，出包会覆盖打包后 `interface.json` 里的同名值；没写就沿用 `interface.json` 的 `mirrorchyan_rid`。它和 `resource_id` 无关联，大小写、下划线等按 MirrorChyan 的规则写就行。
 
 `pi_include` 只能**额外**加：它列出的是 `interface.json` 推导集合之外、还需要打包的相对 `pi_assets` 路径。列出的路径不存在也会让构建失败。`pi_exclude` 会被直接拒绝：推导集合不能被裁剪，写它只会得到一个静默无效的过滤器。
 

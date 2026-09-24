@@ -8,6 +8,8 @@ pi_assets = "maapvz/Android/pi-root"
 
 resource_id = "maapvz"
 
+mirrorchyan_rid = "MaaPVZ"
+
 app_name = "MaaPVZ"
 
 maa_dir = "vendor/maa/android"

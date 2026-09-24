@@ -121,6 +121,7 @@ val preparePiArchive = if (piProfile != null) {
             ),
         )
         extraEntries.set(piProfile.extraEntries)
+        piProfile.mirrorchyanRid?.let { mirrorchyanRid.set(it) }
         destination.set(piRootDir)
         doLast {
             val interfaceFile = piRootDir.get().file("interface.json").asFile

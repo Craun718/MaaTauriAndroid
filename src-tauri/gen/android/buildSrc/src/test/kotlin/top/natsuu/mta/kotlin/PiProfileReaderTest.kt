@@ -1,6 +1,7 @@
 package top.natsuu.mta.kotlin
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -67,6 +68,45 @@ class PiProfileReaderTest {
     fun rejectsBlankApplicationNames() {
         val profile = temporaryFolder.newFile("pi.toml").apply {
             writeText("pi_assets = \".\"\napp_name = \"\"")
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            PiProfileReader.read(profile)
+        }
+    }
+
+    @Test
+    fun readsAndTrimsOptionalMirrorchyanRid() {
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+                mirrorchyan_rid = "  M9A  "
+                """.trimIndent(),
+            )
+        }
+
+        val result = PiProfileReader.read(profile)
+
+        assertEquals("M9A", result.mirrorchyanRid)
+    }
+
+    @Test
+    fun leavesMirrorchyanRidUnsetWhenOmittedFromTheProfile() {
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText("pi_assets = \".\"\nresource_id = \"game\"")
+        }
+
+        val result = PiProfileReader.read(profile)
+
+        assertNull(result.mirrorchyanRid)
+    }
+
+    @Test
+    fun rejectsBlankMirrorchyanRid() {
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText("pi_assets = \".\"\nresource_id = \"game\"\nmirrorchyan_rid = \"   \"")
         }
 
         assertThrows(IllegalArgumentException::class.java) {

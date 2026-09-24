@@ -14,6 +14,7 @@ data class PiProfile(
      */
     val extraEntries: List<String>,
     val resourceId: String,
+    val mirrorchyanRid: String?,
     val appName: String?,
     val maaDir: String,
     val agent: AgentProfile?,
@@ -71,6 +72,7 @@ object PiProfileReader {
             // pi_include now means "also pack this", never "pack only this".
             extraEntries = stringArray(result, "pi_include").orEmpty(),
             resourceId = resourceId(result),
+            mirrorchyanRid = optionalMirrorchyanRid(result),
             appName = optionalString(result, "app_name"),
             maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
             agent = agent,
@@ -151,6 +153,13 @@ object PiProfileReader {
             "resource_id may contain only lowercase letters, digits, and underscores"
         }
         return value
+    }
+
+    private fun optionalMirrorchyanRid(table: TomlTable): String? {
+        val value = table.getString("mirrorchyan_rid") ?: return null
+        val trimmed = value.trim()
+        require(trimmed.isNotEmpty()) { "mirrorchyan_rid must not be empty" }
+        return trimmed
     }
 
     private fun optionalString(table: TomlTable, key: String): String? {

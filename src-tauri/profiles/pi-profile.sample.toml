@@ -20,6 +20,10 @@ pi_assets = "/absolute/path/to/your-maa-project"
 # applicationId suffix: top.natsuu.mta.<resource_id>
 resource_id = "yourpi"
 
+# Optional MirrorChyan update resource id. When set it overrides the value in
+# interface.json; omit it to keep the interface's value.
+mirrorchyan_rid = "yourpi"
+
 # Optional Android launcher and activity title.
 app_name = "Your PI"
 

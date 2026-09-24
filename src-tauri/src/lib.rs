@@ -2341,13 +2341,15 @@ async fn clear_diagnostic_data(
 }
 
 #[tauri::command]
-fn list_run_history(state: &AppState) -> Result<Vec<run_history::RunHistoryEntry>, AppError> {
+fn list_run_history(
+    state: State<'_, AppState>,
+) -> Result<Vec<run_history::RunHistoryEntry>, AppError> {
     Ok(run_history::list(&state.runs_dir()?))
 }
 
 #[tauri::command]
 fn read_run_history(
-    state: &AppState,
+    state: State<'_, AppState>,
     execution_id: String,
 ) -> Result<Vec<run_log::RunEvent>, AppError> {
     Ok(run_history::read(&state.runs_dir()?, &execution_id)?)

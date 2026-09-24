@@ -1,4 +1,4 @@
-use chrono::Local;
+use chrono::{DateTime, Local};
 use log::Level;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -35,7 +35,7 @@ pub enum RunEventKind {
     Screenshot,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunEvent {
     pub execution_id: String,
@@ -79,7 +79,7 @@ pub fn latest_global() -> Option<Arc<RunLogger>> {
 /// `run_<yyyyMMdd>_<HHmmss>_<task_count>.jsonl`: the start time and task
 /// count travel in the name so the history list never reads file contents.
 /// The matching parser lives in `run_history::parse_history_file_name`.
-fn history_file_name(started_at: Local, task_count: usize) -> String {
+fn history_file_name(started_at: DateTime<Local>, task_count: usize) -> String {
     format!(
         "run_{}_{}.jsonl",
         started_at.format("%Y%m%d_%H%M%S"),

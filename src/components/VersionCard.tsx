@@ -36,7 +36,7 @@ export function VersionCard({
             <Row label={t("resourceName")} value={project.label} />
             <Row
               label={t("resourceVersion")}
-              value={project.version ?? t("aboutUnknown")}
+              value={project.version ?? versions?.resourceTag}
             />
           </>
         ) : (

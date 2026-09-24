@@ -913,7 +913,7 @@ describe("run status restoration", () => {
 
     fireEvent.click(screen.getAllByRole("checkbox", { name: "On" })[1]);
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(useAppStore.getState().busy).toBe(false));
+    await waitFor(() => expect(useAppStore.getState().saving).toBe(false));
 
     expect(getRunStatus).toHaveBeenCalledTimes(1);
     expect(useNotificationStore.getState().notifications).toHaveLength(1);

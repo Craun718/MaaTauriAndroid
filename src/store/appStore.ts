@@ -12,6 +12,7 @@ import { useNotificationStore } from "./notificationStore";
 interface AppStore {
   snapshot?: AppStateSnapshot;
   busy: boolean;
+  saving: boolean;
   error?: string;
   dismissedWelcomeFingerprint?: string;
   bootstrap: () => Promise<void>;
@@ -37,6 +38,7 @@ let pendingSaves = 0;
 
 export const useAppStore = create<AppStore>((set) => ({
   busy: false,
+  saving: false,
   dismissedWelcomeFingerprint: undefined,
   async bootstrap() {
     set({ busy: true, error: undefined });
@@ -88,7 +90,7 @@ export const useAppStore = create<AppStore>((set) => ({
     // 先乐观更新：受控控件（任务启用勾选等）必须立刻反映点击结果，
     // 否则要等一整轮 IPC 往返才会变化，视觉上像是「点了一下又弹回去」。
     set({
-      busy: true,
+      saving: true,
       error: undefined,
       snapshot: { ...current, configuration },
     });
@@ -110,7 +112,7 @@ export const useAppStore = create<AppStore>((set) => ({
       reportError(error);
     } finally {
       pendingSaves -= 1;
-      if (pendingSaves === 0) set({ busy: false });
+      if (pendingSaves === 0) set({ saving: false });
     }
   },
   setError(error) {

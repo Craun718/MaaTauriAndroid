@@ -10,6 +10,11 @@ echo
 echo
 "${SCRIPT_DIR}/fetch-maafw.sh"
 echo
+
+# pillow 只有 Chaquopy 索引有 Android 轮子（固定 11.0.0），桌面 PyPI 没有；
+# requirements.txt 是 submodule 的改不了，它钉的版本在 Android 上装不上。
+# 所以 --exclude 先扔掉它的约束，--require 再钉回 11.0.0（顺带豁免装后清理）。
+# 其余 --exclude 是纯桌面依赖，直接剪掉。
 "${SCRIPT_DIR}/build-agent-runtime.sh" \
   --project-dir resource/m9a \
   --out resource/m9a-agent-runtime-arm64-v8a.zip \

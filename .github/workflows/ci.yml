@@ -212,6 +212,8 @@ jobs:
         run: |
           python3 scripts/build_agent_bundle.py --help >/dev/null
           scripts/fetch-maafw.sh
+          # --exclude pillow --require pillow==11.0.0 
+          # rationale: scripts/setup.sh.
           scripts/build-agent-runtime.sh \
             --project-dir resource/m9a \
             --out resource/m9a-agent-runtime-arm64-v8a.zip \

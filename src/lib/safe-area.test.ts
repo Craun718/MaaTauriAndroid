@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applySafeAreaOverrides,
   safeAreaOverrides,
@@ -13,6 +13,10 @@ describe("safe-area overrides", () => {
   beforeEach(() => {
     windowInsets.mockReset();
     document.documentElement.style.cssText = "";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("builds max() variables preferring the larger of env and the native reading", () => {
@@ -46,6 +50,27 @@ describe("safe-area overrides", () => {
     expect(
       document.documentElement.style.getPropertyValue("--tt-safe-bottom"),
     ).toBe("max(env(safe-area-inset-bottom, 0px), 48px)");
+  });
+
+  it("converts the native physical px reading to CSS px via devicePixelRatio", async () => {
+    vi.stubGlobal("devicePixelRatio", 3.25);
+    windowInsets.mockResolvedValue({ top: 130, bottom: 52 });
+    await syncSafeAreaInsets();
+    expect(
+      document.documentElement.style.getPropertyValue("--tt-safe-top"),
+    ).toBe("max(env(safe-area-inset-top, 0px), 40px)");
+    expect(
+      document.documentElement.style.getPropertyValue("--tt-safe-bottom"),
+    ).toBe("max(env(safe-area-inset-bottom, 0px), 16px)");
+  });
+
+  it("falls back to a 1:1 conversion when devicePixelRatio is unavailable", async () => {
+    vi.stubGlobal("devicePixelRatio", undefined);
+    windowInsets.mockResolvedValue({ top: 120, bottom: 48 });
+    await syncSafeAreaInsets();
+    expect(
+      document.documentElement.style.getPropertyValue("--tt-safe-top"),
+    ).toBe("max(env(safe-area-inset-top, 0px), 120px)");
   });
 
   it("keeps the env-only defaults when the bridge reports nothing", async () => {

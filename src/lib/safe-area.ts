@@ -10,8 +10,10 @@ import { windowInsets } from "./api";
  * from the Android shell over IPC and applies them as CSS variables.
  *
  * `max()` prefers whichever side reports the larger inset: on new WebViews the
- * env value is correct and equal, on old ones the native reading wins. Values
- * stay physical px, matching the env() convention (never rem).
+ * env value is correct and equal, on old ones the native reading wins. The
+ * native shell reports physical pixels (WindowInsetsCompat); CSS lengths —
+ * env() included — are CSS pixels, so `syncSafeAreaInsets` divides the native
+ * reading by `devicePixelRatio` before applying it. Values stay px, never rem.
  */
 export function safeAreaOverrides(insets: {
   top: number;
@@ -35,15 +37,21 @@ export function applySafeAreaOverrides(insets: {
 }
 
 /**
- * Reads insets once and applies them. Failures are swallowed by design: on
- * desktop (and before the JNI bridge is attached) the command reports nothing
- * and the CSS env()-only defaults stay in place.
+ * Reads insets once and applies them. The bridge reports physical pixels, so
+ * they are converted to CSS pixels here (`physical / devicePixelRatio`).
+ * Failures are swallowed by design: on desktop (and before the JNI bridge is
+ * attached) the command reports nothing and the CSS env()-only defaults stay
+ * in place.
  */
 export async function syncSafeAreaInsets(): Promise<void> {
   try {
     const insets = await windowInsets();
     if (insets) {
-      applySafeAreaOverrides(insets);
+      const dpr = window.devicePixelRatio || 1;
+      applySafeAreaOverrides({
+        top: insets.top / dpr,
+        bottom: insets.bottom / dpr,
+      });
     }
   } catch {
     // Keep the env()-only defaults.

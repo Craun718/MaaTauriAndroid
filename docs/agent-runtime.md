@@ -91,4 +91,37 @@ python3 pack_agent_bundle.py \
 
 然后在配方里把 `[[agent.runtimes]]` 的 `bundle` 指向产出的 ZIP，条数与 PI 的 `agent[]` 一一对应。PI 没声明 agent 时，配方里的 `agent` 整段删掉即可。
 
-编译型 agent（C++ / Go / Rust 单文件 ELF）不走这条流水线，按配方 `runtimes` 直接给可执行体，参见 [打包规则与配方说明](../src-tauri/profiles/README.md)。
+## 编译型 agent（ELF）
+
+`[[agent.runtimes]]` 只声明一个 ZIP（`bundle`）、包内可执行体路径（`exec`）、要标记可执行的文件（`executables`）、命令行（`args`）、工作目录（`working_dir`）与环境（`env`）。Rust 侧每次运行给每个 runtime 起一个 `AgentClient` TCP，端口经 `{identifier}` 占位符传给子进程；Kotlin 侧用 `ProcessBuilder` 直接执行 `exec`。C++ / Go / Rust 单文件 ELF（或二进制 + 共享库）把可执行体放进 bundle 即可，配方写法见 [打包规则与配方说明](../src-tauri/profiles/README.md)。
+
+编译型 agent 的包体约束：
+
+- **包体**：bundle 是普通 ZIP，须满足无符号链接、条目数不超 0xFFFF，且构建期 `validateAgentBundle` 强制包内含 `lib/arm64-v8a/libMaaAgentClient.so` 与 `libMaaAgentServer.so`。子进程真正需要的是 Server 库（链接它，或经 `MAAFW_BINARY_PATH` / `LD_LIBRARY_PATH` 加载）；Client 库只被壳内宿主进程使用，但每个 bundle 仍必须带上。
+- **打包工具**：用普通 `zip` 打包即可，自行保证无符号链接、条目数不超 0xFFFF。
+- **通信协议**：子进程必须实现 MaaFW 的 AgentServer 侧，监听 `{identifier}`（TCP 端口）与壳内 `AgentClient` 走 AgentClient/Server IPC。`interface.json` 的 `agent.child_args` 指向入口——ELF 就写包内二进制路径，`agent/` 目录整体随 PI 打包。
+
+最小配方示例：
+
+```toml
+[agent]
+timeout_ms = 15000
+
+[[agent.runtimes]]
+bundle = "/path/to/compiled-agent-runtime.zip"
+exec = "bin/my_agent"
+executables = ["bin/my_agent"]
+args = ["{identifier}"]
+working_dir = "{pi}"
+
+[agent.runtimes.env]
+LD_LIBRARY_PATH = "{bundle}/lib/arm64-v8a"
+MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"
+```
+
+出包只需把 bundle 目录压成 ZIP，`exec` 与 `executables` 指向的文件在设备端会被 `AgentRuntimeManager` 自动标成可执行：
+
+```bash
+cd <bundle 目录>
+zip -r compiled-agent-runtime.zip .
+```

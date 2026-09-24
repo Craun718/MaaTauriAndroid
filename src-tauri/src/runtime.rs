@@ -933,9 +933,17 @@ fn configure_framework_logging() {
 /// Re-applies the framework logging configuration so MaaFramework reopens
 /// `maafw.log` after the log directory was cleared. Setting the `LogDir`
 /// global option again closes the stream that still points at a deleted file
-/// and recreates a fresh log, so no restart is needed.
+/// and recreates a fresh log, so no restart is needed. Calls into MaaFramework
+/// would panic before `load_library`, so this no-ops until a run has loaded it.
 pub fn reconfigure_maa_logging() {
+    if !maa_library_loaded(&MAA_LIBRARY) {
+        return;
+    }
     configure_framework_logging();
+}
+
+fn maa_library_loaded(state: &std::sync::OnceLock<Result<(), String>>) -> bool {
+    state.get().is_some_and(Result::is_ok)
 }
 
 pub fn run_result() -> Option<RunResult> {
@@ -1353,6 +1361,28 @@ mod tests {
 
         assert!(matches!(first, Err(RuntimeError::Maa(message)) if message == "load failed"));
         assert!(matches!(second, Err(RuntimeError::Maa(message)) if message == "load failed"));
+    }
+
+    #[test]
+    fn framework_logging_is_reconfigured_only_after_library_load() {
+        let state = std::sync::OnceLock::new();
+        assert!(!maa_library_loaded(&state));
+
+        ensure_maa_library_with(&state, Path::new("maa"), |_path| Ok(())).unwrap();
+
+        assert!(maa_library_loaded(&state));
+    }
+
+    #[test]
+    fn framework_logging_skips_reconfiguration_after_load_failure() {
+        let state = std::sync::OnceLock::new();
+
+        ensure_maa_library_with(&state, Path::new("maa"), |_path| {
+            Err("load failed".to_string())
+        })
+        .unwrap_err();
+
+        assert!(!maa_library_loaded(&state));
     }
 
     #[test]

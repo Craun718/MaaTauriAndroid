@@ -1016,6 +1016,43 @@ mod tests {
         assert!(telemetry.environment.is_none());
     }
 
+    /// The interface's `pipeline_type` is optional; absent fields are strings.
+    #[test]
+    fn defaults_input_pipeline_type_to_string() {
+        let project = ProjectLoader::default()
+            .load_value(
+                "/tmp",
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}],
+                    "option": {
+                        "Consent": {
+                            "type": "input",
+                            "inputs": [{
+                                "name": "consent_text",
+                                "label": "必须输入“我同意”",
+                                "default": "",
+                                "verify": "^我同意$",
+                                "pattern_msg": "必须输入“我同意”"
+                            }],
+                            "pipeline_override": {}
+                        }
+                    }
+                }),
+                "zh_cn",
+            )
+            .expect("an input without pipeline_type should load");
+
+        let OptionDefinition::Input { inputs, .. } =
+            project.options.get("Consent").expect("option should load")
+        else {
+            panic!("Consent should be an input option");
+        };
+        assert_eq!(inputs[0].pipeline_type, PipelineType::String);
+    }
+
     /// M9A-style interfaces reference contact/license as project files
     /// (`"contact": "CONTACT"`); the loader materializes their contents.
     #[test]

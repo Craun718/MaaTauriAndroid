@@ -269,9 +269,7 @@ export function TasksPage() {
   return (
     <div
       className={`flex flex-col gap-3${
-        activityTab === "logs"
-          ? " h-[calc(100dvh_-_var(--tt-safe-top)_-_4rem_-_1px_-_var(--tt-safe-bottom))]"
-          : ""
+        activityTab === "logs" ? " min-h-0 flex-1 overflow-hidden" : ""
       }`}
     >
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>

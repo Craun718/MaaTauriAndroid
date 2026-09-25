@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           The top safe-area inset lives on the shell above, NOT on <main>:
           overflow clips at the scroll container's padding box, so a padding-top
           on <main> would let scrolled content slide under the status bar text. */}
-      <main className="flex-1 overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-[calc(4rem_+_1px_+_var(--tt-safe-bottom))]">
+      <main className="flex min-h-0 flex-1 flex-col overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-[calc(4rem_+_1px_+_var(--tt-safe-bottom))]">
         {children}
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/92 pb-[var(--tt-safe-bottom)] backdrop-blur">

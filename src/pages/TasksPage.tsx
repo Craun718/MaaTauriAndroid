@@ -270,7 +270,7 @@ export function TasksPage() {
     <div
       className={`flex flex-col gap-3${
         activityTab === "logs"
-          ? " min-h-[calc(100dvh_-_var(--tt-safe-top)_-_4rem_-_var(--tt-safe-bottom))]"
+          ? " h-[calc(100dvh_-_var(--tt-safe-top)_-_4rem_-_1px_-_var(--tt-safe-bottom))]"
           : ""
       }`}
     >

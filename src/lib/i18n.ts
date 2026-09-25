@@ -159,6 +159,8 @@ const en = {
   // Run controls
   taskOperations: "Task actions",
   startRun: "Start run",
+  noRunnableTasksNotice: "No runnable task is available.",
+  startUnavailableNotice: "Starting is unavailable right now.",
   stop: "Stop",
   stopRun: "Stop run",
   captureScreenshot: "Shot",
@@ -415,6 +417,8 @@ const zh: Record<MessageKey, string> = {
 
   taskOperations: "任务操作",
   startRun: "开始运行",
+  noRunnableTasksNotice: "当前没有可运行的任务。",
+  startUnavailableNotice: "暂时无法开始运行。",
   stop: "停止",
   stopRun: "停止运行",
   captureScreenshot: "截图",

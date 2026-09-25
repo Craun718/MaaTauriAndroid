@@ -267,7 +267,13 @@ export function TasksPage() {
   }));
 
   return (
-    <div className="space-y-3">
+    <div
+      className={`flex flex-col gap-3${
+        activityTab === "logs"
+          ? " min-h-[calc(100dvh_-_var(--tt-safe-top)_-_4rem_-_var(--tt-safe-bottom))]"
+          : ""
+      }`}
+    >
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>
       <VirtualDisplayCard />
       <RunPanel

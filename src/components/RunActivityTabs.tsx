@@ -116,8 +116,14 @@ export function RunActivityTabs({
     { value: "logs", label: t("taskLogs") },
   ];
 
+  const logsActive = activeTab === "logs";
+
   return (
-    <section className="space-y-2">
+    <section
+      className={
+        logsActive ? "flex min-h-0 flex-1 flex-col space-y-2" : "space-y-2"
+      }
+    >
       <div
         role="tablist"
         aria-label={t("runActivity")}
@@ -157,14 +163,18 @@ export function RunActivityTabs({
         id={`${groupId}-logs-panel`}
         aria-labelledby={`${groupId}-logs-tab`}
         hidden={activeTab !== "logs"}
-        className="rounded-lg border border-line bg-raised p-2"
+        className={
+          logsActive
+            ? "flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-raised p-2"
+            : "rounded-lg border border-line bg-raised p-2"
+        }
       >
         {events.length === 0 ? (
           <p className="px-1 py-1 text-sm text-ink-muted">{t("noRunLogs")}</p>
         ) : (
           <ol
             ref={logListRef}
-            className="max-h-56 space-y-1 overflow-y-auto pr-1"
+            className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1"
           >
             {events.map((entry) => {
               const runEvent = entry.type === "run" ? entry.event : undefined;
@@ -193,12 +203,12 @@ export function RunActivityTabs({
                   className="text-sm"
                 >
                   <div className="flex items-start gap-2">
-                    <time className="w-14 flex-none text-xs text-ink-muted">
+                    <time className="w-12 flex-none text-xs text-ink-muted">
                       {new Date(atUnixMs).toLocaleTimeString([], {
                         hour12: false,
                       })}
                     </time>
-                    <div className="flex w-16 flex-none flex-col items-start gap-1">
+                    <div className="flex w-14 flex-none flex-col items-start gap-1">
                       <span
                         className={`flex h-5 max-w-full items-center truncate rounded-sm border px-1.5 text-xs font-medium ${
                           category === "focus"

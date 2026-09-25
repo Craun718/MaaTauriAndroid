@@ -308,12 +308,12 @@ function RunHistoryDetail({
           return (
             <li key={key} className="text-sm">
               <div className="flex items-start gap-2">
-                <time className="w-14 flex-none text-xs text-ink-muted">
+                <time className="w-12 flex-none text-xs text-ink-muted">
                   {new Date(event.atUnixMs).toLocaleTimeString([], {
                     hour12: false,
                   })}
                 </time>
-                <div className="flex w-16 flex-none flex-col items-start gap-1">
+                <div className="flex w-14 flex-none flex-col items-start gap-1">
                   <span
                     className={`flex h-5 max-w-full items-center truncate rounded-sm border px-1.5 text-xs font-medium ${
                       category === "focus"

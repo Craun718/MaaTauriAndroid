@@ -383,7 +383,7 @@ describe("nested task options", () => {
 });
 
 describe("run configuration tabs and flat task list", () => {
-  it("starts a run with the merged control and switches to logs", async () => {
+  it("starts a run directly and switches to logs", async () => {
     resolveCurrent.mockResolvedValue({
       controller: project.controllers[0],
       resource: project.resources[0],
@@ -410,9 +410,6 @@ describe("run configuration tabs and flat task list", () => {
     });
     renderTasksPage();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Task actions" }),
-    );
     const start = await screen.findByRole("button", { name: "Start run" });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
@@ -435,16 +432,12 @@ describe("run configuration tabs and flat task list", () => {
       });
     });
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Task actions" }),
-    );
-    const drawer = await screen.findByRole("dialog", { name: "Task actions" });
     expect(
-      await within(drawer).findByRole("button", { name: "Stop run" }),
+      await screen.findByRole("button", { name: "Stop run" }),
     ).toBeEnabled();
   });
 
-  it("stops a run with the same merged control", async () => {
+  it("stops a run directly", async () => {
     getRunStatus.mockResolvedValue({
       executionId: "run-1",
       state: "Running",
@@ -477,13 +470,7 @@ describe("run configuration tabs and flat task list", () => {
     renderTasksPage();
 
     await screen.findByText("The run started");
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Task actions" }),
-    );
-    const drawer = await screen.findByRole("dialog", { name: "Task actions" });
-    fireEvent.click(
-      await within(drawer).findByRole("button", { name: "Stop run" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
 
     await waitFor(() => expect(stopRun).toHaveBeenCalledWith("run-1"));
   });
@@ -804,9 +791,6 @@ describe("run failure notifications", () => {
     });
     renderTasksPage();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Task actions" }),
-    );
     const start = await screen.findByRole("button", { name: "Start run" });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);

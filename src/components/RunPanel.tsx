@@ -1,5 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
-import { Camera, Download, Play, Square, Undo2 } from "lucide-react";
+import {
+  Camera,
+  Download,
+  MoreVertical,
+  Play,
+  Square,
+  Undo2,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   captureManualScreenshot,
@@ -189,6 +196,8 @@ export function RunPanel({
   if (!snapshot?.project) return null;
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
+  const startUnavailable =
+    !running && (enabled.length === 0 || busy || saving || starting);
 
   async function start() {
     onRunStarted?.();
@@ -235,15 +244,31 @@ export function RunPanel({
   return (
     <>
       <div className="space-y-2">
-        <button
-          type="button"
-          aria-expanded={actionsOpen}
-          aria-haspopup="dialog"
-          onClick={() => setActionsOpen(true)}
-          className="flex h-9 w-full cursor-pointer items-center justify-center rounded-md border border-line text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {t("taskOperations")}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            aria-disabled={startUnavailable}
+            onClick={() => {
+              if (running) void stop();
+              else if (busy || saving || starting)
+                notify(t("startUnavailableNotice"));
+              else if (enabled.length === 0) notify(t("noRunnableTasksNotice"));
+              else void start();
+            }}
+            className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-line text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          >
+            {running ? <Square size="1rem" /> : <Play size="1rem" />}
+            {t(running ? "stopRun" : "startRun")}
+          </button>
+          <button
+            type="button"
+            aria-label={t("taskOperations")}
+            className="flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-md border border-line text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={() => setActionsOpen(true)}
+          >
+            <MoreVertical size="1rem" />
+          </button>
+        </div>
         {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
       </div>
       <BottomDrawer
@@ -251,24 +276,6 @@ export function RunPanel({
         onClose={() => setActionsOpen(false)}
         title={t("taskOperations")}
       >
-        <button
-          type="button"
-          disabled={
-            (running ? false : enabled.length === 0) ||
-            busy ||
-            saving ||
-            starting
-          }
-          onClick={() => {
-            setActionsOpen(false);
-            if (running) void stop();
-            else void start();
-          }}
-          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-        >
-          {running ? <Square size="1rem" /> : <Play size="1rem" />}
-          {t(running ? "stopRun" : "startRun")}
-        </button>
         <button
           type="button"
           disabled={exporting}

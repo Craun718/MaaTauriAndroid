@@ -28,7 +28,7 @@ class PiMetadataOverrideTest {
 
         val document = JsonSlurper().parse(interfaceFile) as Map<*, *>
         assertEquals("Packaged", document["mirrorchyan_rid"])
-        assertEquals(2L, document["interface_version"])
+        assertEquals(2L, (document["interface_version"] as Number).toLong())
         assertEquals("demo", document["name"])
     }
 }

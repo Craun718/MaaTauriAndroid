@@ -1521,7 +1521,7 @@ async fn reload_project(
 }
 
 #[cfg(not(target_os = "android"))]
-fn reinstall_project_interface(_app: &AppHandle) -> Result<AppStateSnapshot, AppError> {
+async fn reinstall_project_interface(_app: &AppHandle) -> Result<AppStateSnapshot, AppError> {
     Err(AppError::Message(
         "resource reinstall is only available on Android".to_string(),
     ))

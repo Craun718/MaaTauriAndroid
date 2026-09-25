@@ -10,66 +10,38 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
-      m9a: ${{ steps.filter.outputs.m9a }}
-      narutomobile: ${{ steps.filter.outputs.narutomobile }}
-      maapvz: ${{ steps.filter.outputs.maapvz }}
+      m9a: ${{ steps.filter.outputs.m9a == 'true' || steps.filter.outputs.common == 'true' }}
+      narutomobile: ${{ steps.filter.outputs.narutomobile == 'true' || steps.filter.outputs.common == 'true' }}
+      maapvz: ${{ steps.filter.outputs.maapvz == 'true' || steps.filter.outputs.common == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
+            common:
+              - 'scripts/build-resource.py'
+              - 'scripts/prepare-pi.py'
+              - 'scripts/build-agent-runtime.sh'
+              - 'scripts/build_agent_bundle.py'
+              - 'scripts/fetch-maafw.sh'
+              - 'scripts/env.sh'
+              - 'src/**'
+              - 'src-tauri/profiles/**'
+              - 'src-tauri/src/**'
+              - 'src-tauri/Cargo.toml'
+              - 'src-tauri/Cargo.lock'
+              - 'src-tauri/gen/android/**'
+              - 'vendor/maa/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
             m9a:
-              - 'resource/m9a/**'
               - 'resource/m9a.toml'
-              - 'scripts/build-agent-runtime.sh'
-              - 'scripts/build_agent_bundle.py'
-              - 'scripts/env.sh'
-              - 'src/**'
-              - 'src-tauri/profiles/**'
-              - 'src-tauri/src/**'
-              - 'src-tauri/Cargo.toml'
-              - 'src-tauri/Cargo.lock'
-              - 'src-tauri/gen/android/**'
-              - 'vendor/maa/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/ci.yml'
             narutomobile:
-              - 'resource/narutomobile/**'
               - 'resource/narutomobile.toml'
-              - 'scripts/prepare-narutomobile-pi.sh'
-              - 'scripts/build-agent-runtime.sh'
-              - 'scripts/build_agent_bundle.py'
-              - 'scripts/env.sh'
-              - 'src/**'
-              - 'src-tauri/profiles/**'
-              - 'src-tauri/src/**'
-              - 'src-tauri/Cargo.toml'
-              - 'src-tauri/Cargo.lock'
-              - 'src-tauri/gen/android/**'
-              - 'vendor/maa/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/ci.yml'
             maapvz:
-              - 'resource/maapvz/**'
               - 'resource/maapvz.toml'
-              - 'scripts/prepare-maapvz-pi.sh'
-              - 'scripts/prepare-maapvz-pi.py'
-              - 'scripts/build-agent-runtime.sh'
-              - 'scripts/build_agent_bundle.py'
-              - 'scripts/env.sh'
-              - 'src/**'
-              - 'src-tauri/profiles/**'
-              - 'src-tauri/src/**'
-              - 'src-tauri/Cargo.toml'
-              - 'src-tauri/Cargo.lock'
-              - 'src-tauri/gen/android/**'
-              - 'vendor/maa/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/ci.yml'
 
   frontend:
     runs-on: ubuntu-latest
@@ -150,8 +122,6 @@ jobs:
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - uses: pnpm/action-setup@v6
         with:
@@ -208,15 +178,13 @@ jobs:
             echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
           } >> "$GITHUB_ENV"
 
-      - name: Download MaaFramework and build the agent runtime
+      - name: Clone the pinned M9A resource and build its runtime
         run: |
-          python3 scripts/build_agent_bundle.py --help >/dev/null
-          scripts/fetch-maafw.sh
-          # --exclude pillow --require pillow==11.0.0 
-          # rationale: scripts/setup.sh.
-          scripts/build-agent-runtime.sh \
-            --project-dir resource/m9a \
-            --out resource/m9a-agent-runtime-arm64-v8a.zip \
+          python3 scripts/build-resource.py \
+            https://github.com/MAA1999/M9A.git \
+            --id m9a \
+            --ref 4a19a626ce93ec5ab027e734590213bad7f04c12 \
+            --submodules \
             --exclude pillow \
             --require pillow==11.0.0
 
@@ -227,10 +195,6 @@ jobs:
       - name: Run buildSrc tests
         working-directory: src-tauri/gen/android/buildSrc
         run: ../gradlew test
-
-      - name: Generate M9A OCR models
-        working-directory: resource/m9a
-        run: python3 tools/configure.py
 
       - name: Build the arm64 debug APK
         run: |
@@ -260,8 +224,6 @@ jobs:
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - uses: pnpm/action-setup@v6
         with:
@@ -304,9 +266,8 @@ jobs:
           path: ~/.android/debug.keystore
           key: android-debug-keystore-v1
 
-      - name: Prepare the NarutoMobile profile
+      - name: Point the Android build at the NarutoMobile profile
         run: |
-          scripts/prepare-narutomobile-pi.sh
           {
             echo "sdk.dir=$ANDROID_HOME"
             echo "pi.profile=$GITHUB_WORKSPACE/resource/narutomobile.toml"
@@ -316,13 +277,13 @@ jobs:
             echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
           } >> "$GITHUB_ENV"
 
-      - name: Download MaaFramework and build the agent runtime
+      - name: Clone the pinned NarutoMobile resource and build its runtime
         run: |
-          python3 scripts/build_agent_bundle.py --help >/dev/null
-          scripts/fetch-maafw.sh
-          scripts/build-agent-runtime.sh \
-            --project-dir resource/narutomobile \
-            --out resource/narutomobile-agent-runtime-arm64-v8a.zip \
+          python3 scripts/build-resource.py \
+            https://github.com/duorua/narutomobile.git \
+            --id narutomobile \
+            --ref 9d245df1bbe9f72b43324e018ea08e9cca3d2d6a \
+            --submodules \
             --exclude pillow \
             --exclude win32-setctime \
             --exclude colorama \
@@ -361,8 +322,6 @@ jobs:
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - uses: pnpm/action-setup@v6
         with:
@@ -405,9 +364,8 @@ jobs:
           path: ~/.android/debug.keystore
           key: android-debug-keystore-v1
 
-      - name: Prepare the MAAPVZ profile
+      - name: Point the Android build at the MAAPVZ profile
         run: |
-          scripts/prepare-maapvz-pi.sh
           {
             echo "sdk.dir=$ANDROID_HOME"
             echo "pi.profile=$GITHUB_WORKSPACE/resource/maapvz.toml"
@@ -417,13 +375,13 @@ jobs:
             echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
           } >> "$GITHUB_ENV"
 
-      - name: Download MaaFramework and build the agent runtime
+      - name: Clone the pinned MAAPVZ resource and build its runtime
         run: |
-          python3 scripts/build_agent_bundle.py --help >/dev/null
-          scripts/fetch-maafw.sh
-          scripts/build-agent-runtime.sh \
-            --project-dir resource/maapvz \
-            --out resource/maapvz-agent-runtime-arm64-v8a.zip \
+          python3 scripts/build-resource.py \
+            https://github.com/Maa-Assistant-PVZ-The-best/MAAPVZ.git \
+            --id maapvz \
+            --ref 573b542a3ae0b8a648e541de9f062be0e38acb64 \
+            --submodules \
             --exclude pillow \
             --exclude win32-setctime \
             --exclude colorama \

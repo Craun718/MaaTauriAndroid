@@ -1,7 +1,7 @@
 # NarutoMobile 的 Project Interface profile。
 #
-# 上游把 interface.json 放在 assets/，而 agent/ 在仓库根；自行构建 Android
-# 包时先运行 scripts/prepare-narutomobile-pi.sh，把两者摊平成 Android/pi-root/。
+# 上游把 interface.json 放在 assets/，而 agent/ 在仓库根；通用准备脚本
+# scripts/prepare-pi.py 会把两者摊平成 Android/pi-root/。
 #
 # 相对路径解析规则（见 src-tauri/profiles/README.md）：
 #   - pi_assets / agent.runtimes[].bundle 相对【本文件所在目录】，即 resource/

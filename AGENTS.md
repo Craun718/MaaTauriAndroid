@@ -8,7 +8,7 @@
 - `src-tauri/gen/android/`：Android Shell、JNI 桥接、Shizuku 控制服务与 Gradle 工程。
 - `src-tauri/fixtures/`：嵌入式测试项目数据。
 - `vendor/maa/`：vendored MaaFramework 二进制与许可文件；不要修改二进制内容。
-- `resource/m9a/`、`resource/narutomobile/`、`resource/maapvz/`：git submodule，指向外部代码库；**不要修改其中的任何内容**。需要改上游行为时改本仓库的代码，submodule 只做 checkout 到指定 commit（`scripts/setup.sh` / `git submodule update`）。
+- `resource/m9a/`、`resource/narutomobile/`、`resource/maapvz/`：CI-only 的上游资源 checkout；**不要把内容提交进本仓库或修改其中的任何内容**。需要改上游行为时改本仓库的代码，上游 URL、commit 和构建参数钉在 CI job 的 `scripts/build-resource.py` 调用里；PI 布局差异由 `scripts/prepare-pi.py` 适配。
 
 ## 系统栏适配（edge-to-edge）
 
@@ -29,7 +29,7 @@
 
 本地可用（仅用于开发与格式化，不作为验证手段）：
 
-- `scripts/setup.sh`：初始化子模块、下载 MaaFramework 二进制并构建 agent runtime ZIP。
+- `scripts/setup.sh`：下载 MaaFramework 二进制。上游资源 checkout 和 agent runtime ZIP 只由 CI 通过 `scripts/build-resource.py` 构建。
 - `pnpm install`：安装 Node 依赖。包管理器统一用 **pnpm 11**（与 CI 一致，`corepack pnpm@11`）。
 - `pnpm dev`：启动 Vite 前端开发服务器。
 - `pnpm typecheck`：`tsc --noEmit`，只做类型检查不产出文件。
@@ -55,7 +55,7 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 | `android-rust` | Android 目标的 `cargo check`，依赖 `frontend` 的 `dist`             |
 | `m9a-android`  | 构建 arm64 debug APK，并上传 APK 与 agent runtime artifact          |
 
-`m9a-android` 受路径过滤控制，仅在 `resource/m9a/**`、`resource/m9a.toml`、`src/**`、`src-tauri/src/**`、`src-tauri/gen/android/**`、`vendor/maa/**`、`package.json`、`pnpm-lock.yaml` 等路径变更时触发；需要强制跑（例如只改了文档但要出包）用 `workflow_dispatch`。
+资源 APK job 受路径过滤控制。公共构建路径变更会触发全部三个 job；各自的 `resource/<resource-id>.toml` 变更只触发对应 job。需要强制跑（例如只改了文档但要出包）用 `workflow_dispatch`。
 
 ## 真机测试
 
@@ -108,7 +108,7 @@ daisyUI 把自己的样式包在 `@layer utilities > daisyui.*` 子层里，而�
 
 两个细节：`tsc` 不接受单个文件路径，`cargo fmt` 只能整 crate 格式化，因此这两项都以函数形式配置——不拼接暂存文件名。`cargo fmt` 之所以安全，是因为 CI 有 `cargo fmt --check`，未参与本次提交的 `.rs` 文件本来就是干净的。
 
-钩子由 `pnpm install` 触发的 `prepare` 脚本安装，`core.hooksPath` 指向 `.husky/_`。Biome 规则在 `biome.json`：`resource/`（M9A submodule，JSON 被 `resource/m9a.toml` 的 sha256 锁定）、`vendor/`、`src-tauri/gen/` 一律不处理。Biome 不覆盖 Markdown 和 YAML，这些文件不进入 pre-commit 格式化流程。紧急情况下用 `git commit --no-verify` 跳过。
+钩子由 `pnpm install` 触发的 `prepare` 脚本安装，`core.hooksPath` 指向 `.husky/_`。Biome 规则在 `biome.json`：`resource/`（CI-only checkout，JSON 被 `resource/m9a.toml` 的 sha256 锁定）、`vendor/`、`src-tauri/gen/` 一律不处理。Biome 不覆盖 Markdown 和 YAML，这些文件不进入 pre-commit 格式化流程。紧急情况下用 `git commit --no-verify` 跳过。
 
 新提交使用 Conventional Commits，例如 `fix(resolver): preserve encrypted fields` 或 `feat(android): add shizuku status`。PR 应包含变更原因与 CI 运行结果；UI 变更需要截图，Android 行为变更需要注明真机验证结论。
 

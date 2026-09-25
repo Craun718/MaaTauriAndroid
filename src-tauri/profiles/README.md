@@ -18,7 +18,7 @@ MaaTauriAndroid 本身不包含业务资源。资源开发者写好 Project Inte
 MaaFramework 原生库和 agent runtime 不在 profile 里，先铺环境：
 
 ```bash
-scripts/setup.sh   # 子模块 + vendor/maa/android + 内置 agent runtime
+scripts/setup.sh   # vendor/maa/android；resource checkout/runtime 由 CI 构建
 ```
 
 ## 打包配方
@@ -54,11 +54,11 @@ app_name = "Your PI"
 
 ### 仓库内置配置
 
-本仓库用 submodule 的形式内置了 M9A、NarutoMobile、MAAPVZ，profile 放在资源旁边并使用相对路径，这样同一份 profile 在每个 checkout 上都能工作：
+本仓库不在 Git 索引中内置 M9A、NarutoMobile、MAAPVZ；CI 用 `scripts/build-resource.py` 传入上游 URL 和 commit 后克隆资源，profile 放在资源旁边并使用相对路径，这样同一份 profile 在每个 checkout 上都能工作：
 
-- `resource/m9a`、`resource/m9a.toml`：M9A 的 submodule 和 profile
-- `resource/narutomobile`、`resource/narutomobile.toml`：NarutoMobile 的 submodule 和 profile
-- `resource/maapvz`、`resource/maapvz.toml`：MAAPVZ 的 submodule 和 profile
+- `resource/m9a`、`resource/m9a.toml`：M9A 的 CI-only checkout 和 profile
+- `resource/narutomobile`、`resource/narutomobile.toml`：NarutoMobile 的 CI-only checkout 和 profile
+- `resource/maapvz`、`resource/maapvz.toml`：MAAPVZ 的 CI-only checkout 和 profile
 
 对应的 Python agent runtime 由 CI 每次重新构建，是 `resource/*-agent-runtime-arm64-v8a.zip` 构建产物，不提交。某个 checkout 要使用仓库内资源，设：
 
@@ -204,7 +204,7 @@ cd src-tauri/gen/android
 ./gradlew :app:assembleRelease
 ```
 
-仓库完整出包流程先运行 `scripts/setup.sh`，再按根 README 的 Tauri 命令出 APK。profile 改变会改变打包出的 APK；这是构建期嵌入，不是运行时开关。移除或清空 `pi.profile` 可回到 `src-tauri/fixtures/pi/minimal` 中的内置 fixture。
+资源 APK 由 CI 先运行 `python3 scripts/build-resource.py <git-url> --ref <ref> --id <directory>`，其中会调用 `scripts/prepare-pi.py` 组装 PI，再执行 APK 构建。profile 改变会改变打包出的 APK；这是构建期嵌入，不是运行时开关。移除或清空 `pi.profile` 可回到 `src-tauri/fixtures/pi/minimal` 中的内置 fixture。
 
 `scripts/setup.sh` 和 `src-tauri/profiles/pack_agent_bundle.py` 之外的细节见 [Agent runtime 构建](../../docs/agent-runtime.md)。
 

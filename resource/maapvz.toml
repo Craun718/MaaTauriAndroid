@@ -1,8 +1,8 @@
 # MAAPVZ Project Interface profile.
 #
 # The upstream repository keeps interface.json in assets/ and the agent at the
-# repository root. scripts/prepare-maapvz-pi.sh first flattens them into
-# Android/pi-root/ and installs the OCR model at the path declared by the PI.
+# repository root. scripts/prepare-pi.py flattens them into Android/pi-root/ and
+# installs the OCR model at the path declared by the PI.
 
 pi_assets = "maapvz/Android/pi-root"
 

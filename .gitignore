@@ -30,6 +30,9 @@ dist-ssr
 resource/*-agent-dist/
 resource/*.zip
 
+# Upstream resource projects are cloned by CI from scripts/resources.toml.
+resource/*/
+
 # Downloaded MaaFramework Android binaries (see scripts/fetch-maafw.sh)
 vendor/maa/android/
 

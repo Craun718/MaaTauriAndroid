@@ -21,7 +21,7 @@ fn git_dir(repo: &Path) -> Option<PathBuf> {
 }
 
 /// Runs `git` inside `dir`. `None` when the directory is not a checkout (an
-/// uninitialized submodule, a packaged build) or git is unavailable — a build must
+/// absent CI-only resource clone, a packaged build) or git is unavailable — a build must
 /// never fail because version metadata cannot be resolved.
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
     if !dir.join(".git").exists() {

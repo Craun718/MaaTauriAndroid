@@ -23,7 +23,7 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const APP_TAG: &str = env!("MTA_APP_TAG");
 
 /// Tag (or short commit hash) of the `resource/m9a` Project Interface checkout.
-/// Empty when the submodule is absent, so consumers hide the row.
+/// Empty when the CI-only clone is absent, so consumers hide the row.
 pub const RESOURCE_TAG: &str = env!("MTA_RESOURCE_TAG");
 
 /// The application's formal name (`productName` in `tauri.conf.json`). The
@@ -150,7 +150,7 @@ pub struct VersionInfo {
     pub framework_version: String,
     /// Tag HEAD was built from, or the short commit hash when there is none.
     pub app_tag: String,
-    /// Tag (or short commit hash) of the `resource/m9a` checkout.
+    /// Tag (or short commit hash) of the CI-only `resource/m9a` checkout.
     pub resource_tag: Option<String>,
     pub environment: Option<EnvironmentInfo>,
 }

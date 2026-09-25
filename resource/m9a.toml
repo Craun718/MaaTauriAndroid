@@ -5,7 +5,7 @@
 #   - maa_dir 相对【仓库根】
 #
 # 由 M9A `feat/support-android-app` 分支的 Android/profile.yaml 翻译而来，
-# 差别是与子模块同仓后改用相对路径，且占位符 {nativeLibs} 对应本项目的 {nativeLib}。
+# 差别是 PI 位于上游仓库根，改用相对路径，且占位符 {nativeLibs} 对应本项目的 {nativeLib}。
 #
 # agent runtime 由 CI 每次重新构建，直接打包该产物即可。
 

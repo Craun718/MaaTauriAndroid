@@ -28,15 +28,16 @@
 ## 一键与分步
 
 ```bash
-scripts/setup.sh                        # 全量：子模块 + MaaFramework + 三个 runtime
-scripts/build-agent-runtime.sh \
-  --project-dir resource/m9a \
-  --out resource/m9a-agent-runtime-arm64-v8a.zip \
-  --exclude pillow \
-  --require pillow==11.0.0              # 也可单跑某一个
+scripts/setup.sh                              # MaaFramework 原生库
+python3 scripts/build-resource.py \
+  https://github.com/MAA1999/M9A.git \
+  --id m9a --ref 4a19a626ce93ec5ab027e734590213bad7f04c12 \
+  --submodules --exclude pillow --require pillow==11.0.0
 ```
 
-`build-agent-runtime.sh` 是通用脚本：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置三个项目的完整调用参数见下文「仓库内置项目的构建参数」。
+`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本。资源目录和 runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`build-agent-runtime.sh` 本身继续保持通用：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置三个项目的完整调用参数见下文「仓库内置项目的构建参数」。
+
+没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
 
 runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 
@@ -62,7 +63,7 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 
 ## 仓库内置项目的构建参数
 
-各资源只差 `requirements.txt` 与排除/重钉列表。预设不再内置在脚本里，参数由调用方（`scripts/setup.sh` 与 CI）传入：
+各资源只差 `requirements.txt` 与排除/重钉列表。URL、ref 和 runtime 参数由 CI 调用 `scripts/build-resource.py` 时传入；PI 组装由 `scripts/prepare-pi.py` 自动适配：
 
 | 项目 | 重钉 | 排除 |
 |:---|:---|:---|

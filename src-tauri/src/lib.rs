@@ -2973,6 +2973,7 @@ pub fn run() {
         ])
         .setup(|app| {
             let state = app.state::<AppState>();
+            install_panic_reporter();
             let root = app
                 .path()
                 .app_data_dir()
@@ -3004,6 +3005,27 @@ pub fn run() {
                 cleanup_virtual_display_on_exit();
             }
         });
+}
+
+/// Tauri's log plugin writes to the app log file; the default panic hook does
+/// not. Keep the original hook so stdout still receives the normal panic trace.
+fn install_panic_reporter() {
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = if let Some(message) = info.payload().downcast_ref::<&str>() {
+            (*message).to_string()
+        } else if let Some(message) = info.payload().downcast_ref::<String>() {
+            message.clone()
+        } else {
+            "unknown panic payload".to_string()
+        };
+        let location = info
+            .location()
+            .map(|location| location.to_string())
+            .unwrap_or_else(|| "unknown location".to_string());
+        log::error!("Rust panic at {location}: {payload}");
+        previous_hook(info);
+    }));
 }
 
 #[cfg(target_os = "android")]

@@ -8,7 +8,9 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
@@ -92,6 +94,7 @@ pub struct AgentSession {
     execution_id: String,
     host: Arc<dyn AgentHost>,
     clients: Vec<AgentClient>,
+    shutdown_started: AtomicBool,
 }
 
 impl AgentSession {
@@ -181,14 +184,30 @@ impl AgentSession {
             execution_id: execution_id.to_string(),
             host,
             clients,
+            shutdown_started: AtomicBool::new(false),
         })
     }
 
     pub fn shutdown(&self) {
-        for client in &self.clients {
-            let _ = client.disconnect();
+        if self.shutdown_started.swap(true, Ordering::SeqCst) {
+            return;
         }
-        let _ = self.host.stop(&self.execution_id);
+        // `shutdown` runs both explicitly and from `Drop`. If the framework or
+        // JNI layer panics while stopping an agent, suppressing that first
+        // panic keeps `Drop` from running cleanup again while unwinding, which
+        // would become a `panic_in_cleanup` abort.
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            for client in &self.clients {
+                let _ = client.disconnect();
+            }
+            let _ = self.host.stop(&self.execution_id);
+        }));
+        if result.is_err() {
+            log::error!(
+                "Agent session {} panicked while shutting down; native resources may be leaked",
+                self.execution_id
+            );
+        }
     }
 }
 
@@ -792,10 +811,70 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct PanickingHost {
+        stopped: Mutex<Vec<String>>,
+    }
+
+    impl AgentHost for PanickingHost {
+        fn prepare(&self, _descriptor: &AgentDescriptor, _index: usize) -> Result<(), AgentError> {
+            Ok(())
+        }
+
+        fn launch(
+            &self,
+            _descriptor: &AgentDescriptor,
+            _execution_id: &str,
+            _index: usize,
+            _port: u16,
+            _pi_env: &BTreeMap<String, String>,
+        ) -> Result<LaunchedAgent, AgentError> {
+            Err(AgentError::Host("not connected in unit test".to_string()))
+        }
+
+        fn stop(&self, execution_id: &str) -> Result<(), AgentError> {
+            self.stopped.lock().unwrap().push(execution_id.to_string());
+            panic!("host stop failed");
+        }
+    }
+
     #[test]
     fn fake_host_tracks_stop_requests() {
         let host = Arc::new(FakeHost::default());
         assert!(host.stop("run").is_ok());
+        assert_eq!(host.stopped.lock().unwrap().as_slice(), ["run"]);
+    }
+
+    #[test]
+    fn explicit_shutdown_and_drop_stop_once() {
+        let host = Arc::new(FakeHost::default());
+        let session = AgentSession {
+            execution_id: "run".to_string(),
+            host: host.clone(),
+            clients: Vec::new(),
+            shutdown_started: std::sync::atomic::AtomicBool::new(false),
+        };
+
+        session.shutdown();
+        drop(session);
+
+        assert_eq!(host.stopped.lock().unwrap().as_slice(), ["run"]);
+    }
+
+    #[test]
+    fn shutdown_panic_is_not_repeated_while_dropping() {
+        let host = Arc::new(PanickingHost::default());
+        let session_host = host.clone();
+        let session = AgentSession {
+            execution_id: "run".to_string(),
+            host: session_host,
+            clients: Vec::new(),
+            shutdown_started: std::sync::atomic::AtomicBool::new(false),
+        };
+
+        session.shutdown();
+        drop(session);
+
         assert_eq!(host.stopped.lock().unwrap().as_slice(), ["run"]);
     }
 

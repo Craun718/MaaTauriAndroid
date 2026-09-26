@@ -11,6 +11,7 @@ import com.android.build.api.dsl.ApplicationExtension
 import top.natsuu.mta.kotlin.PiProfileReader
 import top.natsuu.mta.kotlin.PiLauncherIcon
 import top.natsuu.mta.kotlin.PiSyncTask
+import top.natsuu.mta.kotlin.VirtualDisplayOrientation
 
 plugins {
     id("com.android.application")
@@ -53,6 +54,8 @@ val piAssets = piProfile?.assets
 val maaTauriAndroidResourceId = piProfile?.resourceId ?: "fixture"
 val maaTauriAndroidAppName = piProfile?.appName ?: "MaaTauriAndroid"
 val maaTauriAndroidMaaDir = piProfile?.maaDir ?: "vendor/maa/android"
+val maaTauriAndroidVirtualDisplayOrientation = piProfile?.virtualDisplayOrientation
+    ?: VirtualDisplayOrientation.Landscape
 val maaTauriAndroidMaaDirPath = if (File(maaTauriAndroidMaaDir).isAbsolute) {
     File(maaTauriAndroidMaaDir).normalize()
 } else {
@@ -276,6 +279,11 @@ extensions.configure<ApplicationExtension> {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        buildConfigField(
+            "String",
+            "VIRTUAL_DISPLAY_ORIENTATION",
+            "\"${maaTauriAndroidVirtualDisplayOrientation.name.lowercase()}\"",
+        )
 
         ndk {
             abiFilters.add(maaTauriAndroidAbi)

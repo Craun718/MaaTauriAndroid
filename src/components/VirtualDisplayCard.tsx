@@ -114,14 +114,15 @@ export function VirtualDisplayCard() {
     if (!fullscreen || status?.active !== true) return;
 
     let disposed = false;
-    setVirtualDisplayLandscape(true).catch(() => undefined);
+    const portrait = status.height > status.width;
+    setVirtualDisplayLandscape(!portrait).catch(() => undefined);
 
     return () => {
       if (disposed) return;
       disposed = true;
       void setVirtualDisplayLandscape(false).catch(() => undefined);
     };
-  }, [fullscreen, status?.active]);
+  }, [fullscreen, status?.active, status?.width, status?.height]);
 
   async function stopDisplay() {
     if (actionPending) return;
@@ -227,12 +228,20 @@ export function VirtualDisplayCard() {
       </div>
 
       {active && status && !fullscreen ? (
-        <div className="relative">
+        <div
+          className="relative w-full rounded-md border border-line"
+          style={{
+            aspectRatio:
+              status.width > 0 && status.height > 0
+                ? `${status.width} / ${status.height}`
+                : "2 / 1",
+          }}
+        >
           <VirtualDisplayPreview
             status={status}
             showTouchMarkers={showTouchMarkers}
             interactive={false}
-            className="aspect-[2/1] w-full rounded-md border border-line"
+            className="absolute inset-0"
           />
           {fpsBadge(false)}
         </div>

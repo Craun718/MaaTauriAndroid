@@ -27,6 +27,10 @@ mirrorchyan_rid = "yourpi"
 # Optional Android launcher and activity title.
 app_name = "Your PI"
 
+# Optional virtual display orientation: "landscape" or "portrait".
+# Omit it to keep the 1280x720 landscape virtual display.
+virtual_display_orientation = "landscape"
+
 # Optional. Relative paths resolve from the repository root.
 maa_dir = "vendor/maa/android"
 

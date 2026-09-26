@@ -46,7 +46,9 @@ app_name = "Your PI"
 # mirrorchyan_rid = "your-mirrorchyan-id"  # 可选；不写则用 interface.json 的值
 ```
 
-`resource_id` 只收小写字母、数字、下划线，且不能以数字开头；省略时是 `fixture`。可选的 `app_name` 设置 Android 桌面图标名称和 Activity 标题；省略时构建使用 `MaaTauriAndroid`。`maa_dir` 缺省为 `vendor/maa/android`，它是打包进 `jniLibs` 的 MaaFramework 库目录。
+`resource_id` 只收小写字母、数字、下划线，且不能以数字开头；省略时是 `fixture`。可选的 `app_name` 设置 Android 桌面图标名称和 Activity 标题；省略时构建使用 `MaaTauriAndroid`。
+
+可选的 `virtual_display_orientation` 设置任务开始前创建的虚拟屏方向，只接受 `"landscape"` 或 `"portrait"`；竖屏会创建 `720x1280`，横屏保持 `1280x720`。省略时默认横屏。值不合法会让构建直接失败，因为虚拟屏不能在 MaaFW 已经缓存 display ID 后再改方向。`maa_dir` 缺省为 `vendor/maa/android`，它是打包进 `jniLibs` 的 MaaFramework 库目录。
 
 可选的 `mirrorchyan_rid` 设置 MirrorChyan 更新资源 ID。构建时如果 profile 写了这个字段，出包会覆盖打包后 `interface.json` 里的同名值；没写就沿用 `interface.json` 的 `mirrorchyan_rid`。它和 `resource_id` 无关联，大小写、下划线等按 MirrorChyan 的规则写就行。
 

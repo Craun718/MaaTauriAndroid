@@ -133,6 +133,10 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun isVirtualDisplayPortrait(): Boolean =
+        BuildConfig.VIRTUAL_DISPLAY_ORIENTATION == "portrait"
+
+    @JvmStatic
     fun startRunForegroundService(): Boolean {
         val context = agentContext ?: return false
         return RunForegroundService.start(context)

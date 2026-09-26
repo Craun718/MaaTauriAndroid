@@ -19,7 +19,13 @@ data class PiProfile(
     val maaDir: String,
     val agent: AgentProfile?,
     val signing: SigningProfile?,
+    val virtualDisplayOrientation: VirtualDisplayOrientation,
 )
+
+enum class VirtualDisplayOrientation {
+    Landscape,
+    Portrait,
+}
 
 data class AgentProfile(
     val timeoutMs: Long,
@@ -77,6 +83,7 @@ object PiProfileReader {
             maaDir = result.getString("maa_dir") ?: "vendor/maa/android",
             agent = agent,
             signing = signing,
+            virtualDisplayOrientation = virtualDisplayOrientation(result),
         )
     }
 
@@ -172,6 +179,21 @@ object PiProfileReader {
         val value = table.getString(key) ?: return null
         require(value.isNotEmpty()) { "$key must not be empty" }
         return value
+    }
+
+    private fun virtualDisplayOrientation(table: TomlTable): VirtualDisplayOrientation {
+        val value = table.get("virtual_display_orientation")
+            ?: return VirtualDisplayOrientation.Landscape
+        require(value is String) {
+            "virtual_display_orientation must be \"landscape\" or \"portrait\""
+        }
+        return when (value) {
+            "landscape" -> VirtualDisplayOrientation.Landscape
+            "portrait" -> VirtualDisplayOrientation.Portrait
+            else -> throw IllegalArgumentException(
+                "virtual_display_orientation must be \"landscape\" or \"portrait\"",
+            )
+        }
     }
 
     private fun stringArray(table: TomlTable, key: String): List<String>? {

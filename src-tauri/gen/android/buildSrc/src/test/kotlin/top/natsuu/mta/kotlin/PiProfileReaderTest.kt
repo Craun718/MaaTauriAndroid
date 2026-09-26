@@ -134,6 +134,47 @@ class PiProfileReaderTest {
     }
 
     @Test
+    fun readsVirtualDisplayOrientationAndDefaultsToLandscape() {
+        val portrait = temporaryFolder.newFile("portrait.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                virtual_display_orientation = "portrait"
+                """.trimIndent(),
+            )
+        }
+        val omitted = temporaryFolder.newFile("omitted.toml").apply {
+            writeText("pi_assets = \".\"")
+        }
+
+        assertEquals(
+            VirtualDisplayOrientation.Portrait,
+            PiProfileReader.read(portrait).virtualDisplayOrientation,
+        )
+        assertEquals(
+            VirtualDisplayOrientation.Landscape,
+            PiProfileReader.read(omitted).virtualDisplayOrientation,
+        )
+    }
+
+    @Test
+    fun rejectsUnknownVirtualDisplayOrientation() {
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                virtual_display_orientation = "auto"
+                """.trimIndent(),
+            )
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            PiProfileReader.read(profile)
+        }
+        assertTrue(error.message.orEmpty().contains("landscape"))
+    }
+
+    @Test
     fun leavesMirrorchyanRidUnsetWhenOmittedFromTheProfile() {
         val profile = temporaryFolder.newFile("pi.toml").apply {
             writeText("pi_assets = \".\"\nresource_id = \"game\"")

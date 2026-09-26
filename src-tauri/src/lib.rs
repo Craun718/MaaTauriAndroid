@@ -851,6 +851,15 @@ fn cleanup_virtual_display_on_exit() {
 #[cfg(not(target_os = "android"))]
 fn cleanup_virtual_display_on_exit() {}
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn virtual_display_dimensions(portrait: bool) -> (i32, i32) {
+    if portrait {
+        (720, 1280)
+    } else {
+        (1280, 720)
+    }
+}
+
 #[tauri::command]
 fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
     #[cfg(target_os = "android")]
@@ -1757,7 +1766,12 @@ async fn start_run_core(
     // display must exist before session creation and before any StartApp task.
     #[cfg(target_os = "android")]
     {
-        if let Err(error) = call_runtime_bridge_start_virtual_display(1280, 720, 160) {
+        let portrait = match call_runtime_bridge_boolean("isVirtualDisplayPortrait") {
+            Ok(portrait) => portrait,
+            Err(error) => return Err(fail_preparing(error.to_string())),
+        };
+        let (width, height) = virtual_display_dimensions(portrait);
+        if let Err(error) = call_runtime_bridge_start_virtual_display(width, height, 160) {
             return Err(fail_preparing(error.to_string()));
         }
         if !call_runtime_bridge_boolean("startRunForegroundService")? {
@@ -2696,6 +2710,12 @@ mod tests {
             virtual_display_touch_rejection_message(-99),
             "The virtual display touch command failed with result -99"
         );
+    }
+
+    #[test]
+    fn virtual_display_dimensions_follow_the_configured_orientation() {
+        assert_eq!(virtual_display_dimensions(false), (1280, 720));
+        assert_eq!(virtual_display_dimensions(true), (720, 1280));
     }
 
     #[test]

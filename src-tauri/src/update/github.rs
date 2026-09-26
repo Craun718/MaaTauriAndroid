@@ -249,6 +249,10 @@ mod tests {
         format!(r#"{{"tag_name": "{tag}", {extra}, "assets": [{assets}]}}"#)
     }
 
+    fn runtime_abi_apk_asset(digest: Option<&str>) -> String {
+        apk_asset(&format!("app-{}.apk", abi_tags()[0]), digest)
+    }
+
     fn apk_asset(name: &str, digest: Option<&str>) -> String {
         let digest = digest
             .map(|digest| format!(r#", "digest": "{digest}""#))
@@ -307,18 +311,12 @@ mod tests {
             release_json(
                 "v1.2.0",
                 r#""prerelease": false, "body": "stable note""#,
-                &apk_asset(
-                    "app-arm64-v8a.apk",
-                    Some(&format!("sha256:{}", digest_of(b"stable"))),
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"stable"))),),
             ),
             release_json(
                 "v1.3.0-beta.1",
                 r#""prerelease": true"#,
-                &apk_asset(
-                    "app-arm64-v8a.apk",
-                    Some(&format!("sha256:{}", digest_of(b"apk")))
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"apk")))),
             ),
             release_json(
                 "v1.1.0",
@@ -352,10 +350,7 @@ mod tests {
             release_json(
                 "v1.3.0-beta.1",
                 r#""prerelease": true, "body": "beta note""#,
-                &apk_asset(
-                    "App-arm64-v8a.APK",
-                    Some(&format!("sha256:{}", digest_of(b"beta")))
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"beta")))),
             ),
         );
         let client = StubClient::new()
@@ -410,10 +405,7 @@ mod tests {
             release_json(
                 "v0.9.0",
                 r#""prerelease": false"#,
-                &apk_asset(
-                    "app-arm64.apk",
-                    Some(&format!("sha256:{}", digest_of(b"apk")))
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"apk")))),
             ),
         );
         let client = StubClient::new()
@@ -437,8 +429,8 @@ mod tests {
                 r#""prerelease": false"#,
                 &format!(
                     "{}, {}",
-                    apk_asset("app-arm64.apk", Some(&fallback_digest)),
-                    apk_asset("app-arm64-v8a.apk", Some(&good_digest)),
+                    apk_asset("app-fallback.apk", Some(&fallback_digest)),
+                    apk_asset(&format!("app-{}.apk", abi_tags()[0]), Some(&good_digest)),
                 ),
             ),
         );
@@ -449,7 +441,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(release.url.ends_with("app-arm64-v8a.apk"));
+        assert!(release.url.ends_with(&format!("app-{}.apk", abi_tags()[0])));
         assert_eq!(release.sha256, digest_of(b"arm64"));
     }
 
@@ -460,7 +452,7 @@ mod tests {
             release_json(
                 "v2.0.0",
                 r#""prerelease": false"#,
-                &apk_asset("app-arm64-v8a.apk", None),
+                &runtime_abi_apk_asset(None),
             ),
         );
         let client = StubClient::new()

@@ -320,6 +320,7 @@ mod tests {
             initialized: true,
             force_stop_target_app: false,
             close_target_app_after_run: false,
+            foreground_mode: false,
             show_virtual_display_fps: true,
             telemetry_enabled: false,
             ui_language: Default::default(),

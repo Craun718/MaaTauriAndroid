@@ -177,7 +177,7 @@ fn pick_asset(assets: &[Asset]) -> Result<&Asset, UpdateError> {
     pick_asset_for(abi_tags(), assets)
 }
 
-fn pick_asset_for(tags: &[&str], assets: &[Asset]) -> Result<&Asset, UpdateError> {
+fn pick_asset_for<'a>(tags: &[&str], assets: &'a [Asset]) -> Result<&'a Asset, UpdateError> {
     for tag in tags {
         let mut digestless = false;
         for asset in assets {

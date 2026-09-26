@@ -65,7 +65,7 @@ class PiProfileReaderTest {
                 resource_id = "game"
 
                 [[agent.runtimes]]
-                bundle = "runtime-{abi}.zip"
+                bundle = "../runtime-{abi}.zip"
                 exec = "bin/python3"
                 executables = ["bin/python3"]
                 args = ["-u"]

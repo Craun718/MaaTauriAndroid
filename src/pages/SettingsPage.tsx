@@ -155,6 +155,20 @@ export function SettingsPage() {
         </Checkbox>
         <Checkbox
           className="min-h-10 gap-2"
+          checked={snapshot?.configuration.foregroundMode ?? false}
+          disabled={restartPending || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.foregroundMode = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
+          <span className="font-medium">{t("foregroundMode")}</span>
+        </Checkbox>
+        <p className="text-sm text-ink-muted">{t("foregroundModeDescription")}</p>
+        <Checkbox
+          className="min-h-10 gap-2"
           checked={snapshot?.configuration.closeTargetAppAfterRun ?? true}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {

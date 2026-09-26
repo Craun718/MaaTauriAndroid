@@ -179,6 +179,9 @@ const en = {
   runBehavior: "Run behavior",
   forceStopTargetApp: "Force stop target app",
   closeTargetAppAfterRun: "Close target app after the run",
+  foregroundMode: "Foreground mode",
+  foregroundModeDescription:
+    "Run on the physical screen instead of a virtual display. Android will show the target app while the run is active.",
   showTouchPositions: "Show click positions",
   showVirtualDisplayFps: "Show current frame rate",
   telemetry: "Anonymous telemetry",
@@ -436,6 +439,9 @@ const zh: Record<MessageKey, string> = {
   runBehavior: "运行行为",
   forceStopTargetApp: "运行前强制停止目标应用",
   closeTargetAppAfterRun: "运行结束后关闭目标应用",
+  foregroundMode: "前台模式",
+  foregroundModeDescription:
+    "在物理屏幕上运行，而不是虚拟屏。运行期间 Android 会显示目标应用。",
   showTouchPositions: "显示点击位置",
   showVirtualDisplayFps: "显示当前帧率",
   telemetry: "匿名遥测",

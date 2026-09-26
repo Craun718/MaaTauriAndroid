@@ -54,6 +54,47 @@ class PiProfileReaderTest {
     }
 
     @Test
+    fun resolvesAgentRuntimeAbiPlaceholders() {
+        val profileDirectory = temporaryFolder.newFolder("profile")
+        val arm64Bundle = temporaryFolder.newFile("runtime-arm64-v8a.zip")
+        val x86Bundle = temporaryFolder.newFile("runtime-x86_64.zip")
+        val profile = profileDirectory.resolve("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+
+                [[agent.runtimes]]
+                bundle = "runtime-{abi}.zip"
+                exec = "bin/python3"
+                executables = ["bin/python3"]
+                args = ["-u"]
+                working_dir = "{pi}"
+
+                [agent.runtimes.env]
+                LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
+                """.trimIndent(),
+            )
+        }
+
+        val arm64 = PiProfileReader.read(profile)
+        val x86 = PiProfileReader.read(profile, "x86_64")
+        val arm64Runtime = requireNotNull(arm64.agent).runtimes.single()
+        val x86Runtime = requireNotNull(x86.agent).runtimes.single()
+
+        assertEquals(arm64Bundle.canonicalFile, arm64Runtime.bundle)
+        assertEquals(
+            "LD_LIBRARY_PATH={bundle}/lib/arm64-v8a",
+            arm64Runtime.env.entries.single().toString(),
+        )
+        assertEquals(x86Bundle.canonicalFile, x86Runtime.bundle)
+        assertEquals(
+            "LD_LIBRARY_PATH={bundle}/lib/x86_64",
+            x86Runtime.env.entries.single().toString(),
+        )
+    }
+
+    @Test
     fun rejectsApplicationIdUnsafeResourceIds() {
         val profile = temporaryFolder.newFile("pi.toml").apply {
             writeText("pi_assets = \".\"\nresource_id = \"../escape\"")

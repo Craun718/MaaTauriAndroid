@@ -48,7 +48,7 @@ data class SigningProfile(
 )
 
 object PiProfileReader {
-    fun read(file: File): PiProfile {
+    fun read(file: File, abi: String = "arm64-v8a"): PiProfile {
         val result = Toml.parse(file.toPath())
         val errors = result.errors()
         require(errors.isEmpty()) {
@@ -63,7 +63,7 @@ object PiProfileReader {
         }
 
         val agentTable = result.getTable("agent")
-        val agent: AgentProfile? = agentTable?.let { table -> readAgent(table, file) }
+        val agent: AgentProfile? = agentTable?.let { table -> readAgent(table, file, abi) }
         val signingTable = result.getTable("signing")
         val signing: SigningProfile? = signingTable?.let { table -> readSigning(table, file) }
         return PiProfile(
@@ -80,20 +80,20 @@ object PiProfileReader {
         )
     }
 
-    private fun readAgent(table: TomlTable, profileFile: File): AgentProfile {
+    private fun readAgent(table: TomlTable, profileFile: File, abi: String): AgentProfile {
         val runtimes: List<Any> = table.getArray("runtimes")?.toList() ?: emptyList()
         require(runtimes.isNotEmpty()) { "agent.runtimes must contain at least one runtime" }
         return AgentProfile(
             timeoutMs = table.getLong("timeout_ms") ?: 15_000L,
             runtimes = runtimes.map { value ->
                 require(value is TomlTable) { "agent.runtimes entries must be tables" }
-                readRuntime(value, profileFile)
+                readRuntime(value, profileFile, abi)
             },
         )
     }
 
-    private fun readRuntime(table: TomlTable, profileFile: File): AgentRuntimeProfile {
-        val bundle = requiredPath(table, "bundle", profileFile)
+    private fun readRuntime(table: TomlTable, profileFile: File, abi: String): AgentRuntimeProfile {
+        val bundle = requiredPath(table, "bundle", profileFile, abi)
             .let(::File)
             .canonicalFile
         require(bundle.isFile) { "agent bundle does not exist: $bundle" }
@@ -109,7 +109,7 @@ object PiProfileReader {
             workingDir = requiredString(table, "working_dir"),
             env = table.getTable("env")?.toMap()?.mapValues { (_, value) ->
                 require(value is String) { "agent environment values must be strings" }
-                value
+                value.replace("{abi}", abi)
             } ?: emptyMap(),
         )
     }
@@ -134,15 +134,21 @@ object PiProfileReader {
             ?: throw IllegalArgumentException("$key is required")
     }
 
-    private fun requiredPath(table: TomlTable, key: String, profileFile: File): String {
+    private fun requiredPath(
+        table: TomlTable,
+        key: String,
+        profileFile: File,
+        abi: String = "arm64-v8a",
+    ): String {
         val value = requiredString(table, key)
-        if (File(value).isAbsolute) {
-            return value
+        val expandedValue = value.replace("{abi}", abi)
+        if (File(expandedValue).isAbsolute) {
+            return expandedValue
         }
         val parent = requireNotNull(profileFile.parentFile) {
             "${profileFile.invariantSeparatorsPath} must have a parent directory"
         }
-        return parent.resolve(value).canonicalPath
+        return parent.resolve(expandedValue).canonicalPath
     }
 
     private fun resourceId(table: TomlTable): String {

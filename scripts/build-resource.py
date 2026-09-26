@@ -101,7 +101,7 @@ def build(arguments: argparse.Namespace, resource_id: str) -> None:
         requirements_path.parent.mkdir(parents=True, exist_ok=True)
         requirements_path.touch()
 
-    output = REPO_ROOT / "resource" / f"{resource_id}-agent-runtime-arm64-v8a.zip"
+    output = REPO_ROOT / "resource" / f"{resource_id}-agent-runtime-{arguments.abi}.zip"
     command = [
         str(REPO_ROOT / "scripts" / "build-agent-runtime.sh"),
         "--project-dir",
@@ -109,6 +109,7 @@ def build(arguments: argparse.Namespace, resource_id: str) -> None:
         "--out",
         str(output.relative_to(REPO_ROOT)),
     ]
+    command.extend(("--abi", arguments.abi))
     command.extend(("--requirements", str(requirements_path)))
     for package in arguments.exclude:
         command.extend(("--exclude", package))
@@ -134,6 +135,12 @@ def parser() -> argparse.ArgumentParser:
         "--id", help="resource directory name; derived from URL by default"
     )
     result.add_argument("--ref", default="HEAD", help="branch, tag, or commit to check out")
+    result.add_argument(
+        "--abi",
+        choices=("arm64-v8a", "x86_64"),
+        default="arm64-v8a",
+        help="Android ABI for the Python runtime; default arm64-v8a",
+    )
     result.add_argument(
         "--submodules",
         action="store_true",
@@ -193,7 +200,12 @@ def main() -> int:
             else normalized_resource_id(arguments.url)
         )
         clone(arguments.url, arguments.ref, resource_id, arguments.submodules)
-        run([str(REPO_ROOT / "scripts" / "fetch-maafw.sh")])
+        run(
+            [
+                str(REPO_ROOT / "scripts" / "fetch-maafw.sh"),
+                arguments.abi,
+            ]
+        )
         build(arguments, resource_id)
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)

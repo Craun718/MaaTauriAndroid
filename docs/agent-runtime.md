@@ -6,16 +6,16 @@
 
 ## ZIP 里有什么
 
-以 Python agent 为例，产物是一个 arm64-v8a 的 ZIP：
+以 Python agent 为例，产物是一个选定 ABI 的 ZIP（默认 `arm64-v8a`）：
 
 ```text
-<项目>-agent-runtime-arm64-v8a.zip
+<项目>-agent-runtime-<abi>.zip
 ├── bin/python3                       # 解释器入口
 ├── prefix/                           # PYTHONHOME：CPython 标准库
 ├── site-packages/
 │   ├── pure.zip                      # 纯 Python 包，收进 zip 交 zipimport
 │   └── …                             # 带 .so 的包留在磁盘（dlopen 需要真实路径）
-└── lib/arm64-v8a/
+└── lib/<abi>/
     ├── libMaaAgentClient.so          # 与 vendor/maa/android 同源的 agent 库
     └── libMaaAgentServer.so
 ```
@@ -35,7 +35,7 @@ python3 scripts/build-resource.py \
   --submodules --exclude pillow --require pillow==11.0.0
 ```
 
-`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本。资源目录和 runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`build-agent-runtime.sh` 本身继续保持通用：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置三个项目的完整调用参数见下文「仓库内置项目的构建参数」。
+`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本。资源目录和 runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，内置 profile 会通过 `{abi}` 自动解析。`build-agent-runtime.sh` 本身继续保持通用：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置三个项目的完整调用参数见下文「仓库内置项目的构建参数」。
 
 没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
 
@@ -46,8 +46,8 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
 `scripts/build-agent-runtime.sh` 做三件事：
 
 1. **组装 Python 核心 + site-packages**：仓库内 `scripts/build_agent_bundle.py`（vendored 自 MaaFwApp，AGPL-3.0，来源 commit 见文件头；升级脚本时手动同步副本并同步头注释）从 MaaAgentCoreAndroid 的 release 下载预编译核心（CPython + 标准库 + `maa` 包，仓库与版本由 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG` 钉定，缓存在 `.cache/maafw/`），再用资源项目自己的 `requirements.txt` 装依赖——Android 轮子来自 Chaquopy 索引（`--extra-index-url https://chaquo.com/pypi-13.1/`），装完剪掉排除列表里的包，纯 Python 的收进 `pure.zip`。
-2. **备 agent 库**：`libMaaAgentClient.so` / `libMaaAgentServer.so` 优先复用 `vendor/maa/android/arm64-v8a/` 里已铺好的；没有就从 MaaFramework release（钉 `MAAFW_VERSION`）下载。**两个来源必须是同一版本**，这是 bundle 与壳内 MaaFramework 对齐的关键。
-3. **打包**：`src-tauri/profiles/pack_agent_bundle.py` 把 bundle 目录和两个 `.so` 打成上述约束的 ZIP，并校验 `lib/arm64-v8a/` 里两个 `.so` 齐全。
+2. **备 agent 库**：`libMaaAgentClient.so` / `libMaaAgentServer.so` 优先复用 `vendor/maa/android/<abi>/` 里已铺好的；没有就从 MaaFramework release（钉 `MAAFW_VERSION`）下载对应架构。**两个来源必须是同一版本**，这是 bundle 与壳内 MaaFramework 对齐的关键。
+3. **打包**：`src-tauri/profiles/pack_agent_bundle.py` 把 bundle 目录和两个 `.so` 打成上述约束的 ZIP，并校验 `lib/<abi>/` 里两个 `.so` 齐全。
 
 ## 版本钉定
 
@@ -83,7 +83,7 @@ scripts/build-agent-runtime.sh \
   --out /tmp/你的-runtime-arm64-v8a.zip \
   [--requirements <文件>] \
   [--exclude pkg]... [--require spec]... \
-  [--abi arm64-v8a] [--extra-index-url url]... [--work <缓存目录>]
+  [--abi arm64-v8a|x86_64] [--extra-index-url url]... [--work <缓存目录>]
 ```
 
 核心（CPython + 标准库 + `maa` 包）默认取 `scripts/env.sh` 钉定的 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG`，需要对齐壳内 MaaFramework 版本时用同名环境变量覆盖。
@@ -96,7 +96,7 @@ scripts/build-agent-runtime.sh \
 
 编译型 agent 的包体约束：
 
-- **包体**：bundle 是普通 ZIP，须满足无符号链接、条目数不超 0xFFFF，且构建期 `validateAgentBundle` 强制包内含 `lib/arm64-v8a/libMaaAgentClient.so` 与 `libMaaAgentServer.so`。子进程真正需要的是 Server 库（链接它，或经 `MAAFW_BINARY_PATH` / `LD_LIBRARY_PATH` 加载）；Client 库只被壳内宿主进程使用，但每个 bundle 仍必须带上。
+- **包体**：bundle 是普通 ZIP，须满足无符号链接、条目数不超 0xFFFF，且构建期 `validateAgentBundle` 强制包内含 `lib/<abi>/libMaaAgentClient.so` 与 `libMaaAgentServer.so`。子进程真正需要的是 Server 库（链接它，或经 `MAAFW_BINARY_PATH` / `LD_LIBRARY_PATH` 加载）；Client 库只被壳内宿主进程使用，但每个 bundle 仍必须带上。
 - **打包工具**：用普通 `zip` 打包即可，自行保证无符号链接、条目数不超 0xFFFF。
 - **通信协议**：子进程必须实现 MaaFW 的 AgentServer 侧，监听 `{identifier}`（TCP 端口）与壳内 `AgentClient` 走 AgentClient/Server IPC。`interface.json` 的 `agent.child_args` 指向入口——ELF 就写包内二进制路径，`agent/` 目录整体随 PI 打包。
 
@@ -114,8 +114,8 @@ args = ["{identifier}"]
 working_dir = "{pi}"
 
 [agent.runtimes.env]
-LD_LIBRARY_PATH = "{bundle}/lib/arm64-v8a"
-MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"
+LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
+MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
 ```
 
 出包只需把 bundle 目录压成 ZIP，`exec` 与 `executables` 指向的文件在设备端会被 `AgentRuntimeManager` 自动标成可执行：

@@ -224,7 +224,7 @@ pub fn validate_descriptor(descriptor: &AgentDescriptor) -> Result<(), AgentErro
             descriptor.schema_version
         )));
     }
-    if is_android() && descriptor.abi != "arm64-v8a" {
+    if is_android() && descriptor.abi != android_abi() {
         return Err(AgentError::InvalidDescriptor(format!(
             "unsupported Android ABI {}",
             descriptor.abi
@@ -741,6 +741,16 @@ fn is_android() -> bool {
     cfg!(target_os = "android")
 }
 
+fn android_abi() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "arm64-v8a"
+    } else if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else {
+        "unsupported"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -782,6 +792,15 @@ mod tests {
     fn strips_agent_ansi_color_escapes() {
         assert_eq!(strip_ansi_escapes("\u{1b}[32msuccess\u{1b}[0m"), "success");
         assert_eq!(strip_ansi_escapes("plain [32mtext"), "plain [32mtext");
+    }
+
+    #[test]
+    fn android_abi_matches_the_build_target() {
+        if cfg!(target_arch = "aarch64") {
+            assert_eq!(android_abi(), "arm64-v8a");
+        } else if cfg!(target_arch = "x86_64") {
+            assert_eq!(android_abi(), "x86_64");
+        }
     }
 
     #[derive(Default)]

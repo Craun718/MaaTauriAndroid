@@ -43,7 +43,11 @@ val piProfileFile = piProfilePath?.let { path ->
     }
     profile
 }
-val piProfile = piProfileFile?.let(PiProfileReader::read)
+
+val maaTauriAndroidAbi = rootProject.ext.get("maaTauriAndroidAbi") as? String
+    ?: "arm64-v8a"
+
+val piProfile = piProfileFile?.let { PiProfileReader.read(it, maaTauriAndroidAbi) }
 
 val piAssets = piProfile?.assets
 val maaTauriAndroidResourceId = piProfile?.resourceId ?: "fixture"
@@ -91,8 +95,8 @@ fun canonicalJson(value: Any?): String = JsonOutput.toJson(canonicalValue(value)
 
 fun validateAgentBundle(file: File, index: Int) {
     val requiredLibraries = setOf(
-        "lib/arm64-v8a/libMaaAgentClient.so",
-        "lib/arm64-v8a/libMaaAgentServer.so",
+        "lib/$maaTauriAndroidAbi/libMaaAgentClient.so",
+        "lib/$maaTauriAndroidAbi/libMaaAgentServer.so",
     )
     ZipFile(file).use { archive ->
         val entries = archive.entries().asSequence()
@@ -161,7 +165,7 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
         dependsOn(preparePiArchive)
         val agentProfile = requireNotNull(requireNotNull(piProfile).agent)
         val runtimes = agentProfile.runtimes
-        inputs.property("abi", "arm64-v8a")
+        inputs.property("abi", maaTauriAndroidAbi)
         inputs.property("timeoutMs", agentProfile.timeoutMs)
         runtimes.forEach { runtime -> inputs.file(runtime.bundle) }
         inputs.files(piRootDir)
@@ -197,7 +201,7 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
                 )
             }
             val canonicalDescriptor = linkedMapOf<String, Any?>(
-                "abi" to "arm64-v8a",
+                "abi" to maaTauriAndroidAbi,
                 "runtimes" to descriptorRuntimes,
                 "schemaVersion" to 1,
                 "timeoutMs" to agentProfile.timeoutMs,
@@ -274,7 +278,7 @@ extensions.configure<ApplicationExtension> {
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
 
         ndk {
-            abiFilters.add("arm64-v8a")
+            abiFilters.add(maaTauriAndroidAbi)
         }
 
         externalNativeBuild {
@@ -300,7 +304,7 @@ extensions.configure<ApplicationExtension> {
             isJniDebuggable = true
             isMinifyEnabled = false
             packaging {
-                jniLibs.keepDebugSymbols.add("*/arm64-v8a/*.so")
+                jniLibs.keepDebugSymbols.add("*/$maaTauriAndroidAbi/*.so")
             }
         }
         getByName("release") {

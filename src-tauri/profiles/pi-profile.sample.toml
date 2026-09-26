@@ -31,8 +31,10 @@ app_name = "Your PI"
 maa_dir = "vendor/maa/android"
 
 # Required when interface.json declares agents. Each runtime bundle is an
-# Android ZIP containing lib/arm64-v8a/libMaaAgentClient.so and
-# lib/arm64-v8a/libMaaAgentServer.so.
+# Android ZIP containing lib/{abi}/libMaaAgentClient.so and
+# lib/{abi}/libMaaAgentServer.so.
+# Use "{abi}" in the bundle path and environment values to resolve to the ABI
+# selected by the Android build (arm64-v8a by default).
 [agent]
 timeout_ms = 15000
 
@@ -44,8 +46,8 @@ args = ["-u", "-m", "maa.agent.agent_server", "{identifier}"]
 working_dir = "{pi}"
 
 [agent.runtimes.env]
-LD_LIBRARY_PATH = "{bundle}/lib/arm64-v8a"
-MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"
+LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
+MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
 PYTHONHOME = "{bundle}/python"
 PYTHONPATH = "{pi}"
 

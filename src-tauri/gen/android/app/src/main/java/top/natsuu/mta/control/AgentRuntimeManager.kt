@@ -3,6 +3,7 @@ package top.natsuu.mta.control
 import android.system.Os
 import android.system.OsConstants
 import android.os.Binder
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import top.natsuu.mta.AgentLaunch
 import top.natsuu.mta.ZipSafety
@@ -316,7 +317,11 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
     private fun parseDescriptor(descriptorJson: String): JSONObject {
         val descriptor = JSONObject(descriptorJson)
         require(descriptor.optInt("schemaVersion") == 1) { "unsupported agent descriptor schema" }
-        require(descriptor.optString("abi") == "arm64-v8a") { "unsupported Android agent ABI" }
+        val deviceAbi = Build.SUPPORTED_ABIS.firstOrNull { abi ->
+            abi == "arm64-v8a" || abi == "x86_64"
+        }
+        requireNotNull(deviceAbi) { "the device does not report a supported Android ABI" }
+        require(descriptor.optString("abi") == deviceAbi) { "unsupported Android agent ABI" }
         require(descriptor.optLong("timeoutMs") in 1..600_000) { "invalid agent timeout" }
         val runtimes = descriptor.optJSONArray("runtimes")
         require(runtimes != null && runtimes.length() > 0) { "the descriptor has no agent runtime" }

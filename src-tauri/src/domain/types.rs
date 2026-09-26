@@ -314,6 +314,10 @@ pub struct UserConfiguration {
     pub force_stop_target_app: bool,
     #[serde(default = "default_true")]
     pub close_target_app_after_run: bool,
+    /// Run against the physical primary display instead of a private virtual
+    /// display. This only takes effect on the next run.
+    #[serde(default)]
+    pub foreground_mode: bool,
     #[serde(default)]
     pub telemetry_enabled: bool,
     #[serde(default = "default_true")]
@@ -347,6 +351,7 @@ impl Default for UserConfiguration {
             initialized: false,
             force_stop_target_app: false,
             close_target_app_after_run: true,
+            foreground_mode: false,
             telemetry_enabled: false,
             show_virtual_display_touches: true,
             show_virtual_display_fps: true,
@@ -392,6 +397,17 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(parsed.close_target_app_after_run);
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_foreground_mode_to_false() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy.as_object_mut().unwrap().remove("foregroundMode");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert!(!parsed.foreground_mode);
     }
 
     #[test]
@@ -469,6 +485,26 @@ mod tests {
 
         let decoded: UserConfiguration = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded.ui_language, UiLanguage::Zh);
+    }
+
+    #[test]
+    fn foreground_mode_round_trips_through_the_configuration() {
+        let mut configuration = UserConfiguration::default();
+        configuration.foreground_mode = true;
+
+        let encoded = serde_json::to_value(&configuration).unwrap();
+        assert_eq!(encoded["foregroundMode"], serde_json::json!(true));
+
+        let decoded: UserConfiguration = serde_json::from_value(encoded).unwrap();
+        assert!(decoded.foreground_mode);
+    }
+
+    #[test]
+    fn rejects_an_invalid_foreground_mode() {
+        let mut encoded = serde_json::to_value(UserConfiguration::default()).unwrap();
+        encoded["foregroundMode"] = serde_json::json!("foreground");
+
+        assert!(serde_json::from_value::<UserConfiguration>(encoded).is_err());
     }
 
     /// The interface switches on the `kind` tag, so the variant names have to reach

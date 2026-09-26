@@ -13,12 +13,14 @@ MaaTauriAndroid 本身不包含业务资源。资源开发者写好 Project Inte
 - JDK 17、Android SDK
 - Python 3（下载 MaaFramework 产物、组装 Python agent）
 - 一份 `interface_version` 为 `2` 的资源项目
-- `arm64-v8a` 设备或镜像（当前 APK 只收这一个 ABI）
+- `arm64-v8a` 设备或镜像（x86_64 构建需显式选择 ABI 并提供对应 runtime）
 
 MaaFramework 原生库和 agent runtime 不在 profile 里，先铺环境：
 
 ```bash
-scripts/setup.sh   # vendor/maa/android；resource checkout/runtime 由 CI 构建
+scripts/setup.sh              # vendor/maa/android/arm64-v8a
+scripts/setup.sh x86_64       # vendor/maa/android/x86_64
+                              # resource checkout/runtime 由 CI 构建
 ```
 
 ## 打包配方
@@ -44,7 +46,9 @@ app_name = "Your PI"
 # mirrorchyan_rid = "your-mirrorchyan-id"  # 可选；不写则用 interface.json 的值
 ```
 
-`resource_id` 只收小写字母、数字、下划线，且不能以数字开头；省略时是 `fixture`。可选的 `app_name` 设置 Android 桌面图标名称和 Activity 标题；省略时构建使用 `MaaTauriAndroid`。`maa_dir` 缺省为 `vendor/maa/android`，它是打包进 `jniLibs` 的 MaaFramework 库目录。
+`resource_id` 只收小写字母、数字、下划线，且不能以数字开头；省略时是 `fixture`。可选的 `app_name` 设置 Android 桌面图标名称和 Activity 标题；省略时构建使用 `MaaTauriAndroid`。
+
+可选的 `virtual_display_orientation` 设置任务开始前创建的虚拟屏方向，只接受 `"landscape"` 或 `"portrait"`；竖屏会创建 `720x1280`，横屏保持 `1280x720`。省略时默认横屏。值不合法会让构建直接失败，因为虚拟屏不能在 MaaFW 已经缓存 display ID 后再改方向。`maa_dir` 缺省为 `vendor/maa/android`，它是打包进 `jniLibs` 的 MaaFramework 库目录。
 
 可选的 `mirrorchyan_rid` 设置 MirrorChyan 更新资源 ID。构建时如果 profile 写了这个字段，出包会覆盖打包后 `interface.json` 里的同名值；没写就沿用 `interface.json` 的 `mirrorchyan_rid`。它和 `resource_id` 无关联，大小写、下划线等按 MirrorChyan 的规则写就行。
 
@@ -60,7 +64,7 @@ app_name = "Your PI"
 - `resource/narutomobile`、`resource/narutomobile.toml`：NarutoMobile 的 CI-only checkout 和 profile
 - `resource/maapvz`、`resource/maapvz.toml`：MAAPVZ 的 CI-only checkout 和 profile
 
-对应的 Python agent runtime 由 CI 每次重新构建，是 `resource/*-agent-runtime-arm64-v8a.zip` 构建产物，不提交。某个 checkout 要使用仓库内资源，设：
+对应的 Python agent runtime 由 CI 每次重新构建，默认是 `resource/*-agent-runtime-arm64-v8a.zip` 构建产物，不提交。某个 checkout 要使用仓库内资源，设：
 
 ```properties
 pi.profile=/path/to/repo/resource/m9a.toml
@@ -120,7 +124,7 @@ pi.profile=/path/to/repo/resource/m9a.toml
 
 `identifier` 不会像某些桌面端方案那样自动追加到命令最后；必须把 `{identifier}` 写进 `args`。子进程要实现 MaaFW 的 AgentServer 侧，监听这个端口，和壳内的 AgentClient 走 AgentClient/Server IPC。
 
-Python 例子：
+Python 例子。`{abi}` 会在构建期替换成当前选择的 ABI（默认 `arm64-v8a`）：
 
 ```toml
 [agent]
@@ -136,15 +140,15 @@ working_dir = "{pi}"
 [agent.runtimes.env]
 PYTHONHOME = "{bundle}/prefix"
 PYTHONPATH = "{bundle}/site-packages/pure.zip:{bundle}/site-packages"
-LD_LIBRARY_PATH = "{bundle}/prefix/lib:{bundle}/site-packages/chaquopy/lib:{bundle}/lib/arm64-v8a:{nativeLib}"
-MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"
+LD_LIBRARY_PATH = "{bundle}/prefix/lib:{bundle}/site-packages/chaquopy/lib:{bundle}/lib/{abi}:{nativeLib}"
+MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
 ```
 
 bundle ZIP 有硬性约束，任何语言的 agent 都躲不开：
 
 - 不能包含符号链接
 - 不能触发 ZIP64
-- 必须包含 `lib/arm64-v8a/libMaaAgentClient.so` 和 `lib/arm64-v8a/libMaaAgentServer.so`
+- 必须包含 `lib/{abi}/libMaaAgentClient.so` 和 `lib/{abi}/libMaaAgentServer.so`
 
 子进程真正需要的是 `libMaaAgentServer.so`，通过 `MAAFW_BINARY_PATH` 或 `LD_LIBRARY_PATH` 加载；`libMaaAgentClient.so` 只由应用宿主使用，但每个 bundle 仍必须携带它。
 
@@ -168,10 +172,10 @@ scripts/build-agent-runtime.sh \
 
 ```bash
 python3 src-tauri/profiles/pack_agent_bundle.py \
-  <bundle_dir> <agent_lib_dir> <out_zip>
+  <bundle_dir> <agent_lib_dir> <out_zip> [--abi arm64-v8a|x86_64]
 ```
 
-它会解引用符号链接、强制非 ZIP64，把两个 `.so` 放进 `lib/arm64-v8a/`，并且额外要求 MaaAgentCoreAndroid bundle 的 `agent-core.json` 标记。
+它会解引用符号链接、强制非 ZIP64，把两个 `.so` 放进 `lib/<abi>/`，并且额外要求 MaaAgentCoreAndroid bundle 的 `agent-core.json` 标记。
 
 > 注意：原生库由 `MAAFW_VERSION` 固定在 MaaFramework `v5.13.0`；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `3.13.15-maafw5.13.0`，所以 bundle 里的 Python `maa` 包保持 5.13.0，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，该协议在补丁版本之间保持兼容。
 
@@ -188,8 +192,8 @@ args = ["{identifier}"]
 working_dir = "{pi}"
 
 [agent.runtimes.env]
-LD_LIBRARY_PATH = "{bundle}/lib/arm64-v8a"
-MAAFW_BINARY_PATH = "{bundle}/lib/arm64-v8a"
+LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
+MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
 ```
 
 这种 ZIP 不需要 `agent-core.json`，用普通 `zip` 打包即可，但要自己保证无符号链接、不触发 ZIP64、带齐两个 `.so`。`agent.child_args` 要指向资源里的同一入口（编译型就写 ELF 路径），让入口随 PI 打包；实际拉起仍由 profile 的 `exec` 负责。进程通过 `{identifier}` 获得 TCP 端口，并且必须实现 AgentClient/Server IPC 协议。
@@ -224,7 +228,7 @@ debug 构建每次的签名可能不同，覆盖安装报 `INSTALL_FAILED_UPDATE
 | 构建报 `pi.profile points at a missing file` | profile 路径没写对，或文件不是 TOML |
 | 构建报 `resource_id` 不合法 | 只允许小写字母、数字、下划线，且不能数字开头 |
 | 构建报 agent 数量对不上 | `interface.json` 的 `agent[]` 和 `[[agent.runtimes]]` 没有按顺序一一对应 |
-| 构建报 bundle 缺 `.so` | ZIP 里没有 `lib/arm64-v8a/libMaaAgentClient.so` 和 `libMaaAgentServer.so` |
+| 构建报 bundle 缺 `.so` | ZIP 里没有当前 ABI 对应的 `libMaaAgentClient.so` 和 `libMaaAgentServer.so` |
 | 设备端拒绝解开 agent runtime | 包里有符号链接、触发了 ZIP64，或入口不是可执行文件 |
 | M9A v4.9.0 构建绿但真机加载失败 | 上游把 `i18n/` 改名成 `locales/`，旧许可名单失配；当前推导集合会直接报缺路径 |
 

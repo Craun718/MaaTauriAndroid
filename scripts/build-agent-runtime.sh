@@ -69,6 +69,14 @@ resolve() {
 [ -n "${PROJECT_DIR}" ] || usage
 [ -n "${OUT_ZIP}" ] || usage
 
+case "${ABI}" in
+  arm64-v8a|x86_64) ;;
+  *)
+    echo "error: unsupported ABI: ${ABI}" >&2
+    exit 2
+    ;;
+esac
+
 PROJECT_DIR="$(resolve "${PROJECT_DIR}")"
 OUT_ZIP="$(resolve "${OUT_ZIP}")"
 if [ -n "${REQUIREMENTS}" ]; then
@@ -117,6 +125,14 @@ python3 "${REPO_ROOT}/scripts/build_agent_bundle.py" \
   --work "${WORK}"
 
 VENDOR_DIR="${REPO_ROOT}/vendor/maa/android/${ABI}"
+case "${ABI}" in
+  arm64-v8a) MAAFW_ARCH="aarch64" ;;
+  x86_64) MAAFW_ARCH="x86_64" ;;
+  *)
+    echo "error: unsupported ABI: ${ABI}" >&2
+    exit 2
+    ;;
+esac
 if [ -f "${VENDOR_DIR}/libMaaAgentClient.so" ]; then
   echo "  2/3  reusing agent libraries from vendor/maa/android/${ABI}/…"
   mkdir -p "${TMP}/agent-libs"
@@ -124,7 +140,7 @@ if [ -f "${VENDOR_DIR}/libMaaAgentClient.so" ]; then
 else
   echo "  2/3  downloading MaaFW agent libraries…"
   curl -fsSL -o "${TMP}/maafw-android.zip" \
-    "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAAFW_VERSION}/MAA-android-aarch64-${MAAFW_VERSION}.zip"
+    "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAAFW_VERSION}/MAA-android-${MAAFW_ARCH}-${MAAFW_VERSION}.zip"
   unzip -j -q "${TMP}/maafw-android.zip" \
     "bin/libMaaAgentClient.so" "bin/libMaaAgentServer.so" \
     -d "${TMP}/agent-libs"
@@ -134,6 +150,7 @@ echo "  3/3  packing the archive…"
 python3 "${REPO_ROOT}/src-tauri/profiles/pack_agent_bundle.py" \
   "${DIST}/${ABI}/bundle" \
   "${TMP}/agent-libs" \
-  "${OUT_ZIP}"
+  "${OUT_ZIP}" \
+  --abi "${ABI}"
 
 echo "==> Done: ${OUT_ZIP}"

@@ -851,6 +851,15 @@ fn cleanup_virtual_display_on_exit() {
 #[cfg(not(target_os = "android"))]
 fn cleanup_virtual_display_on_exit() {}
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn virtual_display_dimensions(portrait: bool) -> (i32, i32) {
+    if portrait {
+        (720, 1280)
+    } else {
+        (1280, 720)
+    }
+}
+
 #[tauri::command]
 fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
     #[cfg(target_os = "android")]
@@ -1757,8 +1766,21 @@ async fn start_run_core(
     // display must exist before session creation and before any StartApp task.
     #[cfg(target_os = "android")]
     {
-        if let Err(error) = call_runtime_bridge_start_virtual_display(1280, 720, 160) {
-            return Err(fail_preparing(error.to_string()));
+        if configuration.foreground_mode {
+            // The bridge resets the native control context and screen metrics to
+            // the physical primary display, so display 0 becomes a valid target.
+            if let Err(error) = call_runtime_bridge_boolean("stopVirtualDisplay") {
+                return Err(fail_preparing(error.to_string()));
+            }
+        } else {
+            let portrait = match call_runtime_bridge_boolean("isVirtualDisplayPortrait") {
+                Ok(portrait) => portrait,
+                Err(error) => return Err(fail_preparing(error.to_string())),
+            };
+            let (width, height) = virtual_display_dimensions(portrait);
+            if let Err(error) = call_runtime_bridge_start_virtual_display(width, height, 160) {
+                return Err(fail_preparing(error.to_string()));
+            }
         }
         if !call_runtime_bridge_boolean("startRunForegroundService")? {
             if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.as_ref() {
@@ -1783,7 +1805,7 @@ async fn start_run_core(
         // Best-effort: without POST_NOTIFICATIONS the FGS still runs, the
         // progress notification just stays hidden until the user grants it.
         let _ = call_runtime_bridge_boolean("ensureNotificationPermission");
-        if configuration.show_virtual_display_touches {
+        if !configuration.foreground_mode && configuration.show_virtual_display_touches {
             let _ = set_virtual_display_touch_markers(true);
         }
         let _ = app.emit("virtual-display-changed", ());
@@ -1805,7 +1827,7 @@ async fn start_run_core(
     let agent_count = project.agents.len();
     let creation_execution_id = run_execution_id.clone();
     let controller_display_id = runtime::active_display_id();
-    if controller_display_id == 0 {
+    if controller_display_id == 0 && !configuration.foreground_mode {
         return Err(fail_preparing(
             "The virtual display is not active".to_string(),
         ));
@@ -2696,6 +2718,12 @@ mod tests {
             virtual_display_touch_rejection_message(-99),
             "The virtual display touch command failed with result -99"
         );
+    }
+
+    #[test]
+    fn virtual_display_dimensions_follow_the_configured_orientation() {
+        assert_eq!(virtual_display_dimensions(false), (1280, 720));
+        assert_eq!(virtual_display_dimensions(true), (720, 1280));
     }
 
     #[test]

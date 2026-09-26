@@ -34,7 +34,7 @@ MaaTauriAndroid 本身不包含具体业务资源。Android 上要把资源在**
 
 | 项目 | 要求 |
 |:---|:---|
-| 系统 | Android 9（API 28）及以上，arm64-v8a |
+| 系统 | Android 9（API 28）及以上，arm64-v8a（x86_64 需显式选择该 ABI） |
 | 提权 | [Shizuku](https://shizuku.rikka.app/) 或 root，二选一，可在应用内切换 |
 | 资源 | 一份符合 Project Interface V2 的资源项目（已在构建期打进当前 APK） |
 
@@ -60,6 +60,8 @@ MaaTauriAndroid 本身不包含具体业务资源。Android 上要把资源在**
 ```bash
 pnpm tauri android build --target aarch64 --apk --split-per-abi
 ```
+
+需要 x86_64 时改用 `scripts/setup.sh x86_64` 和 `pnpm tauri android build --target x86_64 --apk --split-per-abi`，agent runtime 也必须在 CI 手动触发时选择 `x86_64`。
 
 打包集合由 `interface.json` 自动推导，规则详见 [src-tauri/profiles/README.md](src-tauri/profiles/README.md)。清除 `pi.profile` 时构建回退到内置 fixture（`src-tauri/fixtures/pi/minimal`）。当前 commit 没有对应 tag 时出 debug 包，有 tag 对应才用 release 签名。
 

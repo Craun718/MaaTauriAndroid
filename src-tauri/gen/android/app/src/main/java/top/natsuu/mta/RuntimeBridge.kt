@@ -133,6 +133,10 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun isVirtualDisplayPortrait(): Boolean =
+        BuildConfig.VIRTUAL_DISPLAY_ORIENTATION == "portrait"
+
+    @JvmStatic
     fun startRunForegroundService(): Boolean {
         val context = agentContext ?: return false
         return RunForegroundService.start(context)
@@ -196,7 +200,8 @@ object RuntimeBridge {
 
     /**
      * Force-stops the target apps the privileged service recorded while
-     * launching on the virtual display. Called once when a run ends naturally.
+     * launching onto the controlled display. Called once when a run ends
+     * naturally.
      */
     @JvmStatic
     fun stopTargetApp(): Boolean {

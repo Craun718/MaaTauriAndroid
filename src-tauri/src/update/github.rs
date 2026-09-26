@@ -2,7 +2,7 @@
 //!
 //! Paginates the release list, filters drafts and (for the stable channel)
 //! pre-releases, picks the newest parseable tag that is newer than the running
-//! version, then chooses the arm64 APK asset the way MaaFwApp does: ABI marker
+//! version, then chooses the APK asset for the compiled Android ABI: ABI marker
 //! preference first, and a sha256 digest is mandatory.
 
 use serde::Deserialize;
@@ -18,9 +18,18 @@ const API_BASE: &str = "https://api.github.com";
 const PAGE_SIZE: usize = 100;
 const MAX_PAGES: usize = 3;
 
-/// Asset-name markers that mean "this APK runs on this device", in preference
-/// order. MaaTauriAndroid only ships arm64 builds.
-pub const ABI_TAGS: [&str; 3] = ["arm64-v8a", "arm64", "aarch64"];
+/// Asset-name markers that mean "this APK runs on this build", in preference
+/// order. Empty on unsupported desktop targets so no wrong-architecture APK can
+/// ever be selected.
+pub fn abi_tags() -> &'static [&'static str] {
+    if cfg!(target_arch = "x86_64") {
+        &["x86_64"]
+    } else if cfg!(target_arch = "aarch64") {
+        &["arm64-v8a", "arm64", "aarch64"]
+    } else {
+        &[]
+    }
+}
 
 /// Headers for the REST API: browser UA plus the versioned JSON accept set.
 pub fn api_headers() -> Vec<(String, String)> {
@@ -165,7 +174,11 @@ async fn fetch_releases(
 /// are skipped and a tag that only offers digest-less APKs fails hard, because
 /// an unverifiable APK must never reach the installer.
 fn pick_asset(assets: &[Asset]) -> Result<&Asset, UpdateError> {
-    for tag in ABI_TAGS {
+    pick_asset_for(abi_tags(), assets)
+}
+
+fn pick_asset_for<'a>(tags: &[&str], assets: &'a [Asset]) -> Result<&'a Asset, UpdateError> {
+    for tag in tags {
         let mut digestless = false;
         for asset in assets {
             let name = asset.name.to_lowercase();
@@ -186,7 +199,7 @@ fn pick_asset(assets: &[Asset]) -> Result<&Asset, UpdateError> {
     }
     Err(UpdateError::new(
         UpdateFailure::NoMatchingAsset,
-        "no arm64 APK asset matched this device",
+        "no APK asset matched this build target",
     ))
 }
 
@@ -236,6 +249,10 @@ mod tests {
         format!(r#"{{"tag_name": "{tag}", {extra}, "assets": [{assets}]}}"#)
     }
 
+    fn runtime_abi_apk_asset(digest: Option<&str>) -> String {
+        apk_asset(&format!("app-{}.apk", abi_tags()[0]), digest)
+    }
+
     fn apk_asset(name: &str, digest: Option<&str>) -> String {
         let digest = digest
             .map(|digest| format!(r#", "digest": "{digest}""#))
@@ -243,6 +260,23 @@ mod tests {
         format!(
             r#"{{"name": "{name}", "size": 7, "browser_download_url": "https://github.com/owner/repo/releases/download/{name}"{digest}}}"#
         )
+    }
+
+    #[test]
+    fn assets_follow_the_requested_runtime_abi() {
+        let digest = format!("sha256:{}", digest_of(b"abi"));
+        let assets: Vec<Asset> = serde_json::from_str(&format!(
+            "[{}, {}]",
+            apk_asset("app-arm64-v8a.apk", Some(&digest)),
+            apk_asset("app-x86_64.apk", Some(&digest)),
+        ))
+        .expect("assets parse");
+
+        let x86 = pick_asset_for(&["x86_64"], &assets).expect("an x86_64 asset matches");
+        assert_eq!(x86.name, "app-x86_64.apk");
+        let arm64 =
+            pick_asset_for(&["arm64-v8a", "arm64"], &assets).expect("an arm64 asset matches");
+        assert_eq!(arm64.name, "app-arm64-v8a.apk");
     }
 
     fn digest_of(content: &[u8]) -> String {
@@ -277,18 +311,12 @@ mod tests {
             release_json(
                 "v1.2.0",
                 r#""prerelease": false, "body": "stable note""#,
-                &apk_asset(
-                    "app-arm64-v8a.apk",
-                    Some(&format!("sha256:{}", digest_of(b"stable"))),
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"stable"))),),
             ),
             release_json(
                 "v1.3.0-beta.1",
                 r#""prerelease": true"#,
-                &apk_asset(
-                    "app-arm64-v8a.apk",
-                    Some(&format!("sha256:{}", digest_of(b"apk")))
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"apk")))),
             ),
             release_json(
                 "v1.1.0",
@@ -322,10 +350,7 @@ mod tests {
             release_json(
                 "v1.3.0-beta.1",
                 r#""prerelease": true, "body": "beta note""#,
-                &apk_asset(
-                    "App-arm64-v8a.APK",
-                    Some(&format!("sha256:{}", digest_of(b"beta")))
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"beta")))),
             ),
         );
         let client = StubClient::new()
@@ -380,10 +405,7 @@ mod tests {
             release_json(
                 "v0.9.0",
                 r#""prerelease": false"#,
-                &apk_asset(
-                    "app-arm64.apk",
-                    Some(&format!("sha256:{}", digest_of(b"apk")))
-                ),
+                &runtime_abi_apk_asset(Some(&format!("sha256:{}", digest_of(b"apk")))),
             ),
         );
         let client = StubClient::new()
@@ -407,8 +429,8 @@ mod tests {
                 r#""prerelease": false"#,
                 &format!(
                     "{}, {}",
-                    apk_asset("app-arm64.apk", Some(&fallback_digest)),
-                    apk_asset("app-arm64-v8a.apk", Some(&good_digest)),
+                    apk_asset("app-fallback.apk", Some(&fallback_digest)),
+                    apk_asset(&format!("app-{}.apk", abi_tags()[0]), Some(&good_digest)),
                 ),
             ),
         );
@@ -419,7 +441,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(release.url.ends_with("app-arm64-v8a.apk"));
+        assert!(release.url.ends_with(&format!("app-{}.apk", abi_tags()[0])));
         assert_eq!(release.sha256, digest_of(b"arm64"));
     }
 
@@ -430,7 +452,7 @@ mod tests {
             release_json(
                 "v2.0.0",
                 r#""prerelease": false"#,
-                &apk_asset("app-arm64-v8a.apk", None),
+                &runtime_abi_apk_asset(None),
             ),
         );
         let client = StubClient::new()
@@ -444,23 +466,15 @@ mod tests {
 
     #[tokio::test]
     async fn no_matching_asset_is_its_own_failure() {
-        let releases = format!(
+        let assets: Vec<Asset> = serde_json::from_str(&format!(
             "[{}]",
-            release_json(
-                "v2.0.0",
-                r#""prerelease": false"#,
-                &apk_asset(
-                    "app-x86_64.apk",
-                    Some(&format!("sha256:{}", digest_of(b"x")))
-                ),
+            apk_asset(
+                "app-x86_64.apk",
+                Some(&format!("sha256:{}", digest_of(b"x")))
             ),
-        );
-        let client = StubClient::new()
-            .with_body("page=1", 200, releases)
-            .with_body("page=2", 200, "[]");
-        let error = latest_release(&client, "owner/repo", "stable", "1.0.0")
-            .await
-            .unwrap_err();
+        ))
+        .expect("assets parse");
+        let error = pick_asset_for(&["arm64-v8a"], &assets).unwrap_err();
         assert_eq!(error.failure, UpdateFailure::NoMatchingAsset);
     }
 

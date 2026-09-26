@@ -32,12 +32,8 @@ import sys
 import zipfile
 from pathlib import Path
 
-ABI = "arm64-v8a"
-REQUIRED_LIBS = (
-    f"lib/{ABI}/libMaaAgentClient.so",
-    f"lib/{ABI}/libMaaAgentServer.so",
-)
 AGENT_LIB_NAMES = ("libMaaAgentClient.so", "libMaaAgentServer.so")
+ABIS = ("arm64-v8a", "x86_64")
 # ZIP stores the entry count in a 16-bit field; anything larger forces ZIP64.
 MAX_ENTRIES = 0xFFFF
 
@@ -57,25 +53,34 @@ def collect(bundle: Path) -> list[tuple[Path, str]]:
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 6):
         raise SystemExit(__doc__)
     bundle = Path(sys.argv[1]).resolve()
     lib_dir = Path(sys.argv[2]).resolve()
     out_zip = Path(sys.argv[3]).resolve()
+    abi = "arm64-v8a"
+    if len(sys.argv) == 6:
+        if sys.argv[4] != "--abi" or sys.argv[5] not in ABIS:
+            raise SystemExit(__doc__)
+        abi = sys.argv[5]
+    required_libs = (
+        f"lib/{abi}/libMaaAgentClient.so",
+        f"lib/{abi}/libMaaAgentServer.so",
+    )
 
     if not bundle.is_dir():
         raise SystemExit(f"bundle directory missing: {bundle}")
     if not (bundle / "agent-core.json").is_file():
         raise SystemExit(f"not an agent core bundle (agent-core.json missing): {bundle}")
 
-    target_lib = bundle / "lib" / ABI
+    target_lib = bundle / "lib" / abi
     target_lib.mkdir(parents=True, exist_ok=True)
     for name in AGENT_LIB_NAMES:
         source = lib_dir / name
         if not source.is_file():
             raise SystemExit(f"agent library missing: {source}")
         (target_lib / name).write_bytes(source.read_bytes())
-        print(f"  + lib/{ABI}/{name}")
+        print(f"  + lib/{abi}/{name}")
 
     items = collect(bundle)
     if len(items) > MAX_ENTRIES:
@@ -99,7 +104,7 @@ def main() -> int:
         for info in archive.infolist():
             if info.external_attr >> 16 & 0xA000 == 0xA000:
                 raise SystemExit(f"archive contains a symlink: {info.filename}")
-        missing = [name for name in REQUIRED_LIBS if name not in names]
+        missing = [name for name in required_libs if name not in names]
         if missing:
             raise SystemExit(f"archive is missing required libraries: {missing}")
 

@@ -565,7 +565,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                     }
                     val result = startGameOnDisplay(target, displayId)
                     val activeDisplayId = virtualDisplay.get()?.display?.displayId
-                    if (result == RESULT_OK && displayId != 0 && displayId == activeDisplayId) {
+                    if (result == RESULT_OK && (displayId == 0 || displayId == activeDisplayId)) {
                         targetPackages.add(appLauncher.packageNameOf(target))
                     }
                     return result

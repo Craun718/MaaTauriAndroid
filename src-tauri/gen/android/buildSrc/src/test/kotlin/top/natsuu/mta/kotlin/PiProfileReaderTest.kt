@@ -54,6 +54,47 @@ class PiProfileReaderTest {
     }
 
     @Test
+    fun resolvesAgentRuntimeAbiPlaceholders() {
+        val profileDirectory = temporaryFolder.newFolder("profile")
+        val arm64Bundle = temporaryFolder.newFile("runtime-arm64-v8a.zip")
+        val x86Bundle = temporaryFolder.newFile("runtime-x86_64.zip")
+        val profile = profileDirectory.resolve("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                resource_id = "game"
+
+                [[agent.runtimes]]
+                bundle = "../runtime-{abi}.zip"
+                exec = "bin/python3"
+                executables = ["bin/python3"]
+                args = ["-u"]
+                working_dir = "{pi}"
+
+                [agent.runtimes.env]
+                LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
+                """.trimIndent(),
+            )
+        }
+
+        val arm64 = PiProfileReader.read(profile)
+        val x86 = PiProfileReader.read(profile, "x86_64")
+        val arm64Runtime = requireNotNull(arm64.agent).runtimes.single()
+        val x86Runtime = requireNotNull(x86.agent).runtimes.single()
+
+        assertEquals(arm64Bundle.canonicalFile, arm64Runtime.bundle)
+        assertEquals(
+            "LD_LIBRARY_PATH={bundle}/lib/arm64-v8a",
+            arm64Runtime.env.entries.single().toString(),
+        )
+        assertEquals(x86Bundle.canonicalFile, x86Runtime.bundle)
+        assertEquals(
+            "LD_LIBRARY_PATH={bundle}/lib/x86_64",
+            x86Runtime.env.entries.single().toString(),
+        )
+    }
+
+    @Test
     fun rejectsApplicationIdUnsafeResourceIds() {
         val profile = temporaryFolder.newFile("pi.toml").apply {
             writeText("pi_assets = \".\"\nresource_id = \"../escape\"")
@@ -90,6 +131,47 @@ class PiProfileReaderTest {
         val result = PiProfileReader.read(profile)
 
         assertEquals("M9A", result.mirrorchyanRid)
+    }
+
+    @Test
+    fun readsVirtualDisplayOrientationAndDefaultsToLandscape() {
+        val portrait = temporaryFolder.newFile("portrait.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                virtual_display_orientation = "portrait"
+                """.trimIndent(),
+            )
+        }
+        val omitted = temporaryFolder.newFile("omitted.toml").apply {
+            writeText("pi_assets = \".\"")
+        }
+
+        assertEquals(
+            VirtualDisplayOrientation.Portrait,
+            PiProfileReader.read(portrait).virtualDisplayOrientation,
+        )
+        assertEquals(
+            VirtualDisplayOrientation.Landscape,
+            PiProfileReader.read(omitted).virtualDisplayOrientation,
+        )
+    }
+
+    @Test
+    fun rejectsUnknownVirtualDisplayOrientation() {
+        val profile = temporaryFolder.newFile("pi.toml").apply {
+            writeText(
+                """
+                pi_assets = "."
+                virtual_display_orientation = "auto"
+                """.trimIndent(),
+            )
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            PiProfileReader.read(profile)
+        }
+        assertTrue(error.message.orEmpty().contains("landscape"))
     }
 
     @Test

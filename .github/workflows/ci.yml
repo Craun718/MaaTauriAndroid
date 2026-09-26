@@ -4,6 +4,14 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      android_abi:
+        description: Android ABI for resource APK jobs
+        type: choice
+        options:
+          - arm64-v8a
+          - x86_64
+        default: arm64-v8a
 
 jobs:
   changes:
@@ -80,6 +88,9 @@ jobs:
   android-rust:
     needs: frontend
     runs-on: ubuntu-latest
+    env:
+      ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
+      ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -88,7 +99,7 @@ jobs:
           path: dist/
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: ${{ env.ANDROID_RUST_TARGET }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -98,16 +109,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri
-          key: android-aarch64
+          key: android-${{ env.ANDROID_RUST_TARGET }}
       - run: |
           toolchain="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
-          echo "AR=$toolchain/llvm-ar" >> "$GITHUB_ENV"
-          echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang" >> "$GITHUB_ENV"
-          echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$toolchain/aarch64-linux-android35-clang" >> "$GITHUB_ENV"
-      - run: cargo check --manifest-path src-tauri/Cargo.toml --target aarch64-linux-android --features tauri/custom-protocol --lib
+          {
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "AR=$toolchain/llvm-ar"
+            echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang"
+            echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$toolchain/aarch64-linux-android35-clang"
+            echo "CC_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang"
+            echo "CXX_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang++"
+            echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$toolchain/x86_64-linux-android35-clang"
+          } >> "$GITHUB_ENV"
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --target "$ANDROID_RUST_TARGET" --features tauri/custom-protocol --lib
 
   m9a-android:
     needs: changes
@@ -120,6 +136,9 @@ jobs:
       # Keep in sync with the MaaFramework binaries vendored in vendor/maa/.
       MAAFW_VERSION: v5.13.0
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
+      ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
+      ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
+      TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -135,7 +154,7 @@ jobs:
           python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: ${{ env.ANDROID_RUST_TARGET }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -152,7 +171,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri
-          key: android-aarch64-apk
+          key: android-${{ env.ANDROID_RUST_TARGET }}-apk
       - uses: actions/cache@v6
         with:
           path: .cache
@@ -186,7 +205,8 @@ jobs:
             --ref 4a19a626ce93ec5ab027e734590213bad7f04c12 \
             --submodules \
             --exclude pillow \
-            --require pillow==11.0.0
+            --require pillow==11.0.0 \
+            --abi "$ANDROID_ABI"
 
       # buildSrc is its own Gradle build: there is no gradlew at the repository
       # root, and the Android settings.gradle applies tauri.settings.gradle,
@@ -196,16 +216,16 @@ jobs:
         working-directory: src-tauri/gen/android/buildSrc
         run: ../gradlew test
 
-      - name: Build the arm64 debug APK
+      - name: Build the $ANDROID_ABI debug APK
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android build --target aarch64 --apk --debug --split-per-abi
+          pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
         with:
-          name: m9a-agent-runtime-arm64-v8a
-          path: resource/m9a-agent-runtime-arm64-v8a.zip
+          name: m9a-agent-runtime-${{ env.ANDROID_ABI }}
+          path: resource/m9a-agent-runtime-${{ env.ANDROID_ABI }}.zip
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v7
@@ -222,6 +242,9 @@ jobs:
       # Keep in sync with scripts/env.sh and the M9A job.
       MAAFW_VERSION: v5.13.0
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
+      ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
+      ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
+      TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -237,7 +260,7 @@ jobs:
           python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: ${{ env.ANDROID_RUST_TARGET }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -254,7 +277,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri
-          key: android-aarch64-narutomobile-apk
+          key: android-${{ env.ANDROID_RUST_TARGET }}-narutomobile-apk
       - uses: actions/cache@v6
         with:
           path: .cache
@@ -288,22 +311,23 @@ jobs:
             --exclude win32-setctime \
             --exclude colorama \
             --exclude jeepney \
-            --require pillow==11.0.0
+            --require pillow==11.0.0 \
+            --abi "$ANDROID_ABI"
 
       - name: Run buildSrc tests
         working-directory: src-tauri/gen/android/buildSrc
         run: ../gradlew test
 
-      - name: Build the arm64 debug APK
+      - name: Build the $ANDROID_ABI debug APK
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android build --target aarch64 --apk --debug --split-per-abi
+          pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
         with:
-          name: narutomobile-agent-runtime-arm64-v8a
-          path: resource/narutomobile-agent-runtime-arm64-v8a.zip
+          name: narutomobile-agent-runtime-${{ env.ANDROID_ABI }}
+          path: resource/narutomobile-agent-runtime-${{ env.ANDROID_ABI }}.zip
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v7
@@ -320,6 +344,9 @@ jobs:
       # Keep in sync with scripts/env.sh and the M9A job.
       MAAFW_VERSION: v5.13.0
       MAAFW_CORE_TAG: 3.13.15-maafw5.13.0
+      ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
+      ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
+      TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -335,7 +362,7 @@ jobs:
           python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: ${{ env.ANDROID_RUST_TARGET }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -352,7 +379,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri
-          key: android-aarch64-maapvz-apk
+          key: android-${{ env.ANDROID_RUST_TARGET }}-maapvz-apk
       - uses: actions/cache@v6
         with:
           path: .cache
@@ -387,22 +414,23 @@ jobs:
             --exclude colorama \
             --exclude jeepney \
             --exclude onnxruntime \
-            --require pillow==11.0.0
+            --require pillow==11.0.0 \
+            --abi "$ANDROID_ABI"
 
       - name: Run buildSrc tests
         working-directory: src-tauri/gen/android/buildSrc
         run: ../gradlew test
 
-      - name: Build the arm64 debug APK
+      - name: Build the $ANDROID_ABI debug APK
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android build --target aarch64 --apk --debug --split-per-abi
+          pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
         with:
-          name: maapvz-agent-runtime-arm64-v8a
-          path: resource/maapvz-agent-runtime-arm64-v8a.zip
+          name: maapvz-agent-runtime-${{ env.ANDROID_ABI }}
+          path: resource/maapvz-agent-runtime-${{ env.ANDROID_ABI }}.zip
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v7

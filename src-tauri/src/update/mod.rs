@@ -926,8 +926,10 @@ mod tests {
     #[tokio::test]
     async fn the_github_source_flows_through_asset_selection() {
         let digest = digest_of(b"github apk");
+        let abi = github::abi_tags()[0];
+        let asset_name = format!("app-{abi}.apk");
         let releases = format!(
-            r#"[{{"tag_name": "v2.0.0", "prerelease": false, "body": "gh note", "assets": [{{"name": "app-arm64-v8a.apk", "size": 11, "browser_download_url": "https://github.com/owner/repo/releases/download/v2.0.0/app-arm64-v8a.apk", "digest": "sha256:{digest}"}}]}}]"#
+            r#"[{{"tag_name": "v2.0.0", "prerelease": false, "body": "gh note", "assets": [{{"name": "{asset_name}", "size": 11, "browser_download_url": "https://github.com/owner/repo/releases/download/v2.0.0/{asset_name}", "digest": "sha256:{digest}"}}]}}]"#
         );
         let stream = http::testing::StreamSpec {
             status: 200,
@@ -938,7 +940,7 @@ mod tests {
             StubClient::new()
                 .with_body("page=1", 200, releases)
                 .with_body("page=2", 200, "[]")
-                .with_stream("app-arm64-v8a.apk", stream),
+                .with_stream(&asset_name, stream),
         );
         let state = UpdateState::with_client(client);
         let env = test_env();

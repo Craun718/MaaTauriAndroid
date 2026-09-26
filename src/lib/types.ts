@@ -237,6 +237,7 @@ export interface UserConfiguration {
   initialized: boolean;
   forceStopTargetApp: boolean;
   closeTargetAppAfterRun: boolean;
+  foregroundMode?: boolean;
   telemetryEnabled: boolean;
   showVirtualDisplayTouches?: boolean;
   showVirtualDisplayFps?: boolean;

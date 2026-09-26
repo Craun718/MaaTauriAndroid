@@ -166,7 +166,9 @@ export function SettingsPage() {
         >
           <span className="font-medium">{t("foregroundMode")}</span>
         </Checkbox>
-        <p className="text-sm text-ink-muted">{t("foregroundModeDescription")}</p>
+        <p className="text-sm text-ink-muted">
+          {t("foregroundModeDescription")}
+        </p>
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.closeTargetAppAfterRun ?? true}

@@ -120,6 +120,7 @@ val preparePiArchive = if (piProfile != null) {
     val syncPiAssets = tasks.register<PiSyncTask>("syncPiAssets") {
         group = "build"
         description = "Resolve the Project Interface pack set from interface.json and sync it"
+        dependsOn("buildKotlinToolingMetadata")
         projectRoot.set(
             file(
                 requireNotNull(piAssets) {

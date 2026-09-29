@@ -214,6 +214,15 @@ jobs:
           } > src-tauri/gen/android/local.properties
           {
             echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358"
+            toolchain="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            echo "AR=$toolchain/llvm-ar"
+            echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang"
+            echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$toolchain/aarch64-linux-android35-clang"
+            echo "CC_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang"
+            echo "CXX_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang++"
+            echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$toolchain/x86_64-linux-android35-clang"
             echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
           } >> "$GITHUB_ENV"
 
@@ -228,14 +237,28 @@ jobs:
             --require pillow==11.0.0 \
             --abi "$ANDROID_ABI"
 
-      - name: Run app unit tests
-        working-directory: src-tauri/gen/android
-        run: ../gradlew ":app:test${TAURI_ANDROID_TARGET^}DebugUnitTest"
+      - name: Generate the Tauri Android Gradle dependencies
+        env:
+          TAURI_ANDROID_PROJECT_PATH: ${{ github.workspace }}/src-tauri/gen/android
+          WRY_ANDROID_PACKAGE: top.natsuu.mta
+          WRY_ANDROID_LIBRARY: maa_tauri_android_lib
+        run: |
+          pnpm install --frozen-lockfile
+          # tauri-build does not declare this variable as a rerun trigger, so
+          # invalidate only the app build script when reusing a cached target.
+          cargo clean --manifest-path src-tauri/Cargo.toml --package maa_tauri_android
+          cargo check --manifest-path src-tauri/Cargo.toml --target "$ANDROID_RUST_TARGET" --lib
 
       - name: Build the $ANDROID_ABI debug APK
         run: |
           pnpm install --frozen-lockfile
           pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
+
+      - name: Run app unit tests
+        working-directory: src-tauri/gen/android
+        run: |
+          flavor="${ANDROID_ABI%-v8a}"
+          ./gradlew ":app:test${flavor^}DebugUnitTest"
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7

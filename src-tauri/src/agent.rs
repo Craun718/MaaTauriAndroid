@@ -957,8 +957,8 @@ mod tests {
         assert_eq!(environment["PI_CLIENT_VERSION"], env!("CARGO_PKG_VERSION"));
         assert_eq!(environment["PI_CLIENT_LANGUAGE"], "zh_cn");
         assert_eq!(environment["PI_VERSION"], "0.1.0");
-        set_maa_framework_version(&mut environment, "1.23.0");
-        assert_eq!(environment["PI_CLIENT_MAAFW_VERSION"], "1.23.0");
+        set_maa_framework_version(&mut environment, "5.14.0");
+        assert_eq!(environment["PI_CLIENT_MAAFW_VERSION"], "5.14.0");
 
         let controller: serde_json::Value =
             serde_json::from_str(&environment["PI_CONTROLLER"]).unwrap();

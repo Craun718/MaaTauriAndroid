@@ -10,8 +10,8 @@ import top.natsuu.mta.IMaaTauriAndroidControlService;
 
 /**
  * Entry point hosted by {@code /system/bin/app_process}: creates the control
- * service, hands its binder back to the app, then watches the app lifecycle
- * binder so the service is destroyed when the app process dies.
+ * service and hands its binder back to the app. The service itself owns the
+ * app lifecycle binder supplied by the bootstrap handshake.
  */
 public final class RootServiceStarter {
 
@@ -19,11 +19,6 @@ public final class RootServiceStarter {
 
     /** Reserved Shizuku user-service transaction; MaaTauriAndroid pins destroy() there too. */
     private static final int DESTROY_TRANSACTION_CODE = 16777114;
-
-    // linkToDeath only watches a BinderProxy while something holds a strong
-    // reference to it, so keep both fields alive for the whole process.
-    private static IBinder appLifecycleBinder;
-    private static IBinder.DeathRecipient appDeathRecipient;
 
     private RootServiceStarter() {
     }
@@ -59,43 +54,29 @@ public final class RootServiceStarter {
             return false;
         }
 
-        primeHeartbeat(createdService.service(), result.appPid());
-
-        try {
-            IBinder.DeathRecipient recipient = () -> {
-                Log.i(TAG, "App process died; destroying the root control service");
-                destroyService(createdService.service());
-                System.exit(0);
-            };
-            IBinder lifecycleBinder = result.lifecycleBinder();
-            lifecycleBinder.linkToDeath(recipient, 0);
-            appLifecycleBinder = lifecycleBinder;
-            appDeathRecipient = recipient;
-            return true;
-        } catch (Throwable error) {
-            Log.e(TAG, "Could not link the app lifecycle binder", error);
-            return false;
-        }
+        return attachOwner(createdService.service(), result.lifecycleBinder());
     }
 
-    /**
-     * Arms the /proc watchdog before the owner token's death recipient lands.
-     * The service polls the pid so it can run its exit cleanup even if the
-     * app is hard-killed during the handshake.
-     */
-    private static void primeHeartbeat(IBinder service, int appPid) {
-        if (appPid <= 0) {
-            return;
+    private static boolean attachOwner(IBinder service, IBinder owner) {
+        IMaaTauriAndroidControlService remote =
+                IMaaTauriAndroidControlService.Stub.asInterface(service);
+        if (remote == null) {
+            return false;
         }
+        int result;
         try {
-            IMaaTauriAndroidControlService remote =
-                    IMaaTauriAndroidControlService.Stub.asInterface(service);
-            if (remote != null) {
-                remote.heartbeat(appPid);
-            }
+            result = remote.attachOwner(owner);
         } catch (Throwable error) {
-            Log.w(TAG, "Could not prime the root service heartbeat", error);
+            Log.w(TAG, "Could not attach the root service owner", error);
+            destroyService(service);
+            return false;
         }
+        if (result != OwnerLease.RESULT_ATTACHED) {
+            Log.w(TAG, "Root service rejected the owner attach: " + result);
+            destroyService(service);
+            return false;
+        }
+        return true;
     }
 
     private static void destroyService(IBinder service) {

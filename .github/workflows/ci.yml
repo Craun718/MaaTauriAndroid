@@ -208,6 +208,10 @@ jobs:
             --require pillow==11.0.0 \
             --abi "$ANDROID_ABI"
 
+      - name: Run app unit tests
+        working-directory: src-tauri/gen/android
+        run: ../gradlew ":app:test${TAURI_ANDROID_TARGET^}DebugUnitTest"
+
       # buildSrc is its own Gradle build: there is no gradlew at the repository
       # root, and the Android settings.gradle applies tauri.settings.gradle,
       # which the Tauri CLI only generates during the APK build below. Run the

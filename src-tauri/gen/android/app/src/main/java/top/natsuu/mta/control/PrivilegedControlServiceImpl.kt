@@ -48,27 +48,16 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     private val targetPackages = TargetPackages(targetPackageStore)
 
     /**
-     * Death watchdog state. The app hands us a process-lifetime binder token via
-     * [registerOwner]; when that token dies the app process is gone for good
-     * (hard kill, crash, force-stop) and nobody will run the graceful cleanup,
-     * so we force-stop the target packages and release the virtual display here.
-     */
-    private val ownerWatch = AtomicReference<OwnerWatch?>(null)
-    private val ownerWatchLock = Any()
-
-    /**
-     * Exit sequence latch: owner binder death, the Shizuku destroy() hook and
-     * the heartbeat watchdog all funnel into [enterExitSequence]; exactly one
-     * of them runs the cleanup and stops the process.
+     * Exit sequence latch: owner binder death and the Shizuku destroy() hook
+     * funnel into [enterExitSequence]; exactly one of them runs the cleanup
+     * and stops the process.
      */
     private val exitSequenceStarted = AtomicBoolean(false)
-    private val heartbeatWatchdog = HeartbeatWatchdog(
-        intervalMs = HEARTBEAT_INTERVAL_MS,
-        processAlive = { pid -> File("/proc/$pid").exists() },
-        onOwnerGone = { pid ->
-            enterExitSequence("Heartbeat watchdog lost the app process (pid=$pid)")
-        },
-    )
+    private val ownerLease = OwnerLease {
+        enterExitSequence(
+            "Owner process died; force-stopping target packages and releasing the virtual display",
+        )
+    }
 
     private val binder = this
 
@@ -121,20 +110,18 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         }
 
         // Last-resort cleanup for graceful termination (SIGTERM, exitProcess):
-        // SIGKILL-style deaths are covered by the owner death recipient and the
-        // heartbeat watchdog instead.
+        // SIGKILL-style deaths are covered by the owner death recipient.
         Runtime.getRuntime().addShutdownHook(
             Thread { runCatching(::exitCleanup) }.apply {
                 name = "maa-control-shutdown-hook"
             },
         )
-        heartbeatWatchdog.start()
     }
 
     /**
      * Force-stops whatever the previous service process still had recorded as
      * running, so no game survives an app exit unattended. Failed stops stay
-     * recorded for the owner-death watchdog or the next reap to retry.
+     * recorded for the next service process to retry.
      */
     private fun reapOrphanTargetPackages() {
         val orphans = targetPackageStore.read()
@@ -168,7 +155,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         // nothing to sample. Idempotent, so exit paths can call it freely.
         GameFpsMonitor.stop()
         // Peek instead of drain: a failed stop keeps its record so the
-        // owner-death watchdog or the next service process can retry it.
+        // next service process can retry it.
         targetPackages.peek().forEach { packageName ->
             val stopped = runCatching { appLauncher.stopPackage(packageName) }
                 .getOrDefault(RESULT_COMMAND_FAILED)
@@ -187,7 +174,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
      * Closes the target app after a run finished naturally (the MaaFwApp
      * "closeAppAfterTask" pattern). The package list lives here because only
      * the privileged side knows what was actually launched. Failed stops stay
-     * recorded, so the owner-death watchdog still retries them later.
+     * recorded so the next service process retries them.
      */
     override fun stopTargetApp(): Boolean {
         if (targetPackages.peek().isEmpty()) {
@@ -204,8 +191,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     /**
      * Samples the game frame rate for the recorded target packages. The app
      * polls this once a second during a run; -1 (UNKNOWN) tells it to fall
-     * back to its own frame counter. A missing transaction (older surviving
-     * service process) surfaces as a binder failure on the app side, not here.
+     * back to its own frame counter. A binder failure surfaces on the app side.
      */
     override fun gameFps(): Float {
         val target = targetPackages.peek().firstOrNull()
@@ -226,8 +212,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
      * recorded as launched here, whether their tasks still exist and on which
      * display, the current top package, and the virtual display's liveness.
      * The app side parses the JSON and turns a task failure into a concrete
-     * cause; a binder-level failure (an older surviving service process)
-     * simply skips diagnostics there.
+     * cause; a binder failure simply skips diagnostics there.
      */
     override fun targetAppState(displayId: Int): String {
         val targets = targetPackages.peek()
@@ -254,35 +239,8 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return state.toString()
     }
 
-    override fun registerOwner(owner: IBinder?) {
-        if (owner == null) return
-        synchronized(ownerWatchLock) {
-            ownerWatch.getAndSet(null)?.let { watch ->
-                // The previous token is usually already dead (its process died);
-                // unlinkToDeath throws in that case and it is safe to ignore.
-                runCatching { watch.token.unlinkToDeath(watch.recipient, 0) }
-            }
-            val recipient = IBinder.DeathRecipient {
-                // Skip stale notifications: a reconnect registers a fresh token,
-                // so only the currently registered owner may trigger the cleanup.
-                if (ownerWatch.get()?.token !== owner) return@DeathRecipient
-                handleOwnerDeath()
-            }
-            runCatching { owner.linkToDeath(recipient, 0) }.onFailure { error ->
-                android.util.Log.w(
-                    "MaaTauriAndroidControl",
-                    "Could not watch the owner binder for death",
-                    error,
-                )
-            }
-            ownerWatch.set(OwnerWatch(owner, recipient))
-        }
-    }
-
-    private fun handleOwnerDeath() {
-        enterExitSequence(
-            "Owner process died; force-stopping target packages and releasing the virtual display",
-        )
+    override fun attachOwner(owner: IBinder?): Int {
+        return ownerLease.attach(owner)
     }
 
     /**
@@ -297,24 +255,19 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         )
     }
 
-    override fun heartbeat(appPid: Int) {
-        heartbeatWatchdog.heartbeat(appPid)
-    }
-
     private fun stopServiceProcess() {
         android.os.Process.killProcess(android.os.Process.myPid())
         exitProcess(0)
     }
 
     /**
-     * Single exit path shared by every teardown trigger (owner binder death,
-     * Shizuku destroy(), the heartbeat watchdog). Latched: whichever fires
-     * first runs the cleanup and stops the process; the rest return at once.
+     * Single exit path shared by every teardown trigger (owner binder death and
+     * Shizuku destroy()). Latched: whichever fires first runs the cleanup and
+     * stops the process; the rest return at once.
      */
     private fun enterExitSequence(reason: String) {
         if (!exitSequenceStarted.compareAndSet(false, true)) return
         android.util.Log.w("MaaTauriAndroidControl", reason)
-        heartbeatWatchdog.stop()
         exitCleanup()
         stopServiceProcess()
     }
@@ -520,8 +473,6 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     override fun stopAllAgents() {
         agentRuntimeManager.stopAll()
     }
-
-    override fun protocolVersion(): Int = PROTOCOL_VERSION
 
     private fun capture(displayId: Int): ByteArray {
         val process = if (displayId == 0) {
@@ -904,14 +855,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return readEnd
     }
 
-    private class OwnerWatch(
-        val token: IBinder,
-        val recipient: IBinder.DeathRecipient,
-    )
-
     companion object {
-        const val PROTOCOL_VERSION = 6
-        private const val HEARTBEAT_INTERVAL_MS = 1_000L
         private const val TOUCH_MARKER_FIELDS = 5
         private const val TOUCH_MARKER_LIMIT = 256
         const val METHOD_START_GAME = 1

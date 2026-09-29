@@ -7,11 +7,8 @@ import android.os.ParcelFileDescriptor;
 import android.view.Surface;
 
 /**
- * Transaction ids are pinned explicitly and only ever appended: an app upgrade
- * may find a privileged service process from the old build still alive, and
- * both sides talk by transaction code, so inserting or reordering methods
- * would silently misroute calls. destroy() = 16777114 is the transaction id
- * the Shizuku server reserves for user services.
+ * Transaction ids are pinned explicitly. destroy() = 16777114 is the
+ * transaction id the Shizuku server reserves for user services.
  */
 interface IMaaTauriAndroidControlService {
     ParcelFileDescriptor captureFrame(int displayId) = 1;
@@ -37,43 +34,34 @@ interface IMaaTauriAndroidControlService {
     void stopAgent(String executionId) = 16;
     void stopAllAgents() = 17;
     int[] setTouchMarkersEnabled(boolean enabled) = 18;
-    int protocolVersion() = 19;
 
     /**
-     * Hands the service a process-lifetime binder token from the app. The service
-     * links a death recipient to it, so when the app process dies in any way
-     * (hard kill, crash, force-stop) the privileged process can still force-stop
-     * the target packages and release the virtual display before exiting.
+     * Claims the service for one app process by handing over a process-lifetime
+     * owner binder. The acknowledgement proves that death watching is armed
+     * before stateful calls are allowed; when the owner dies, the service runs
+     * its cleanup and exits.
+     *
+     * Returns 0 when attached, or a nonzero OwnerLease result on rejection.
      */
-    oneway void registerOwner(in IBinder owner) = 20;
-
-    /**
-     * Reports the app pid once, right after the binder arrives. The service
-     * polls /proc/<pid> as a fallback owner watchdog: linkToDeath on the owner
-     * token is the primary app-death signal, this covers the window before
-     * that recipient is registered (or if its notification is lost).
-     */
-    oneway void heartbeat(int appPid) = 21;
+    int attachOwner(in IBinder owner) = 19;
 
     /**
      * Force-stops the target packages recorded on the virtual display during
      * the run. The privileged side is the only one that knows which apps were
      * actually launched, so no package name travels from the app. Returns
      * false when nothing was recorded or a stop failed; failed stops stay
-     * recorded for the owner-death watchdog or exit cleanup to retry.
+     * recorded for exit cleanup to retry.
      */
-    boolean stopTargetApp() = 22;
+    boolean stopTargetApp() = 20;
 
     /**
      * Samples the current game frame rate for the packages recorded on the
      * virtual display. Returns -1 when nothing is being monitored (no target
      * package, no matching task, or the device lacks the frame-rate callback);
      * 0 means the display went silent. The app polls this once a second while
-     * a run is active. Added after 22 without bumping the service version: an
-     * older surviving service process simply fails this call and the app side
-     * falls back to its own frame counter.
+     * a run is active.
      */
-    float gameFps() = 23;
+    float gameFps() = 21;
 
     /**
      * Reports the state of the controlled display for run diagnostics: which
@@ -81,10 +69,9 @@ interface IMaaTauriAndroidControlService {
      * which display, what the top package on the display is, and whether the
      * virtual display is still alive. Returns a JSON string; a binder failure
      * means the caller skips diagnostics entirely (same fallback contract as
-     * gameFps). Appended after 23 without bumping the service version: an
-     * older surviving service process simply fails this call.
+     * gameFps).
      */
-    String targetAppState(int displayId) = 24;
+    String targetAppState(int displayId) = 22;
 
     /**
      * Reserved Shizuku user-service transaction: the server invokes it when it

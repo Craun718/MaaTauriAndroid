@@ -1577,8 +1577,8 @@ fn call_runtime_bridge_optional_string_with_int(
 }
 
 /// One display-state snapshot for run diagnostics, or `None` when the
-/// privileged service cannot be asked (an older surviving service process, a
-/// binder failure) — the diagnosis then stays silent.
+/// privileged service cannot be asked (a binder failure) — the diagnosis then
+/// stays silent.
 #[cfg(target_os = "android")]
 fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
     let raw = call_runtime_bridge_optional_string_with_int(

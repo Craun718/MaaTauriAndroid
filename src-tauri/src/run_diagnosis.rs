@@ -6,7 +6,7 @@
 //!
 //! # Design
 //!
-//! One privileged query, `targetAppState(displayId)` (AIDL transaction 24),
+//! One privileged query, `targetAppState(displayId)`,
 //! reports which target packages were recorded as launched, whether their
 //! tasks still exist and on which display, which package is on top of the
 //! controlled display, and whether the virtual display itself is still alive.
@@ -16,10 +16,9 @@
 //! begins on an empty display) and once when a task fails (a `Diagnosis:`
 //! line classifying the failure).
 //!
-//! Old surviving privileged service processes lack transaction 24; the probe
-//! then returns `None`, `classify` answers [`FailureCause::QueryUnavailable`],
-//! and no diagnosis line is appended — the same fallback contract as
-//! `gameFps()`.
+//! A failed probe returns `None`, `classify` answers
+//! [`FailureCause::QueryUnavailable`], and no diagnosis line is appended — the
+//! same fallback contract as `gameFps()`.
 //!
 //! # Miss tracking
 //!
@@ -81,8 +80,8 @@ pub struct TargetTaskState {
 /// the recorded targets' task states.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FailureCause {
-    /// The privileged service could not be queried (an older surviving
-    /// service process, or a binder failure). No diagnosis is reported.
+    /// The privileged service could not be queried (a binder failure). No
+    /// diagnosis is reported.
     QueryUnavailable,
     /// The virtual display backing the run was lost.
     DisplayGone,

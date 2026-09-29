@@ -17,7 +17,7 @@ import java.lang.reflect.Method;
  * system_server for the provider binder
  * ({@code getContentProviderExternal}), then calls the provider with the
  * launch token and the service binder. The provider answers with the app
- * lifecycle binder and pid so the root service can watch the app process.
+ * lifecycle binder so the root service can watch the app process.
  */
 public final class RootServiceBootstrapClient {
 
@@ -28,8 +28,8 @@ public final class RootServiceBootstrapClient {
     private RootServiceBootstrapClient() {
     }
 
-    /** Handshake result: the app lifecycle binder and the app process pid. */
-    public record BootstrapResult(IBinder lifecycleBinder, int appPid) {
+    /** Handshake result: the app's process-lifecycle binder. */
+    public record BootstrapResult(IBinder lifecycleBinder) {
     }
 
     public static BootstrapResult attachRemoteService(
@@ -86,8 +86,7 @@ public final class RootServiceBootstrapClient {
                 Log.e(TAG, "Root bootstrap app lifecycle binder missing or dead");
                 return null;
             }
-            int appPid = reply.getInt(RootServiceBootstrapRegistry.KEY_APP_PID, 0);
-            return new BootstrapResult(lifecycleBinder, appPid);
+            return new BootstrapResult(lifecycleBinder);
         } catch (Throwable error) {
             Log.e(TAG, "Failed to send the root service binder back to the app", error);
             return null;

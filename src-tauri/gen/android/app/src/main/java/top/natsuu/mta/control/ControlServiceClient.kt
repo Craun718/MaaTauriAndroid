@@ -349,6 +349,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             return
         }
         mainHandler.post {
+            if (rootBinder !== binder) return@post
             connectToService(binder)
             rootConnecting.set(false)
             completeRootConnectionRequest(true)
@@ -357,9 +358,15 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     private fun connectToService(binder: IBinder) {
         val service = IMaaTauriAndroidControlService.Stub.asInterface(binder)
+        if (!attachOwner(service)) {
+            rejectService(service)
+            RuntimeBridge.setControlState(STATE_ERROR)
+            completeConnectionRequest(false)
+            completePermissionRequest(false)
+            completeRootConnectionRequest(false)
+            return
+        }
         ControlHost.attach(service)
-        registerOwnerSafely(service)
-        heartbeatSafely(service)
         RuntimeBridge.setControlState(STATE_CONNECTED)
         completeConnectionRequest(true)
         completePermissionRequest(true)
@@ -397,30 +404,40 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         ControlHost.detach()
     }
 
-    private fun registerOwnerSafely(service: IMaaTauriAndroidControlService?) {
-        if (service == null) return
-        runCatching {
-            service.registerOwner(ControlHost.ownerBinder())
+    private fun attachOwner(service: IMaaTauriAndroidControlService?): Boolean {
+        val result = runCatching {
+            service?.attachOwner(ControlHost.ownerBinder())
         }.onFailure { error ->
-            Log.w(TAG, "Could not register the owner token with the privileged service", error)
-        }
+            Log.w(TAG, "Could not attach the owner token to the privileged service", error)
+        }.getOrDefault(OwnerLease.RESULT_WATCH_FAILED)
+        if (result == OwnerLease.RESULT_ATTACHED) return true
+
+        Log.w(
+            TAG,
+            "The privileged service rejected the owner attach (result=$result)",
+        )
+        return false
     }
 
-    private fun heartbeatSafely(service: IMaaTauriAndroidControlService?) {
-        if (service == null) return
-        runCatching {
-            service.heartbeat(Process.myPid())
-        }.onFailure { error ->
-            Log.w(TAG, "Could not report the app pid to the privileged service", error)
+    private fun destroyServiceSafely(service: IMaaTauriAndroidControlService?) {
+        if (service != null) {
+            runCatching { service.destroy() }.onFailure { error ->
+                Log.w(TAG, "Could not destroy the rejected privileged service", error)
+            }
         }
     }
 
     private fun destroyCurrentServiceSafely() {
-        ControlHost.current()?.let { service ->
-            runCatching { service.destroy() }.onFailure { error ->
-                Log.w(TAG, "Could not destroy the privileged service process", error)
-            }
+        destroyServiceSafely(ControlHost.current())
+    }
+
+    private fun rejectService(service: IMaaTauriAndroidControlService?) {
+        destroyServiceSafely(service)
+        if (bound) {
+            Shizuku.unbindUserService(serviceArgs, this, true)
+            bound = false
         }
+        removeRootBinder()
     }
 
     private fun removeRootBinder() {
@@ -544,7 +561,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     companion object {
         private const val TAG = "MaaTauriAndroidControl"
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 13
+        private const val SERVICE_VERSION = 14
         private const val ROOT_CONNECT_TIMEOUT_MS = 15_000L
         private const val SWITCH_TIMEOUT_MS = 18_000L
         private const val PREFERENCES_NAME = "privileged_backend"

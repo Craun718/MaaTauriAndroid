@@ -1163,8 +1163,8 @@ fn wait_for_modal_acks(tasker: &Arc<Tasker>) {
 }
 
 /// `state_probe` asks the privileged side for one snapshot of the controlled
-/// display (`crate::run_diagnosis`); on desktop builds and old service
-/// processes it answers `None` and diagnosis stays silent. The snapshot is
+/// display (`crate::run_diagnosis`); on desktop builds or a failed query it
+/// answers `None` and diagnosis stays silent. The snapshot is
 /// consumed before the first task (an empty-display hint) and on a task
 /// failure (the concrete cause).
 pub fn run_tasks(

@@ -22,7 +22,6 @@ object RootServiceBootstrapRegistry {
     const val KEY_TOKEN = "token"
     const val KEY_SERVICE_BINDER = "service_binder"
     const val KEY_APP_BINDER = "app_binder"
-    const val KEY_APP_PID = "app_pid"
 
     private val pendingBinders = ConcurrentHashMap<String, CompletableFuture<IBinder>>()
     private val appLifecycleBinder: IBinder = Binder()

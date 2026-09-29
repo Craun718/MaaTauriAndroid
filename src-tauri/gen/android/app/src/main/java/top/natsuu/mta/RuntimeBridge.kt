@@ -665,9 +665,8 @@ object RuntimeBridge {
 
     /**
      * One frame-rate sample from the privileged service, or -1 when unknown.
-     * No log on failure on purpose: an older surviving service process lacks
-     * the gameFps transaction and would fail every second during a run; the
-     * caller treats -1 as its cue to use its own frame counter.
+     * No log on failure on purpose: the caller treats -1 as its cue to use its
+     * own frame counter.
      */
     @JvmStatic
     fun gameFps(): Float {
@@ -678,9 +677,8 @@ object RuntimeBridge {
 
     /**
      * One display-state snapshot for run diagnostics, or null when the
-     * privileged service cannot be asked. No log on failure on purpose: an
-     * older surviving service process lacks the targetAppState transaction,
-     * and the caller skips diagnostics entirely in that case.
+     * privileged service cannot be asked. No log on failure on purpose: the
+     * caller skips diagnostics entirely in that case.
      */
     @JvmStatic
     fun targetAppState(displayId: Int): String? {

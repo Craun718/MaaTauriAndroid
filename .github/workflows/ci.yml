@@ -240,6 +240,8 @@ jobs:
       - name: Generate the Tauri Android Gradle dependencies
         env:
           TAURI_ANDROID_PROJECT_PATH: ${{ github.workspace }}/src-tauri/gen/android
+          WRY_ANDROID_PACKAGE: top.natsuu.mta
+          WRY_ANDROID_LIBRARY: maa_tauri_android_lib
         run: |
           pnpm install --frozen-lockfile
           # tauri-build does not declare this variable as a rerun trigger, so

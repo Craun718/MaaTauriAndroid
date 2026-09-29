@@ -616,16 +616,33 @@ describe("run configuration tabs and flat task list", () => {
     expect(saved.runConfigurations[0].tasks[0].taskName).toBe("糖果");
   });
 
-  it("removes a task from the list", async () => {
+  it("removes a task only after the confirmation", async () => {
     renderTasksPage();
 
     const removeButtons = screen.getAllByRole("button", { name: "Remove" });
     fireEvent.click(removeButtons[0]);
 
+    expect(saveConfiguration).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("This removes 糖果 from the current configuration."),
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
     await waitFor(() => expect(saveConfiguration).toHaveBeenCalledTimes(1));
     const saved = saveConfiguration.mock.calls[0][0] as UserConfiguration;
     expect(saved.runConfigurations[0].tasks).toHaveLength(1);
     expect(saved.runConfigurations[0].tasks[0].taskName).toBe("整理");
+  });
+
+  it("keeps the task when the confirmation is cancelled", async () => {
+    renderTasksPage();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(saveConfiguration).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(2);
   });
 });
 

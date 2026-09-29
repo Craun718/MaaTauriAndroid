@@ -582,6 +582,7 @@ function TaskItem({
 }: TaskItemProps) {
   const { t } = useTranslation();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const unavailable =
     (task.controllers.length > 0 &&
       !task.controllers.includes(controllerName)) ||
@@ -607,6 +608,11 @@ function TaskItem({
   function closeDetails() {
     commitLabel();
     setDetailsOpen(false);
+  }
+
+  function confirmRemove() {
+    setRemoveConfirmOpen(false);
+    onRemove();
   }
 
   return (
@@ -644,24 +650,25 @@ function TaskItem({
             >
               {locked ? <Eye size="0.875rem" /> : <SquarePen size="0.875rem" />}
             </button>
-            <Checkbox
-              className="h-7 shrink-0 gap-1.5 text-xs"
-              checked={configured.enabled}
-              disabled={unavailable || locked}
-              onCheckedChange={onEnabledChange}
-            >
-              {t("toggleOn")}
-            </Checkbox>
           </div>
           <button
             type="button"
-            onClick={onRemove}
+            onClick={() => setRemoveConfirmOpen(true)}
             aria-label={t("removeTask")}
+            aria-haspopup="dialog"
             disabled={locked}
             className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
           >
             <Trash2 size="0.875rem" />
           </button>
+          <Checkbox
+            className="h-7 shrink-0 gap-1.5 text-xs"
+            checked={configured.enabled}
+            disabled={unavailable || locked}
+            onCheckedChange={onEnabledChange}
+          >
+            {t("toggleOn")}
+          </Checkbox>
         </div>
         {unavailable && (
           <p className="mt-2 text-xs text-ink-muted">
@@ -735,6 +742,32 @@ function TaskItem({
             <RichDescription text={task.description} />
           </>
         )}
+      </Modal>
+      <Modal
+        open={removeConfirmOpen}
+        onClose={() => setRemoveConfirmOpen(false)}
+        title={t("removeTaskConfirmTitle")}
+      >
+        <p className="text-sm">
+          {t("removeTaskConfirmWarning", { task: label })}
+        </p>
+        <p className="text-xs text-ink-muted">{t("removeTaskConfirmHint")}</p>
+        <div className="flex justify-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={confirmRemove}
+            className="h-10 min-w-20 rounded-md border border-red-500/50 px-3 font-medium text-red-600 dark:text-red-300"
+          >
+            {t("confirm")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRemoveConfirmOpen(false)}
+            className="h-10 min-w-20 rounded-md border border-line px-3"
+          >
+            {t("cancel")}
+          </button>
+        </div>
       </Modal>
     </>
   );

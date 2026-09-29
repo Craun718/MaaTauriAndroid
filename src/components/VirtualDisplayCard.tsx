@@ -241,7 +241,7 @@ export function VirtualDisplayCard() {
             status={status}
             showTouchMarkers={showTouchMarkers}
             interactive={false}
-            className="absolute inset-0"
+            className="h-full w-full"
           />
           {fpsBadge(false)}
         </div>

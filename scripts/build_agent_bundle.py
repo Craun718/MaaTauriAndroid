@@ -56,6 +56,7 @@ CORE_TAG = "3.13.15-maafw5.12.3"
 CORE_PY = "3.13.15"
 CORE_URL = "https://github.com/{repo}/releases/download/{tag}/{asset}"
 CORE_MANIFEST = "agent-core.json"
+ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 # 下载与解包都落在项目里，跨构建复用
 WORK_DIR = Path(__file__).resolve().parents[1] / ".maafw"
@@ -483,6 +484,14 @@ def pack_site_packages(site: Path) -> tuple[int, list[str]]:
     archive = site / "pure.zip"
     kept: list[str] = []
     zipped: list[Path] = []
+
+    def write_file(path: Path, name: str) -> None:
+        info = zipfile.ZipInfo(name, date_time=ZIP_EPOCH)
+        info.compress_type = zipfile.ZIP_DEFLATED
+        info.compresslevel = 9
+        info.external_attr = 0o644 << 16
+        sink.writestr(info, path.read_bytes())
+
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as sink:
         for child in sorted(site.iterdir()):
             if child.name == archive.name:
@@ -493,10 +502,10 @@ def pack_site_packages(site: Path) -> tuple[int, list[str]]:
             if child.is_dir():
                 for path in sorted(child.rglob("*")):
                     if path.is_file():
-                        sink.write(path, path.relative_to(site).as_posix())
+                        write_file(path, path.relative_to(site).as_posix())
                 zipped.append(child)
             elif child.suffix == ".py":
-                sink.write(child, child.name)
+                write_file(child, child.name)
                 zipped.append(child)
     for path in zipped:
         rmtree(path) if path.is_dir() else path.unlink()

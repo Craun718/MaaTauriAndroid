@@ -82,6 +82,16 @@ pnpm install       # 安装 Node 依赖（同时安装 husky 钩子）
 pnpm dev           # 前端开发服务器
 ```
 
+一键出包（传入已 clone 好的资源项目 profile，内含 agent runtime 构建和 APK 打包；签名按当前 commit 是否有 tag 自动选择 release / debug）：
+
+```bash
+scripts/build_apk.py --profile resource/m9a.toml
+scripts/build_apk.py --profile resource/m9a.toml --abi x86_64
+scripts/build_apk.py --profile resource/m9a.toml --release
+```
+
+资源项目由 CI 在构建期 clone；本地使用时先手动 clone 到 `resource/<resource_id>/`，再执行上述命令。资源不进 git。
+
 本地检查：
 
 ```bash

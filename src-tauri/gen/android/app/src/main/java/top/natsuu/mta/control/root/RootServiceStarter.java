@@ -7,6 +7,7 @@ import android.os.Parcel;
 import android.util.Log;
 
 import top.natsuu.mta.IMaaTauriAndroidControlService;
+import top.natsuu.mta.control.OwnerLease;
 
 /**
  * Entry point hosted by {@code /system/bin/app_process}: creates the control

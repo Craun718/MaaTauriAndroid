@@ -14,6 +14,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RESOURCE_ID = re.compile(r"[a-z][a-z0-9_-]*")
+ZIP_EPOCH_TIMESTAMP = 315532800
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> None:
@@ -72,7 +73,22 @@ def clone(url: str, ref: str, resource_id: str, submodules: bool) -> Path:
     return path
 
 
+def export_source_timestamp(project_dir: Path) -> None:
+    try:
+        output = subprocess.check_output(
+            ["git", "log", "-1", "--format=%ct", "HEAD"],
+            cwd=project_dir,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        timestamp = int(output.strip())
+    except (OSError, subprocess.SubprocessError, ValueError):
+        timestamp = 0
+    os.environ["SOURCE_DATE_EPOCH"] = str(max(timestamp, ZIP_EPOCH_TIMESTAMP))
+
+
 def build(arguments: argparse.Namespace, resource_id: str) -> None:
+    export_source_timestamp(REPO_ROOT / "resource" / resource_id)
     run(
         [
             sys.executable,

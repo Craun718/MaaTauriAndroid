@@ -30,12 +30,20 @@ import hashlib
 import os
 import sys
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 AGENT_LIB_NAMES = ("libMaaAgentClient.so", "libMaaAgentServer.so")
 ABIS = ("arm64-v8a", "x86_64")
 # ZIP stores the entry count in a 16-bit field; anything larger forces ZIP64.
 MAX_ENTRIES = 0xFFFF
+ZIP_EPOCH_TIMESTAMP = 315532800
+
+
+def zip_date_time() -> tuple[int, int, int, int, int, int]:
+    source_timestamp = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
+    timestamp = max(source_timestamp, ZIP_EPOCH_TIMESTAMP)
+    return datetime.fromtimestamp(timestamp, timezone.utc).timetuple()[:6]
 
 
 def collect(bundle: Path) -> list[tuple[Path, str]]:
@@ -92,7 +100,7 @@ def main() -> int:
     with zipfile.ZipFile(out_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9,
                          allowZip64=False) as sink:
         for source, relative in items:
-            info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+            info = zipfile.ZipInfo(relative, date_time=zip_date_time())
             info.external_attr = (0o100755 if os.access(source, os.X_OK) else 0o100644) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             data = source.read_bytes()

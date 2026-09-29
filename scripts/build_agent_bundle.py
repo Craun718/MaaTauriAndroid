@@ -49,6 +49,7 @@ import tempfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 CORE_REPO = "Aliothmoon/MaaAgentCoreAndroid"
@@ -56,7 +57,7 @@ CORE_TAG = "3.13.15-maafw5.12.3"
 CORE_PY = "3.13.15"
 CORE_URL = "https://github.com/{repo}/releases/download/{tag}/{asset}"
 CORE_MANIFEST = "agent-core.json"
-ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
+ZIP_EPOCH_TIMESTAMP = 315532800
 
 # 下载与解包都落在项目里，跨构建复用
 WORK_DIR = Path(__file__).resolve().parents[1] / ".maafw"
@@ -213,6 +214,12 @@ def rmtree(path: Path) -> None:
 def normalize(name: str) -> str:
     """PEP 503 的包名归一：StrEnum / strenum / str_enum 是同一个包"""
     return re.sub(r"[-_.]+", "-", name).strip().lower()
+
+
+def zip_date_time() -> tuple[int, int, int, int, int, int]:
+    source_timestamp = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
+    timestamp = max(source_timestamp, ZIP_EPOCH_TIMESTAMP)
+    return datetime.fromtimestamp(timestamp, timezone.utc).timetuple()[:6]
 
 
 def requirement_name(spec: str) -> str:
@@ -486,7 +493,7 @@ def pack_site_packages(site: Path) -> tuple[int, list[str]]:
     zipped: list[Path] = []
 
     def write_file(path: Path, name: str) -> None:
-        info = zipfile.ZipInfo(name, date_time=ZIP_EPOCH)
+        info = zipfile.ZipInfo(name, date_time=zip_date_time())
         info.compress_type = zipfile.ZIP_DEFLATED
         info.compresslevel = 9
         info.external_attr = 0o644 << 16

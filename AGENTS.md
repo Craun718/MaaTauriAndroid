@@ -106,9 +106,10 @@ daisyUI 把自己的样式包在 `@layer utilities > daisyui.*` 子层里，而�
 | ----------------------------------------------------- | ------------------------------------------------ |
 | `*.{ts,tsx}`                                          | `tsc --noEmit`，整项目类型检查                   |
 | `*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,svg,html}` | `biome check --write`，格式化并 lint 后自动重新暂存 |
+| `*.{py,pyi}`                                          | `ruff check`，只检查不自动改                     |
 | `*.rs`                                                | `cargo fmt --manifest-path src-tauri/Cargo.toml` |
 
-两个细节：`tsc` 不接受单个文件路径，`cargo fmt` 只能整 crate 格式化，因此这两项都以函数形式配置——不拼接暂存文件名。`cargo fmt` 之所以安全，是因为 CI 有 `cargo fmt --check`，未参与本次提交的 `.rs` 文件本来就是干净的。
+三个细节：`tsc` 不接受单个文件路径，`cargo fmt` 只能整 crate 格式化，因此这两项都以函数形式配置——不拼接暂存文件名；Ruff 相反，逐文件检查正合它意（配置由它自己按 `ruff.toml` 逐文件解析），所以直接串命令。`cargo fmt` 之所以安全，是因为 CI 有 `cargo fmt --check`，未参与本次提交的 `.rs` 文件本来就是干净的。Ruff 刻意不加 `--fix`，免得自动改写 `scripts/build_agent_bundle.py` 这个 vendored 副本；它也不在仓库依赖里，本地没装的话钩子会失败（`uv tool install ruff==0.16.2`）。
 
 钩子由 `pnpm install` 触发的 `prepare` 脚本安装，`core.hooksPath` 指向 `.husky/_`。Biome 规则在 `biome.json`：`resource/`（CI-only checkout，JSON 被 `resource/m9a.toml` 的 sha256 锁定）、`vendor/`、`src-tauri/gen/` 一律不处理。Biome 不覆盖 Markdown 和 YAML，这些文件不进入 pre-commit 格式化流程。紧急情况下用 `git commit --no-verify` 跳过。
 

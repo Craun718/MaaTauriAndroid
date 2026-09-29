@@ -21,6 +21,13 @@ export default defineConfig({
   "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,svg,html}":
     "biome check --write --no-errors-on-unmatched",
 
+  // Ruff checks the staged Python files; passing filepaths is safe because Ruff
+  // discovers ruff.toml up the tree. Only checking (no `--fix`) keeps the
+  // AGPL-3.0 vendored scripts/build_agent_bundle.py as close to upstream as its
+  // header promises. Needs `ruff` on PATH — see AGENTS.md. The same check runs
+  // over the whole repository in CI, so files outside this commit stay clean.
+  "*.{py,pyi}": "ruff check",
+
   // `cargo fmt` always formats the whole crate rather than a single file. That
   // is safe here because CI enforces `cargo fmt --check`, so files that are not
   // part of this commit are already rustfmt-clean and stay untouched.

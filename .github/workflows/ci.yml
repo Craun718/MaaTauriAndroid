@@ -173,7 +173,7 @@ jobs:
       # MAAFW_CORE_REPO defaults to scripts/env.sh.
       # Keep in sync with the MaaFramework binaries vendored in vendor/maa/.
       MAAFW_VERSION: v5.14.0
-      MAAFW_CORE_TAG: 3.13.15-maafw5.14.0
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.0
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -301,7 +301,7 @@ jobs:
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
       MAAFW_VERSION: v5.14.0
-      MAAFW_CORE_TAG: 3.13.15-maafw5.14.0
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.0
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -402,7 +402,7 @@ jobs:
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
       MAAFW_VERSION: v5.14.0
-      MAAFW_CORE_TAG: 3.13.15-maafw5.14.0
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.0
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}

@@ -1233,34 +1233,6 @@ fn get_schedule_status(state: State<'_, AppState>) -> Result<schedule::ScheduleS
     state.schedule_store()?.summary().map_err(AppError::from)
 }
 
-/// Best-effort close of the target apps the privileged service launched on
-/// the virtual display during the run; the outcome is recorded in the log.
-fn stop_target_app_after_run(logger: &run_log::RunLogger) {
-    #[cfg(target_os = "android")]
-    {
-        let stopped = call_runtime_bridge_boolean("stopTargetApp").unwrap_or(false);
-        let _ = logger.append_to_ui(
-            if stopped {
-                run_log::RunEventKind::Task
-            } else {
-                run_log::RunEventKind::Warning
-            },
-            runtime::RunState::Idle,
-            if stopped {
-                "The target app was closed".to_string()
-            } else {
-                "The target app was not closed".to_string()
-            },
-            None,
-            None,
-        );
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = logger;
-    }
-}
-
 #[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean_with_bool(
     method: &'static str,
@@ -1994,8 +1966,14 @@ async fn start_run_core(
                         return;
                     }
                 };
-                // MaaFwApp semantics: only natural endings (completed or
-                // failed) close the target app; a user stop changes nothing.
+                // MaaFwApp semantics: only natural endings (completed or failed)
+                // close the target app; a user stop changes nothing.
+                //
+                // Closing the app means tearing the display session down: the
+                // target runs *on* the virtual display, so releasing the display
+                // (owned by the run foreground service) is what closes it. With
+                // the setting off the session — display, preview stream and target
+                // app — stays alive until the user ends it from the display card.
                 let should_close_target_app =
                     close_target_app_after_run && outcome.is_natural_end();
                 let task_name = if let runtime::RunOutcome::Failed { task_name, .. } = &outcome {
@@ -2075,7 +2053,9 @@ async fn start_run_core(
                         }
                     };
                 sessions.finish_with(&run_execution_id, || {
-                    stop_run_foreground_service();
+                    if should_close_target_app {
+                        stop_run_foreground_service();
+                    }
                     if let Ok(event) =
                         logger_for_run.append(kind, state, message.clone(), task_name, data)
                     {
@@ -2101,9 +2081,6 @@ async fn start_run_core(
                         message,
                     );
                 });
-                if should_close_target_app {
-                    stop_target_app_after_run(&logger_for_run);
-                }
             }
             Ok(Err(error)) => {
                 sessions.finish_with(&run_execution_id, || {

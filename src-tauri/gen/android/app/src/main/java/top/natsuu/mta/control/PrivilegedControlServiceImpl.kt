@@ -134,6 +134,16 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         stopTargetPackages()
     }
 
+    /**
+     * Tears the display session down: release the virtual display and close the
+     * target apps recorded on it. The two cannot be separated — the target runs
+     * *on* the virtual display, so an app left running after its display was
+     * released would be a zombie with nothing to draw to.
+     *
+     * Whether the session is torn down at all is decided on the app side: after a
+     * natural run end `closeTargetAppAfterRun` gates it, a user stop ends it
+     * explicitly from the display card, and app exit / owner death always end it.
+     */
     override fun stopVirtualDisplay() {
         stopTargetPackages()
         releaseVirtualDisplay()
@@ -156,17 +166,25 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         GameFpsMonitor.stop()
         // Peek instead of drain: a failed stop keeps its record so the
         // next service process can retry it.
+        val stoppedPackages = mutableListOf<String>()
         targetPackages.peek().forEach { packageName ->
             val stopped = runCatching { appLauncher.stopPackage(packageName) }
                 .getOrDefault(RESULT_COMMAND_FAILED)
             if (stopped == RESULT_OK) {
                 targetPackages.remove(packageName)
+                stoppedPackages += packageName
             } else {
                 android.util.Log.w(
                     "MaaTauriAndroidControl",
                     "Could not force-stop the target app; it stays recorded for a retry: $packageName",
                 )
             }
+        }
+        if (stoppedPackages.isNotEmpty()) {
+            android.util.Log.i(
+                "MaaTauriAndroidControl",
+                "Force-stopped target packages: $stoppedPackages",
+            )
         }
     }
 

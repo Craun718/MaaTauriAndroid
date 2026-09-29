@@ -182,6 +182,9 @@ export function SettingsPage() {
         >
           <span className="font-medium">{t("closeTargetAppAfterRun")}</span>
         </Checkbox>
+        <p className="text-sm text-ink-muted">
+          {t("closeTargetAppAfterRunDescription")}
+        </p>
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.showVirtualDisplayTouches ?? true}

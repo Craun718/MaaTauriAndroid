@@ -190,6 +190,8 @@ const en = {
   runBehavior: "Run behavior",
   forceStopTargetApp: "Force stop target app",
   closeTargetAppAfterRun: "Close target app after the run",
+  closeTargetAppAfterRunDescription:
+    "Off keeps the virtual display, the preview and the target app after the run. Stop the display to end the session.",
   foregroundMode: "Foreground mode",
   foregroundModeDescription:
     "Run on the physical screen instead of a virtual display. Android will show the target app while the run is active.",
@@ -450,6 +452,8 @@ const zh: Record<MessageKey, string> = {
   runBehavior: "运行行为",
   forceStopTargetApp: "运行前强制停止目标应用",
   closeTargetAppAfterRun: "运行结束后关闭目标应用",
+  closeTargetAppAfterRunDescription:
+    "关闭后，运行结束会保留虚拟屏、画面与目标应用，直到你手动停止画面。",
   foregroundMode: "前台模式",
   foregroundModeDescription:
     "在物理屏幕上运行，而不是虚拟屏。运行期间 Android 会显示目标应用。",

@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Vendored into MaaTauriAndroid from MaaFwApp (AGPL-3.0). The script is
-# byte-identical to the upstream file; only this header is MaaTauriAndroid's.
+# Vendored into MaaTauriAndroid from MaaFwApp (AGPL-3.0). The body is upstream's
+# apart from the local patches listed below.
 #
 #   upstream: https://github.com/Aliothmoon/MaaFwApp
 #   commit:   f4f6f220e21e3a1b7b0cf5df4bdbe0ec04c668f7 (== upstream main as of vendoring)
 #   license:  AGPL-3.0, full text in MAA-FWAPP-LICENSE.md in this directory
-#   sync:     refresh from the commit above when the agent runtime pipeline changes;
-#             keep the body untouched so `git diff` against upstream stays clean.
+#   sync:     refresh from the commit above when the agent runtime pipeline changes,
+#             then reapply (or upstream) these local patches:
+#               - pack_site_packages() writes every pure.zip entry through
+#                 write_file() with a fixed timestamp instead of sink.write(), so
+#                 the same input always produces the same archive bytes;
+#               - zip_date_time() takes that timestamp from SOURCE_DATE_EPOCH,
+#                 which scripts/build-resource.py exports from the resource commit.
+#             A `git diff` against upstream therefore shows more than this header.
 """
 Build a Python agent runtime for a MaaFramework PI project.
 
@@ -40,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess

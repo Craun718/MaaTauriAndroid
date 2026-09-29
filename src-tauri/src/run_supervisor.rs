@@ -14,27 +14,38 @@
 //! can explain it. Fatal findings trigger `request_stop` on the Maa session
 //! immediately, before recognition misses accumulate.
 
+#[cfg(any(target_os = "android", test))]
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+#[cfg(target_os = "android")]
 use std::time::Duration;
+#[cfg(target_os = "android")]
+use tauri::Emitter;
 
 /// Sampling window: one sample per second for 15 seconds.
+#[cfg(any(target_os = "android", test))]
 pub(crate) const WINDOW_SIZE: usize = 15;
 /// Fraction of window samples required below a threshold before advising.
+#[cfg(any(target_os = "android", test))]
 const MIN_FRACTION: f32 = 0.8;
 /// Screen-silent streaks up to this length only pause judgement (loading
 /// screens); longer streaks clear the window (menus, black frames).
+#[cfg(any(target_os = "android", test))]
 const MAX_IDLE_STREAK: usize = 3;
+#[cfg(any(target_os = "android", test))]
 pub(crate) const LOW_FPS: f32 = 30.0;
+#[cfg(any(target_os = "android", test))]
 pub(crate) const DEGRADED_FPS: f32 = 50.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(any(target_os = "android", test))]
 pub(crate) enum AdviceLevel {
     Low,
     Degraded,
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg(any(target_os = "android", test))]
 pub(crate) struct Advice {
     pub level: AdviceLevel,
     pub median_fps: f32,
@@ -45,11 +56,13 @@ pub(crate) struct Advice {
 /// the two levels are mutually exclusive. After a LOW advice, samples
 /// recovering into the 30-50 band satisfy the DEGRADED check and emit the
 /// "still degraded" advice once.
+#[cfg(any(target_os = "android", test))]
 pub(crate) struct FpsAdvisor {
     window: VecDeque<f32>,
     idle_streak: usize,
     low_advised: bool,
     degraded_advised: bool,
+    recovered_after_low: bool,
     required_count: usize,
 }
 
@@ -60,6 +73,7 @@ impl FpsAdvisor {
             idle_streak: 0,
             low_advised: false,
             degraded_advised: false,
+            recovered_after_low: false,
             required_count: (WINDOW_SIZE as f32 * MIN_FRACTION).ceil() as usize,
         }
     }
@@ -73,6 +87,7 @@ impl FpsAdvisor {
             return None;
         }
         self.idle_streak = 0;
+        self.recovered_after_low |= fps >= LOW_FPS;
         self.window.push_back(fps);
         while self.window.len() > WINDOW_SIZE {
             self.window.pop_front();
@@ -87,21 +102,28 @@ impl FpsAdvisor {
                 .filter(|sample| **sample < threshold)
                 .count()
         };
-        let mut advice = None;
-        if !self.low_advised && below(LOW_FPS) >= self.required_count {
+        if below(LOW_FPS) >= self.required_count {
+            if self.low_advised {
+                return None;
+            }
             self.low_advised = true;
-            advice = Some(Advice {
+            self.recovered_after_low = false;
+            return Some(Advice {
                 level: AdviceLevel::Low,
                 median_fps: self.median(),
             });
-        } else if !self.degraded_advised && below(DEGRADED_FPS) >= self.required_count {
+        }
+        if !self.degraded_advised
+            && (!self.low_advised || self.recovered_after_low)
+            && below(DEGRADED_FPS) >= self.required_count
+        {
             self.degraded_advised = true;
-            advice = Some(Advice {
+            return Some(Advice {
                 level: AdviceLevel::Degraded,
                 median_fps: self.median(),
             });
         }
-        advice
+        None
     }
 
     fn median(&self) -> f32 {
@@ -191,6 +213,7 @@ impl Drop for SupervisorGuard {
 
 /// The kind of health finding from the latest target app state probe.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg(any(target_os = "android", test))]
 enum HealthFinding {
     Healthy,
     /// The virtual display backing the run no longer exists.
@@ -203,6 +226,7 @@ enum HealthFinding {
     ProbeUnavailable,
 }
 
+#[cfg(any(target_os = "android", test))]
 fn assess_health(state: &crate::run_diagnosis::TargetAppState) -> HealthFinding {
     if state.display_id != 0 && !state.display_alive {
         return HealthFinding::DisplayLost;

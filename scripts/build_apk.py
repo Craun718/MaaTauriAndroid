@@ -20,6 +20,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+AGENT_CORE_PY = "3.13.15"
 
 ABIS = {
     "arm64-v8a": ("aarch64-linux-android", "aarch64"),
@@ -155,6 +156,23 @@ def build(args: argparse.Namespace) -> None:
     log(f"==> [1/4] Fetching MaaFramework {maafw_version} ({args.abi})…")
     run([str(REPO_ROOT / "scripts" / "fetch-maafw.sh"), args.abi])
 
+    # --- 1.5/4 agent core ------------------------------------------------------
+
+    core_tarball: Path | None = None
+    if not args.use_prebuilt_core and not args.skip_runtime:
+        pypi_maafw = maafw_version.removeprefix("v")
+        core_work = REPO_ROOT / ".cache" / "agent-core"
+        log(f"==> [1.5/4] Building agent core (CPython {args.python_version}, MaaFW {pypi_maafw})…")
+        run([
+            "python3", str(REPO_ROOT / "scripts" / "build_agent_core.py"),
+            "--python-version", args.python_version,
+            "--maafw-version", pypi_maafw,
+            "--work-dir", str(core_work),
+        ])
+        core_tarball = core_work / "dist" / f"agent-core-{args.python_version}-{args.abi}.tar.gz"
+        if not core_tarball.is_file():
+            die(f"agent core tarball not found: {core_tarball}")
+
     # --- 2/4 agent runtime -------------------------------------------------------
 
     if not args.skip_runtime and runtime_zip is not None:
@@ -170,6 +188,8 @@ def build(args: argparse.Namespace) -> None:
             runtime_cmd += ["--exclude", pkg]
         for spec in args.require:
             runtime_cmd += ["--require", spec]
+        if core_tarball is not None:
+            runtime_cmd += ["--core", str(core_tarball)]
         run(runtime_cmd)
     else:
         log(f"==> [2/4] Skipping agent runtime; using {runtime_zip}")
@@ -238,6 +258,14 @@ def main() -> None:
     parser.add_argument("--release", action="store_true", help="Force release build")
     parser.add_argument("--debug", action="store_true", help="Force debug build")
     parser.add_argument("--skip-runtime", action="store_true", help="Use the existing agent runtime ZIP")
+    parser.add_argument(
+        "--python-version", default=AGENT_CORE_PY,
+        help="CPython version for the agent core build (default %(default)s)",
+    )
+    parser.add_argument(
+        "--use-prebuilt-core", action="store_true",
+        help="Download the prebuilt agent core instead of compiling from source",
+    )
     parser.add_argument("--exclude", action="append", default=[], metavar="PKG", help="Pass to build-agent-runtime.sh")
     parser.add_argument("--require", action="append", default=[], metavar="SPEC", help="Pass to build-agent-runtime.sh")
     args = parser.parse_args()

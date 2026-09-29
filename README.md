@@ -92,6 +92,8 @@ scripts/build_apk.py --profile resource/m9a.toml --release
 
 资源项目由 CI 在构建期 clone；本地使用时先手动 clone 到 `resource/<resource_id>/`，再执行上述命令。资源不进 git。
 
+默认从源码编译 agent core（需 ANDROID_HOME + NDK，首次耗时较长）；加 `--use-prebuilt-core` 改为从 release 下载预编译产物。`--skip-runtime` 跳过 agent runtime 构建，直接出 APK。
+
 本地检查：
 
 ```bash

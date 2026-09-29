@@ -15,6 +15,7 @@ NO_DEPS=0
 EXCLUDES=()
 REQUIRES=()
 EXTRA_INDEXES=()
+CORE_PATH=""
 
 usage() {
   cat >&2 <<'EOF'
@@ -30,6 +31,7 @@ required:
 
 options:
   --requirements FILE   requirements file; default <project-dir>/requirements.txt
+  --core PATH           local agent-core tar.gz or directory (overrides MAAFW_CORE_REPO/TAG download)
   --dist DIR            intermediate bundle root; default <out dir>/<project basename>-agent-dist
   --abi ABI             target ABI; default arm64-v8a
   --exclude PKG         package to prune from site-packages; repeatable
@@ -54,6 +56,7 @@ while [ $# -gt 0 ]; do
     --extra-index-url)  EXTRA_INDEXES+=(--extra-index-url "${2:?--extra-index-url needs a value}"); shift 2 ;;
     --no-deps)          NO_DEPS=1; shift ;;
     --work)             WORK="${2:?--work needs a value}"; shift 2 ;;
+    --core)             CORE_PATH="${2:?--core needs a value}"; shift 2 ;;
     -h|--help)          usage 0 ;;
     *)                  usage ;;
   esac
@@ -65,6 +68,13 @@ resolve() {
     *)  printf '%s\n' "${REPO_ROOT}/$1" ;;
   esac
 }
+
+CORE_ARGS=()
+if [ -n "${CORE_PATH}" ]; then
+  CORE_ARGS=(--core "$(resolve "${CORE_PATH}")")
+else
+  CORE_ARGS=(--core-repo "${MAAFW_CORE_REPO}" --core-tag "${MAAFW_CORE_TAG}")
+fi
 
 [ -n "${PROJECT_DIR}" ] || usage
 [ -n "${OUT_ZIP}" ] || usage
@@ -120,8 +130,7 @@ python3 "${REPO_ROOT}/scripts/build_agent_bundle.py" \
   --extra-index-url https://chaquo.com/pypi-13.1/ \
   "${EXTRA_INDEXES[@]}" \
   "${NO_DEPS_ARGS[@]}" \
-  --core-repo "${MAAFW_CORE_REPO}" \
-  --core-tag "${MAAFW_CORE_TAG}" \
+  "${CORE_ARGS[@]}" \
   --work "${WORK}"
 
 VENDOR_DIR="${REPO_ROOT}/vendor/maa/android/${ABI}"

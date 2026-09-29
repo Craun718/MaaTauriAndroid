@@ -103,6 +103,10 @@ def main() -> int:
             info = zipfile.ZipInfo(relative, date_time=zip_date_time())
             info.external_attr = (0o100755 if os.access(source, os.X_OK) else 0o100644) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
+            # `ZipFile(compresslevel=)` only reaches `writestr` calls that pass an
+            # arcname; entries written from a ZipInfo use its own compress_level,
+            # so the level has to be set here as well.
+            info.compress_level = 9
             data = source.read_bytes()
             payload += len(data)
             sink.writestr(info, data)

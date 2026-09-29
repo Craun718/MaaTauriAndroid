@@ -502,7 +502,7 @@ def pack_site_packages(site: Path) -> tuple[int, list[str]]:
     def write_file(path: Path, name: str) -> None:
         info = zipfile.ZipInfo(name, date_time=zip_date_time())
         info.compress_type = zipfile.ZIP_DEFLATED
-        info.compresslevel = 9
+        info.compress_level = 9
         info.external_attr = 0o644 << 16
         sink.writestr(info, path.read_bytes())
 

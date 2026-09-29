@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Vendored into MaaTauriAndroid from MaaFwApp (AGPL-3.0). The body is upstream's
 # apart from the local patches listed below.
 #
@@ -13,9 +12,10 @@
 #                 the same input always produces the same archive bytes;
 #               - zip_date_time() takes that timestamp from SOURCE_DATE_EPOCH,
 #                 which scripts/build-resource.py exports from the resource commit.
-#             A `git diff` against upstream therefore shows more than this header.
-"""
-Build a Python agent runtime for a MaaFramework PI project.
+#             The body also carries plain lint cleanups from ruff.toml
+#             (`select = ["ALL"]`), which are not itemized here, so expect a
+#             `git diff` against upstream to show style changes as well.
+"""Build a Python agent runtime for a MaaFramework PI project.
 
 The prebuilt core (CPython + stdlib + the maa package) is downloaded from
 MaaAgentCoreAndroid releases into .maafw/; this script only adds the project's
@@ -56,7 +56,7 @@ import tempfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 CORE_REPO = "Aliothmoon/MaaAgentCoreAndroid"
@@ -219,14 +219,14 @@ def rmtree(path: Path) -> None:
 
 
 def normalize(name: str) -> str:
-    """PEP 503 的包名归一：StrEnum / strenum / str_enum 是同一个包"""
+    """PEP 503 的包名归一：StrEnum / strenum / str_enum 是同一个包."""
     return re.sub(r"[-_.]+", "-", name).strip().lower()
 
 
 def zip_date_time() -> tuple[int, int, int, int, int, int]:
     source_timestamp = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
     timestamp = max(source_timestamp, ZIP_EPOCH_TIMESTAMP)
-    return datetime.fromtimestamp(timestamp, timezone.utc).timetuple()[:6]
+    return datetime.fromtimestamp(timestamp, UTC).timetuple()[:6]
 
 
 def requirement_name(spec: str) -> str:
@@ -238,14 +238,14 @@ def requirement_name(spec: str) -> str:
 
 
 def fetch_core(abi: str, repo: str, tag: str, work: Path) -> Path:
-    """下载并解包内核，两步都以 .maafw 里已有的产物为准，不重复拉"""
+    """下载并解包内核，两步都以 .maafw 里已有的产物为准，不重复拉."""
     asset = f"agent-core-{CORE_PY}-{abi}.tar.gz"
     archive = work / asset
     if not archive.is_file() or archive.stat().st_size == 0:
         url = CORE_URL.format(repo=repo, tag=tag, asset=asset)
         log(f"download {url}")
         part = archive.with_suffix(archive.suffix + ".part")
-        with urllib.request.urlopen(url, timeout=120) as response, part.open("wb") as sink:
+        with urllib.request.urlopen(url, timeout=120) as response, part.open("wb") as sink:  # noqa: S310 -- constant https URL
             shutil.copyfileobj(response, sink)
         part.replace(archive)
     else:
@@ -263,7 +263,7 @@ def fetch_core(abi: str, repo: str, tag: str, work: Path) -> Path:
 
 
 def local_core(value: str, abi: str, stack: list[tempfile.TemporaryDirectory]) -> Path:
-    """--core 收目录或 tar.gz；归档解到临时目录，退出时清掉"""
+    """--core 收目录或 tar.gz；归档解到临时目录，退出时清掉."""
     path = Path(value).resolve()
     if path.is_dir():
         return path / abi / "bundle"
@@ -289,29 +289,37 @@ def read_manifest(bundle: Path) -> dict:
 
 @dataclass(frozen=True)
 class Requirement:
+    """requirements.txt 里的一行：归一化名字、交给 pip 的 spec、marker 原文."""
+
     name: str  # 归一化后的名字
     spec: str  # 去掉 marker 的部分，原样交给 pip
     marker: str | None
 
 
-def load_marker_evaluator():
-    """packaging 不在 stdlib 里；pip 自带一份 vendored 的，够用就不强求外部安装"""
+def load_marker_evaluator() -> type:
+    """加载 Marker 求值器；packaging 不是 stdlib，优先用独立安装的那份，退回 pip 自带的 vendored 副本."""
     try:
-        from packaging.markers import Marker  # type: ignore
-        return Marker
+        from packaging.markers import (  # noqa: PLC0415 -- optional dependency, keep the module importable without it
+            Marker,  # type: ignore[import-not-found]
+        )
     except ImportError:
         pass
-    try:
-        from pip._vendor.packaging.markers import Marker  # type: ignore
+    else:
         return Marker
+    try:
+        from pip._vendor.packaging.markers import (  # noqa: PLC0415 -- optional dependency, keep the module importable without it
+            Marker,  # type: ignore[import-not-found]
+        )
     except ImportError as error:
         raise SystemExit(
             "packaging is required to evaluate environment markers: pip install packaging"
         ) from error
+    else:
+        return Marker
 
 
 def marker_env(abi: str, manifest: dict) -> dict[str, str]:
-    """CPython 3.13 起 Android 是独立平台（PEP 738），sys_platform 是 android 而非 linux"""
+    """CPython 3.13 起 Android 是独立平台（PEP 738），sys_platform 是 android 而非 linux."""
     python = manifest["python"]
     return {
         "sys_platform": "android",
@@ -326,7 +334,7 @@ def marker_env(abi: str, manifest: dict) -> dict[str, str]:
 
 
 def parse_requirement(line: str) -> Requirement | None:
-    """注释与空行返回 None；选项行直接失败"""
+    """注释与空行返回 None；选项行直接失败."""
     text = line.split(" #", 1)[0].strip()
     if not text or text.startswith("#"):
         return None
@@ -350,9 +358,9 @@ def decide(
     provides: dict[str, str],
     excludes: set[str],
     environment: dict[str, str],
-    marker_type,
+    marker_type: type,
 ) -> str | None:
-    """返回丢弃理由；None 表示要装"""
+    """返回丢弃理由；None 表示要装."""
     if requirement.marker and not marker_type(requirement.marker).evaluate(environment):
         return f"marker is false: {requirement.marker}"
     if requirement.name in provides:
@@ -375,7 +383,7 @@ def plan(
     excludes: set[str],
     environment: dict[str, str],
 ) -> tuple[list[str], set[str]]:
-    """筛出要装的 spec，外加「装完还要清一遍」的名字
+    """筛出要装的 spec，外加「装完还要清一遍」的名字.
 
     pip 对传递依赖的 marker 同样按构建机求值，loguru 在 Windows 上会把 colorama
     拖回来，光筛顶层挡不住。内核提供的那批不在清理名单里
@@ -415,9 +423,10 @@ def pip_install(
     manifest: dict,
     specs: list[str],
     extra_indexes: tuple[str, ...],
+    *,
     no_deps: bool,
 ) -> None:
-    """pip 只按 wheel 文件名的 tag 过滤、不执行构建，所以能跨平台解析
+    """Pip 只按 wheel 文件名的 tag 过滤、不执行构建，所以能跨平台解析.
 
     tag 给一梯而不是一级：--platform 是精确匹配，没有 manylinux 那种兼容阶梯，
     只发 android_24 会拒掉 chaquopy-freetype 这类 tag 是 android_21 的轮子
@@ -451,7 +460,7 @@ def pip_install(
 
 
 def prune_installed(site: Path, unwanted: set[str]) -> list[str]:
-    """按 dist-info 的 RECORD 删，才能连顶层模块一起清干净
+    """按 dist-info 的 RECORD 删，才能连顶层模块一起清干净.
 
     包名与目录名对不上的（win32-setctime -> win32_setctime.py）猜路径会漏
     """
@@ -490,7 +499,7 @@ def trim_site(site: Path) -> None:
 
 
 def pack_site_packages(site: Path) -> tuple[int, list[str]]:
-    """纯 Python 的包收进 pure.zip 交 zipimport，带 .so 的留磁盘
+    """纯 Python 的包收进 pure.zip 交 zipimport，带 .so 的留磁盘.
 
     只用标准 zipimport，所以混装的包（py + so）只能整个留在磁盘上；
     dlopen 要真实路径，zip 里的读不出来
@@ -527,7 +536,7 @@ def pack_site_packages(site: Path) -> tuple[int, list[str]]:
 
 
 def write_multiprocessing_shim(site: Path) -> None:
-    """Android 的 bionic 没有 POSIX 命名信号量，CPython 因此不编译 `_multiprocessing`
+    """Android 的 bionic 没有 POSIX 命名信号量，CPython 因此不编译 `_multiprocessing`.
 
     典型受害者是 loguru 的 `enqueue=True`：它只要一个 SimpleQueue，而 SimpleQueue 只要一把锁
     """
@@ -537,7 +546,7 @@ def write_multiprocessing_shim(site: Path) -> None:
 # ---------------------------------------------------------------- main
 
 
-def build(core: Path, out: Path, abi: str, options, work: Path) -> None:
+def build(core: Path, out: Path, abi: str, options: argparse.Namespace, work: Path) -> None:
     manifest = read_manifest(core)
     if manifest["abi"] != abi:
         raise SystemExit(f"core declares abi {manifest['abi']}, expected {abi}: {core}")
@@ -556,7 +565,7 @@ def build(core: Path, out: Path, abi: str, options, work: Path) -> None:
         options.excludes,
         marker_env(abi, manifest),
     )
-    pip_install(site, work, manifest, specs, options.indexes, options.no_deps)
+    pip_install(site, work, manifest, specs, options.indexes, no_deps=options.no_deps)
     removed = prune_installed(site, unwanted)
     if removed:
         log(f"  pruned re-added by pip under build-host markers: {', '.join(removed)}")

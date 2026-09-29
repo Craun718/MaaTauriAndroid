@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # Vendored into MaaTauriAndroid from Craun718/MaaAgentCoreAndroid. The body is
-# byte-identical to the upstream file except for the launcher.c path below;
-# only this header is MaaTauriAndroid's.
+# upstream's apart from the launcher.c path below and plain lint cleanups from
+# ruff.toml (`select = ["ALL"]`), so a `git diff` against upstream shows more
+# than this header.
 #
 #   upstream: https://github.com/Craun718/MaaAgentCoreAndroid
-#   path:     scripts/build_agent_core.py
-#   sync:     refresh from the upstream repo when the agent core pipeline changes;
-#             keep the body untouched so `git diff` against upstream stays clean
+#   path:     `scripts/build_agent_core.py` (the backticks keep the note from
+#             parsing as an annotated assignment; ruff ERA001)
+#   sync:     refresh from the upstream repo when the agent core pipeline changes,
+#             then reapply the launcher.c path change and the lint fixes
 #   license:  undeclared upstream; maintained by the same author as this repo
 """Build Android agent-core archives from source inputs."""
 
@@ -42,9 +44,15 @@ EXCLUDED_STDLIB_DIRECTORIES = {
     "tkinter",
     "turtledemo",
 }
+ELF_HEADER_SIZE = 64
+ELF_CLASS_64 = 2
+ELF_TYPE_SHARED_OBJECT = 3
+ELF_PROGRAM_HEADER_INTERP = 3
 
 
 class AbiInfo(TypedDict):
+    """Per-ABI build inputs: NDK host tuple, wheel tag and ELF machine id."""
+
     host: str
     wheel_abi: str
     elf_machine: int
@@ -65,7 +73,7 @@ ABIS: dict[str, AbiInfo] = {
 
 
 class BuildError(RuntimeError):
-    pass
+    """Raised when an input, a step or a validation result is unusable."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -206,12 +214,12 @@ def download_runtime_wheels(
         "--extra-index-url",
         CHAQUOPY_INDEX,
     ]
-    run(base_command + [f"StrEnum=={STRENUM_VERSION}"])
+    run([*base_command, f"StrEnum=={STRENUM_VERSION}"])
     wheel_hashes: dict[str, str] = {}
     for abi_info in ABIS.values():
         run(
-            base_command
-            + [
+            [
+                *base_command,
                 "--platform",
                 f"android_{WHEEL_APIS[0]}_{abi_info['wheel_abi']}",
                 f"numpy=={NUMPY_VERSION}",
@@ -574,7 +582,11 @@ def write_manifest(
 
 def elf_info(path: Path) -> tuple[int, int, list[str]]:
     data = path.read_bytes()
-    if len(data) < 64 or data[:4] != b"\x7fELF" or data[4] != 2:
+    if (
+        len(data) < ELF_HEADER_SIZE
+        or data[:4] != b"\x7fELF"
+        or data[4] != ELF_CLASS_64
+    ):
         raise BuildError(f"Not a 64-bit little-endian ELF: {path}")
     endian = "<" if data[5] == 1 else ">"
     elf_type, machine = struct.unpack_from(endian + "HH", data, 16)
@@ -584,7 +596,7 @@ def elf_info(path: Path) -> tuple[int, int, list[str]]:
     for index in range(phnum):
         offset = phoff + index * phentsize
         ph_type, _flags, p_offset = struct.unpack_from(endian + "IIQ", data, offset)
-        if ph_type == 3:
+        if ph_type == ELF_PROGRAM_HEADER_INTERP:
             end = data.index(b"\0", p_offset)
             interpreters.append(data[p_offset:end].decode("ascii"))
     return elf_type, machine, interpreters
@@ -622,7 +634,7 @@ def validate_bundle(
     launcher = bundle / "bin" / "python3"
     elf_type, machine, interpreters = elf_info(launcher)
     if (
-        elf_type != 3
+        elf_type != ELF_TYPE_SHARED_OBJECT
         or machine != abi_info["elf_machine"]
         or interpreters != ["/system/bin/linker64"]
     ):
@@ -834,8 +846,6 @@ def main() -> None:
 
     if "ANDROID_HOME" not in os.environ:
         raise BuildError("ANDROID_HOME must be set")
-    if sys.version_info < (3, 11):
-        raise BuildError("The build script requires Python 3.11 or newer")
 
     py_abi = f"cp{major}{minor}"
     script_root = Path(__file__).resolve().parent.parent
@@ -969,4 +979,4 @@ if __name__ == "__main__":
         zipfile.BadZipFile,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from error

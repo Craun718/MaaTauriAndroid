@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canRequestPrivilegedAccess,
   isChineseLocale,
   localizeDiagnostic,
   localizeRunEvent,
@@ -7,7 +8,7 @@ import {
   resolveLanguage,
   translate,
 } from "./i18n";
-import type { RunEvent } from "./types";
+import type { PrivilegedStatus, RunEvent } from "./types";
 
 describe("isChineseLocale", () => {
   it("matches every Chinese tag Android and the desktop webviews report", () => {
@@ -130,6 +131,27 @@ describe("localizeDiagnostic", () => {
     expect(localizeDiagnostic("Pipeline exploded", "zh")).toBe(
       "Pipeline exploded",
     );
+  });
+});
+
+describe("canRequestPrivilegedAccess", () => {
+  const status = (value: PrivilegedStatus["status"]): PrivilegedStatus =>
+    value === "connected"
+      ? { status: value, message: "connected", backend: "shizuku" }
+      : {
+          status: value,
+          message: "reason",
+          setupRequired: [],
+          backend: "shizuku",
+        };
+
+  it("only advances a missing grant, since only that can be requested", () => {
+    expect(canRequestPrivilegedAccess(status("permissionRequired"))).toBe(true);
+    expect(canRequestPrivilegedAccess(status("starting"))).toBe(false);
+    expect(canRequestPrivilegedAccess(status("connected"))).toBe(false);
+    expect(canRequestPrivilegedAccess(status("notInstalled"))).toBe(false);
+    expect(canRequestPrivilegedAccess(status("disconnected"))).toBe(false);
+    expect(canRequestPrivilegedAccess(status("error"))).toBe(false);
   });
 });
 

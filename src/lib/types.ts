@@ -361,6 +361,13 @@ export interface RunResult {
   message: string;
 }
 
+/** The backend's answer to `start_run`, before any run event arrives. */
+export interface StartRunStatus {
+  executionId: string;
+  message: string;
+  taskCount: number;
+}
+
 /** One persisted run: metadata read from the JSONL file name, no file content. */
 export interface RunHistoryEntry {
   executionId: string;

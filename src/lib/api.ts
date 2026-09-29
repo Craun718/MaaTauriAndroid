@@ -15,6 +15,7 @@ import type {
   ScheduleRule,
   ScheduleRuleStatus,
   ScheduleSummary,
+  StartRunStatus,
   UpdatePrefs,
   UpdateStatus,
   UserConfiguration,
@@ -148,9 +149,7 @@ export async function isNotificationGranted() {
 }
 
 export async function startRun() {
-  return invoke<{ executionId: string; message: string; taskCount: number }>(
-    "start_run",
-  );
+  return invoke<StartRunStatus>("start_run");
 }
 
 export async function exportLogs() {

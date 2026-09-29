@@ -28,14 +28,18 @@ const exportLogs = vi.fn();
 const setVirtualDisplayTouchMarkers = vi.fn();
 const isNotificationGranted = vi.fn();
 const requestNotificationPermission = vi.fn();
+const getPrivilegedStatus = vi.fn();
+const requestPrivilegedAccess = vi.fn();
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
   captureManualScreenshot: () => captureManualScreenshot(),
   exportLogs: () => exportLogs(),
+  getPrivilegedStatus: () => getPrivilegedStatus(),
   getRunStatus: () => getRunStatus(),
   isNotificationGranted: () => isNotificationGranted(),
   requestNotificationPermission: () => requestNotificationPermission(),
+  requestPrivilegedAccess: () => requestPrivilegedAccess(),
   resolveCurrent: () => resolveCurrent(),
   saveConfiguration: (configuration: unknown) =>
     saveConfiguration(configuration),

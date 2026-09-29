@@ -14,7 +14,6 @@ import {
   pressVirtualDisplayBack,
   requestNotificationPermission,
   resolveCurrent,
-  startRun,
   stopRun,
 } from "../lib/api";
 import {
@@ -25,6 +24,7 @@ import {
 import { canAcceptRunEvent } from "../lib/runEvents";
 import type { ResolvedRun, RunEvent } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
+import { useRunStartRetry } from "../lib/useRunStartRetry";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { BottomDrawer } from "./ui/BottomDrawer";
@@ -110,6 +110,29 @@ export function RunPanel({
     [notify, notifyOnce, language],
   );
 
+  // A start rejected for a missing Shizuku grant asks for it and starts again
+  // once; the notices it reports follow the interface language, and the raw
+  // message is the activity-log key so no sentence is named twice.
+  const { startRunWithAccess, retryAfterRunFailure, resetRetry } =
+    useRunStartRetry({
+      // The accepted execution id is the single "this start counted" marker:
+      // a failed attempt clears it, so a rejection that only arrives as a run
+      // event can still be told apart from a failure of an accepted run.
+      onAttemptReset: () => {
+        executionIdRef.current = undefined;
+      },
+      onStarted: (result) => {
+        executionIdRef.current = result.executionId;
+        setExecutionId(result.executionId);
+        // The first run-event may trail the invoke response, so the task list
+        // locks as soon as the backend has accepted the run.
+        setRunState("Preparing");
+        notify(result.message);
+      },
+      onNotice: (message) => notify(localizeDiagnostic(message, language)),
+      onFailure: reportStartFailure,
+    });
+
   useEffect(() => {
     if (!snapshot) return;
     resolveCurrent().then(setRun).catch(reportError);
@@ -164,6 +187,11 @@ export function RunPanel({
             tone: "error",
             logToActivity: false,
           });
+          // A rejection that only arrives as a run event still gets the one
+          // permission retry; an accepted run already consumed it.
+          if (!executionIdRef.current) {
+            void retryAfterRunFailure(payload.message);
+          }
         } else {
           notify(message, {
             tone: "warning",
@@ -185,7 +213,7 @@ export function RunPanel({
       disposed = true;
       unsubscribe?.();
     };
-  }, [notify, notifyOnce, reportError, language]);
+  }, [notify, notifyOnce, reportError, language, retryAfterRunFailure]);
 
   const running = Boolean(executionId) && runState !== "Idle";
 
@@ -202,20 +230,13 @@ export function RunPanel({
   async function start() {
     onRunStarted?.();
     setStarting(true);
+    resetRetry();
     try {
       // Once-per-install OS prompt (no-op once granted): backend focus
       // `display: "notification"` messages only reach the OS notification
       // center with POST_NOTIFICATIONS granted.
       void requestNotificationPermission();
-      const result = await startRun();
-      executionIdRef.current = result.executionId;
-      setExecutionId(result.executionId);
-      // The first run-event may trail the invoke response, so the task list
-      // locks as soon as the backend has accepted the run.
-      setRunState("Preparing");
-      notify(result.message);
-    } catch (error) {
-      await reportStartFailure(error);
+      await startRunWithAccess();
     } finally {
       setStarting(false);
     }

@@ -1,9 +1,15 @@
 import { useMemo } from "react";
 import { useAppStore } from "../store/appStore";
-import type { RunEvent, UiLanguage } from "./types";
+import type { PrivilegedStatus, RunEvent, UiLanguage } from "./types";
 
 /** Language the interface actually renders in, after resolving "system". */
 export type AppLanguage = "zh" | "en";
+
+/** Backend diagnostic for a run start rejected because Shizuku was never
+ * authorized. Shared by the English catalog and the localization table that
+ * keys off this exact wording, so the two cannot drift apart. */
+const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
+  "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
 
 const en = {
   // Bottom navigation
@@ -96,8 +102,7 @@ const en = {
   // Known backend diagnostics, localized when shown as notifications
   diagnosticShizukuUnavailable:
     "Shizuku is unavailable; install or start Shizuku, then try again",
-  diagnosticShizukuPermissionRequired:
-    "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again",
+  diagnosticShizukuPermissionRequired: SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC,
   diagnosticControlServiceDisconnected:
     "The privileged control service disconnected; restart Shizuku and reopen the app, then try again",
   diagnosticControlServiceFailedToStart:
@@ -113,6 +118,12 @@ const en = {
   diagnosticVirtualDisplayRejected:
     "The privileged control service rejected the virtual display",
   diagnosticVirtualDisplayInactive: "The virtual display is not active",
+  diagnosticPermissionRequestInProgress:
+    "The run needs permission; requesting it now.",
+  diagnosticPermissionRequestSucceeded:
+    "Permission granted; starting the run again.",
+  diagnosticPermissionRequestFailed:
+    "Permission was not granted; request it again and allow it in the prompt.",
   diagnosticVirtualDisplayBackRejected:
     "Android rejected the virtual display back-key injection",
   diagnosticVirtualDisplayBackUnavailable:
@@ -556,6 +567,10 @@ const zh: Record<MessageKey, string> = {
     "无法打开 Shizuku；请确认它已安装，且未被系统拦截",
   diagnosticVirtualDisplayRejected: "特权控制服务拒绝了虚拟屏请求",
   diagnosticVirtualDisplayInactive: "虚拟屏未启动",
+  diagnosticPermissionRequestInProgress: "本次运行需要权限，正在申请。",
+  diagnosticPermissionRequestSucceeded: "已获得权限，正在重新开始运行。",
+  diagnosticPermissionRequestFailed:
+    "权限未授予；请重新申请，并在弹窗中选择允许。",
   diagnosticVirtualDisplayBackRejected: "Android 拒绝了虚拟屏返回键注入",
   diagnosticVirtualDisplayBackUnavailable:
     "特权控制服务不可用，无法发送虚拟屏返回键",
@@ -724,7 +739,7 @@ export interface Translation {
 const diagnosticKeys: Record<string, MessageKey> = {
   "Shizuku is unavailable; install or start Shizuku, then try again":
     "diagnosticShizukuUnavailable",
-  "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again":
+  [SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC]:
     "diagnosticShizukuPermissionRequired",
   "The privileged control service disconnected; restart Shizuku and reopen the app, then try again":
     "diagnosticControlServiceDisconnected",
@@ -748,6 +763,30 @@ const diagnosticKeys: Record<string, MessageKey> = {
 };
 
 const TASK_ABORT_PATTERN = /^Maa task \S+ failed: /;
+
+/** English wording of the notices the run-start permission retry shows. They
+ * are also the activity-log keys, so the same sentence never gets a second
+ * name. */
+export const runStartPermissionNotices = {
+  requesting: translate("en", "diagnosticPermissionRequestInProgress"),
+  succeeded: translate("en", "diagnosticPermissionRequestSucceeded"),
+  failed: translate("en", "diagnosticPermissionRequestFailed"),
+} as const;
+
+/**
+ * Whether a failed run start can be repaired by requesting privileged access.
+ * Only a missing Shizuku grant qualifies: an uninstalled, disconnected, or
+ * failed control unit reports a different diagnostic, where prompting the user
+ * for permission would not help.
+ */
+export function isPermissionRequiredDiagnostic(message: string): boolean {
+  return message === SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC;
+}
+
+/** Only a missing grant can be advanced by asking; other states cannot. */
+export function canRequestPrivilegedAccess(status: PrivilegedStatus): boolean {
+  return status.status === "permissionRequired";
+}
 
 /**
  * Localizes a known backend diagnostic. Task failures collapse to the short

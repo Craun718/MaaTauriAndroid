@@ -47,3 +47,6 @@ vendor/maa/android/
 
 # worktrees
 .worktrees
+
+# Python bytecode
+__pycache__/

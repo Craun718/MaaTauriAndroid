@@ -22,6 +22,13 @@ import { useNotificationStore } from "../store/notificationStore";
 import { Modal } from "./ui/Modal";
 import { VirtualDisplayPreview } from "./VirtualDisplayPreview";
 
+// Non-fullscreen preview cap. A portrait virtual display (720x1280) laid out at
+// the full column width is 1.78x that width tall, which swallows the tasks page
+// and squeezes the log panel shut. Capping the height keeps the preview centered
+// as a phone-shaped thumbnail; landscape displays stay at full column width
+// because their height is already below the cap.
+const CARD_PREVIEW_MAX_HEIGHT = "16rem";
+
 export function VirtualDisplayCard() {
   const [status, setStatus] = useState<VirtualDisplayStatus>();
   const [, setStatusError] = useState<string>();
@@ -229,12 +236,16 @@ export function VirtualDisplayCard() {
 
       {active && status && !fullscreen ? (
         <div
-          className="relative w-full rounded-md border border-line"
+          className="relative mx-auto rounded-md border border-line"
           style={{
             aspectRatio:
               status.width > 0 && status.height > 0
                 ? `${status.width} / ${status.height}`
                 : "2 / 1",
+            width:
+              status.width > 0 && status.height > 0
+                ? `min(100%, calc(${CARD_PREVIEW_MAX_HEIGHT} * ${status.width} / ${status.height}))`
+                : undefined,
           }}
         >
           <VirtualDisplayPreview

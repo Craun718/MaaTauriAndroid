@@ -8,10 +8,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.concurrent.thread
-
 /**
  * Launches apps the way MaaFwApp does: use framework APIs to pin the task to a
  * display, verify the result, and retain the shell command as a compatibility
@@ -21,11 +17,8 @@ internal class AppLauncher(
     private val context: Context?,
     private val shell: (Array<out String>) -> Int,
 ) {
-    private val launchGuards = ConcurrentHashMap<String, AtomicBoolean>()
-
     fun stopPackage(spec: String): Int {
         val packageName = packageNameOf(spec)
-        cancelLaunchGuard(packageName)
         return if (hiddenForceStop(packageName) || shell(arrayOf("am", "force-stop", packageName)) == 0) {
             PrivilegedControlServiceImpl.RESULT_OK
         } else {
@@ -48,7 +41,6 @@ internal class AppLauncher(
 
         return when (awaitAppOnDisplay(packageName, displayId, intent)) {
             LaunchLocation.TARGET_DISPLAY -> {
-                startLaunchStabilityGuard(packageName, displayId)
                 PrivilegedControlServiceImpl.RESULT_OK
             }
             LaunchLocation.MISSING -> if (usedShellFallback) {
@@ -98,7 +90,6 @@ internal class AppLauncher(
         return if (waitForAppOnDisplay(packageName, displayId, FALLBACK_WAIT_MS) ==
             LaunchLocation.TARGET_DISPLAY
         ) {
-            startLaunchStabilityGuard(packageName, displayId)
             PrivilegedControlServiceImpl.RESULT_OK
         } else {
             PrivilegedControlServiceImpl.RESULT_COMMAND_FAILED
@@ -227,59 +218,6 @@ internal class AppLauncher(
         } else {
             LaunchLocation.MISSING
         }
-    }
-
-    /**
-     * Some OEM launchers and game SDKs move a newly started task to the default
-     * display after its first activity settles. Keep the launch window watched
-     * so Maa does not receive success while the controlled display is empty.
-     */
-    private fun startLaunchStabilityGuard(
-        packageName: String,
-        displayId: Int,
-    ) {
-        if (displayId == 0) return
-        cancelLaunchGuard(packageName)
-        val cancelled = AtomicBoolean(false)
-        launchGuards[packageName] = cancelled
-        thread(name = "maa_tauri_android-launch-guard", isDaemon = true) {
-            android.util.Log.i(
-                TAG,
-                "Watching $packageName for display migration on displayId=$displayId",
-            )
-            val deadline = SystemClock.uptimeMillis() + LAUNCH_GUARD_MS
-            var lastWrongDisplay = Int.MIN_VALUE
-            while (!cancelled.get() && SystemClock.uptimeMillis() < deadline) {
-                val task = findTask(packageName)
-                if (task == null || task.displayId == displayId) {
-                    lastWrongDisplay = Int.MIN_VALUE
-                } else if (lastWrongDisplay != task.displayId) {
-                    lastWrongDisplay = task.displayId
-                    android.util.Log.w(
-                        TAG,
-                        "$packageName moved to displayId=${task.displayId}; moving back to $displayId",
-                    )
-                    val moved = !cancelled.get() && moveTaskToDisplay(task.taskId, displayId)
-                    if (!moved && !cancelled.get()) {
-                        android.util.Log.w(
-                            TAG,
-                            "Could not move $packageName back to displayId=$displayId",
-                        )
-                    }
-                }
-                SystemClock.sleep(POLL_INTERVAL_MS)
-            }
-            if (launchGuards.remove(packageName, cancelled) && !cancelled.get()) {
-                android.util.Log.i(
-                    TAG,
-                    "Finished watching $packageName on displayId=$displayId",
-                )
-            }
-        }
-    }
-
-    private fun cancelLaunchGuard(packageName: String) {
-        launchGuards.remove(packageName)?.set(true)
     }
 
     private fun findTask(packageName: String): TaskLocation? {
@@ -624,7 +562,6 @@ internal class AppLauncher(
         private const val TASK_SCAN_LIMIT = 100
         private const val DISPLAY_WAIT_MS = 10_000L
         private const val LAUNCH_STABILITY_MS = 5_000L
-        private const val LAUNCH_GUARD_MS = 30_000L
         private const val FALLBACK_WAIT_MS = 3_000L
         private const val POLL_INTERVAL_MS = 250L
         private const val WINDOWING_MODE_FULLSCREEN = 1

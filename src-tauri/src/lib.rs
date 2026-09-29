@@ -3,12 +3,12 @@ mod atomic_io;
 mod diagnostics;
 mod domain;
 mod focus;
-mod game_fps;
 mod persistence;
 mod run_diagnosis;
 mod run_history;
 mod run_log;
 mod run_progress;
+mod run_supervisor;
 mod runtime;
 mod schedule;
 mod secrets;
@@ -1115,7 +1115,7 @@ fn call_runtime_bridge_boolean(method: &'static str) -> Result<bool, AppError> {
 }
 
 #[cfg(target_os = "android")]
-fn call_runtime_bridge_float(method: &'static str) -> Result<f32, AppError> {
+pub(crate) fn call_runtime_bridge_float(method: &'static str) -> Result<f32, AppError> {
     let bridge_class = crate::runtime::runtime_bridge_class()
         .map_err(|error| AppError::Message(error.to_string()))?;
     let vm = crate::runtime::java_vm().ok_or_else(|| {
@@ -1432,7 +1432,7 @@ fn virtual_display_rejection_message(
 }
 
 #[cfg(target_os = "android")]
-fn call_runtime_bridge_int_array(method: &'static str) -> Result<Vec<i32>, AppError> {
+pub(crate) fn call_runtime_bridge_int_array(method: &'static str) -> Result<Vec<i32>, AppError> {
     let bridge_class = crate::runtime::runtime_bridge_class()
         .map_err(|error| AppError::Message(error.to_string()))?;
     let vm = crate::runtime::java_vm().ok_or_else(|| {
@@ -1580,7 +1580,7 @@ fn call_runtime_bridge_optional_string_with_int(
 /// privileged service cannot be asked (a binder failure) — the diagnosis then
 /// stays silent.
 #[cfg(target_os = "android")]
-fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
+pub(crate) fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
     let raw = call_runtime_bridge_optional_string_with_int(
         "targetAppState",
         runtime::active_display_id() as i32,
@@ -1591,7 +1591,7 @@ fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
 }
 
 #[cfg(not(target_os = "android"))]
-fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
+pub(crate) fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> {
     None
 }
 
@@ -1857,10 +1857,17 @@ async fn start_run_core(
     };
     drop(_lifecycle_guard);
     tokio::spawn(async move {
-        // Samples the game frame rate once per second for the whole run: the
-        // low/degraded warnings always go to the run log, and the event feeds
-        // the optional preview badge. The guard stops it on every exit path.
-        let _fps_guard = game_fps::run_guard(&app, logger_for_run.clone());
+        // Watches the game's health on the controlled display for the whole
+        // run: samples FPS once per second, polls the target app state once
+        // per second, and stops the run early on target exit or display
+        // loss. The guard stops the watcher on every exit path.
+        let _supervisor = run_supervisor::SupervisorGuard::start(
+            &app,
+            logger_for_run.clone(),
+            sessions.clone(),
+            &run_execution_id,
+            controller_display_id,
+        );
         let fail = abort_preparing_run;
         let creation = tokio::task::spawn_blocking(move || {
             let agent = agent::prepare_android(agent_count)

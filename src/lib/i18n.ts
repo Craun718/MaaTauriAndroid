@@ -783,6 +783,15 @@ export function isPermissionRequiredDiagnostic(message: string): boolean {
   return message === SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC;
 }
 
+/**
+ * Whether a failed run start was refused because the privileged control unit
+ * was still coming up. That state resolves on its own, so the start can simply
+ * wait for it and try again.
+ */
+export function isControlUnitStartingDiagnostic(message: string): boolean {
+  return message === translate("en", "diagnosticControlServiceStarting");
+}
+
 /** Only a missing grant can be advanced by asking; other states cannot. */
 export function canRequestPrivilegedAccess(status: PrivilegedStatus): boolean {
   return status.status === "permissionRequired";

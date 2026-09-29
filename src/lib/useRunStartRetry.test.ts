@@ -1,7 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useNotificationStore } from "../store/notificationStore";
-import { isPermissionRequiredDiagnostic, translate } from "./i18n";
+import {
+  isControlUnitStartingDiagnostic,
+  isPermissionRequiredDiagnostic,
+  translate,
+} from "./i18n";
 import { useRunStartRetry } from "./useRunStartRetry";
 
 const startRun = vi.fn();
@@ -20,6 +24,19 @@ const permissionMessage = translate(
   "diagnosticShizukuPermissionRequired",
 );
 const unavailableMessage = translate("en", "diagnosticShizukuUnavailable");
+const startingMessage = translate("en", "diagnosticControlServiceStarting");
+const startingStatus = {
+  status: "starting" as const,
+  message: "connecting",
+  setupRequired: [],
+  backend: "shizuku" as const,
+};
+const permissionRequiredStatus = {
+  status: "permissionRequired" as const,
+  message: "grant it",
+  setupRequired: [],
+  backend: "shizuku" as const,
+};
 const requestFailedMessage = translate(
   "en",
   "diagnosticShizukuPermissionRequestFailed",
@@ -31,7 +48,12 @@ const started = {
   taskCount: 1,
 };
 
-function renderRetry() {
+function renderRetry(
+  retry: { readyTimeoutMs?: number; readyPollIntervalMs?: number } = {
+    readyTimeoutMs: 100,
+    readyPollIntervalMs: 0,
+  },
+) {
   const onStarted = vi.fn();
   const onAttemptReset = vi.fn();
   const onFailure = vi.fn(async (_error: unknown) => undefined);
@@ -43,6 +65,7 @@ function renderRetry() {
         useNotificationStore.getState().notify(message);
       },
       onFailure,
+      ...retry,
     }),
   );
   return {
@@ -110,6 +133,69 @@ describe("useRunStartRetry", () => {
       translate("en", "diagnosticPermissionRequestInProgress"),
       translate("en", "diagnosticPermissionRequestSucceeded"),
     ]);
+  });
+
+  it("waits for a control unit that is still starting and starts again", async () => {
+    startRun
+      .mockRejectedValueOnce(new Error(startingMessage))
+      .mockResolvedValueOnce(started);
+    getPrivilegedStatus
+      .mockResolvedValueOnce(startingStatus)
+      .mockResolvedValueOnce(startingStatus)
+      .mockResolvedValue(permissionRequiredStatus);
+    const { result, onStarted, onFailure } = renderRetry();
+
+    await act(async () => {
+      await result.current.startRunWithAccess();
+    });
+
+    expect(getPrivilegedStatus).toHaveBeenCalledTimes(3);
+    expect(startRun).toHaveBeenCalledTimes(2);
+    expect(onStarted).toHaveBeenCalledWith(started);
+    expect(onFailure).not.toHaveBeenCalled();
+    // Waiting is silent: no prompt, and no notice to read about it.
+    expect(requestPrivilegedAccess).not.toHaveBeenCalled();
+    expect(notices()).toEqual([]);
+  });
+
+  it("gives up on waiting once the control unit never arrives", async () => {
+    startRun.mockRejectedValue(new Error(startingMessage));
+    getPrivilegedStatus.mockResolvedValue(startingStatus);
+    const { result, onFailure } = renderRetry({
+      readyTimeoutMs: 0,
+      readyPollIntervalMs: 0,
+    });
+
+    await act(async () => {
+      await result.current.startRunWithAccess();
+    });
+
+    expect(startRun).toHaveBeenCalledTimes(2);
+    expect(requestPrivilegedAccess).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits when the readiness rejection only arrives as a run event", async () => {
+    startRun
+      .mockRejectedValueOnce(new Error(startingMessage))
+      .mockResolvedValueOnce(started);
+    getPrivilegedStatus
+      .mockResolvedValueOnce(startingStatus)
+      .mockResolvedValue({
+        status: "connected",
+        message: "connected",
+        backend: "shizuku",
+      });
+    const { result, onStarted, onFailure } = renderRetry();
+
+    await act(async () => {
+      await result.current.retryAfterRunFailure(startingMessage);
+    });
+
+    expect(startRun).toHaveBeenCalledTimes(2);
+    expect(onStarted).toHaveBeenCalledWith(started);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(notices()).toEqual([]);
   });
 
   it("leaves failures a prompt cannot repair alone", async () => {
@@ -249,5 +335,11 @@ describe("permission diagnostics", () => {
     expect(isPermissionRequiredDiagnostic(permissionMessage)).toBe(true);
     expect(isPermissionRequiredDiagnostic(unavailableMessage)).toBe(false);
     expect(isPermissionRequiredDiagnostic(requestFailedMessage)).toBe(false);
+  });
+
+  it("recognizes only the control unit that is still coming up", () => {
+    expect(isControlUnitStartingDiagnostic(startingMessage)).toBe(true);
+    expect(isControlUnitStartingDiagnostic(permissionMessage)).toBe(false);
+    expect(isControlUnitStartingDiagnostic(unavailableMessage)).toBe(false);
   });
 });

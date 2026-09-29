@@ -95,6 +95,21 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
+  python-lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      # Pinned so a new Ruff release cannot turn the gate red on its own. The
+      # rule set lives in ruff.toml; `scripts/build_agent_bundle.py` is a
+      # vendored AGPL-3.0 copy, which is why the selection stays narrow.
+      - run: pip install ruff==0.16.2
+      - run: ruff check scripts src-tauri/profiles
+
   android-rust:
     needs: frontend
     runs-on: ubuntu-latest

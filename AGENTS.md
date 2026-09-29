@@ -36,6 +36,7 @@
 - `pnpm lint`：用 Biome 做 lint。
 - `pnpm format` / `pnpm format:check`：用 Biome 格式化 / 校验 JS、TS、JSON、CSS、HTML 和 SVG。
 - `cargo fmt --manifest-path src-tauri/Cargo.toml`：格式化 Rust 代码。
+- `ruff check scripts src-tauri/profiles`：用 Ruff 检查 Python 构建脚本（规则见仓库根 `ruff.toml`，与 CI 的 `python-lint` job 一致）。
 
 除非用户明确要求在本地运行，否则不要自行执行以下命令：
 
@@ -52,6 +53,7 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 | -------------- | ------------------------------------------------------------------- |
 | `frontend`     | `pnpm check` + `pnpm test` + `pnpm build`（TypeScript 检查），产出 `dist` artifact |
 | `rust`         | `cargo fmt --check` + `cargo test`（桌面目标）                      |
+| `python-lint`  | `ruff check`（`scripts/`、`src-tauri/profiles/`，抓 `E9`/`F` 类错误） |
 | `android-rust` | Android 目标的 `cargo check`，依赖 `frontend` 的 `dist`             |
 | `m9a-android`  | 构建 arm64 debug APK，并上传 APK 与 agent runtime artifact          |
 

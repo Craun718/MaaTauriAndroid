@@ -10,7 +10,6 @@ The resource project must already be cloned (by CI or manually) at
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import subprocess

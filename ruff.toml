@@ -1,0 +1,14 @@
+# Lint config for the Python parts of the build pipeline: the CI-only helpers in
+# scripts/ and the packaging profiles in src-tauri/profiles/. The `python-lint`
+# job in .github/workflows/ci.yml runs exactly this config.
+#
+# The rule set is deliberately narrow. scripts/build_agent_bundle.py is an
+# AGPL-3.0 vendored copy of MaaFwApp's script (see its header), so style rules
+# would only add churn against upstream. What this gate has to catch is the
+# class of breakage that otherwise surfaces minutes later inside a slow Android
+# job: `F821 undefined-name` (a missing import, as in 5fa1967), syntax errors,
+# and the rest of pyflakes' name and flow checks.
+target-version = "py313"
+
+[lint]
+select = ["E9", "F"]

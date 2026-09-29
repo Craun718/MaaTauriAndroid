@@ -109,7 +109,7 @@ class OwnerLeaseTest {
 
         override fun getInterfaceDescriptor(): String? = null
 
-        override fun queryLocalInterface(descriptor: String?): IInterface? = null
+        override fun queryLocalInterface(descriptor: String): IInterface? = null
 
         override fun dump(fd: FileDescriptor, args: Array<String?>?) {}
 

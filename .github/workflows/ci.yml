@@ -238,8 +238,13 @@ jobs:
             --abi "$ANDROID_ABI"
 
       - name: Generate the Tauri Android Gradle dependencies
+        env:
+          TAURI_ANDROID_PROJECT_PATH: ${{ github.workspace }}/src-tauri/gen/android
         run: |
           pnpm install --frozen-lockfile
+          # tauri-build does not declare this variable as a rerun trigger, so
+          # invalidate only the app build script when reusing a cached target.
+          cargo clean --manifest-path src-tauri/Cargo.toml --package maa_tauri_android
           cargo check --manifest-path src-tauri/Cargo.toml --target "$ANDROID_RUST_TARGET" --lib
 
       - name: Run app unit tests

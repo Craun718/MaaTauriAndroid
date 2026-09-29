@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { saveConfiguration } from "../lib/api";
 import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
-import { useAppStore } from "./appStore";
+import { useAppStore, waitForPendingSaves } from "./appStore";
 import { useNotificationStore } from "./notificationStore";
 
 vi.mock("../lib/api", () => ({
@@ -89,5 +89,61 @@ describe("appStore saveConfiguration", () => {
     expect(useNotificationStore.getState().notifications).toMatchObject([
       { tone: "error", message: "Save failed" },
     ]);
+  });
+});
+
+describe("appStore waitForPendingSaves", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppStore.setState({
+      snapshot: { configuration },
+      busy: false,
+      saving: false,
+      error: undefined,
+      dismissedWelcomeFingerprint: undefined,
+    });
+    useNotificationStore.setState({ notifications: [] });
+  });
+
+  it("resolves immediately when no save is queued", async () => {
+    await expect(waitForPendingSaves()).resolves.toBeUndefined();
+  });
+
+  it("resolves only after the queued save reaches the backend", async () => {
+    const request = deferred<UserConfiguration>();
+    mockedSaveConfiguration.mockReturnValue(request.promise);
+
+    const save = useAppStore
+      .getState()
+      .saveConfiguration(configurationWith({ forceStopTargetApp: true }));
+    let settled = false;
+    const waited = waitForPendingSaves().then(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    const persisted = configurationWith({ forceStopTargetApp: true });
+    request.resolve(persisted);
+    await waited;
+    await save;
+
+    expect(settled).toBe(true);
+    expect(useAppStore.getState().snapshot?.configuration).toBe(persisted);
+  });
+
+  it("resolves after a failed save so a start is not blocked forever", async () => {
+    mockedSaveConfiguration.mockRejectedValue(new Error("Save failed"));
+
+    const save = useAppStore
+      .getState()
+      .saveConfiguration(configurationWith({ telemetryEnabled: true }));
+
+    await expect(waitForPendingSaves()).resolves.toBeUndefined();
+    await save;
+
+    expect(useAppStore.getState().saving).toBe(false);
+    expect(useAppStore.getState().error).toBe("Save failed");
   });
 });

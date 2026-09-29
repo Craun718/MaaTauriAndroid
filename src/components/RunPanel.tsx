@@ -25,7 +25,7 @@ import { canAcceptRunEvent } from "../lib/runEvents";
 import type { ResolvedRun, RunEvent } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useRunStartRetry } from "../lib/useRunStartRetry";
-import { useAppStore } from "../store/appStore";
+import { useAppStore, waitForPendingSaves } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { BottomDrawer } from "./ui/BottomDrawer";
 
@@ -45,7 +45,6 @@ export function RunPanel({
 }) {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
-  const saving = useAppStore((state) => state.saving);
   const { t, language } = useTranslation();
   const [run, setRun] = useState<ResolvedRun>();
   const [status, setStatus] = useState<string>();
@@ -225,7 +224,7 @@ export function RunPanel({
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
   const startUnavailable =
-    !running && (enabled.length === 0 || busy || saving || starting);
+    !running && (enabled.length === 0 || busy || starting);
 
   async function start() {
     onRunStarted?.();
@@ -236,6 +235,12 @@ export function RunPanel({
       // `display: "notification"` messages only reach the OS notification
       // center with POST_NOTIFICATIONS granted.
       void requestNotificationPermission();
+      // Task-list edits are optimistic and persist in the background, so a
+      // start issued right after a toggle would otherwise be resolved against
+      // the stale backend configuration. Draining the queue here is what lets
+      // the button stay evenly enabled: dimming it on `saving` made it blink on
+      // every task-list edit.
+      await waitForPendingSaves();
       await startRunWithAccess();
     } finally {
       setStarting(false);
@@ -271,8 +276,7 @@ export function RunPanel({
             aria-disabled={startUnavailable}
             onClick={() => {
               if (running) void stop();
-              else if (busy || saving || starting)
-                notify(t("startUnavailableNotice"));
+              else if (busy || starting) notify(t("startUnavailableNotice"));
               else if (enabled.length === 0) notify(t("noRunnableTasksNotice"));
               else void start();
             }}

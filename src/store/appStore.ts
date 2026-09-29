@@ -36,6 +36,16 @@ function reportError(error: unknown) {
 let saveQueue: Promise<void> = Promise.resolve();
 let pendingSaves = 0;
 
+/**
+ * 等所有已入队的配置保存真正落到后端。启动运行前用它替代「保存中禁用开始
+ * 按钮」：任务列表的改动是乐观更新加后台落盘，`saving` 只表示还有请求在路
+ * 上，拿它去改按钮外观的话，每改一次任务列表按钮就闪一下。队列里的失败各自
+ * 上报且已被 catch，所以这里不抛错；等待期间新入队的保存也会一并等完。
+ */
+export async function waitForPendingSaves(): Promise<void> {
+  while (pendingSaves > 0) await saveQueue;
+}
+
 export const useAppStore = create<AppStore>((set) => ({
   busy: false,
   saving: false,

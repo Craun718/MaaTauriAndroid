@@ -249,16 +249,16 @@ jobs:
           cargo clean --manifest-path src-tauri/Cargo.toml --package maa_tauri_android
           cargo check --manifest-path src-tauri/Cargo.toml --target "$ANDROID_RUST_TARGET" --lib
 
+      - name: Build the $ANDROID_ABI debug APK
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
+
       - name: Run app unit tests
         working-directory: src-tauri/gen/android
         run: |
           flavor="${ANDROID_ABI%-v8a}"
           ./gradlew ":app:test${flavor^}DebugUnitTest"
-
-      - name: Build the $ANDROID_ABI debug APK
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
 
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7

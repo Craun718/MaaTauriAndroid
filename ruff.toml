@@ -1,6 +1,13 @@
-# Lint config for the Python parts of the build pipeline: the CI-only helpers in
-# scripts/ and the packaging profiles in src-tauri/profiles/. The `python-lint`
-# job in .github/workflows/ci.yml runs exactly this config.
+# Lint config for every Python file this project owns: the build helpers in
+# scripts/, the packaging profiles in src-tauri/profiles/, and anything else that
+# lands in the repository. CI runs `ruff check .` (the `python-lint` job) and the
+# pre-commit hook runs the same check on staged files.
+#
+# Everything the repository does not own is excluded. `resource/` holds the
+# CI-only clones of the upstream PI projects, `vendor/` the vendored MaaFramework
+# artifacts, and `src-tauri/gen/` the generated Android project, which embeds an
+# upstream project's python under app/build/generated/piAssets/. Biome already
+# ignores those same three trees (see biome.json).
 #
 # The rule set is deliberately narrow. scripts/build_agent_bundle.py is an
 # AGPL-3.0 vendored copy of MaaFwApp's script (see its header), so style rules
@@ -9,6 +16,20 @@
 # job: `F821 undefined-name` (a missing import, as in 5fa1967), syntax errors,
 # and the rest of pyflakes' name and flow checks.
 target-version = "py313"
+extend-exclude = [
+  # Third-party trees: upstream resources, vendored binaries, generated shell.
+  "resource",
+  "vendor",
+  "src-tauri/gen",
+  # Caches and scratch trees that are not the project's source: `.cache` holds
+  # the downloaded agent core, `.worktrees` complete checkouts of this
+  # repository, `src-tauri/target` the Rust build output. Ruff already skips
+  # build/, dist/, node_modules/ and site-packages/ by default; these are the
+  # ones it does not know about.
+  ".cache",
+  ".worktrees",
+  "src-tauri/target",
+]
 
 [lint]
 select = ["E9", "F"]

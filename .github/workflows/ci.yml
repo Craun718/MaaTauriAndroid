@@ -105,10 +105,11 @@ jobs:
         with:
           python-version: '3.13'
       # Pinned so a new Ruff release cannot turn the gate red on its own. The
-      # rule set lives in ruff.toml; `scripts/build_agent_bundle.py` is a
-      # vendored AGPL-3.0 copy, which is why the selection stays narrow.
+      # rule set and the excluded third-party trees live in ruff.toml;
+      # `scripts/build_agent_bundle.py` is a vendored AGPL-3.0 copy, which is
+      # why the selection stays narrow.
       - run: pip install ruff==0.16.2
-      - run: ruff check scripts src-tauri/profiles
+      - run: ruff check .
 
   android-rust:
     needs: frontend

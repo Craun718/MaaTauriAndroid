@@ -255,7 +255,11 @@ export function RunPanel({
               else if (enabled.length === 0) notify(t("noRunnableTasksNotice"));
               else void start();
             }}
-            className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-line text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            className={`flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${
+              running
+                ? "border-error bg-error text-white focus-visible:outline-error"
+                : "border-accent bg-accent text-white focus-visible:outline-accent"
+            }`}
           >
             {running ? <Square size="1rem" /> : <Play size="1rem" />}
             {t(running ? "stopRun" : "startRun")}

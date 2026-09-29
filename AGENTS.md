@@ -36,7 +36,7 @@
 - `pnpm lint`：用 Biome 做 lint。
 - `pnpm format` / `pnpm format:check`：用 Biome 格式化 / 校验 JS、TS、JSON、CSS、HTML 和 SVG。
 - `cargo fmt --manifest-path src-tauri/Cargo.toml`：格式化 Rust 代码。
-- `ruff check .`：用 Ruff 检查本项目所有 Python 文件（规则与排除的第三方目录见仓库根 `ruff.toml`，与 CI 的 `python-lint` job、pre-commit 钩子一致）。ruff 不在仓库依赖里，本地需自备：`uv tool install ruff==0.16.2`（或 `pipx install ruff==0.16.2`）。
+- `ruff check .`：用 Ruff 检查本项目所有 Python 文件（`select = ["ALL"]`，被排除的第三方目录和每条带理由的 `ignore` 都在仓库根 `ruff.toml`；与 CI 的 `python-lint` job、pre-commit 钩子一致）。ruff 不在仓库依赖里，本地需自备：`uv tool install ruff==0.16.2`（或 `pipx install ruff==0.16.2`）。
 
 除非用户明确要求在本地运行，否则不要自行执行以下命令：
 
@@ -53,7 +53,7 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 | -------------- | ------------------------------------------------------------------- |
 | `frontend`     | `pnpm check` + `pnpm test` + `pnpm build`（TypeScript 检查），产出 `dist` artifact |
 | `rust`         | `cargo fmt --check` + `cargo test`（桌面目标）                      |
-| `python-lint`  | `ruff check .`（本项目全部 Python，第三方目录见 `ruff.toml`，抓 `E9`/`F` 类错误） |
+| `python-lint`  | `ruff check .`（本项目全部 Python；`select = ["ALL"]` + 带理由的 `ignore`，见 `ruff.toml`） |
 | `android-rust` | Android 目标的 `cargo check`，依赖 `frontend` 的 `dist`             |
 | `m9a-android`  | 构建 arm64 debug APK，并上传 APK 与 agent runtime artifact          |
 

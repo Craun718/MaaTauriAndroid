@@ -228,10 +228,10 @@ jobs:
             --require pillow==11.0.0 \
             --abi "$ANDROID_ABI"
 
-      - name: Generate the Tauri Android Gradle integration
+      - name: Generate the Tauri Android Gradle dependencies
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri android init --ci --skip-targets-install
+          cargo check --manifest-path src-tauri/Cargo.toml --target "$ANDROID_RUST_TARGET" --lib
 
       - name: Run app unit tests
         working-directory: src-tauri/gen/android

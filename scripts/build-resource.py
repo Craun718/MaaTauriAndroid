@@ -27,8 +27,7 @@ def run(command: list[str], *, cwd: Path | None = None) -> None:
 
 def normalized_resource_id(url: str) -> str:
     name = url.rstrip("/").rsplit("/", 1)[-1]
-    if name.endswith(".git"):
-        name = name[:-4]
+    name = name.removesuffix(".git")
     resource_id = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     if not RESOURCE_ID.fullmatch(resource_id):
         raise RuntimeError(f"cannot derive a resource id from {url!r}; pass --id ID")
@@ -44,7 +43,7 @@ def validate_resource_id(resource_id: str) -> str:
     return resource_id
 
 
-def clone(url: str, ref: str, resource_id: str, submodules: bool) -> Path:
+def clone(url: str, ref: str, resource_id: str, *, submodules: bool) -> Path:
     path = REPO_ROOT / "resource" / resource_id
     if path.exists():
         raise RuntimeError(
@@ -215,7 +214,12 @@ def main() -> int:
             if arguments.id
             else normalized_resource_id(arguments.url)
         )
-        clone(arguments.url, arguments.ref, resource_id, arguments.submodules)
+        clone(
+            arguments.url,
+            arguments.ref,
+            resource_id,
+            submodules=arguments.submodules,
+        )
         run(
             [
                 str(REPO_ROOT / "scripts" / "fetch-maafw.sh"),

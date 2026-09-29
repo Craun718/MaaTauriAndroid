@@ -70,7 +70,7 @@ def jsonc_text(source: Path) -> str:
 def read_interface(source: Path) -> dict[str, Any]:
     document = json.loads(jsonc_text(source))
     if not isinstance(document, dict):
-        raise RuntimeError(f"{source} must contain a JSON object")
+        raise TypeError(f"{source} must contain a JSON object")
     return document
 
 
@@ -85,7 +85,7 @@ def normalize_relative_path(value: str) -> PurePosixPath:
 def first_resource_path(interface: dict[str, Any]) -> PurePosixPath:
     resources = interface.get("resource", [])
     if not isinstance(resources, list):
-        raise RuntimeError("interface.resource must be a list")
+        raise TypeError("interface.resource must be a list")
     for resource in resources:
         if not isinstance(resource, dict):
             continue
@@ -234,7 +234,15 @@ def main() -> int:
         destination = prepare(arguments.project)
         files = sum(1 for path in destination.rglob("*") if path.is_file())
         print(f"{files} files -> {destination}")
-    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+    # TypeError joins the list for the shape validations in read_interface() and
+    # first_resource_path(): a bad JSON document is reported, not traced back.
+    except (
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        subprocess.CalledProcessError,
+    ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     return 0

@@ -28,9 +28,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import sys
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 AGENT_LIB_NAMES = ("libMaaAgentClient.so", "libMaaAgentServer.so")
@@ -38,12 +39,15 @@ ABIS = ("arm64-v8a", "x86_64")
 # ZIP stores the entry count in a 16-bit field; anything larger forces ZIP64.
 MAX_ENTRIES = 0xFFFF
 ZIP_EPOCH_TIMESTAMP = 315532800
+# Accepted argv layouts: <bundle> <lib_dir> <out_zip> [--abi <abi>].
+ARGC_WITHOUT_ABI = 4
+ARGC_WITH_ABI = 6
 
 
 def zip_date_time() -> tuple[int, int, int, int, int, int]:
     source_timestamp = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
     timestamp = max(source_timestamp, ZIP_EPOCH_TIMESTAMP)
-    return datetime.fromtimestamp(timestamp, timezone.utc).timetuple()[:6]
+    return datetime.fromtimestamp(timestamp, UTC).timetuple()[:6]
 
 
 def collect(bundle: Path) -> list[tuple[Path, str]]:
@@ -61,13 +65,13 @@ def collect(bundle: Path) -> list[tuple[Path, str]]:
 
 
 def main() -> int:
-    if len(sys.argv) not in (4, 6):
+    if len(sys.argv) not in (ARGC_WITHOUT_ABI, ARGC_WITH_ABI):
         raise SystemExit(__doc__)
     bundle = Path(sys.argv[1]).resolve()
     lib_dir = Path(sys.argv[2]).resolve()
     out_zip = Path(sys.argv[3]).resolve()
     abi = "arm64-v8a"
-    if len(sys.argv) == 6:
+    if len(sys.argv) == ARGC_WITH_ABI:
         if sys.argv[4] != "--abi" or sys.argv[5] not in ABIS:
             raise SystemExit(__doc__)
         abi = sys.argv[5]
@@ -114,7 +118,7 @@ def main() -> int:
     with zipfile.ZipFile(out_zip) as archive:
         names = archive.namelist()
         for info in archive.infolist():
-            if info.external_attr >> 16 & 0xA000 == 0xA000:
+            if stat.S_ISLNK(info.external_attr >> 16):
                 raise SystemExit(f"archive contains a symlink: {info.filename}")
         missing = [name for name in required_libs if name not in names]
         if missing:

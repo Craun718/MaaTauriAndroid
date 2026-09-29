@@ -17,7 +17,6 @@ import sys
 import tomllib
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENT_CORE_PY = "3.13.15"
 
@@ -42,7 +41,7 @@ def die(msg: str) -> None:
 
 def run(cmd: list[str], **kwargs: object) -> None:
     log(f"==> {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, **kwargs)  # noqa: S603
+    subprocess.run(cmd, check=True, **kwargs)
 
 
 def read_profile(path: Path) -> tuple[str, str]:
@@ -72,7 +71,7 @@ def pick_ndk(android_home: Path) -> Path:
     return chosen
 
 
-def detect_build_mode(force_release: bool, force_debug: bool) -> str:
+def detect_build_mode(*, force_release: bool, force_debug: bool) -> str:
     if force_release and force_debug:
         die("--release and --debug are mutually exclusive")
     if force_release:
@@ -82,6 +81,7 @@ def detect_build_mode(force_release: bool, force_debug: bool) -> str:
     result = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "describe", "--exact-match", "--tags"],
         capture_output=True,
+        check=False,
     )
     return "release" if result.returncode == 0 else "debug"
 
@@ -91,6 +91,7 @@ def ensure_rust_target(target: str) -> None:
         ["rustup", "target", "list", "--installed"],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode == 0 and target in result.stdout.splitlines():
         return
@@ -107,6 +108,7 @@ def load_env() -> None:
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
+        check=False,
     )
     if result.returncode != 0:
         die(f"failed to source {env_sh}")
@@ -138,7 +140,7 @@ def build(args: argparse.Namespace) -> None:
     if args.skip_runtime and (runtime_zip is None or not runtime_zip.is_file()):
         die(f"--skip-runtime requires an existing runtime ZIP at {runtime_zip}")
 
-    build_mode = detect_build_mode(args.release, args.debug)
+    build_mode = detect_build_mode(force_release=args.release, force_debug=args.debug)
     log(f"==> Building {resource_id} ({args.abi}) {build_mode} APK")
 
     android_home = Path(os.environ.get("ANDROID_HOME", ""))

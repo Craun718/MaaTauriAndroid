@@ -18,6 +18,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
+      android: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.m9a == 'true' || steps.filter.outputs.narutomobile == 'true' || steps.filter.outputs.maapvz == 'true' }}
       m9a: ${{ steps.filter.outputs.m9a == 'true' || steps.filter.outputs.common == 'true' }}
       narutomobile: ${{ steps.filter.outputs.narutomobile == 'true' || steps.filter.outputs.common == 'true' }}
       maapvz: ${{ steps.filter.outputs.maapvz == 'true' || steps.filter.outputs.common == 'true' }}
@@ -125,9 +126,28 @@ jobs:
           } >> "$GITHUB_ENV"
       - run: cargo check --manifest-path src-tauri/Cargo.toml --target "$ANDROID_RUST_TARGET" --features tauri/custom-protocol --lib
 
-  m9a-android:
+  android-gradle:
     needs: changes
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.m9a == 'true')
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      # buildSrc is its own Gradle build: there is no gradlew at the repository
+      # root, and the Android settings.gradle applies tauri.settings.gradle,
+      # which the Tauri CLI only generates during the APK build below. Run the
+      # tests from buildSrc so they do not depend on generated files.
+      - name: Run buildSrc tests
+        working-directory: src-tauri/gen/android/buildSrc
+        run: ../gradlew test
+
+  m9a-android:
+    needs: [changes, android-gradle]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.m9a == 'true') && needs.android-gradle.result == 'success'
     runs-on: ubuntu-latest
     env:
       # The Python agent runtime is built by the vendored script
@@ -212,14 +232,6 @@ jobs:
         working-directory: src-tauri/gen/android
         run: ../gradlew ":app:test${TAURI_ANDROID_TARGET^}DebugUnitTest"
 
-      # buildSrc is its own Gradle build: there is no gradlew at the repository
-      # root, and the Android settings.gradle applies tauri.settings.gradle,
-      # which the Tauri CLI only generates during the APK build below. Run the
-      # tests from buildSrc so they do not depend on generated files.
-      - name: Run buildSrc tests
-        working-directory: src-tauri/gen/android/buildSrc
-        run: ../gradlew test
-
       - name: Build the $ANDROID_ABI debug APK
         run: |
           pnpm install --frozen-lockfile
@@ -239,8 +251,8 @@ jobs:
           if-no-files-found: error
 
   narutomobile-android:
-    needs: changes
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.narutomobile == 'true')
+    needs: [changes, android-gradle]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.narutomobile == 'true') && needs.android-gradle.result == 'success'
     runs-on: ubuntu-latest
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
@@ -318,10 +330,6 @@ jobs:
             --require pillow==11.0.0 \
             --abi "$ANDROID_ABI"
 
-      - name: Run buildSrc tests
-        working-directory: src-tauri/gen/android/buildSrc
-        run: ../gradlew test
-
       - name: Build the $ANDROID_ABI debug APK
         run: |
           pnpm install --frozen-lockfile
@@ -341,8 +349,8 @@ jobs:
           if-no-files-found: error
 
   maapvz-android:
-    needs: changes
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.maapvz == 'true')
+    needs: [changes, android-gradle]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.maapvz == 'true') && needs.android-gradle.result == 'success'
     runs-on: ubuntu-latest
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
@@ -420,10 +428,6 @@ jobs:
             --exclude onnxruntime \
             --require pillow==11.0.0 \
             --abi "$ANDROID_ABI"
-
-      - name: Run buildSrc tests
-        working-directory: src-tauri/gen/android/buildSrc
-        run: ../gradlew test
 
       - name: Build the $ANDROID_ABI debug APK
         run: |

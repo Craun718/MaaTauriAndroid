@@ -66,6 +66,7 @@ pub(crate) struct FpsAdvisor {
     required_count: usize,
 }
 
+#[cfg(any(target_os = "android", test))]
 impl FpsAdvisor {
     pub(crate) fn new() -> Self {
         Self {
@@ -138,6 +139,7 @@ impl FpsAdvisor {
     }
 }
 
+#[cfg(any(target_os = "android", test))]
 impl Default for FpsAdvisor {
     fn default() -> Self {
         Self::new()

@@ -230,7 +230,7 @@ jobs:
 
       - name: Run app unit tests
         working-directory: src-tauri/gen/android
-        run: ../gradlew ":app:test${TAURI_ANDROID_TARGET^}DebugUnitTest"
+        run: ./gradlew ":app:test${TAURI_ANDROID_TARGET^}DebugUnitTest"
 
       - name: Build the $ANDROID_ABI debug APK
         run: |

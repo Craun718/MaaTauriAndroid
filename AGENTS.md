@@ -59,6 +59,8 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 
 资源 APK job 受路径过滤控制。公共构建路径变更会触发全部三个 job；各自的 `resource/<resource-id>.toml` 变更只触发对应 job。需要强制跑（例如只改了文档但要出包）用 `workflow_dispatch`。
 
+三个资源 job（`m9a-android` / `narutomobile-android` / `maapvz-android`）上传的 artifact 名和包内文件名都带 7 位 commit hash 后缀：artifact 为 `<id>-apk-debug-<hash>` / `<id>-agent-runtime-<abi>-<hash>`，对应文件为 `app-<flavor>-debug-<hash>.apk`（flavor 是 `arm64` / `x86_64`）与 `<id>-agent-runtime-<abi>-<hash>.zip`。hash 取 `pull_request` 的 head commit、其余事件取 `github.sha` 前 7 位（PR 上 `github.sha` 是合成 merge commit，不能用于追溯）。改名在 Gradle 打包之后执行——profile 的 `bundle` 按不带 hash 的名字解析，提前改名会让打包失败。
+
 ## 真机测试
 
 装机注意：`m9a-android` 目前每次构建都会重新生成 debug 密钥（`android-debug-keystore-v1` 缓存步骤不生效），所以**不同 CI 产物的签名互不相同**。`adb install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，只能先 `adb uninstall` 再装；卸载会清掉 app 私有数据（`configuration.json` 里的运行配置、Keystore 里的密码），动手前先确认 `secretManifest` 是否为空。

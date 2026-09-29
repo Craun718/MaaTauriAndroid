@@ -39,7 +39,7 @@ python3 scripts/build-resource.py \
 
 没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
 
-runtime ZIP 是构建产物，不进 git——CI 每次重新构建。
+runtime ZIP 是构建产物，不进 git——CI 每次重新构建。本地构建保持 `<项目>-agent-runtime-<abi>.zip` 这个名字（profile 的 `bundle` 按它解析）；CI 在上传前会把它改名为 `<项目>-agent-runtime-<abi>-<7 位 commit hash>.zip`，APK 同理，便于把下载到的包对应回具体提交。
 
 ## 流水线三步
 

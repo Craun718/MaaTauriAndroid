@@ -240,6 +240,14 @@ jobs:
           path: ~/.android/debug.keystore
           key: android-debug-keystore-v1
 
+      # On pull_request, github.sha is the synthetic merge commit, so prefer the
+      # real head commit. The uploaded APK and runtime archive carry this suffix,
+      # which keeps a downloaded package traceable to an actual commit.
+      - name: Resolve the commit hash suffix
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "SHORT_SHA=$(printf '%s' "$HEAD_SHA" | cut -c1-7)" >> "$GITHUB_ENV"
+
       - name: Point the Android build at the M9A profile
         run: |
           {
@@ -294,16 +302,32 @@ jobs:
           flavor="${ANDROID_ABI%-v8a}"
           ./gradlew ":app:test${flavor^}DebugUnitTest"
 
+      # Rename the runtime ZIP and the APKs so every downloadable file names the
+      # commit it was built from. This runs after the Gradle build: the profile
+      # resolves `bundle` by its plain name, so renaming it earlier would break
+      # the packaging step.
+      - name: Suffix the artifacts with the commit hash
+        run: |
+          mv "resource/m9a-agent-runtime-${ANDROID_ABI}.zip" \
+             "resource/m9a-agent-runtime-${ANDROID_ABI}-${SHORT_SHA}.zip"
+          apks=()
+          while IFS= read -r -d '' apk; do apks+=("$apk"); done \
+            < <(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print0)
+          [ "${#apks[@]}" -gt 0 ] || { echo "no APK found to suffix" >&2; exit 1; }
+          for apk in "${apks[@]}"; do
+            mv "$apk" "${apk%.apk}-${SHORT_SHA}.apk"
+          done
+
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
         with:
-          name: m9a-agent-runtime-${{ env.ANDROID_ABI }}
-          path: resource/m9a-agent-runtime-${{ env.ANDROID_ABI }}.zip
+          name: m9a-agent-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}
+          path: resource/m9a-agent-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}.zip
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: m9a-apk-debug
+          name: m9a-apk-debug-${{ env.SHORT_SHA }}
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
 
@@ -365,6 +389,14 @@ jobs:
           path: ~/.android/debug.keystore
           key: android-debug-keystore-v1
 
+      # On pull_request, github.sha is the synthetic merge commit, so prefer the
+      # real head commit. The uploaded APK and runtime archive carry this suffix,
+      # which keeps a downloaded package traceable to an actual commit.
+      - name: Resolve the commit hash suffix
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "SHORT_SHA=$(printf '%s' "$HEAD_SHA" | cut -c1-7)" >> "$GITHUB_ENV"
+
       - name: Point the Android build at the NarutoMobile profile
         run: |
           {
@@ -395,16 +427,32 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
 
+      # Rename the runtime ZIP and the APKs so every downloadable file names the
+      # commit it was built from. This runs after the Gradle build: the profile
+      # resolves `bundle` by its plain name, so renaming it earlier would break
+      # the packaging step.
+      - name: Suffix the artifacts with the commit hash
+        run: |
+          mv "resource/narutomobile-agent-runtime-${ANDROID_ABI}.zip" \
+             "resource/narutomobile-agent-runtime-${ANDROID_ABI}-${SHORT_SHA}.zip"
+          apks=()
+          while IFS= read -r -d '' apk; do apks+=("$apk"); done \
+            < <(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print0)
+          [ "${#apks[@]}" -gt 0 ] || { echo "no APK found to suffix" >&2; exit 1; }
+          for apk in "${apks[@]}"; do
+            mv "$apk" "${apk%.apk}-${SHORT_SHA}.apk"
+          done
+
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
         with:
-          name: narutomobile-agent-runtime-${{ env.ANDROID_ABI }}
-          path: resource/narutomobile-agent-runtime-${{ env.ANDROID_ABI }}.zip
+          name: narutomobile-agent-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}
+          path: resource/narutomobile-agent-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}.zip
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: narutomobile-apk-debug
+          name: narutomobile-apk-debug-${{ env.SHORT_SHA }}
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
 
@@ -466,6 +514,14 @@ jobs:
           path: ~/.android/debug.keystore
           key: android-debug-keystore-v1
 
+      # On pull_request, github.sha is the synthetic merge commit, so prefer the
+      # real head commit. The uploaded APK and runtime archive carry this suffix,
+      # which keeps a downloaded package traceable to an actual commit.
+      - name: Resolve the commit hash suffix
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "SHORT_SHA=$(printf '%s' "$HEAD_SHA" | cut -c1-7)" >> "$GITHUB_ENV"
+
       - name: Point the Android build at the MAAPVZ profile
         run: |
           {
@@ -497,15 +553,31 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
 
+      # Rename the runtime ZIP and the APKs so every downloadable file names the
+      # commit it was built from. This runs after the Gradle build: the profile
+      # resolves `bundle` by its plain name, so renaming it earlier would break
+      # the packaging step.
+      - name: Suffix the artifacts with the commit hash
+        run: |
+          mv "resource/maapvz-agent-runtime-${ANDROID_ABI}.zip" \
+             "resource/maapvz-agent-runtime-${ANDROID_ABI}-${SHORT_SHA}.zip"
+          apks=()
+          while IFS= read -r -d '' apk; do apks+=("$apk"); done \
+            < <(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print0)
+          [ "${#apks[@]}" -gt 0 ] || { echo "no APK found to suffix" >&2; exit 1; }
+          for apk in "${apks[@]}"; do
+            mv "$apk" "${apk%.apk}-${SHORT_SHA}.apk"
+          done
+
       - name: Upload the agent runtime archive
         uses: actions/upload-artifact@v7
         with:
-          name: maapvz-agent-runtime-${{ env.ANDROID_ABI }}
-          path: resource/maapvz-agent-runtime-${{ env.ANDROID_ABI }}.zip
+          name: maapvz-agent-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}
+          path: resource/maapvz-agent-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}.zip
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: maapvz-apk-debug
+          name: maapvz-apk-debug-${{ env.SHORT_SHA }}
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error

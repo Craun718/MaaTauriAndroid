@@ -884,11 +884,33 @@ pub fn maa_log_dir() -> Option<&'static Path> {
 /// framework (see [`configure_framework_logging`]).
 pub fn apply_debug_mode(enabled: bool) {
     MAA_DEBUG_MODE.store(enabled, Ordering::Relaxed);
+    #[cfg(target_os = "android")]
+    sync_android_debug_mode(enabled);
     log::set_max_level(if enabled {
         log::LevelFilter::Debug
     } else {
         log::LevelFilter::Info
     });
+}
+
+#[cfg(target_os = "android")]
+fn sync_android_debug_mode(enabled: bool) {
+    let Ok(bridge_class) = runtime_bridge_class() else {
+        return;
+    };
+    let Some(vm) = java_vm() else {
+        return;
+    };
+    let Ok(mut env) = vm.attach_current_thread() else {
+        return;
+    };
+    let _ = env.exception_clear();
+    let _ = env.call_static_method(
+        bridge_class,
+        "setDebugMode",
+        "(Z)V",
+        &[jni::objects::JValue::Bool(u8::from(enabled))],
+    );
 }
 
 pub fn maa_debug_mode() -> bool {

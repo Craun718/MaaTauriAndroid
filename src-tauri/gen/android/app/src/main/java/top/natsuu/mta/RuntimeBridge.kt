@@ -19,6 +19,7 @@ import android.os.ParcelFileDescriptor
 import android.os.Looper
 import android.os.Process
 import android.provider.MediaStore
+import android.util.Log
 import android.view.WindowManager
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
@@ -53,9 +54,23 @@ object RuntimeBridge {
     private var controlClient: ControlServiceClient? = null
     private var hostActivity: WeakReference<Activity>? = null
     @Volatile
+    private var debugMode = false
+    @Volatile
     private var physicalScreenWidth = 0
     @Volatile
     private var physicalScreenHeight = 0
+
+    private const val LOG_TAG = "MaaTauriAndroidControl"
+
+    @JvmStatic
+    fun setDebugMode(enabled: Boolean) {
+        debugMode = enabled
+    }
+
+    @JvmStatic
+    fun logDebug(message: String) {
+        if (debugMode) Log.d(LOG_TAG, message)
+    }
 
     @JvmStatic
     fun attachContext(context: Context) {
@@ -122,11 +137,20 @@ object RuntimeBridge {
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
+        logDebug(
+            "Virtual display orientation requested: enabled=$enabled, " +
+                "current=${activity.requestedOrientation}, target=$targetOrientation",
+        )
         return runCatching {
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 activity.requestedOrientation = targetOrientation
             } else {
-                mainHandler.post { activity.requestedOrientation = targetOrientation }
+                mainHandler.post {
+                    activity.requestedOrientation = targetOrientation
+                    logDebug(
+                        "Virtual display orientation posted: enabled=$enabled",
+                    )
+                }
             }
             true
         }.getOrDefault(false)

@@ -1,5 +1,6 @@
 package top.natsuu.mta
 
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -60,5 +61,12 @@ class MainActivity : TauriActivity() {
     if (::controlClient.isInitialized) {
       controlClient.connect()
     }
+  }
+
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    RuntimeBridge.logDebug(
+      "Host configuration changed: orientation=${newConfig.orientation}",
+    )
   }
 }

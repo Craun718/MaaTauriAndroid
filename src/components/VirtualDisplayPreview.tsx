@@ -12,6 +12,7 @@ import {
   touchVirtualDisplay,
 } from "../lib/api";
 import {
+  reportFrontendDebug,
   reportFrontendError,
   reportFrontendWarning,
 } from "../lib/frontendLogging";
@@ -71,6 +72,12 @@ export type StreamState =
 
 type PreviewTouchAction = 6 | 7 | 8;
 
+const TOUCH_ACTION_NAMES: Record<PreviewTouchAction, string> = {
+  6: "down",
+  7: "move",
+  8: "up",
+};
+
 export function VirtualDisplayPreview({
   status,
   showTouchMarkers,
@@ -104,6 +111,7 @@ export function VirtualDisplayPreview({
     ): Promise<boolean> => {
       const current = statusRef.current;
       if (!current.active) return false;
+      const startedAt = performance.now();
       try {
         const result = await touchVirtualDisplay({
           contact,
@@ -112,14 +120,30 @@ export function VirtualDisplayPreview({
           y,
           action,
         });
-        if (result.accepted) return true;
+        if (result.accepted) {
+          reportFrontendDebug("Virtual display touch dispatched", {
+            displayId: current.displayId,
+            action: TOUCH_ACTION_NAMES[action],
+            contact,
+            x,
+            y,
+            durationMs: Math.round(performance.now() - startedAt),
+          });
+          return true;
+        }
         throw new Error(result.message);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        reportFrontendError("Virtual display touch failed", error, {
+          displayId: current.displayId,
+          action: TOUCH_ACTION_NAMES[action],
+          contact,
+          x,
+          y,
+          durationMs: Math.round(performance.now() - startedAt),
+        });
         if (visibleFailure) {
           notify(message, { tone: "error" });
-        } else {
-          reportFrontendError("Virtual display touch failed", error);
         }
         return false;
       }
@@ -466,13 +490,31 @@ export function VirtualDisplayPreview({
 
   function onPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     const point = mapPoint(event);
-    if (!point.inside) return;
+    if (!point.inside) {
+      reportFrontendDebug("Virtual display pointer outside preview", {
+        pointerId: event.pointerId,
+        x: point.x,
+        y: point.y,
+      });
+      return;
+    }
     const pointerId = event.pointerId;
     const contact = pointerSlots.current.acquire(pointerId);
-    if (contact < 0) return;
+    if (contact < 0) {
+      reportFrontendError("Virtual display touch contact slots exhausted", {
+        pointerId,
+      });
+      return;
+    }
     event.currentTarget.setPointerCapture(pointerId);
     lastPoints.current.set(pointerId, { x: point.x, y: point.y });
     pointerSlots.current.remember(pointerId, point.x, point.y);
+    reportFrontendDebug("Virtual display pointer down", {
+      pointerId,
+      contact,
+      x: point.x,
+      y: point.y,
+    });
     void dispatchTouch(6, point.x, point.y, contact, true).then((accepted) => {
       if (!accepted) {
         pointerSlots.current.release(pointerId);
@@ -483,7 +525,12 @@ export function VirtualDisplayPreview({
 
   function onPointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
     const contact = pointerSlots.current.contact(event.pointerId);
-    if (contact < 0) return;
+    if (contact < 0) {
+      reportFrontendDebug("Virtual display pointer move without contact", {
+        pointerId: event.pointerId,
+      });
+      return;
+    }
     const point = mapPoint(event);
     const previous = lastPoints.current.get(event.pointerId);
     if (previous?.x === point.x && previous.y === point.y) return;
@@ -492,15 +539,36 @@ export function VirtualDisplayPreview({
     moveScheduler.current.move({ contact, x: point.x, y: point.y });
   }
 
-  function onPointerEnd(event: ReactPointerEvent<HTMLCanvasElement>) {
+  function onPointerEnd(
+    event: ReactPointerEvent<HTMLCanvasElement>,
+    reason: "up" | "cancel",
+  ) {
     const contact = pointerSlots.current.contact(event.pointerId);
     if (contact < 0) return;
     const point = mapPoint(event);
     lastPoints.current.set(event.pointerId, { x: point.x, y: point.y });
     pointerSlots.current.remember(event.pointerId, point.x, point.y);
+    reportFrontendDebug("Virtual display pointer ended", {
+      reason,
+      pointerId: event.pointerId,
+      contact,
+      x: point.x,
+      y: point.y,
+    });
     void dispatchTouch(8, point.x, point.y, contact, true).finally(() => {
       pointerSlots.current.release(event.pointerId);
       lastPoints.current.delete(event.pointerId);
+    });
+  }
+
+  function onPointerLostCapture(
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ): void {
+    const contact = pointerSlots.current.contact(event.pointerId);
+    reportFrontendDebug("Virtual display pointer capture lost", {
+      pointerId: event.pointerId,
+      contact,
+      stillActive: contact >= 0,
     });
   }
 
@@ -541,8 +609,9 @@ export function VirtualDisplayPreview({
           aria-label={t("virtualDisplay")}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={onPointerEnd}
-          onPointerCancel={onPointerEnd}
+          onPointerUp={(event) => onPointerEnd(event, "up")}
+          onPointerCancel={(event) => onPointerEnd(event, "cancel")}
+          onLostPointerCapture={onPointerLostCapture}
         />
         {status.active && showTouchMarkers && (
           <div className="pointer-events-none absolute inset-0">

@@ -1,4 +1,5 @@
-import { error, warn } from "@tauri-apps/plugin-log";
+import { debug, error, warn } from "@tauri-apps/plugin-log";
+import { useAppStore } from "../store/appStore";
 
 export function formatLogValue(value: unknown): string {
   if (value instanceof DOMException) {
@@ -41,6 +42,17 @@ export function reportFrontendWarning(
 ): void {
   console.warn(message, ...details);
   void warn(formatLogMessage(message, details)).catch(() => {});
+}
+
+export function reportFrontendDebug(
+  message: string,
+  ...details: unknown[]
+): void {
+  if (useAppStore.getState().snapshot?.configuration.debugMode !== true) {
+    return;
+  }
+  console.debug(message, ...details);
+  void debug(formatLogMessage(message, details)).catch(() => {});
 }
 
 export function installFrontendErrorLogging(): () => void {

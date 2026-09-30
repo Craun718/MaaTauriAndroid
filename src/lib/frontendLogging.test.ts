@@ -1,34 +1,56 @@
-import { error, warn } from "@tauri-apps/plugin-log";
+import { debug, error, warn } from "@tauri-apps/plugin-log";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
+import { useAppStore } from "../store/appStore";
 import {
   formatLogValue,
   installFrontendErrorLogging,
+  reportFrontendDebug,
   reportFrontendError,
   reportFrontendWarning,
 } from "./frontendLogging";
 
+const configuration: UserConfiguration = {
+  schemaVersion: 1,
+  initialized: true,
+  forceStopTargetApp: false,
+  closeTargetAppAfterRun: false,
+  telemetryEnabled: false,
+  globalOptionValues: {},
+  controllerOptionValues: {},
+  resourceOptionValues: {},
+  runConfigurations: [],
+};
+
 vi.mock("@tauri-apps/plugin-log", () => ({
+  debug: vi.fn(() => Promise.resolve()),
   error: vi.fn(() => Promise.resolve()),
   warn: vi.fn(() => Promise.resolve()),
 }));
 
+const debugMock = vi.mocked(debug);
 const errorMock = vi.mocked(error);
 const warnMock = vi.mocked(warn);
 
 describe("frontend logging", () => {
   let consoleError: ReturnType<typeof vi.spyOn>;
   let consoleWarn: ReturnType<typeof vi.spyOn>;
+  let consoleDebug: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    useAppStore.setState({ snapshot: undefined });
     errorMock.mockClear();
     warnMock.mockClear();
+    debugMock.mockClear();
     consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    consoleDebug = vi.spyOn(console, "debug").mockImplementation(() => {});
   });
 
   afterEach(() => {
     consoleError.mockRestore();
     consoleWarn.mockRestore();
+    consoleDebug.mockRestore();
   });
 
   it("formats errors and non-error values", () => {
@@ -65,6 +87,36 @@ describe("frontend logging", () => {
 
     expect(warnMock).toHaveBeenCalledWith('Socket closed\n{"code":1006}');
     expect(consoleWarn).toHaveBeenCalledWith("Socket closed", { code: 1006 });
+  });
+
+  it("suppresses diagnostics when debug mode is unavailable", () => {
+    reportFrontendDebug("Virtual display touch", {
+      action: "down",
+      contact: 15,
+    });
+
+    expect(debugMock).not.toHaveBeenCalled();
+    expect(consoleDebug).not.toHaveBeenCalled();
+  });
+
+  it("reports diagnostics to the console and Tauri debug log in debug mode", () => {
+    const snapshot: AppStateSnapshot = {
+      configuration: { ...configuration, debugMode: true },
+    };
+    useAppStore.setState({ snapshot });
+
+    reportFrontendDebug("Virtual display touch", {
+      action: "down",
+      contact: 15,
+    });
+
+    expect(debugMock).toHaveBeenCalledWith(
+      'Virtual display touch\n{"action":"down","contact":15}',
+    );
+    expect(consoleDebug).toHaveBeenCalledWith("Virtual display touch", {
+      action: "down",
+      contact: 15,
+    });
   });
 
   it("logs uncaught errors and removes the listeners on cleanup", async () => {

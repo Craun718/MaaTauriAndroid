@@ -407,6 +407,16 @@ export function SchedulesPage() {
             </div>
           )}
 
+          <Checkbox
+            checked={draft.autoStart}
+            onCheckedChange={(autoStart) => setDraft({ ...draft, autoStart })}
+          >
+            {t("scheduleAutoStart")}
+          </Checkbox>
+          {draft.autoStart ? (
+            <p className="text-xs text-ink-muted">{t("scheduleAutoStartHint")}</p>
+          ) : null}
+
           <div className="flex justify-end gap-2">
             <button
               type="button"

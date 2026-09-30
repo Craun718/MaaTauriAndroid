@@ -48,8 +48,29 @@ class ScheduleExecutionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        ScheduleAlarmManager.sync(this)
+        if (RuntimeBridge.isAppReady()) {
+            ScheduleAlarmManager.sync(this)
+        }
         thread(name = "mta-schedule-execution") {
+            if (!RuntimeBridge.isAppReady()) {
+                if (!ScheduleAlarmManager.isAutoStartAllowed(this@ScheduleExecutionService, ruleId)) {
+                    android.util.Log.i(
+                        TAG,
+                        "Skipping scheduled run: auto-start is disabled for rule $ruleId",
+                    )
+                    stopSelf()
+                    return@thread
+                }
+                launchMainActivityToInitialize()
+                if (!waitForAppReady()) {
+                    android.util.Log.w(
+                        TAG,
+                        "The Tauri app was not ready before the schedule timeout expired",
+                    )
+                    stopSelf()
+                    return@thread
+                }
+            }
             if (!RuntimeBridge.connectPrivilegedService(CONNECT_TIMEOUT_MS)) {
                 android.util.Log.w(
                     TAG,
@@ -65,6 +86,26 @@ class ScheduleExecutionService : Service() {
             stopSelf()
         }
         return START_NOT_STICKY
+    }
+
+    private fun launchMainActivityToInitialize() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching {
+            startActivity(intent)
+        }.onFailure { error ->
+            android.util.Log.e(TAG, "Could not launch MainActivity for schedule initialization", error)
+        }
+    }
+
+    private fun waitForAppReady(): Boolean {
+        val deadline = System.currentTimeMillis() + APP_READY_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (RuntimeBridge.isAppReady()) return true
+            Thread.sleep(APP_READY_POLL_INTERVAL_MS)
+        }
+        return RuntimeBridge.isAppReady()
     }
 
     override fun onDestroy() {
@@ -116,6 +157,8 @@ class ScheduleExecutionService : Service() {
         private const val CHANNEL_ID = "mta-schedule"
         private const val NOTIFICATION_ID = 2
         private const val CONNECT_TIMEOUT_MS = 15_000L
+        private const val APP_READY_TIMEOUT_MS = 30_000L
+        private const val APP_READY_POLL_INTERVAL_MS = 500L
 
         fun start(context: Context, ruleId: String, scheduledTimeMs: Long) {
             if (!SpecialUseFgsGate.canStart(context, ScheduleExecutionService::class.java)) {

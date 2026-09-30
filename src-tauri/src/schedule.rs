@@ -34,6 +34,8 @@ pub struct ScheduleRule {
     pub name: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
     pub run_configuration_id: String,
     #[serde(default)]
     pub force_start: bool,
@@ -380,6 +382,7 @@ mod tests {
             id: "rule".to_string(),
             name: "Daily".to_string(),
             enabled: true,
+            auto_start: true,
             run_configuration_id: "run".to_string(),
             force_start: false,
             trigger: ScheduleTrigger::FixedTime {

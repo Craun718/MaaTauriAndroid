@@ -267,6 +267,9 @@ const en = {
   scheduleLastTrigger: "Last trigger",
   scheduleNoRules: "No scheduled rules yet.",
   scheduleNewRule: "New",
+  scheduleAutoStart: "Allow auto-start",
+  scheduleAutoStartHint:
+    "When the app is not running, the system may launch it to run this schedule. You must also enable auto-start for this app in your device settings.",
   scheduleEdit: "Edit",
   scheduleDelete: "Delete",
   scheduleSave: "Save",
@@ -604,6 +607,9 @@ const zh: Record<MessageKey, string> = {
   scheduleLastTrigger: "最近触发",
   scheduleNoRules: "还没有定时规则。",
   scheduleNewRule: "新建",
+  scheduleAutoStart: "允许自启动",
+  scheduleAutoStartHint:
+    "应用未运行时，系统可能启动应用来执行此定时任务。同时需要在系统设置中允许本应用自启动。",
   scheduleEdit: "编辑",
   scheduleDelete: "删除",
   scheduleSave: "保存",

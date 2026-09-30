@@ -3058,6 +3058,15 @@ fn install_panic_reporter() {
 
 #[cfg(target_os = "android")]
 #[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_isAppReady(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> jni::sys::jboolean {
+    android_app_handle().is_some().into()
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
 pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_scheduleRulesJson(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,

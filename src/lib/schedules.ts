@@ -17,6 +17,7 @@ export function createScheduleRule(runConfigurationId: string): ScheduleRule {
     id: "",
     name: "",
     enabled: true,
+    autoStart: true,
     runConfigurationId,
     forceStart: false,
     trigger: {

@@ -14,13 +14,15 @@ import org.json.JSONObject
 data class ScheduledTrigger(
     val ruleId: String,
     val scheduledAtMs: Long,
+    val autoStart: Boolean = true,
 ) {
     companion object {
         fun fromStatus(status: JSONObject): ScheduledTrigger? {
             val ruleId = status.optString("id")
             val scheduledAtMs = status.optLong("nextTriggerEpochMs", Long.MIN_VALUE)
             if (ruleId.isEmpty() || scheduledAtMs == Long.MIN_VALUE) return null
-            return ScheduledTrigger(ruleId, scheduledAtMs)
+            val autoStart = if (status.has("autoStart")) status.optBoolean("autoStart") else true
+            return ScheduledTrigger(ruleId, scheduledAtMs, autoStart)
         }
     }
 }
@@ -55,8 +57,15 @@ object ScheduleAlarmManager {
             stateFile.writeText(JSONArray(schedules.map { rule ->
                 JSONObject().put("id", rule.ruleId)
                     .put("nextTriggerEpochMs", rule.scheduledAtMs)
+                    .put("autoStart", rule.autoStart)
             }).toString())
         }
+    }
+
+    fun isAutoStartAllowed(context: Context, ruleId: String): Boolean {
+        val stateFile = File(context.filesDir, "schedule-alarm-state.json")
+        val triggers = schedulesFromJson(stateFile.readTextOrNull())
+        return triggers.find { it.ruleId == ruleId }?.autoStart ?: false
     }
 
     fun syncFromLocalJson(context: Context, json: String?) {

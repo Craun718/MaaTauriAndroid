@@ -793,6 +793,9 @@ object RuntimeBridge {
     external fun scheduleRulesJson(): String?
 
     @JvmStatic
+    external fun isAppReady(): Boolean
+
+    @JvmStatic
     external fun recordScheduleForegroundServiceDenied(
         ruleId: String,
         scheduledTimeMs: Long,

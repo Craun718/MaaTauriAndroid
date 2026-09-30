@@ -173,7 +173,7 @@ export function SchedulesPage() {
   }
 
   function confirmTime() {
-    if (!draft || draft.trigger.kind !== "fixedTime" || !timeEditor) return;
+    if (draft?.trigger.kind !== "fixedTime" || !timeEditor) return;
     const nextTime = timeValue(timeEditor);
     const { originalTime } = timeEditor;
     const times = originalTime
@@ -414,7 +414,9 @@ export function SchedulesPage() {
             {t("scheduleAutoStart")}
           </Checkbox>
           {draft.autoStart ? (
-            <p className="text-xs text-ink-muted">{t("scheduleAutoStartHint")}</p>
+            <p className="text-xs text-ink-muted">
+              {t("scheduleAutoStartHint")}
+            </p>
           ) : null}
 
           <div className="flex justify-end gap-2">

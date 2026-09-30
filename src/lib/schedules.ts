@@ -18,6 +18,7 @@ export function createScheduleRule(runConfigurationId: string): ScheduleRule {
     name: "",
     enabled: true,
     runConfigurationId,
+    forceStart: false,
     trigger: {
       kind: "fixedTime",
       days: [1, 2, 3, 4, 5, 6, 7],

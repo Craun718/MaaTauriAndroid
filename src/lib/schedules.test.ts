@@ -12,6 +12,7 @@ import type { ScheduleRule } from "./types";
 describe("schedule rules", () => {
   it("rejects incomplete fixed-time rules", () => {
     const rule = createScheduleRule("");
+    expect(rule.forceStart).toBe(false);
     expect(scheduleRuleErrors(rule)).toContain("nameRequired");
     expect(scheduleRuleErrors(rule)).toContain("runConfigurationRequired");
     expect(scheduleRuleErrors(rule)).toContain("timeRequired");

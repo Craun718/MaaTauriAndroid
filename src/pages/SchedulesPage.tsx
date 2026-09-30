@@ -264,6 +264,20 @@ export function SchedulesPage() {
             }}
           />
 
+          <div>
+            <Checkbox
+              checked={draft.forceStart}
+              onCheckedChange={(forceStart) =>
+                setDraft({ ...draft, forceStart })
+              }
+            >
+              {t("scheduleForceStart")}
+            </Checkbox>
+            <p className="mt-1 text-sm text-ink-muted">
+              {t("scheduleForceStartTip")}
+            </p>
+          </div>
+
           {draft.trigger.kind === "fixedTime" ? (
             <div className="space-y-3">
               <span className="block text-sm text-base-content/60">

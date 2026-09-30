@@ -274,6 +274,9 @@ const en = {
   scheduleName: "Name",
   scheduleRunConfiguration: "Run configuration",
   scheduleTriggerType: "Trigger",
+  scheduleForceStart: "Force start",
+  scheduleForceStartTip:
+    "Interrupt a run already in progress and run this rule instead",
   scheduleFixedTime: "Clock times",
   scheduleInterval: "Interval",
   scheduleWeekdays: "Weekdays",
@@ -608,6 +611,8 @@ const zh: Record<MessageKey, string> = {
   scheduleName: "名称",
   scheduleRunConfiguration: "运行配置",
   scheduleTriggerType: "触发方式",
+  scheduleForceStart: "强制启动",
+  scheduleForceStartTip: "到达设定时间时若有任务正在执行，中断后执行本规则",
   scheduleFixedTime: "固定时间",
   scheduleInterval: "间隔",
   scheduleWeekdays: "星期",

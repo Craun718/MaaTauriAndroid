@@ -191,6 +191,7 @@ export interface ScheduleRule {
   name: string;
   enabled: boolean;
   runConfigurationId: string;
+  forceStart: boolean;
   trigger: ScheduleTrigger;
 }
 

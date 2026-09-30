@@ -1234,6 +1234,22 @@ fn get_schedule_status(state: State<'_, AppState>) -> Result<schedule::ScheduleS
 }
 
 #[cfg(target_os = "android")]
+fn preempt_running_run(state: &AppState) -> Result<bool, AppError> {
+    if state.maa.status() == runtime::RunState::Idle {
+        return Ok(true);
+    }
+    state.maa.request_stop(None).map_err(AppError::from)?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        if state.maa.status() == runtime::RunState::Idle {
+            return Ok(true);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Ok(false)
+}
+
+#[cfg(target_os = "android")]
 fn call_runtime_bridge_boolean_with_bool(
     method: &'static str,
     value: bool,
@@ -3160,14 +3176,39 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
         return 1;
     }
     if state.maa.status() != runtime::RunState::Idle {
-        let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
-            rule_id,
-            scheduled_epoch_ms: scheduled_time_ms,
-            actual_epoch_ms: chrono::Local::now().timestamp_millis(),
-            result: schedule::ScheduleTriggerResult::RejectedActive,
-            detail: Some("Another run is active or finishing".to_string()),
-        });
-        return 1;
+        if !rule.force_start {
+            let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+                rule_id,
+                scheduled_epoch_ms: scheduled_time_ms,
+                actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                result: schedule::ScheduleTriggerResult::RejectedActive,
+                detail: Some("Another run is active or finishing".to_string()),
+            });
+            return 1;
+        }
+        let preempted = match preempt_running_run(&state) {
+            Ok(preempted) => preempted,
+            Err(error) => {
+                let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+                    rule_id,
+                    scheduled_epoch_ms: scheduled_time_ms,
+                    actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                    result: schedule::ScheduleTriggerResult::RejectedActive,
+                    detail: Some(error.to_string()),
+                });
+                return 1;
+            }
+        };
+        if !preempted {
+            let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+                rule_id,
+                scheduled_epoch_ms: scheduled_time_ms,
+                actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                result: schedule::ScheduleTriggerResult::RejectedActive,
+                detail: Some("The active run did not stop in time".to_string()),
+            });
+            return 1;
+        }
     }
     let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
         rule_id: rule_id.clone(),

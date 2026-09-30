@@ -35,6 +35,8 @@ pub struct ScheduleRule {
     #[serde(default = "default_true")]
     pub enabled: bool,
     pub run_configuration_id: String,
+    #[serde(default)]
+    pub force_start: bool,
     // Nested (not flattened) so the wire shape matches the frontend's
     // `ScheduleRule.trigger` discriminated union exactly.
     pub trigger: ScheduleTrigger,
@@ -379,6 +381,7 @@ mod tests {
             name: "Daily".to_string(),
             enabled: true,
             run_configuration_id: "run".to_string(),
+            force_start: false,
             trigger: ScheduleTrigger::FixedTime {
                 days: vec![1, 2, 3, 4, 5, 6, 7],
                 times: vec!["12:00".to_string()],
@@ -453,8 +456,13 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mta-schedule-{}", Uuid::new_v4()));
         let store = ScheduleStore::new(&dir);
         let saved = store.save(fixed_rule())?;
+        assert!(!saved.force_start);
         assert_eq!(store.list()?.len(), 1);
         assert_eq!(store.find(&saved.id)?.unwrap().id, saved.id);
+        let mut forced = saved.clone();
+        forced.force_start = true;
+        let saved = store.save(forced)?;
+        assert!(store.find(&saved.id)?.unwrap().force_start);
         let entry = ScheduleTriggerLogEntry {
             rule_id: saved.id.clone(),
             scheduled_epoch_ms: 123,
@@ -494,6 +502,7 @@ mod tests {
         });
         let parsed: ScheduleRule =
             serde_json::from_value(fixed_json).expect("parse frontend fixedTime rule");
+        assert!(!parsed.force_start);
         match parsed.trigger {
             ScheduleTrigger::FixedTime { days, times } => {
                 assert_eq!(days, vec![1, 2, 3, 4, 5, 6, 7]);
@@ -505,6 +514,7 @@ mod tests {
         let interval_json = serde_json::json!({
             "id": "rule-2",
             "runConfigurationId": "run",
+            "forceStart": true,
             "trigger": {
                 "kind": "interval",
                 "startEpochMs": 1_000,
@@ -514,6 +524,7 @@ mod tests {
         });
         let parsed: ScheduleRule =
             serde_json::from_value(interval_json).expect("parse frontend interval rule");
+        assert!(parsed.force_start);
         assert!(matches!(parsed.trigger, ScheduleTrigger::Interval { .. }));
     }
 }

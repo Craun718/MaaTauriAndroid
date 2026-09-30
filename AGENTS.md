@@ -51,7 +51,7 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 
 | Job            | 作用                                                                |
 | -------------- | ------------------------------------------------------------------- |
-| `frontend`     | `pnpm check` + `pnpm test` + `pnpm build`（TypeScript 检查），产出 `dist` artifact |
+| `frontend`     | `pnpm check` + `pnpm test` + `pnpm build`（TypeScript 检查），产出 `frontend-dist` artifact |
 | `rust`         | `cargo fmt --check` + `cargo test`（桌面目标）                      |
 | `python-lint`  | `ruff check .`（本项目全部 Python；`select = ["ALL"]` + 带理由的 `ignore`，见 `ruff.toml`） |
 | `android-rust` | Android 目标的 `cargo check`，依赖 `frontend` 的 `dist`             |

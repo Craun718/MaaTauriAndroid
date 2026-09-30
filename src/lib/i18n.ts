@@ -53,6 +53,7 @@ const en = {
   virtualDisplayStreamError: "Stream error",
   virtualDisplayFullscreen: "Fullscreen",
   virtualDisplayExitFullscreen: "Exit fullscreen",
+  virtualDisplayBack: "Back",
   virtualDisplayStopTitle: "Stop virtual display",
   virtualDisplayStopWarning:
     "This will close the virtual display and the running app.",
@@ -400,6 +401,7 @@ const zh: Record<MessageKey, string> = {
   virtualDisplayStreamError: "画面流出错",
   virtualDisplayFullscreen: "全屏",
   virtualDisplayExitFullscreen: "退出全屏",
+  virtualDisplayBack: "返回",
   virtualDisplayStopTitle: "停止虚拟屏",
   virtualDisplayStopWarning: "当前操作会关闭虚拟屏以及正在运行的应用。",
   virtualDisplayStopHint: "如需停止任务请在任务操作面板操作。",

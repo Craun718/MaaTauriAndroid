@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import {
+  ArrowLeft,
   LoaderCircle,
   Maximize2,
   MonitorPlay,
@@ -11,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   getVirtualDisplayStatus,
+  pressVirtualDisplayBack,
   setVirtualDisplayLandscape,
   stopRun,
   stopVirtualDisplay,
@@ -40,6 +42,7 @@ export function VirtualDisplayCard() {
   const [actionPending, setActionPending] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [confirmStopOpen, setConfirmStopOpen] = useState(false);
+  const [backPending, setBackPending] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
@@ -186,6 +189,20 @@ export function VirtualDisplayCard() {
   function confirmStopDisplay() {
     setConfirmStopOpen(false);
     void stopDisplay();
+  }
+
+  async function pressBack() {
+    if (backPending) return;
+    setBackPending(true);
+    try {
+      await pressVirtualDisplayBack();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), {
+        tone: "error",
+      });
+    } finally {
+      setBackPending(false);
+    }
   }
 
   const active = status?.active === true;
@@ -347,7 +364,7 @@ export function VirtualDisplayCard() {
         createPortal(
           <div className="fixed inset-0 z-50 bg-surface">
             {/* 全屏层是沉浸式画面：视频满出血铺满视口（横屏高度只有 ~369 CSS px，
-                任何 padding 都会显著压缩 16:9 画面的等比尺寸），退出按钮浮在画面上、
+                任何 padding 都会显著压缩 16:9 画面的等比尺寸），返回/退出按钮浮在画面上、
                 钉物理 px 并保留 safe-area 偏移，不参与根字号的等比放大。 */}
             <div className="absolute inset-0">
               <VirtualDisplayPreview
@@ -357,6 +374,19 @@ export function VirtualDisplayCard() {
               />
               {fpsBadge(true)}
             </div>
+            <button
+              type="button"
+              onClick={() => void pressBack()}
+              disabled={backPending}
+              className="absolute right-[64px] top-[calc(12px_+_var(--tt-safe-top))] flex h-[36px] w-[36px] items-center justify-center rounded-[6px] border border-line bg-raised text-ink-muted disabled:opacity-50"
+              aria-label={t("virtualDisplayBack")}
+            >
+              {backPending ? (
+                <LoaderCircle size={16} className="animate-spin" />
+              ) : (
+                <ArrowLeft size={16} />
+              )}
+            </button>
             <button
               type="button"
               onClick={() => setFullscreen(false)}

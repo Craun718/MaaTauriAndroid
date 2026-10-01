@@ -1,11 +1,11 @@
 import { listen } from "@tauri-apps/api/event";
 import {
-  ArrowLeft,
   LoaderCircle,
   Maximize2,
   MonitorPlay,
   RefreshCw,
   Square,
+  Undo2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -378,13 +378,13 @@ export function VirtualDisplayCard() {
               type="button"
               onClick={() => void pressBack()}
               disabled={backPending}
-              className="absolute right-[64px] top-[calc(12px_+_var(--tt-safe-top))] flex h-[36px] w-[36px] items-center justify-center rounded-[6px] border border-line bg-raised text-ink-muted disabled:opacity-50"
+              className="absolute right-[16px] bottom-[calc(12px_+_var(--tt-safe-bottom))] flex h-[36px] w-[36px] items-center justify-center rounded-[6px] border border-line bg-raised text-ink-muted disabled:opacity-50"
               aria-label={t("virtualDisplayBack")}
             >
               {backPending ? (
                 <LoaderCircle size={16} className="animate-spin" />
               ) : (
-                <ArrowLeft size={16} />
+                <Undo2 size={16} />
               )}
             </button>
             <button

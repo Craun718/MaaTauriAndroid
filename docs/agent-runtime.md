@@ -31,7 +31,7 @@
 scripts/setup.sh                              # MaaFramework 原生库
 python3 scripts/build-resource.py \
   https://github.com/MAA1999/M9A.git \
-  --id m9a --ref 4a19a626ce93ec5ab027e734590213bad7f04c12 \
+  --id m9a --ref 4fbfb4ac85697f2f75910016ee7ba6128d3d9494 \
   --submodules --exclude pillow --require pillow==11.0.0
 ```
 

@@ -273,7 +273,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/MAA1999/M9A.git \
             --id m9a \
-            --ref 4a19a626ce93ec5ab027e734590213bad7f04c12 \
+            --ref 4fbfb4ac85697f2f75910016ee7ba6128d3d9494 \
             --submodules \
             --exclude pillow \
             --require pillow==11.0.0 \
@@ -413,7 +413,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/duorua/narutomobile.git \
             --id narutomobile \
-            --ref 9d245df1bbe9f72b43324e018ea08e9cca3d2d6a \
+            --ref 2a0897125fd2c81672a56af4d6b280c48025d9d4 \
             --submodules \
             --exclude pillow \
             --exclude win32-setctime \
@@ -538,7 +538,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/Maa-Assistant-PVZ-The-best/MAAPVZ.git \
             --id maapvz \
-            --ref 573b542a3ae0b8a648e541de9f062be0e38acb64 \
+            --ref 989ba881d675690deea734f363f6e2c6d6e1da48 \
             --submodules \
             --exclude pillow \
             --exclude win32-setctime \

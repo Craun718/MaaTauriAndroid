@@ -137,6 +137,8 @@ def copy_icon(project: Path, interface: dict[str, Any], destination: Path) -> No
         return
     icon_dir = project / "docs" / "imgs"
     target = destination / normalize_relative_path(icon)
+    if target.is_file():
+        return
     stem = target.stem
 
     candidates = [

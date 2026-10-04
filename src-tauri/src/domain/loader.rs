@@ -577,12 +577,11 @@ fn parse_option(
             } else {
                 let hotkeys = fields
                     .map(|fields| {
-                        serde_json::from_value::<Vec<HotkeyFieldDefinition>>(fields).map_err(
-                            |source| ProjectError::InputDefinition {
+                        serde_json::from_value::<Vec<HotkeyFieldDefinition>>(fields.clone())
+                            .map_err(|source| ProjectError::InputDefinition {
                                 option: name.to_string(),
                                 source,
-                            },
-                        )
+                            })
                     })
                     .transpose()?
                     .unwrap_or_default();

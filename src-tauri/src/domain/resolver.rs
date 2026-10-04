@@ -113,9 +113,11 @@ pub fn resolve_run(
             merger.output = base_pipeline.clone();
             merger.active_options.clear();
             merger.merge_override(Some(&task.pipeline_override));
-            for name in &task.options {
-                let value = configured.and_then(|item| item.option_values.get(name));
-                merger.merge_option(name, value)?;
+            if configured.is_some_and(|item| item.enabled) {
+                for name in &task.options {
+                    let value = configured.and_then(|item| item.option_values.get(name));
+                    merger.merge_option(name, value)?;
+                }
             }
             merge_pipeline_maps(&mut combined_pipeline, &merger.output);
         }
@@ -387,6 +389,7 @@ impl<'a> PipelineMerger<'a> {
     fn task_option_value(&self, name: &str) -> Option<&OptionValue> {
         self.active_tasks
             .iter()
+            .filter(|task| task.enabled)
             .find_map(|task| task.option_values.get(name))
     }
 
@@ -740,6 +743,18 @@ mod tests {
         )
         .expect_err("invalid input should fail");
         assert!(error.to_string().contains("invalid"));
+    }
+
+    #[test]
+    fn skips_input_validation_for_disabled_configured_tasks() {
+        let project = fixture_project();
+        let mut config = configuration(&project, "normal", Some("bad"), "Yes");
+        config.run_configurations[0].tasks[0].enabled = false;
+
+        let resolved = resolve_run(&project, &config).expect("disabled task should not validate");
+
+        assert!(!resolved.tasks[0].enabled);
+        assert_eq!(resolved.pipeline_override.get("Start"), None);
     }
 
     #[test]

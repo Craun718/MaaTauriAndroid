@@ -8,7 +8,12 @@ interface TimePickerFieldProps {
   /** 24 小时制 "HH:mm"。 */
   value: string;
   onValueChange: (value: string) => void;
+  title?: string;
+  placeholder?: string;
   className?: string;
+  compact?: boolean;
+  error?: ReactNode;
+  description?: ReactNode;
 }
 
 interface TimePickerDialogProps {
@@ -97,7 +102,12 @@ export function TimePickerField({
   label,
   value,
   onValueChange,
+  title,
+  placeholder,
   className,
+  compact = false,
+  error,
+  description,
 }: TimePickerFieldProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -109,19 +119,41 @@ export function TimePickerField({
   return (
     <span className={`block ${className ?? ""}`}>
       {label && (
-        <span className="mb-1 block text-sm text-base-content/60">{label}</span>
+        <span
+          className={`block text-sm text-base-content/60 ${
+            compact ? "mb-0.5" : "mb-1"
+          }`}
+        >
+          {label}
+        </span>
       )}
       <button
         type="button"
         onClick={openPicker}
         className="input w-full cursor-pointer text-left"
       >
-        {value}
+        {value || <span className="text-base-content/40">{placeholder}</span>}
       </button>
+      {error && (
+        <span
+          className={`block text-[0.8125rem] text-error ${
+            compact ? "mt-1" : "mt-1.5"
+          }`}
+        >
+          {error}
+        </span>
+      )}
+      {description && (
+        <span
+          className={`block text-[0.8125rem] ${compact ? "mt-1" : "mt-1.5"}`}
+        >
+          {description}
+        </span>
+      )}
       {open && (
         <TimePickerDialog
           value={value}
-          title={t("scheduleTime")}
+          title={title ?? t("scheduleTime")}
           onConfirm={onValueChange}
           onClose={() => setOpen(false)}
         />

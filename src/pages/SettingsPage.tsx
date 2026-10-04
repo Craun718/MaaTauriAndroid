@@ -1,7 +1,15 @@
-import { Download, RefreshCw, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  RefreshCw,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
+import { ProjectImage } from "../components/ProjectImage";
+import { RichDescription } from "../components/RichDescription";
 import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
@@ -9,12 +17,19 @@ import { VersionCard } from "../components/VersionCard";
 import { clearDiagnosticData, restartApp } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
+import type { VisibleOption } from "../lib/options";
 import {
   activeResource,
   defaultOptionValue,
-  visibleOptions,
+  groupedVisibleOptions,
 } from "../lib/options";
-import type { OptionValue, UiLanguage, UserConfiguration } from "../lib/types";
+import type {
+  OptionDefinition,
+  OptionValue,
+  SettingSection,
+  UiLanguage,
+  UserConfiguration,
+} from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
@@ -98,9 +113,14 @@ export function SettingsPage() {
       </section>
       {project && snapshot && (
         <>
+          {project.settingSections.length > 0 &&
+            project.globalOptions.length > 0 && (
+              <h2 className="text-lg font-semibold">{t("taskSettings")}</h2>
+            )}
           <ScopedOptions
             title="globalOptions"
             compact
+            sections={project.settingSections}
             names={project.globalOptions}
             values={snapshot.configuration.globalOptionValues}
             onChange={(name, value) =>
@@ -340,12 +360,14 @@ export function SettingsPage() {
 function ScopedOptions({
   title,
   compact,
+  sections = [],
   names,
   values,
   onChange,
 }: {
   title: MessageKey;
   compact?: boolean;
+  sections?: SettingSection[];
   names: string[];
   values: Record<string, OptionValue>;
   onChange: (name: string, value: OptionValue) => void;
@@ -354,10 +376,129 @@ function ScopedOptions({
   const { t } = useTranslation();
   if (names.length === 0) return null;
   const definitions = project?.options ?? {};
+  const groups = groupedVisibleOptions(sections, definitions, names, values);
+
   return (
-    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
-      <h2 className="font-medium">{t(title)}</h2>
-      {visibleOptions(definitions, names, values).map(({ name, depth }) => {
+    <>
+      {groups.map((group) =>
+        group.section ? (
+          <TaskSettingSection
+            key={group.section.name}
+            section={group.section}
+            compact={compact}
+            definitions={definitions}
+            options={group.options}
+            values={values}
+            onChange={onChange}
+          />
+        ) : (
+          <section
+            key={`${title}-ungrouped`}
+            className="space-y-2 rounded-lg border border-line bg-raised p-3"
+          >
+            <h3 className="font-medium">{t(title)}</h3>
+            <VisibleOptionList
+              compact={compact}
+              definitions={definitions}
+              options={group.options}
+              values={values}
+              onChange={onChange}
+            />
+          </section>
+        ),
+      )}
+    </>
+  );
+}
+
+function TaskSettingSection({
+  section,
+  compact,
+  definitions,
+  options,
+  values,
+  onChange,
+}: {
+  section: SettingSection;
+  compact?: boolean;
+  definitions: Record<string, OptionDefinition>;
+  options: VisibleOption[];
+  values: Record<string, OptionValue>;
+  onChange: (name: string, value: OptionValue) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(section.defaultExpand);
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-line bg-raised">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-[-0.25rem] focus-visible:outline-accent"
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <ProjectImage
+            path={section.icon}
+            alt=""
+            className="h-5 w-5 shrink-0 object-contain"
+            fallback={
+              <SlidersHorizontal
+                size="1.25rem"
+                className="shrink-0 text-accent"
+              />
+            }
+          />
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{section.label}</span>
+          </span>
+        </span>
+        <ChevronDown
+          size="1.25rem"
+          className={`flex-none text-ink-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {section.description && (
+        <RichDescription
+          text={section.description}
+          className="px-3 py-2 text-xs text-ink-muted"
+        />
+      )}
+      {open && (
+        <div className="space-y-2 border-t border-line p-3">
+          {options.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("taskSettingsEmpty")}</p>
+          ) : (
+            <VisibleOptionList
+              compact={compact}
+              definitions={definitions}
+              options={options}
+              values={values}
+              onChange={onChange}
+            />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function VisibleOptionList({
+  compact,
+  definitions,
+  options,
+  values,
+  onChange,
+}: {
+  compact?: boolean;
+  definitions: Record<string, OptionDefinition>;
+  options: VisibleOption[];
+  values: Record<string, OptionValue>;
+  onChange: (name: string, value: OptionValue) => void;
+}) {
+  return (
+    <>
+      {options.map(({ name, depth }) => {
         const option = definitions[name];
         if (!option) return null;
         return (
@@ -374,6 +515,6 @@ function ScopedOptions({
           </div>
         );
       })}
-    </section>
+    </>
   );
 }

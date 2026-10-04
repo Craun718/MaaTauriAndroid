@@ -5,6 +5,7 @@ import type {
   OptionValue,
   Project,
   ResourceDefinition,
+  SettingSection,
   TaskDefinition,
   UserConfiguration,
 } from "./types";
@@ -129,6 +130,15 @@ export function visibleOptions(
   names: string[],
   values: Record<string, OptionValue> = {},
 ): VisibleOption[] {
+  return visibleOptionsExcluding(definitions, names, values, new Set());
+}
+
+function visibleOptionsExcluding(
+  definitions: Record<string, OptionDefinition>,
+  names: string[],
+  values: Record<string, OptionValue>,
+  excludedNames: ReadonlySet<string>,
+): VisibleOption[] {
   const roots = names.filter((name) => definitions[name]);
   const owned = new Set<string>();
   for (const name of roots) {
@@ -142,7 +152,7 @@ export function visibleOptions(
   const seen = new Set<string>();
   const emit = (name: string, depth: number) => {
     const option = definitions[name];
-    if (!option || seen.has(name)) return;
+    if (!option || seen.has(name) || excludedNames.has(name)) return;
     seen.add(name);
     result.push({ name, depth });
     for (const caseName of selectedCaseNames(option, values[name])) {
@@ -158,6 +168,54 @@ export function visibleOptions(
   // above already placed.
   for (const name of roots) emit(name, 0);
   return result;
+}
+
+export interface VisibleOptionGroup {
+  section?: SettingSection;
+  options: VisibleOption[];
+}
+
+/**
+ * Groups the roots of a project-scoped option list using MXU `setting` sections.
+ *
+ * A section can only take over an option that the scope itself declares; this
+ * keeps `setting` purely presentational instead of making an option effective
+ * in the resolver. Children owned by a grouped root follow it into the same
+ * section. Roots not named by any section remain in the trailing ungrouped
+ * group, so no editable value disappears when a project adopts sections.
+ */
+export function groupedVisibleOptions(
+  sections: SettingSection[],
+  definitions: Record<string, OptionDefinition>,
+  names: string[],
+  values: Record<string, OptionValue> = {},
+): VisibleOptionGroup[] {
+  const scopeNames = new Set(names.filter((name) => definitions[name]));
+  const grouped = new Set<string>();
+
+  const groups: VisibleOptionGroup[] = sections.map((section) => {
+    const sectionRoots = section.options.filter((name) => {
+      if (!scopeNames.has(name)) return false;
+      grouped.add(name);
+      return true;
+    });
+    return {
+      section,
+      options: visibleOptions(definitions, sectionRoots, values),
+    };
+  });
+
+  const ungroupedRoots = names.filter(
+    (name) => scopeNames.has(name) && !grouped.has(name),
+  );
+  const ungrouped = visibleOptionsExcluding(
+    definitions,
+    ungroupedRoots,
+    values,
+    grouped,
+  );
+  if (ungrouped.length > 0) groups.push({ options: ungrouped });
+  return groups;
 }
 
 export function configuredTask(

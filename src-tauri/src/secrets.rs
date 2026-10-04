@@ -251,8 +251,8 @@ fn call_bridge(method: &str, value: &str) -> Result<String, SecretError> {
 mod tests {
     use super::*;
     use crate::domain::types::{
-        ConfiguredTask, InputFieldDefinition, OptionApplicability, OptionDefinition, PipelineType,
-        RunConfiguration, TaskDefinition,
+        ConfiguredTask, InputFieldDefinition, InputType, OptionApplicability, OptionDefinition,
+        PipelineType, RunConfiguration, TaskDefinition,
     };
 
     fn project() -> Project {
@@ -260,11 +260,13 @@ mod tests {
             name: "token".to_string(),
             label: "Token".to_string(),
             description: None,
+            placeholder: None,
             default: None,
             pipeline_type: PipelineType::String,
             verify: None,
             pattern_message: None,
             password: true,
+            input_type: InputType::Text,
         }];
         let mut options = BTreeMap::new();
         options.insert(
@@ -293,6 +295,7 @@ mod tests {
             controllers: Vec::new(),
             resources: Vec::new(),
             groups: Vec::new(),
+            setting_sections: Vec::new(),
             tasks: vec![TaskDefinition {
                 name: "Task".to_string(),
                 label: "Task".to_string(),

@@ -120,6 +120,7 @@ const project: Project = {
     },
     { name: "event", label: "活动", defaultExpand: false },
   ],
+  settingSections: [],
   tasks: [
     {
       name: "糖果",
@@ -175,6 +176,7 @@ const project: Project = {
           name: "count",
           label: "次数",
           description: "次数 *说明*",
+          inputType: "text",
           pipelineType: "int",
           password: false,
         },

@@ -332,11 +332,13 @@ impl<'a> PipelineMerger<'a> {
                         name: field.name.clone(),
                         label: field.label.clone(),
                         description: field.description.clone(),
+                        placeholder: None,
                         default: field.default.clone(),
                         pipeline_type: PipelineType::String,
                         verify: None,
                         pattern_message: None,
                         password: false,
+                        input_type: InputType::Text,
                     })
                     .collect::<Vec<_>>();
                 let values = match configured {
@@ -401,6 +403,13 @@ impl<'a> PipelineMerger<'a> {
                 .cloned()
                 .or_else(|| field.default.clone());
             let raw = raw.unwrap_or_default();
+            if field.input_type == InputType::Time && !raw.is_empty() && !is_24_hour_time(&raw) {
+                return Err(ResolverError::InvalidInput {
+                    option: option.to_string(),
+                    field: field.name.clone(),
+                    message: "expected a 24-hour time in HH:mm format".to_string(),
+                });
+            }
             if let Some(pattern) = &field.verify {
                 let regex = Regex::new(pattern).map_err(|error| ResolverError::InvalidInput {
                     option: option.to_string(),
@@ -437,6 +446,22 @@ impl<'a> PipelineMerger<'a> {
         };
         merge_json(&mut self.output, value);
     }
+}
+
+fn is_24_hour_time(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 5
+        || !bytes[0].is_ascii_digit()
+        || !bytes[1].is_ascii_digit()
+        || bytes[2] != b':'
+        || !bytes[3].is_ascii_digit()
+        || !bytes[4].is_ascii_digit()
+    {
+        return false;
+    }
+    let hour = (bytes[0] - b'0') * 10 + bytes[1] - b'0';
+    let minute = (bytes[3] - b'0') * 10 + bytes[4] - b'0';
+    hour <= 23 && minute <= 59
 }
 
 fn substitute_inputs(
@@ -715,5 +740,37 @@ mod tests {
         )
         .expect_err("invalid input should fail");
         assert!(error.to_string().contains("invalid"));
+    }
+
+    #[test]
+    fn validates_time_input_format() {
+        let mut project = fixture_project();
+        let OptionDefinition::Input { inputs, .. } = project
+            .options
+            .get_mut("retries")
+            .expect("option should load")
+        else {
+            panic!("retries should be an input option");
+        };
+        inputs[0].pipeline_type = PipelineType::String;
+        inputs[0].verify = None;
+        inputs[0].input_type = InputType::Time;
+
+        let resolved = resolve_run(
+            &project,
+            &configuration(&project, "normal", Some("08:05"), "Yes"),
+        )
+        .expect("a 24-hour time should resolve");
+        assert_eq!(
+            resolved.pipeline_override.get("Start"),
+            Some(&json!({ "stage": "normal", "retries": "08:05" }))
+        );
+
+        let error = resolve_run(
+            &project,
+            &configuration(&project, "normal", Some("8:05"), "Yes"),
+        )
+        .expect_err("a time without zero padding should fail");
+        assert!(error.to_string().contains("HH:mm"));
     }
 }

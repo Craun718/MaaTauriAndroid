@@ -50,6 +50,7 @@ const snapshot: AppStateSnapshot = {
       },
     ],
     groups: [],
+    settingSections: [],
     tasks: [],
     options: {},
     globalOptions: [],

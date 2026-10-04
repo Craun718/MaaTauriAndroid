@@ -1,11 +1,13 @@
 import { useTranslation } from "../lib/i18n";
 import { defaultOptionValue, switchCases } from "../lib/options";
+import { stripInlineRichText } from "../lib/richText";
 import type { OptionDefinition, OptionValue } from "../lib/types";
-import { RichDescription } from "./RichDescription";
+import { InlineMarkdownLabel, RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
 import { SegmentGroup } from "./ui/SegmentGroup";
 import { Select } from "./ui/Select";
 import { TextField } from "./ui/TextField";
+import { TimePickerField } from "./ui/TimePicker";
 
 interface OptionEditorProps {
   option: OptionDefinition;
@@ -45,7 +47,7 @@ export function OptionEditor({
               onChange({ type: "single", case: next ? pair.on : pair.off })
             }
           >
-            {option.label}
+            <InlineMarkdownLabel text={option.label} />
           </Checkbox>
           <RichDescription text={option.description} />
         </div>
@@ -65,7 +67,7 @@ export function OptionEditor({
       <div className={compact ? "space-y-1.5" : "space-y-3"}>
         <div>
           <p id={`option-label-${option.name}`} className="font-medium">
-            {option.label}
+            <InlineMarkdownLabel text={option.label} />
           </p>
           <RichDescription text={option.description} />
         </div>
@@ -75,7 +77,7 @@ export function OptionEditor({
           value={selected}
           items={option.cases.map((item) => ({
             value: item.name,
-            label: item.label,
+            label: stripInlineRichText(item.label),
           }))}
           onValueChange={(caseName) =>
             onChange({ type: "single", case: caseName })
@@ -96,7 +98,7 @@ export function OptionEditor({
     return (
       <SegmentGroup
         compact={compact}
-        label={option.label}
+        label={<InlineMarkdownLabel text={option.label} />}
         description={
           option.description ? (
             <RichDescription text={option.description} />
@@ -106,7 +108,7 @@ export function OptionEditor({
         columns={Math.min(option.cases.length, 3)}
         items={option.cases.map((item) => ({
           value: item.name,
-          label: item.label,
+          label: <InlineMarkdownLabel text={item.label} />,
           description: item.description ? (
             <RichDescription text={item.description} className="text-xs" />
           ) : undefined,
@@ -124,7 +126,9 @@ export function OptionEditor({
     return (
       <div className={compact ? "space-y-1.5" : "space-y-3"}>
         <div>
-          <p className="font-medium">{option.label}</p>
+          <p className="font-medium">
+            <InlineMarkdownLabel text={option.label} />
+          </p>
           <RichDescription text={option.description} />
         </div>
         <div className={compact ? "space-y-1.5" : "space-y-2"}>
@@ -149,7 +153,10 @@ export function OptionEditor({
                 }}
               >
                 <span className="flex flex-col items-start gap-0.5 text-left">
-                  <span className="font-medium">{item.label}</span>
+                  <InlineMarkdownLabel
+                    text={item.label}
+                    className="font-medium"
+                  />
                   <RichDescription
                     text={item.description}
                     className="text-xs"
@@ -167,17 +174,21 @@ export function OptionEditor({
     name: string;
     label: string;
     description?: string;
+    placeholder?: string;
     default?: string;
     password?: boolean;
     pipelineType?: "string" | "int" | "bool";
     verify?: string;
     patternMessage?: string;
+    inputType?: "text" | "file" | "time";
   }> = option.kind === "input" ? option.inputs : option.hotkeys;
   const values = value?.type === "inputs" ? value.values : {};
   return (
     <div className={compact ? "space-y-1.5" : "space-y-3"}>
       <div>
-        <p className="font-medium">{option.label}</p>
+        <p className="font-medium">
+          <InlineMarkdownLabel text={option.label} />
+        </p>
         <RichDescription text={option.description} />
       </div>
       {fields.map((field) => {
@@ -200,7 +211,7 @@ export function OptionEditor({
               }
             >
               <span className="flex flex-col items-start gap-0.5 text-left">
-                <span>{field.label}</span>
+                <InlineMarkdownLabel text={field.label} />
                 <RichDescription text={field.description} className="text-xs" />
               </span>
             </Checkbox>
@@ -213,10 +224,41 @@ export function OptionEditor({
               ? undefined
               : (field.patternMessage ?? t("invalidInput"))
             : undefined;
+        const timeError =
+          option.kind === "input" &&
+          field.inputType === "time" &&
+          current.length > 0 &&
+          !matchesTime(current)
+            ? t("invalidTimeInput")
+            : undefined;
+        if (option.kind === "input" && field.inputType === "time") {
+          return (
+            <TimePickerField
+              key={field.name}
+              label={<InlineMarkdownLabel text={field.label} />}
+              value={current}
+              title={stripInlineRichText(field.label)}
+              placeholder={field.placeholder}
+              error={patternError ?? timeError}
+              compact={compact}
+              description={
+                field.description ? (
+                  <RichDescription text={field.description} />
+                ) : undefined
+              }
+              onValueChange={(next) =>
+                onChange({
+                  type: "inputs",
+                  values: { ...values, [field.name]: next },
+                })
+              }
+            />
+          );
+        }
         return (
           <TextField
             key={field.name}
-            label={field.label}
+            label={<InlineMarkdownLabel text={field.label} />}
             type={
               option.kind === "input" && field.password ? "password" : "text"
             }
@@ -228,6 +270,7 @@ export function OptionEditor({
             value={current}
             error={patternError}
             compact={compact}
+            placeholder={field.placeholder}
             description={
               field.description ? (
                 <RichDescription text={field.description} />
@@ -244,6 +287,10 @@ export function OptionEditor({
       })}
     </div>
   );
+}
+
+function matchesTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function matchesPattern(value: string, pattern: string): boolean {

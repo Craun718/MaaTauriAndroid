@@ -140,7 +140,10 @@ const en = {
   noResources: "No resources are declared.",
   globalOptions: "Global options",
   resourceOptions: "Resource options",
+  taskSettings: "Task settings",
+  taskSettingsEmpty: "No settings available to display",
   invalidInput: "Invalid value",
+  invalidTimeInput: "Enter a 24-hour time (HH:mm)",
 
   // Tasks
   tasksAndRun: "Tasks & Run",
@@ -416,7 +419,10 @@ const zh: Record<MessageKey, string> = {
   noResources: "未声明资源。",
   globalOptions: "全局选项",
   resourceOptions: "资源选项",
+  taskSettings: "任务设置",
+  taskSettingsEmpty: "暂无可显示的设置",
   invalidInput: "输入不合法",
+  invalidTimeInput: "请输入 24 小时制时间（HH:mm）",
 
   tasksAndRun: "任务与运行",
   runActivity: "运行活动",

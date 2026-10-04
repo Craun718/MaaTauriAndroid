@@ -168,6 +168,24 @@ impl ProjectLoader {
             })
             .collect::<Vec<_>>();
 
+        let setting_sections = array(&document, "setting")
+            .into_iter()
+            .filter_map(|item| {
+                let name = item.get("name")?.as_str()?.to_string();
+                Some(SettingSectionDefinition {
+                    label: text(item.get("label")).unwrap_or_else(|| name.clone()),
+                    description: text(item.get("description")),
+                    icon: text(item.get("icon")),
+                    default_expand: item
+                        .get("default_expand")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true),
+                    options: strings(item.get("option")).unwrap_or_default(),
+                    name,
+                })
+            })
+            .collect::<Vec<_>>();
+
         let mut tasks = Vec::new();
         for item in array(&document, "task") {
             let task_name = item
@@ -292,6 +310,7 @@ impl ProjectLoader {
             controllers,
             resources,
             groups,
+            setting_sections,
             tasks,
             options,
             global_options: strings(document.get("global_option")).unwrap_or_default(),
@@ -526,18 +545,23 @@ fn parse_option(
             applicability,
         },
         "input" | "hotkey" => {
-            let fields = item
-                .get(if kind == "input" { "inputs" } else { "hotkeys" })
-                .cloned();
+            let fields = item.get(if kind == "input" { "inputs" } else { "hotkeys" });
             if kind == "input" {
-                let inputs = match fields {
-                    Some(fields) => serde_json::from_value::<Vec<InputFieldDefinition>>(fields)
-                        .map_err(|source| ProjectError::InputDefinition {
-                            option: name.to_string(),
-                            source,
-                        })?,
+                let mut inputs = match fields {
+                    Some(fields) => {
+                        serde_json::from_value::<Vec<InputFieldDefinition>>(fields.clone())
+                            .map_err(|source| ProjectError::InputDefinition {
+                                option: name.to_string(),
+                                source,
+                            })?
+                    }
                     None => Vec::new(),
                 };
+                if let Some(raw_inputs) = fields.and_then(Value::as_array) {
+                    for (input, raw_input) in inputs.iter_mut().zip(raw_inputs) {
+                        input.placeholder = text(raw_input.get("placeholder"));
+                    }
+                }
                 OptionDefinition::Input {
                     name: name.to_string(),
                     label,
@@ -922,6 +946,92 @@ mod tests {
     }
 
     #[test]
+    fn localizes_setting_sections_and_defaults_them_to_expanded() {
+        let project = ProjectLoader::default()
+            .load_embedded(
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}],
+                    "setting": [
+                        {
+                            "name": "advanced",
+                            "label": "$setting.advanced",
+                            "description": "$setting.advancedDescription",
+                            "icon": "assets/advanced.png",
+                            "default_expand": false,
+                            "option": ["Retry", "Ghost"]
+                        },
+                        {"name": "basic", "option": ["Username"]}
+                    ]
+                }),
+                BTreeMap::from([
+                    ("setting.advanced".to_string(), "Advanced".to_string()),
+                    (
+                        "setting.advancedDescription".to_string(),
+                        "Advanced settings".to_string(),
+                    ),
+                ]),
+                "en_us",
+            )
+            .expect("a project with setting sections should load");
+
+        assert_eq!(project.setting_sections.len(), 2);
+        let advanced = &project.setting_sections[0];
+        assert_eq!(advanced.name, "advanced");
+        assert_eq!(advanced.label, "Advanced");
+        assert_eq!(advanced.description.as_deref(), Some("Advanced settings"));
+        assert_eq!(advanced.icon.as_deref(), Some("assets/advanced.png"));
+        assert!(!advanced.default_expand);
+        assert_eq!(advanced.options, vec!["Retry", "Ghost"]);
+        assert_eq!(project.setting_sections[1].label, "basic");
+        assert!(project.setting_sections[1].default_expand);
+    }
+
+    #[test]
+    fn merges_setting_sections_from_imported_fragments() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-setting",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("temp project should be created");
+        fs::write(
+            root.join("interface.json"),
+            r#"{
+                "interface_version": 2,
+                "name": "profiled",
+                "import": ["settings.json"],
+                "controller": [{"name": "ADB", "type": "Adb"}],
+                "resource": [{"name": "base", "path": ["resource/base"]}],
+                "setting": [{"name": "main", "option": ["Retry"]}]
+            }"#,
+        )
+        .expect("interface should be written");
+        fs::write(
+            root.join("settings.json"),
+            r#"{"setting": [{"name": "imported", "default_expand": false}]}"#,
+        )
+        .expect("import should be written");
+
+        let project = ProjectLoader::default()
+            .load(root.join("interface.json"), "en_us")
+            .expect("imported setting sections should load");
+
+        assert_eq!(
+            project
+                .setting_sections
+                .iter()
+                .map(|section| section.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["main", "imported"]
+        );
+        assert!(!project.setting_sections[1].default_expand);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
     fn falls_back_to_a_synthetic_controller_without_an_adb_entry() {
         let project = ProjectLoader::default()
             .load_value(
@@ -1051,6 +1161,119 @@ mod tests {
             panic!("Consent should be an input option");
         };
         assert_eq!(inputs[0].pipeline_type, PipelineType::String);
+    }
+
+    #[test]
+    fn localizes_optional_input_placeholders() {
+        let project = ProjectLoader::default()
+            .load_embedded(
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}],
+                    "option": {
+                        "Consent": {
+                            "type": "input",
+                            "inputs": [
+                                {
+                                    "name": "consent_text",
+                                    "label": "Consent text",
+                                    "placeholder": "$Consent.Placeholder"
+                                },
+                                {"name": "nickname", "label": "Nickname"}
+                            ],
+                            "pipeline_override": {}
+                        }
+                    }
+                }),
+                BTreeMap::from([(
+                    "Consent.Placeholder".to_string(),
+                    "Enter I agree".to_string(),
+                )]),
+                "en_us",
+            )
+            .expect("an input with placeholders should load");
+
+        let OptionDefinition::Input { inputs, .. } =
+            project.options.get("Consent").expect("option should load")
+        else {
+            panic!("Consent should be an input option");
+        };
+        assert_eq!(inputs[0].placeholder.as_deref(), Some("Enter I agree"));
+        assert_eq!(inputs[1].placeholder, None);
+    }
+
+    #[test]
+    fn parses_mxu_input_control_types() {
+        let project = ProjectLoader::default()
+            .load_embedded(
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}],
+                    "option": {
+                        "Schedule": {
+                            "type": "input",
+                            "inputs": [
+                                {
+                                    "name": "start_time",
+                                    "label": "Start time",
+                                    "default": "08:00",
+                                    "input_type": "time"
+                                },
+                                {
+                                    "name": "config",
+                                    "label": "Config",
+                                    "input_type": "file"
+                                }
+                            ],
+                            "pipeline_override": {}
+                        }
+                    }
+                }),
+                BTreeMap::new(),
+                "en_us",
+            )
+            .expect("MXU input control types should load");
+
+        let OptionDefinition::Input { inputs, .. } =
+            project.options.get("Schedule").expect("option should load")
+        else {
+            panic!("Schedule should be an input option");
+        };
+        assert_eq!(inputs[0].input_type, InputType::Time);
+        assert_eq!(inputs[1].input_type, InputType::File);
+    }
+
+    #[test]
+    fn rejects_unknown_input_control_type() {
+        let error = ProjectLoader::default()
+            .load_embedded(
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}],
+                    "option": {
+                        "Schedule": {
+                            "type": "input",
+                            "inputs": [{
+                                "name": "start_time",
+                                "label": "Start time",
+                                "input_type": "clock"
+                            }],
+                            "pipeline_override": {}
+                        }
+                    }
+                }),
+                BTreeMap::new(),
+                "en_us",
+            )
+            .expect_err("an unknown input control type should fail");
+
+        assert!(error.to_string().contains("unknown variant"));
     }
 
     /// M9A-style interfaces reference contact/license as project files

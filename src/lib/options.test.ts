@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  groupedVisibleOptions,
   optionValueSummary,
   selectedCaseNames,
   switchCases,
   visibleOptions,
 } from "./options";
-import type { OptionDefinition, OptionValue } from "./types";
+import type { OptionDefinition, OptionValue, SettingSection } from "./types";
 
 const applicability = { controllers: [], resources: [] };
 
@@ -38,6 +39,7 @@ function field(name: string): OptionDefinition {
       {
         name: "value",
         label: "Value",
+        inputType: "text",
         pipelineType: "string",
         password: false,
       },
@@ -208,6 +210,60 @@ describe("visibleOptions", () => {
   });
 });
 
+describe("groupedVisibleOptions", () => {
+  it("moves only scoped roots into setting sections and keeps their children", () => {
+    const sections: SettingSection[] = [
+      {
+        name: "advanced",
+        label: "Advanced",
+        description: "Advanced settings",
+        defaultExpand: false,
+        options: ["customCount", "ghost", "plain"],
+      },
+    ];
+
+    expect(
+      groupedVisibleOptions(
+        sections,
+        definitions,
+        ["eatSugar", "customCount", "plain"],
+        { eatSugar: single("Yes"), customCount: single("Yes") },
+      ),
+    ).toEqual([
+      {
+        section: sections[0],
+        options: [
+          { name: "customCount", depth: 0 },
+          { name: "count", depth: 1 },
+          { name: "plain", depth: 0 },
+        ],
+      },
+      { options: [{ name: "eatSugar", depth: 0 }] },
+    ]);
+  });
+
+  it("keeps every option ungrouped when no section references it", () => {
+    expect(
+      groupedVisibleOptions([], definitions, ["plain"]).map(
+        (group) => group.options,
+      ),
+    ).toEqual([[{ name: "plain", depth: 0 }]]);
+  });
+
+  it("renders an option in every section that references it", () => {
+    const sections: SettingSection[] = [
+      { name: "one", label: "One", defaultExpand: true, options: ["plain"] },
+      { name: "two", label: "Two", defaultExpand: true, options: ["plain"] },
+    ];
+
+    expect(
+      groupedVisibleOptions(sections, definitions, ["plain"]).map(
+        (group) => group.options,
+      ),
+    ).toEqual([[{ name: "plain", depth: 0 }], [{ name: "plain", depth: 0 }]]);
+  });
+});
+
 describe("selectedCaseNames", () => {
   it("reports the default case of an unset switch", () => {
     expect(selectedCaseNames(sugar)).toEqual(["No"]);
@@ -332,6 +388,7 @@ describe("optionValueSummary", () => {
           name: "value",
           label: "Value",
           default: "7",
+          inputType: "text",
           pipelineType: "int",
           password: false,
         },

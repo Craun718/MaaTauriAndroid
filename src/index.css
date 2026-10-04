@@ -278,4 +278,30 @@
   .rich-description img {
     max-width: 100%;
   }
+
+  .rich-label {
+    overflow-wrap: anywhere;
+  }
+
+  .rich-label a {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
+  .rich-label code {
+    padding: 0.05rem 0.2rem;
+    border-radius: 0.25rem;
+    background: var(--color-surface-muted);
+    font-size: 0.8125em;
+  }
+
+  .rich-label img {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    margin-inline: 0.125rem;
+    border-radius: 0.125rem;
+    object-fit: contain;
+    vertical-align: -0.125em;
+  }
 }

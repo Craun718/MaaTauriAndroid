@@ -15,6 +15,7 @@ pub struct Project {
     pub controllers: Vec<ControllerDefinition>,
     pub resources: Vec<ResourceDefinition>,
     pub groups: Vec<GroupDefinition>,
+    pub setting_sections: Vec<SettingSectionDefinition>,
     pub tasks: Vec<TaskDefinition>,
     pub options: BTreeMap<String, OptionDefinition>,
     pub global_options: Vec<String>,
@@ -52,6 +53,17 @@ pub struct GroupDefinition {
     pub label: String,
     pub description: Option<String>,
     pub default_expand: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingSectionDefinition {
+    pub name: String,
+    pub label: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub default_expand: bool,
+    pub options: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,6 +187,7 @@ pub struct InputFieldDefinition {
     pub name: String,
     pub label: String,
     pub description: Option<String>,
+    pub placeholder: Option<String>,
     pub default: Option<String>,
     #[serde(alias = "pipeline_type", default)]
     pub pipeline_type: PipelineType,
@@ -183,6 +196,8 @@ pub struct InputFieldDefinition {
     pub pattern_message: Option<String>,
     #[serde(default)]
     pub password: bool,
+    #[serde(alias = "input_type", default)]
+    pub input_type: InputType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,6 +216,15 @@ pub enum PipelineType {
     String,
     Int,
     Bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum InputType {
+    #[default]
+    Text,
+    File,
+    Time,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

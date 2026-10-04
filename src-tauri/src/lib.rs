@@ -2549,6 +2549,7 @@ mod tests {
             controllers: Vec::new(),
             resources: Vec::new(),
             groups: Vec::new(),
+            setting_sections: Vec::new(),
             tasks: Vec::new(),
             options: BTreeMap::new(),
             global_options: Vec::new(),

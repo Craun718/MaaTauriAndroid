@@ -51,11 +51,13 @@ export interface InputFieldDefinition {
   name: string;
   label: string;
   description?: string;
+  placeholder?: string;
   default?: string;
   pipelineType: "string" | "int" | "bool";
   verify?: string;
   patternMessage?: string;
   password: boolean;
+  inputType: "text" | "file" | "time";
 }
 
 export type OptionDefinition =
@@ -137,11 +139,21 @@ export interface Project {
   controllers: ControllerDefinition[];
   resources: ResourceDefinition[];
   groups: GroupDefinition[];
+  settingSections: SettingSection[];
   tasks: TaskDefinition[];
   options: Record<string, OptionDefinition>;
   globalOptions: string[];
   presets: ConfigurationTemplate[];
   metadata: ProjectMetadata;
+}
+
+export interface SettingSection {
+  name: string;
+  label: string;
+  description?: string;
+  icon?: string;
+  defaultExpand: boolean;
+  options: string[];
 }
 
 export interface ConfigurationTemplate {

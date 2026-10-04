@@ -6,6 +6,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { readProjectImage } from "../lib/api";
+import { hasInlineRichText, inlineHtmlTagNames } from "../lib/richText";
 
 const sanitizeSchema = {
   ...defaultSchema,
@@ -16,6 +17,8 @@ const sanitizeSchema = {
     src: ["http", "https"],
   },
 };
+
+const inlineMarkdownElements = ["del", ...inlineHtmlTagNames];
 
 type MarkdownLinkProps = ComponentPropsWithoutRef<"a"> & { node?: unknown };
 type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & { node?: unknown };
@@ -141,5 +144,39 @@ export function RichDescription({ text, className }: RichDescriptionProps) {
         {text}
       </Markdown>
     </div>
+  );
+}
+
+interface InlineMarkdownLabelProps {
+  text: string;
+  className?: string;
+}
+
+/**
+ * PI label renderer. The Markdown parser is only used for known inline syntax;
+ * ordinary angle-bracket text therefore stays intact instead of being treated
+ * as HTML. React Markdown additionally unwraps block nodes so malformed labels
+ * cannot introduce layout into compact controls.
+ */
+export function InlineMarkdownLabel({
+  text,
+  className,
+}: InlineMarkdownLabelProps) {
+  if (!hasInlineRichText(text)) {
+    return <span className={className}>{text}</span>;
+  }
+
+  return (
+    <span className={className ? `rich-label ${className}` : "rich-label"}>
+      <Markdown
+        allowedElements={inlineMarkdownElements}
+        unwrapDisallowed
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+        components={{ a: MarkdownLink, img: MarkdownImage }}
+      >
+        {text}
+      </Markdown>
+    </span>
   );
 }

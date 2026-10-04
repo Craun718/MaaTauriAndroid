@@ -2,7 +2,7 @@ import { type ReactNode, useId } from "react";
 
 export interface SegmentGroupItem {
   value: string;
-  label: string;
+  label: ReactNode;
   description?: ReactNode;
   disabled?: boolean;
 }

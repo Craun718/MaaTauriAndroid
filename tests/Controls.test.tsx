@@ -63,6 +63,7 @@ const project: Project = {
     },
   ],
   groups: [],
+  settingSections: [],
   tasks: [],
   options: {},
   globalOptions: [],

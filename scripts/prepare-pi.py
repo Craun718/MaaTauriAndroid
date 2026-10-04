@@ -143,6 +143,7 @@ def copy_icon(project: Path, interface: dict[str, Any], destination: Path) -> No
         icon_dir / f"{stem}.png",
         *sorted(icon_dir.glob("*.png")),
         icon_dir / target.name,
+        project / "assets" / target,
         project / target.name,
     ]
     source = next((path for path in candidates if path.is_file()), None)

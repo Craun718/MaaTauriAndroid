@@ -677,71 +677,73 @@ function TaskItem({
         )}
       </article>
       <Modal open={detailsOpen} onClose={closeDetails} title={label}>
-        {locked ? (
-          <>
-            <p className="text-sm text-ink-muted">
-              {t("taskName")}: <span className="text-ink">{label}</span>
-            </p>
-            {options.map(({ name, depth }) => {
-              const option = project.options[name];
-              if (!option) return null;
-              return (
-                <div
-                  key={name}
-                  className={
-                    depth > 0 ? "border-l-2 border-line pl-2" : undefined
-                  }
-                >
-                  {optionValueSummary(
-                    option,
-                    configured.optionValues[name],
-                  ).map((row) => (
-                    <div key={row.label} className="space-y-0.5">
-                      <p className="text-sm font-medium">{row.label}</p>
-                      {row.detail && (
-                        <p className="text-sm text-ink-muted">{row.detail}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-            <RichDescription text={task.description} />
-          </>
-        ) : (
-          <>
-            <TextField
-              compact
-              label={t("taskName")}
-              value={labelDraft}
-              onValueChange={setLabelDraft}
-              onBlur={commitLabel}
-            />
-            {options.map(({ name, depth }) => {
-              const option = project.options[name];
-              if (!option) return null;
-              return (
-                <div
-                  key={name}
-                  className={
-                    depth > 0 ? "border-l-2 border-line pl-2" : undefined
-                  }
-                >
-                  <OptionEditor
-                    option={option}
-                    compact
-                    value={defaultOptionValue(
+        <div className="space-y-1 px-2 pb-2">
+          {locked ? (
+            <>
+              <p className="text-sm text-ink-muted">
+                {t("taskName")}: <span className="text-ink">{label}</span>
+              </p>
+              {options.map(({ name, depth }) => {
+                const option = project.options[name];
+                if (!option) return null;
+                return (
+                  <div
+                    key={name}
+                    className={
+                      depth > 0 ? "border-l-2 border-line pl-2" : undefined
+                    }
+                  >
+                    {optionValueSummary(
                       option,
                       configured.optionValues[name],
-                    )}
-                    onChange={(value) => onOptionValueChange(name, value)}
-                  />
-                </div>
-              );
-            })}
-            <RichDescription text={task.description} />
-          </>
-        )}
+                    ).map((row) => (
+                      <div key={row.label} className="space-y-0.5">
+                        <p className="text-sm font-medium">{row.label}</p>
+                        {row.detail && (
+                          <p className="text-sm text-ink-muted">{row.detail}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              <RichDescription text={task.description} />
+            </>
+          ) : (
+            <>
+              <TextField
+                compact
+                label={t("taskName")}
+                value={labelDraft}
+                onValueChange={setLabelDraft}
+                onBlur={commitLabel}
+              />
+              {options.map(({ name, depth }) => {
+                const option = project.options[name];
+                if (!option) return null;
+                return (
+                  <div
+                    key={name}
+                    className={
+                      depth > 0 ? "border-l-2 border-line pl-2" : undefined
+                    }
+                  >
+                    <OptionEditor
+                      option={option}
+                      compact
+                      value={defaultOptionValue(
+                        option,
+                        configured.optionValues[name],
+                      )}
+                      onChange={(value) => onOptionValueChange(name, value)}
+                    />
+                  </div>
+                );
+              })}
+              <RichDescription text={task.description} />
+            </>
+          )}
+        </div>
       </Modal>
       <Modal
         open={removeConfirmOpen}

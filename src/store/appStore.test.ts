@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { saveConfiguration } from "../lib/api";
+import { applyPreset, saveConfiguration } from "../lib/api";
 import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
 import { useAppStore, waitForPendingSaves } from "./appStore";
 import { useNotificationStore } from "./notificationStore";
@@ -13,6 +13,7 @@ vi.mock("../lib/api", () => ({
 }));
 
 const mockedSaveConfiguration = vi.mocked(saveConfiguration);
+const mockedApplyPreset = vi.mocked(applyPreset);
 
 const configuration: UserConfiguration = {
   schemaVersion: 1,
@@ -145,5 +146,67 @@ describe("appStore waitForPendingSaves", () => {
 
     expect(useAppStore.getState().saving).toBe(false);
     expect(useAppStore.getState().error).toBe("Save failed");
+  });
+
+  it("waits for an in-flight preset before resolving", async () => {
+    const persisted = configurationWith({ telemetryEnabled: true });
+    const request = deferred<UserConfiguration>();
+    mockedApplyPreset.mockReturnValue(request.promise);
+
+    const applying = useAppStore.getState().applyPreset("daily");
+    let settled = false;
+    const waited = waitForPendingSaves().then(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(useAppStore.getState().saving).toBe(true);
+    expect(useAppStore.getState().busy).toBe(false);
+
+    request.resolve(persisted);
+    await waited;
+    await applying;
+
+    expect(useAppStore.getState().snapshot?.configuration).toBe(persisted);
+    expect(useAppStore.getState().saving).toBe(false);
+    expect(useAppStore.getState().busy).toBe(false);
+  });
+
+  it("keeps a task edit made after a preset request", async () => {
+    const presetResult = configurationWith({ telemetryEnabled: true });
+    const edited = configurationWith({ forceStopTargetApp: true });
+    const savedResult = configurationWith({ forceStopTargetApp: true });
+    const applyRequest = deferred<UserConfiguration>();
+    const saveRequest = deferred<UserConfiguration>();
+    mockedApplyPreset.mockReturnValue(applyRequest.promise);
+    mockedSaveConfiguration.mockReturnValue(saveRequest.promise);
+
+    const applying = useAppStore.getState().applyPreset("daily");
+    const saving = useAppStore.getState().saveConfiguration(edited);
+    applyRequest.resolve(presetResult);
+    await applying;
+
+    expect(useAppStore.getState().snapshot?.configuration).toBe(edited);
+    expect(useAppStore.getState().saving).toBe(true);
+
+    saveRequest.resolve(savedResult);
+    await saving;
+
+    expect(useAppStore.getState().snapshot?.configuration).toBe(savedResult);
+    expect(useAppStore.getState().saving).toBe(false);
+  });
+
+  it("clears the saving state and reports a failed preset", async () => {
+    mockedApplyPreset.mockRejectedValue(new Error("Preset failed"));
+
+    await useAppStore.getState().applyPreset("daily");
+
+    expect(useAppStore.getState().saving).toBe(false);
+    expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().error).toBe("Preset failed");
+    expect(useNotificationStore.getState().notifications).toMatchObject([
+      { tone: "error", message: "Preset failed" },
+    ]);
   });
 });

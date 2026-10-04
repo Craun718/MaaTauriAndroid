@@ -34,7 +34,7 @@ pi_include = ["data"]
 
 # interface.json 声明 1 个 agent，因此这里必须恰好配置 1 个 runtime。
 [agent]
-timeout_ms = 15000
+timeout_ms = 30000
 
 [[agent.runtimes]]
 bundle = "m9a-agent-runtime-{abi}.zip"

@@ -35,11 +35,11 @@ python3 scripts/build-resource.py \
   --submodules --exclude pillow --require pillow==11.0.0
 ```
 
-`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本。资源目录和 runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，内置 profile 会通过 `{abi}` 自动解析。`build-agent-runtime.sh` 本身继续保持通用：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置三个项目的完整调用参数见下文「仓库内置项目的构建参数」。
+`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本；传 `--skip-runtime` 时会在 PI 准备和 MaaFramework 下载后停止，供编译型 agent 自己构建。资源目录和 Python runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，内置 profile 会通过 `{abi}` 自动解析。`build-agent-runtime.sh` 本身继续保持通用：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置项目的完整调用参数见下文「仓库内置项目的构建参数」。
 
 没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
 
-runtime ZIP 是构建产物，不进 git——CI 每次重新构建。本地构建保持 `<项目>-agent-runtime-<abi>.zip` 这个名字（profile 的 `bundle` 按它解析）；CI 在上传前会把它改名为 `<项目>-agent-runtime-<abi>-<7 位 commit hash>.zip`，APK 同理，便于把下载到的包对应回具体提交。
+runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项目的本地构建保持 `<项目>-agent-runtime-<abi>.zip` 这个名字（profile 的 `bundle` 按它解析）；CI 在上传前会把它改名为 `<项目>-agent-runtime-<abi>-<7 位 commit hash>.zip`，APK 同理，便于把下载到的包对应回具体提交。MaaEnd 是双编译型 agent 例外：CI 上传一个 `maaend-agent-runtime-<abi>-<hash>` artifact，其中包含 `maaend-go-service-runtime-<abi>-<hash>.zip` 和 `maaend-cpp-algo-runtime-<abi>-<hash>.zip` 两个 bundle。
 
 ## 流水线三步
 
@@ -70,8 +70,13 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。本地构�
 | m9a | `pillow==11.0.0` | `pillow` |
 | narutomobile | `pillow==11.0.0` | `pillow` `win32-setctime` `colorama` `jeepney` |
 | maapvz | `pillow==11.0.0` | `pillow` `win32-setctime` `colorama` `jeepney` `onnxruntime` |
+| maaend | 不适用 | 不适用；上游脚本交叉编译 `go-service` 与 `cpp-algo` |
 
 模式是统一的：先排除依赖解析默认选中的版本，再用 `--require` 钉回 Chaquopy 索引上有 Android 轮子的版本（桌面 PyPI 上的 pillow 没有 arm64 Android 轮子）；纯桌面依赖直接剪掉。
+
+### MaaEnd 例外
+
+MaaEnd `v2.31.0`（commit `f6e3b5f8b27a8f84391bb73d85a296dabaddfb5d`）有两个编译型 agent。CI 先用 `build-resource.py --submodules --prepare ... --skip-runtime` 组装 PI，并把 `AndroidOpenGame` 插到 `DailyFull` / `QuickDaily` / `RealtimeAssist` 三个预设首位；随后按上游 `tools/build_android_agents.py` 交叉编译，再用 `scripts/pack_compiled_agent.py` 分别产出两个 ZIP。两个 ZIP 与 `interface.json` 的 agent 顺序一一对应，不能合成一个 bundle，否则 APK 会把同一份 agent 负载重复打包两次。
 
 ## 给下游：为自己的资源构建
 
@@ -97,7 +102,7 @@ scripts/build-agent-runtime.sh \
 编译型 agent 的包体约束：
 
 - **包体**：bundle 是普通 ZIP，须满足无符号链接、条目数不超 0xFFFF，且构建期 `validateAgentBundle` 强制包内含 `lib/<abi>/libMaaAgentClient.so` 与 `libMaaAgentServer.so`。子进程真正需要的是 Server 库（链接它，或经 `MAAFW_BINARY_PATH` / `LD_LIBRARY_PATH` 加载）；Client 库只被壳内宿主进程使用，但每个 bundle 仍必须带上。
-- **打包工具**：用普通 `zip` 打包即可，自行保证无符号链接、条目数不超 0xFFFF。
+- **打包工具**：优先用 `scripts/pack_compiled_agent.py` 打包单 ELF agent；用普通 `zip` 时自行保证无符号链接、条目数不超 0xFFFF。
 - **通信协议**：子进程必须实现 MaaFW 的 AgentServer 侧，监听 `{identifier}`（TCP 端口）与壳内 `AgentClient` 走 AgentClient/Server IPC。`interface.json` 的 `agent.child_args` 指向入口——ELF 就写包内二进制路径，`agent/` 目录整体随 PI 打包。
 
 最小配方示例：
@@ -118,7 +123,18 @@ LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
 MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
 ```
 
-出包只需把 bundle 目录压成 ZIP，`exec` 与 `executables` 指向的文件在设备端会被 `AgentRuntimeManager` 自动标成可执行：
+单文件 ELF 可直接用仓库脚本出包，它会把 ELF 放到 `bin/<name>`、复制两个 Maa agent 库到 `lib/<abi>/`，并写入可执行位与确定性时间戳：
+
+```bash
+python3 scripts/pack_compiled_agent.py \
+  --elf /path/to/my-agent \
+  --name my-agent \
+  --abi arm64-v8a \
+  --maa-dir vendor/maa/android \
+  --out /path/to/compiled-agent-runtime.zip
+```
+
+如果手写 bundle 目录，出包只需把目录压成 ZIP，`exec` 与 `executables` 指向的文件在设备端会被 `AgentRuntimeManager` 自动标成可执行：
 
 ```bash
 cd <bundle 目录>

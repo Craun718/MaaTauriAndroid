@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Clone an arbitrary MaaFramework PI project and build its Python runtime."""
+"""Clone and prepare a MaaFramework PI project, optionally building its runtime."""
 
 from __future__ import annotations
 
@@ -101,6 +101,9 @@ def build(arguments: argparse.Namespace, resource_id: str) -> None:
             raise RuntimeError("--prepare must not be empty")
         run(command)
 
+    if arguments.skip_runtime:
+        return
+
     project_dir = REPO_ROOT / "resource" / resource_id
     requirements = arguments.requirements
     if requirements:
@@ -167,6 +170,14 @@ def parser() -> argparse.ArgumentParser:
         default=[],
         metavar="COMMAND",
         help="repository-root command to run after checkout; repeatable",
+    )
+    result.add_argument(
+        "--skip-runtime",
+        action="store_true",
+        help=(
+            "prepare the resource and MaaFramework libraries without building "
+            "a Python runtime"
+        ),
     )
     result.add_argument("--requirements", help="requirements file for the Python runtime")
     result.add_argument(

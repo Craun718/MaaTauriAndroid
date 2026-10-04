@@ -21,10 +21,11 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      android: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.m9a == 'true' || steps.filter.outputs.narutomobile == 'true' || steps.filter.outputs.maapvz == 'true' }}
+      android: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.m9a == 'true' || steps.filter.outputs.narutomobile == 'true' || steps.filter.outputs.maapvz == 'true' || steps.filter.outputs.maaend == 'true' }}
       m9a: ${{ steps.filter.outputs.m9a == 'true' || steps.filter.outputs.common == 'true' }}
       narutomobile: ${{ steps.filter.outputs.narutomobile == 'true' || steps.filter.outputs.common == 'true' }}
       maapvz: ${{ steps.filter.outputs.maapvz == 'true' || steps.filter.outputs.common == 'true' }}
+      maaend: ${{ steps.filter.outputs.maaend == 'true' || steps.filter.outputs.common == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -34,6 +35,8 @@ jobs:
             common:
               - 'scripts/build-resource.py'
               - 'scripts/prepare-pi.py'
+              - 'scripts/prepare-maaend.py'
+              - 'scripts/pack_compiled_agent.py'
               - 'scripts/build-agent-runtime.sh'
               - 'scripts/build_agent_bundle.py'
               - 'scripts/fetch-maafw.sh'
@@ -54,6 +57,8 @@ jobs:
               - 'resource/narutomobile.toml'
             maapvz:
               - 'resource/maapvz.toml'
+            maaend:
+              - 'resource/maaend.toml'
 
   frontend:
     runs-on: ubuntu-latest
@@ -579,5 +584,214 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: maapvz-apk-debug-${{ env.SHORT_SHA }}
+        path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+        if-no-files-found: error
+
+  maaend-android:
+    needs: [changes, android-gradle]
+    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.maaend == 'true') && needs.android-gradle.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    env:
+      # The application build still uses NDK 28.2. MaaEnd's upstream Android
+      # agent recipe requires NDK 29 and CMake 3.31 for cpp-algo.
+      MAAFW_VERSION: v5.14.0
+      MAAEND_VERSION: v2.31.0
+      AGENT_NDK_VERSION: 29.0.13599879
+      ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
+      ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
+      TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.ANDROID_RUST_TARGET }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v4
+      - name: Install the Android build toolchains
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      # API 37 ships as the minor-numbered package android-37.0, while AGP
+      # looks the platform up by the bare android-37 hash: symlink it into
+      # place after installing (see flutter/flutter#192478).
+      - name: Install the Android SDK components
+        run: |
+          sdkmanager --install \
+            "ndk;28.2.13676358" \
+            "ndk;29.0.13599879" \
+            "cmake;3.22.1" \
+            "cmake;3.31.6" \
+            "platforms;android-37.0"
+          ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          echo "$ANDROID_HOME/cmake/3.31.6/bin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2.9.2
+        with:
+          workspaces: src-tauri
+          key: android-${{ env.ANDROID_RUST_TARGET }}-maaend-apk
+      - name: Cache the Android debug keystore
+        uses: actions/cache@v6
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
+      - name: Resolve the commit hash suffix
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "SHORT_SHA=$(printf '%s' "$HEAD_SHA" | cut -c1-7)" >> "$GITHUB_ENV"
+
+      - name: Point the Android build at the MaaEnd profile
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "pi.profile=$GITHUB_WORKSPACE/resource/maaend.toml"
+          } > src-tauri/gen/android/local.properties
+          {
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358"
+            toolchain="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            echo "AR=$toolchain/llvm-ar"
+            echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang"
+            echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$toolchain/aarch64-linux-android35-clang"
+            echo "CC_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang"
+            echo "CXX_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang++"
+            echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$toolchain/x86_64-linux-android35-clang"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+          } >> "$GITHUB_ENV"
+
+      - name: Clone and prepare the pinned MaaEnd resource
+        run: |
+          python3 scripts/build-resource.py \
+            https://github.com/MaaEnd/MaaEnd.git \
+            --id maaend \
+            --ref f6e3b5f8b27a8f84391bb73d85a296dabaddfb5d \
+            --submodules \
+            --prepare "python3 scripts/prepare-maaend.py resource/maaend/Android/pi-root" \
+            --skip-runtime \
+            --abi "$ANDROID_ABI"
+          source_date_epoch="$(git -C resource/maaend log -1 --format=%ct HEAD)"
+          echo "SOURCE_DATE_EPOCH=$source_date_epoch" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: resource/maaend/agent/go-service/go.mod
+          cache: true
+          cache-dependency-path: |
+            resource/maaend/agent/go-service/go.mod
+            resource/maaend/agent/go-service/go.sum
+      - uses: actions/cache@v6
+        with:
+          path: resource/maaend/agent/cpp-algo/MaaUtils/MaaDeps
+          key: maaend-v2.31.0-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
+
+      - name: Build the MaaEnd Android agents
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          agent_ndk="$ANDROID_HOME/ndk/$AGENT_NDK_VERSION"
+          export ANDROID_NDK_HOME="$agent_ndk"
+          export ANDROID_NDK_ROOT="$agent_ndk"
+          python3 resource/maaend/tools/build_android_agents.py \
+            --ndk "$agent_ndk" \
+            --abi "$ANDROID_ABI" \
+            --maafw-version "$MAAFW_VERSION" \
+            --version "$MAAEND_VERSION"
+
+      - name: Validate and pack the MaaEnd agents
+        run: |
+          readelf="$ANDROID_HOME/ndk/$AGENT_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          agent_dist="resource/maaend/Android/agent-dist/$ANDROID_ABI/jniLibs"
+          for agent in go-service cpp-algo; do
+            elf="$agent_dist/lib${agent}.so"
+            [ -s "$elf" ] || { echo "missing Android ELF: $elf" >&2; exit 1; }
+            machine="$("$readelf" -h "$elf" | sed -n 's/^  Machine:[[:space:]]*//p' | head -n 1)"
+            case "$ANDROID_ABI" in
+              arm64-v8a) [ "$machine" = "AArch64" ] || { echo "wrong ELF machine for $elf: $machine" >&2; exit 1; } ;;
+              x86_64) [[ "$machine" == *X86-64* ]] || { echo "wrong ELF machine for $elf: $machine" >&2; exit 1; } ;;
+            esac
+            "$readelf" -l "$elf" | grep -q '/system/bin/linker64' || {
+              echo "wrong dynamic linker for $elf" >&2
+              exit 1
+            }
+          done
+          python3 scripts/pack_compiled_agent.py \
+            --elf "$agent_dist/libgo-service.so" \
+            --name go-service \
+            --abi "$ANDROID_ABI" \
+            --maa-dir vendor/maa/android \
+            --out "resource/maaend-go-service-runtime-$ANDROID_ABI.zip"
+          python3 scripts/pack_compiled_agent.py \
+            --elf "$agent_dist/libcpp-algo.so" \
+            --name cpp-algo \
+            --abi "$ANDROID_ABI" \
+            --maa-dir vendor/maa/android \
+            --out "resource/maaend-cpp-algo-runtime-$ANDROID_ABI.zip"
+
+      - name: Generate the Tauri Android Gradle dependencies
+        env:
+          TAURI_ANDROID_PROJECT_PATH: ${{ github.workspace }}/src-tauri/gen/android
+          WRY_ANDROID_PACKAGE: top.natsuu.mta
+          WRY_ANDROID_LIBRARY: maa_tauri_android_lib
+        run: |
+          pnpm install --frozen-lockfile
+          # tauri-build does not declare this variable as a rerun trigger, so
+          # invalidate only the app build script when reusing a cached target.
+          cargo clean --manifest-path src-tauri/Cargo.toml --package maa_tauri_android
+          cargo check --manifest-path src-tauri/Cargo.toml --target "$ANDROID_RUST_TARGET" --lib
+
+      - name: Build the $ANDROID_ABI debug APK
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm tauri android build --target "$TAURI_ANDROID_TARGET" --apk --debug --split-per-abi
+
+      - name: Run app unit tests
+        working-directory: src-tauri/gen/android
+        run: |
+          flavor="${ANDROID_ABI%-v8a}"
+          ./gradlew ":app:test${flavor^}DebugUnitTest"
+
+      - name: Suffix the artifacts with the commit hash
+        run: |
+          mv "resource/maaend-go-service-runtime-${ANDROID_ABI}.zip" \
+             "resource/maaend-go-service-runtime-${ANDROID_ABI}-${SHORT_SHA}.zip"
+          mv "resource/maaend-cpp-algo-runtime-${ANDROID_ABI}.zip" \
+             "resource/maaend-cpp-algo-runtime-${ANDROID_ABI}-${SHORT_SHA}.zip"
+          apks=()
+          while IFS= read -r -d '' apk; do apks+=("$apk"); done \
+            < <(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print0)
+          [ "${#apks[@]}" -gt 0 ] || { echo "no APK found to suffix" >&2; exit 1; }
+          for apk in "${apks[@]}"; do
+            mv "$apk" "${apk%.apk}-${SHORT_SHA}.apk"
+          done
+
+      - name: Upload the agent runtime archives
+        uses: actions/upload-artifact@v7
+        with:
+          name: maaend-agent-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}
+          path: |
+            resource/maaend-go-service-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}.zip
+            resource/maaend-cpp-algo-runtime-${{ env.ANDROID_ABI }}-${{ env.SHORT_SHA }}.zip
+          if-no-files-found: error
+
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: maaend-apk-debug-${{ env.SHORT_SHA }}
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error

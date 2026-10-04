@@ -58,13 +58,14 @@ app_name = "Your PI"
 
 ### 仓库内置配置
 
-本仓库不在 Git 索引中内置 M9A、NarutoMobile、MAAPVZ；CI 用 `scripts/build-resource.py` 传入上游 URL 和 commit 后克隆资源，profile 放在资源旁边并使用相对路径，这样同一份 profile 在每个 checkout 上都能工作：
+本仓库不在 Git 索引中内置 M9A、NarutoMobile、MAAPVZ、MaaEnd；CI 用 `scripts/build-resource.py` 传入上游 URL 和 commit 后克隆资源，profile 放在资源旁边并使用相对路径，这样同一份 profile 在每个 checkout 上都能工作：
 
 - `resource/m9a`、`resource/m9a.toml`：M9A 的 CI-only checkout 和 profile
 - `resource/narutomobile`、`resource/narutomobile.toml`：NarutoMobile 的 CI-only checkout 和 profile
 - `resource/maapvz`、`resource/maapvz.toml`：MAAPVZ 的 CI-only checkout 和 profile
+- `resource/maaend`、`resource/maaend.toml`：MaaEnd 的 CI-only checkout 和 profile（`v2.31.0`）
 
-对应的 Python agent runtime 由 CI 每次重新构建，默认是 `resource/*-agent-runtime-arm64-v8a.zip` 构建产物，不提交。某个 checkout 要使用仓库内资源，设：
+M9A、NarutoMobile 与 MAAPVZ 的 Python agent runtime 由 CI 每次重新构建，默认是 `resource/*-agent-runtime-arm64-v8a.zip` 构建产物，不提交。MaaEnd 有两个编译型 agent，CI 分别生成 `resource/maaend-go-service-runtime-<abi>.zip` 与 `resource/maaend-cpp-algo-runtime-<abi>.zip`，同样不提交。某个 checkout 要使用仓库内资源，设：
 
 ```properties
 pi.profile=/path/to/repo/resource/m9a.toml
@@ -196,7 +197,7 @@ LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
 MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
 ```
 
-这种 ZIP 不需要 `agent-core.json`，用普通 `zip` 打包即可，但要自己保证无符号链接、不触发 ZIP64、带齐两个 `.so`。`agent.child_args` 要指向资源里的同一入口（编译型就写 ELF 路径），让入口随 PI 打包；实际拉起仍由 profile 的 `exec` 负责。进程通过 `{identifier}` 获得 TCP 端口，并且必须实现 AgentClient/Server IPC 协议。
+这种 ZIP 不需要 `agent-core.json`。单文件 ELF 用 `scripts/pack_compiled_agent.py` 打包；手写 bundle 目录时才用普通 `zip`，但要自己保证无符号链接、不触发 ZIP64、带齐两个 `.so`。`agent.child_args` 要指向资源里的同一入口（编译型就写 ELF 路径），让入口随 PI 打包；实际拉起仍由 profile 的 `exec` 负责。进程通过 `{identifier}` 获得 TCP 端口，并且必须实现 AgentClient/Server IPC 协议。
 
 ## 出包
 

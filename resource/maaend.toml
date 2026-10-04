@@ -1,0 +1,43 @@
+# MaaEnd Project Interface profile.
+#
+# The upstream repository keeps interface.json in assets/ and the compiled agents
+# under agent/. scripts/prepare-pi.py assembles them into Android/pi-root/, then
+# scripts/prepare-maaend.py adds the Android open-game task to three presets.
+
+pi_assets = "maaend/Android/pi-root"
+
+resource_id = "maaend"
+
+# MaaEnd's desktop interface uses MaaEnd, while its Android APK distribution
+# updates through the separate MaaEnd_exec resource.
+mirrorchyan_rid = "MaaEnd_exec"
+
+app_name = "MaaEnd"
+
+maa_dir = "vendor/maa/android"
+
+[agent]
+timeout_ms = 15000
+
+# The two bundles match interface.json's two agent entries in order.
+[[agent.runtimes]]
+bundle = "maaend-go-service-runtime-{abi}.zip"
+exec = "bin/go-service"
+executables = ["bin/go-service"]
+args = ["{identifier}"]
+working_dir = "{pi}"
+
+[agent.runtimes.env]
+LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
+MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
+
+[[agent.runtimes]]
+bundle = "maaend-cpp-algo-runtime-{abi}.zip"
+exec = "bin/cpp-algo"
+executables = ["bin/cpp-algo"]
+args = ["{identifier}"]
+working_dir = "{pi}"
+
+[agent.runtimes.env]
+LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
+MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"

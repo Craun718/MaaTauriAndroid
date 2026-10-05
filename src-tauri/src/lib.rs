@@ -715,7 +715,7 @@ async fn prepare_app(
         .await
         .map_err(|error| AppError::Message(error.to_string()))??;
         set_preparation_stage("loadingProject");
-        Some(root)
+        Some(PathBuf::from(root))
     };
 
     #[cfg(not(target_os = "android"))]

@@ -5,12 +5,21 @@ import {
   loadProject as invokeLoadProject,
   reinstallResources as invokeReinstallResources,
   saveConfiguration as invokeSaveConfiguration,
+  readProjectText,
 } from "../lib/api";
+import {
+  projectLanguage,
+  resolveLanguage,
+  systemLanguageTags,
+} from "../lib/language";
+import { buildAndroidProject, loadProjectSource } from "../lib/pi";
+import type { ProjectSource } from "../lib/pi/rawTypes";
 import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
 import { useNotificationStore } from "./notificationStore";
 
 interface AppStore {
   snapshot?: AppStateSnapshot;
+  projectSource?: ProjectSource;
   busy: boolean;
   saving: boolean;
   error?: string;
@@ -18,6 +27,7 @@ interface AppStore {
   bootstrap: () => Promise<void>;
   reinstallResources: () => Promise<void>;
   loadProject: (path: string, language?: string) => Promise<void>;
+  setProjectLanguage: (language: string) => Promise<void>;
   applyPreset: (presetName: string) => Promise<void>;
   saveConfiguration: (configuration: UserConfiguration) => Promise<void>;
   setError: (error?: string) => void;
@@ -42,6 +52,57 @@ function revisedSnapshot(snapshot: AppStateSnapshot) {
   return { snapshot, busy: false };
 }
 
+function normalizedDirectory(path: string): string {
+  return path.replace(/[\\/]+$/, "");
+}
+
+function interfacePath(snapshot: AppStateSnapshot): string | undefined {
+  const projectPath = snapshot.projectPath;
+  const project = snapshot.project;
+  if (!projectPath || !project) return undefined;
+
+  const root = normalizedDirectory(project.root);
+  const path = normalizedDirectory(projectPath);
+  if (path === root) return "interface.json";
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return separator === -1 ? path : path.slice(separator + 1);
+}
+
+function preferredProjectLanguage(configuration: UserConfiguration): string {
+  return projectLanguage(
+    resolveLanguage(configuration.uiLanguage, systemLanguageTags()),
+  );
+}
+
+async function parseSnapshotProject(
+  snapshot: AppStateSnapshot,
+): Promise<{ snapshot: AppStateSnapshot; source?: ProjectSource }> {
+  const interfacePathValue = interfacePath(snapshot);
+  if (!interfacePathValue || !snapshot.project) return { snapshot };
+
+  const readProjectFile = (path: string) => readProjectText(path);
+  const source = await loadProjectSource(
+    snapshot.project.root,
+    readProjectFile,
+    interfacePathValue,
+  );
+  const project = await buildAndroidProject(
+    source,
+    preferredProjectLanguage(snapshot.configuration),
+    readProjectFile,
+  );
+  return { snapshot: { ...snapshot, project }, source };
+}
+
+async function adoptSnapshot(snapshot: AppStateSnapshot) {
+  const parsed = await parseSnapshotProject(snapshot);
+  set({
+    ...revisedSnapshot(parsed.snapshot),
+    projectSource: parsed.source,
+  });
+  return parsed.snapshot;
+}
+
 /**
  * 等所有已入队的配置保存和预设套用真正落到后端。启动运行前用它替代「保存
  * 中禁用开始按钮」：任务列表的改动是乐观更新加后台落盘，`saving` 只表示还有
@@ -60,7 +121,7 @@ export const useAppStore = create<AppStore>((set) => ({
   async bootstrap() {
     set({ busy: true, error: undefined });
     try {
-      set(revisedSnapshot(await bootstrapApp()));
+      await adoptSnapshot(await bootstrapApp());
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
@@ -69,7 +130,7 @@ export const useAppStore = create<AppStore>((set) => ({
   async reinstallResources() {
     set({ busy: true, error: undefined });
     try {
-      set(revisedSnapshot(await invokeReinstallResources()));
+      await adoptSnapshot(await invokeReinstallResources());
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
@@ -78,7 +139,22 @@ export const useAppStore = create<AppStore>((set) => ({
   async loadProject(path, language) {
     set({ busy: true, error: undefined });
     try {
-      set(revisedSnapshot(await invokeLoadProject(path, language)));
+      await adoptSnapshot(await invokeLoadProject(path, language));
+    } catch (error) {
+      set({ error: message(error), busy: false });
+      reportError(error);
+    }
+  },
+  async setProjectLanguage(language) {
+    const current = useAppStore.getState().snapshot;
+    const source = useAppStore.getState().projectSource;
+    if (!current?.project || !source) return;
+    set({ busy: true, error: undefined });
+    try {
+      const project = await buildAndroidProject(source, language, (path) =>
+        readProjectText(path),
+      );
+      set({ snapshot: { ...current, project }, busy: false });
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);

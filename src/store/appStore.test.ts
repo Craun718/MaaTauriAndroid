@@ -364,7 +364,10 @@ describe("appStore WebView Project Interface parsing", () => {
   });
 
   it("parses the snapshot returned after reinstalling resources", async () => {
-    const backendSnapshot = snapshot("/reinstalled-project");
+    const backendSnapshot = {
+      ...snapshot("/reinstalled-project"),
+      project: { ...project("Rust view"), root: "/reinstalled-project" },
+    };
     const projectSource = { ...source(), root: "/reinstalled-project" };
     mockedReinstallResources.mockResolvedValue(backendSnapshot);
     mockedReadProjectText.mockResolvedValue("interface text");

@@ -130,13 +130,14 @@ async function parseSnapshotProject(
   return { snapshot: { ...snapshot, project }, source };
 }
 
-async function adoptSnapshot(snapshot: AppStateSnapshot) {
+async function adoptSnapshot(
+  snapshot: AppStateSnapshot,
+): Promise<Partial<AppStore>> {
   const parsed = await parseSnapshotProject(snapshot);
-  set({
+  return {
     ...revisedSnapshot(parsed.snapshot),
     projectSource: parsed.source,
-  });
-  return parsed.snapshot;
+  };
 }
 
 export function canApplyWelcomeState(
@@ -168,7 +169,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({ busy: true, error: undefined });
     void ensureWelcomeListener();
     try {
-      await adoptSnapshot(await prepareApp());
+      set(await adoptSnapshot(await prepareApp()));
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
@@ -177,7 +178,7 @@ export const useAppStore = create<AppStore>((set) => ({
   async reinstallResources() {
     set({ busy: true, error: undefined });
     try {
-      await adoptSnapshot(await invokeReinstallResources());
+      set(await adoptSnapshot(await invokeReinstallResources()));
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
@@ -186,7 +187,7 @@ export const useAppStore = create<AppStore>((set) => ({
   async loadProject(path, language) {
     set({ busy: true, error: undefined });
     try {
-      await adoptSnapshot(await invokeLoadProject(path, language));
+      set(await adoptSnapshot(await invokeLoadProject(path, language)));
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);

@@ -724,9 +724,6 @@ async fn prepare_app(
         Option::<PathBuf>::None
     };
 
-    #[cfg(target_os = "android")]
-    let project_root = bundled_root.as_deref();
-    #[cfg(not(target_os = "android"))]
     let project_root = bundled_root.as_deref().and_then(std::path::Path::to_str);
 
     let result = bootstrap_snapshot(&app, &state, project_root).await;

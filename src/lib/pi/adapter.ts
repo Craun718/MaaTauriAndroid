@@ -294,8 +294,7 @@ async function parseWelcome(
   const welcome: string[] = [];
   for (const declaration of declarations) {
     const value =
-      localize(declaration, translations) ??
-      declaration.replace(/^\$/, "");
+      localize(declaration, translations) ?? declaration.replace(/^\$/, "");
     if (isFilePath(value)) {
       const relative = value.replace(/^\.\//, "");
       try {

@@ -21,8 +21,7 @@ pub(crate) async fn resolve_project(project: &mut Project) {
 
 /// Installs a project without waiting for remote announcements. Local entries
 /// remain visible immediately; remote declarations are hidden until fetched.
-pub(crate) fn defer_remote_project(project: &mut Project) {
-    let metadata = &mut project.metadata;
+pub(crate) fn defer_remote_announcements(metadata: &mut ProjectMetadata) {
     metadata.welcome_pending = metadata.welcome.iter().any(|value| is_remote_url(value));
     if !metadata.welcome_pending {
         metadata.welcome_fingerprint = Some(welcome_fingerprint(&metadata.welcome_declarations));
@@ -317,7 +316,7 @@ mod tests {
             "https://example.test/announcement.md".to_string(),
         ]);
 
-        defer_remote_project(&mut project);
+        defer_remote_announcements(&mut project);
 
         assert_eq!(project.welcome, vec!["local".to_string()]);
         assert!(project.welcome_pending);
@@ -340,7 +339,7 @@ mod tests {
     fn deferring_local_announcements_completes_without_a_pending_marker() {
         let mut project = metadata(vec!["local".to_string()]);
 
-        defer_remote_project(&mut project);
+        defer_remote_announcements(&mut project);
 
         assert!(!project.welcome_pending);
         assert_eq!(

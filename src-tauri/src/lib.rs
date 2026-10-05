@@ -721,7 +721,7 @@ async fn prepare_app(
     #[cfg(not(target_os = "android"))]
     let bundled_root = {
         set_preparation_stage("loadingProject");
-        None
+        Option::<PathBuf>::None
     };
 
     let result = bootstrap_snapshot(&app, &state, bundled_root.as_deref()).await;
@@ -801,7 +801,7 @@ async fn bootstrap_snapshot(
             ProjectLoader::default().load_embedded(fixture, translations, "zh_cn")?
         }
     };
-    welcome::defer_remote_project(&mut project);
+    welcome::defer_remote_announcements(&mut project.metadata);
     #[cfg(target_os = "android")]
     runtime::validate_ocr_models(&project.root, &project.resources)?;
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
@@ -852,7 +852,7 @@ fn current_snapshot(state: &AppState) -> AppStateSnapshot {
             .project_path
             .read()
             .expect("project path lock poisoned")
-            .clone(),
+            .map(|path| path.to_string_lossy().into_owned()),
         welcome_revision: state.current_welcome_revision(),
     }
 }
@@ -928,7 +928,7 @@ async fn load_project(
     let _preparation_guard = state.preparation_task.lock().await;
     let preferred_language = language.unwrap_or_else(|| "zh_cn".to_string());
     let mut project = ProjectLoader::default().load(&path, &preferred_language)?;
-    welcome::defer_remote_project(&mut project);
+    welcome::defer_remote_announcements(&mut project.metadata);
     let stored = state.configuration()?;
     let config_path = state
         .store
@@ -1934,7 +1934,7 @@ async fn reload_project(
         .join("configuration.json");
     let mut project =
         ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), language)?;
-    welcome::defer_remote_project(&mut project);
+    welcome::defer_remote_announcements(&mut project.metadata);
     runtime::validate_ocr_models(&project.root, &project.resources)?;
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;

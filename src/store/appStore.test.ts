@@ -426,7 +426,10 @@ describe("appStore WebView Project Interface parsing", () => {
 
   it("keeps backend-resolved welcome metadata in the WebView view", async () => {
     const backendSnapshot = snapshot("/project");
-    backendSnapshot.project.metadata = {
+    const backendProject = backendSnapshot.project;
+    if (!backendProject)
+      throw new Error("test snapshot must include a project");
+    backendProject.metadata = {
       welcome: ["Remote announcement"],
       welcomeFingerprint: "resolved-fingerprint",
       welcomePending: true,
@@ -453,7 +456,7 @@ describe("appStore WebView Project Interface parsing", () => {
 
     await useAppStore.getState().setProjectLanguage("zh_cn");
 
-    expect(useAppStore.getState().snapshot?.project.metadata).toMatchObject({
+    expect(useAppStore.getState().snapshot?.project?.metadata).toMatchObject({
       welcome: ["Remote announcement"],
       welcomeFingerprint: "resolved-fingerprint",
       welcomePending: true,

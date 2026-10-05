@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadProjectSource } from "./loader";
+import type { RawJsonObject } from "./rawTypes";
 
 function reader(files: Record<string, string>) {
   return async (path: string): Promise<string> => {
@@ -41,7 +42,8 @@ describe("loadProjectSource", () => {
       { name: "Imported" },
     ]);
     expect(source.document.setting).toEqual([{ name: "Advanced" }]);
-    expect(source.document.option?.Mode).toEqual({ cases: [{ name: "Slow" }] });
+    const option = source.document.option as RawJsonObject | undefined;
+    expect(option?.Mode).toEqual({ cases: [{ name: "Slow" }] });
     expect(source.languages).toEqual([]);
     expect(source.translations).toEqual({});
   });

@@ -138,11 +138,15 @@ describe("buildAndroidProject", () => {
       defaultCase: "Fast",
       applicability: { controllers: ["ADB"], resources: [] },
     });
-    expect(project.options.Input.inputs[0]).toMatchObject({
-      name: "value",
-      placeholder: "Enter a value",
-      pipelineType: "int",
-      inputType: "file",
+    expect(project.options.Input).toMatchObject({
+      inputs: [
+        {
+          name: "value",
+          placeholder: "Enter a value",
+          pipelineType: "int",
+          inputType: "file",
+        },
+      ],
     });
     expect(project.presets[0].tasks[0]).toMatchObject({
       taskName: "Start",

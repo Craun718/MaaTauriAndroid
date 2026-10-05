@@ -8,7 +8,7 @@ export type RawJsonValue =
 
 export type RawJsonObject = { [key: string]: RawJsonValue };
 
-export interface RawProjectInterface extends RawJsonObject {
+export type RawProjectInterface = RawJsonObject & {
   interface_version?: RawJsonValue;
   name?: RawJsonValue;
   label?: RawJsonValue;
@@ -31,9 +31,9 @@ export interface RawProjectInterface extends RawJsonObject {
   preset?: RawJsonValue;
   agent?: RawJsonValue;
   telemetry?: RawJsonValue;
-}
+};
 
-export interface RawImportFragment extends RawJsonObject {
+export type RawImportFragment = RawJsonObject & {
   import?: RawJsonValue;
   controller?: RawJsonValue;
   resource?: RawJsonValue;
@@ -45,7 +45,7 @@ export interface RawImportFragment extends RawJsonObject {
   preset?: RawJsonValue;
   agent?: RawJsonValue;
   pretask?: RawJsonValue;
-}
+};
 
 export type ProjectTextReader = (relativePath: string) => Promise<string>;
 

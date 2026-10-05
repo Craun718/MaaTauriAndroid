@@ -93,7 +93,8 @@ function androidController(document: RawJsonObject): ControllerDefinition {
     return typeof type === "string" && type.toLowerCase() === "adb";
   });
   const name =
-    (declared && optionalString(object(declared)?.name)) ?? ANDROID_CONTROLLER;
+    (declared ? optionalString(object(declared)?.name) : undefined) ??
+    ANDROID_CONTROLLER;
   return {
     name,
     label: ANDROID_CONTROLLER,
@@ -222,16 +223,25 @@ function parseOption(
       applicability: scope,
     };
   }
-  if (kind === "input" || kind === "hotkey") {
-    const fields = array(item[kind === "input" ? "inputs" : "hotkeys"]);
+  if (kind === "input") {
     return {
       kind,
       name,
       label,
       description,
-      ...(kind === "input"
-        ? { inputs: fields.map((field) => parseInputField(field, localize)) }
-        : { hotkeys: fields.map(parseHotkeyField) }),
+      inputs: array(item.inputs).map((field) =>
+        parseInputField(field, localize),
+      ),
+      applicability: scope,
+    };
+  }
+  if (kind === "hotkey") {
+    return {
+      kind,
+      name,
+      label,
+      description,
+      hotkeys: array(item.hotkeys).map(parseHotkeyField),
       applicability: scope,
     };
   }
@@ -472,9 +482,9 @@ export async function buildAndroidProject(
         name: presetName,
         label: localizeText(item.label) ?? presetName,
         description: localizeText(item.description),
-        tasks: array(item.task).flatMap((task) =>
-          parseTemplateTask(task, localizeText),
-        ),
+        tasks: array(item.task)
+          .map((task) => parseTemplateTask(task, localizeText))
+          .filter((task): task is TemplateTask => task !== undefined),
       },
     ];
   });

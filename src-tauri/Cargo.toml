@@ -38,8 +38,8 @@ sha2 = "0.10"
 hex = "0.4"
 tempfile = "3"
 # Pin the tagged release so the dynamic MaaFramework ABI stays explicit;
-# this rev is the official MaaFramework 5.14.0 binding (v1.25.1).
-maa-framework = { git = "https://github.com/MaaXYZ/maa-framework-rs", rev = "7c8bd1e380de0fe44f48bed691fb3e0a5ccbabed", features = ["dynamic"] }
+# this rev is the official MaaFramework 5.14.2 binding (v1.25.2).
+maa-framework = { git = "https://github.com/MaaXYZ/maa-framework-rs", rev = "85b367bd16532f6c7631fe887f4c4da10a2ec58b", features = ["dynamic"] }
 sentry = { version = "0.37", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 url = "2"

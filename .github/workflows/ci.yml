@@ -193,8 +193,8 @@ jobs:
       # scripts/build_agent_bundle.py (AGPL-3.0, from MaaFwApp);
       # MAAFW_CORE_REPO defaults to scripts/env.sh.
       # Keep in sync with the MaaFramework binaries vendored in vendor/maa/.
-      MAAFW_VERSION: v5.14.0
-      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.0
+      MAAFW_VERSION: v5.14.2
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.2
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -234,7 +234,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .cache
-          key: m9a-agent-core-3.13.15-maafw5.14.0
+          key: m9a-agent-core-3.13.15-maafw5.14.2
       # Pin the debug keystore. Without this every run generates a fresh one, so
       # each APK is signed with a different key: `adb install -r` then fails with
       # INSTALL_FAILED_UPDATE_INCOMPATIBLE and verifying a build on a device
@@ -345,8 +345,8 @@ jobs:
       contents: read
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
-      MAAFW_VERSION: v5.14.0
-      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.0
+      MAAFW_VERSION: v5.14.2
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.2
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -386,7 +386,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .cache
-          key: narutomobile-agent-core-3.13.15-maafw5.14.0
+          key: narutomobile-agent-core-3.13.15-maafw5.14.2
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6
@@ -418,7 +418,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/duorua/narutomobile.git \
             --id narutomobile \
-            --ref 2a0897125fd2c81672a56af4d6b280c48025d9d4 \
+            --ref a5ad50e68986dc012f1020cebb91946d82ea4538 \
             --submodules \
             --exclude pillow \
             --exclude win32-setctime \
@@ -470,8 +470,8 @@ jobs:
       contents: read
     env:
       # Keep in sync with scripts/env.sh and the M9A job.
-      MAAFW_VERSION: v5.14.0
-      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.0
+      MAAFW_VERSION: v5.14.2
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.14.2
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -511,7 +511,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .cache
-          key: maapvz-agent-core-3.13.15-maafw5.14.0
+          key: maapvz-agent-core-3.13.15-maafw5.14.2
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6
@@ -597,7 +597,7 @@ jobs:
     env:
       # The application build still uses NDK 28.2. MaaEnd's upstream Android
       # agent recipe requires NDK 29 and CMake 3.31 for cpp-algo.
-      MAAFW_VERSION: v5.14.0
+      MAAFW_VERSION: v5.14.2
       MAAEND_VERSION: v2.31.0
       AGENT_NDK_VERSION: 29.0.13599879
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}

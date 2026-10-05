@@ -476,6 +476,7 @@ fn read_project_image(
 }
 
 const MAX_PROJECT_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+const MAX_PROJECT_TEXT_BYTES: usize = 8 * 1024 * 1024;
 
 fn project_asset_path(root: &Path, relative: &str) -> Result<PathBuf, AppError> {
     if image_mime(relative).is_none() {
@@ -517,6 +518,53 @@ fn image_mime(path: &str) -> Option<&'static str> {
         "webp" => Some("image/webp"),
         _ => None,
     }
+}
+
+#[tauri::command]
+fn read_project_text(state: State<'_, AppState>, path: String) -> Result<String, AppError> {
+    let project = state.project()?;
+    read_scoped_project_text(Path::new(&project.root), &path)
+}
+
+fn read_scoped_project_text(root: &Path, relative: &str) -> Result<String, AppError> {
+    let text_path = project_text_path(root, relative)?;
+    if std::fs::metadata(&text_path)?.len() > MAX_PROJECT_TEXT_BYTES as u64 {
+        return Err(AppError::Message(
+            "The Project Interface text file exceeds the size limit".to_string(),
+        ));
+    }
+
+    let bytes = std::fs::read(&text_path)?;
+    String::from_utf8(bytes)
+        .map_err(|_| AppError::Message("Project Interface text files must be UTF-8".to_string()))
+}
+
+fn project_text_path(root: &Path, relative: &str) -> Result<PathBuf, AppError> {
+    if relative.is_empty() {
+        return Err(AppError::Message(
+            "Project Interface text paths cannot be empty".to_string(),
+        ));
+    }
+
+    let relative_path = Path::new(relative);
+    if relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(AppError::Message(
+            "Project Interface text paths must use a safe relative path".to_string(),
+        ));
+    }
+
+    let root = root.canonicalize()?;
+    let text_path = root.join(relative_path).canonicalize()?;
+    if !text_path.starts_with(&root) {
+        return Err(AppError::Message(
+            "Project Interface text paths must stay inside the project".to_string(),
+        ));
+    }
+    Ok(text_path)
 }
 
 #[tauri::command]
@@ -2604,6 +2652,60 @@ mod tests {
     }
 
     #[test]
+    fn project_text_path_reads_only_files_inside_the_project() {
+        let root = std::env::temp_dir().join(format!("mta-text-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("locale")).unwrap();
+        std::fs::write(root.join("locale/interface.jsonc"), "{\"name\":\"x\"}").unwrap();
+
+        let path = project_text_path(&root, "locale/interface.jsonc").unwrap();
+        assert!(path.ends_with("locale/interface.jsonc"));
+        assert!(project_text_path(&root, "").is_err());
+        assert!(project_text_path(&root, "/etc/passwd").is_err());
+        assert!(project_text_path(&root, "../outside.json").is_err());
+        assert!(project_text_path(&root, "locale/../../outside.json").is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn project_text_path_rejects_symlinks_escaping_the_project() {
+        let root = std::env::temp_dir().join(format!("mta-text-link-{}", uuid::Uuid::new_v4()));
+        let outside =
+            std::env::temp_dir().join(format!("mta-text-outside-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&outside, "outside").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("interface.json")).unwrap();
+
+        assert!(project_text_path(&root, "interface.json").is_err());
+
+        std::fs::remove_file(root.join("interface.json")).unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_file(outside).unwrap();
+    }
+
+    #[test]
+    fn scoped_project_text_rejects_missing_oversized_and_non_utf8_files() {
+        let root = std::env::temp_dir().join(format!("mta-text-read-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+
+        assert!(read_scoped_project_text(&root, "missing.json").is_err());
+
+        let oversized = root.join("oversized.json");
+        std::fs::File::create(&oversized)
+            .unwrap()
+            .set_len(MAX_PROJECT_TEXT_BYTES as u64 + 1)
+            .unwrap();
+        assert!(read_scoped_project_text(&root, "oversized.json").is_err());
+        std::fs::remove_file(&oversized).unwrap();
+
+        std::fs::write(root.join("invalid.json"), [0xff, 0xfe]).unwrap();
+        assert!(read_scoped_project_text(&root, "invalid.json").is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn telemetry_defaults_on_for_first_install_only() {
         let project = project();
         let mut first_install = UserConfiguration::default();
@@ -2975,6 +3077,7 @@ pub fn run() {
             window_insets,
             load_project,
             read_project_image,
+            read_project_text,
             save_configuration,
             apply_preset,
             resolve_current,

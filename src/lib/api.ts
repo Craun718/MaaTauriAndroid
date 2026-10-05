@@ -34,6 +34,10 @@ export async function readProjectImage(path: string) {
   return invoke<ArrayBuffer>("read_project_image", { path });
 }
 
+export async function readProjectText(path: string) {
+  return invoke<string>("read_project_text", { path });
+}
+
 export async function saveConfiguration(configuration: UserConfiguration) {
   return invoke<UserConfiguration>("save_configuration", { configuration });
 }

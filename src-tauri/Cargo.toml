@@ -43,6 +43,7 @@ maa-framework = { git = "https://github.com/MaaXYZ/maa-framework-rs", rev = "85b
 sentry = { version = "0.37", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 url = "2"
+jsonc-parser = { version = "0.34.0", features = ["serde"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"

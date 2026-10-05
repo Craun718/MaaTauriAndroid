@@ -724,12 +724,12 @@ async fn prepare_app(
         Option::<PathBuf>::None
     };
 
-    let result = bootstrap_snapshot(
-        &app,
-        &state,
-        bundled_root.as_deref().and_then(std::path::Path::to_str),
-    )
-    .await;
+    #[cfg(target_os = "android")]
+    let project_root = bundled_root.as_deref();
+    #[cfg(not(target_os = "android"))]
+    let project_root = bundled_root.as_deref().and_then(std::path::Path::to_str);
+
+    let result = bootstrap_snapshot(&app, &state, project_root).await;
     match result {
         Ok(snapshot) => {
             mark_preparation_ui_ready().map_err(AppError::Message)?;

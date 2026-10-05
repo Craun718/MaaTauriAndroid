@@ -38,6 +38,16 @@ export function AnnouncementModal({
 
   if (!open) return null;
 
+  const contentOccurrences = new Map<string, number>();
+  const announcementItems = content.map((item) => {
+    const occurrence = contentOccurrences.get(item) ?? 0;
+    contentOccurrences.set(item, occurrence + 1);
+    return {
+      item,
+      key: occurrence === 0 ? item : `${item}:${occurrence}`,
+    };
+  });
+
   return (
     <>
       <button
@@ -67,8 +77,8 @@ export function AnnouncementModal({
           </button>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3">
-          {content.map((item) => (
-            <RichDescription key={item} text={item} />
+          {announcementItems.map(({ item, key }) => (
+            <RichDescription key={key} text={item} />
           ))}
         </div>
         <div className="space-y-3 p-3 pb-[calc(1rem_+_var(--tt-safe-bottom))]">

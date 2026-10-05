@@ -19,6 +19,7 @@ mod version;
 use domain::loader::ProjectLoader;
 use domain::resolver::{resolve_run, ResolverError};
 use domain::types::{ConfiguredTask, Project, RunConfiguration, UserConfiguration};
+use domain::welcome;
 use persistence::{PersistenceError, UserConfigurationStore};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -423,14 +424,17 @@ fn window_insets() -> Option<runtime::WindowInsets> {
 }
 
 #[tauri::command]
-fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnapshot, AppError> {
+async fn bootstrap(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AppStateSnapshot, AppError> {
     let config_path = app
         .path()
         .app_data_dir()
         .map_err(|error| AppError::Path(error.to_string()))?
         .join("configuration.json");
     let bundled_root = bootstrap_project_root();
-    let project = match bundled_root {
+    let mut project = match bundled_root {
         Some(root) => {
             ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), "zh_cn")?
         }
@@ -444,6 +448,7 @@ fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> Result<AppStateSnaps
             ProjectLoader::default().load_embedded(fixture, translations, "zh_cn")?
         }
     };
+    welcome::resolve_project(&mut project).await;
     #[cfg(target_os = "android")]
     runtime::validate_ocr_models(&project.root, &project.resources)?;
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
@@ -520,13 +525,14 @@ fn image_mime(path: &str) -> Option<&'static str> {
 }
 
 #[tauri::command]
-fn load_project(
+async fn load_project(
     state: State<'_, AppState>,
     path: String,
     language: Option<String>,
 ) -> Result<AppStateSnapshot, AppError> {
     let preferred_language = language.unwrap_or_else(|| "zh_cn".to_string());
-    let project = ProjectLoader::default().load(&path, &preferred_language)?;
+    let mut project = ProjectLoader::default().load(&path, &preferred_language)?;
+    welcome::resolve_project(&mut project).await;
     let stored = state.configuration()?;
     let config_path = state
         .store
@@ -1515,8 +1521,9 @@ async fn reload_project(
         .app_data_dir()
         .map_err(|error| AppError::Path(error.to_string()))?
         .join("configuration.json");
-    let project =
+    let mut project =
         ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), language)?;
+    welcome::resolve_project(&mut project).await;
     runtime::validate_ocr_models(&project.root, &project.resources)?;
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;

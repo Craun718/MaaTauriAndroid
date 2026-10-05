@@ -6,11 +6,19 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { readProjectImage } from "../lib/api";
-import { hasInlineRichText, inlineHtmlTagNames } from "../lib/richText";
+import {
+  hasInlineRichText,
+  inlineHtmlTagNames,
+  rehypeSanitizeInlineStyles,
+} from "../lib/richText";
 
 const sanitizeSchema = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames ?? []), "font"],
+  attributes: {
+    ...defaultSchema.attributes,
+    "*": [...(defaultSchema.attributes?.["*"] ?? []), "style"],
+  },
   protocols: {
     ...defaultSchema.protocols,
     href: ["http", "https", "mailto"],
@@ -138,7 +146,11 @@ export function RichDescription({ text, className }: RichDescriptionProps) {
     >
       <Markdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+        rehypePlugins={[
+          rehypeRaw,
+          rehypeSanitizeInlineStyles,
+          [rehypeSanitize, sanitizeSchema],
+        ]}
         components={{ a: MarkdownLink, img: MarkdownImage }}
       >
         {text}
@@ -172,7 +184,11 @@ export function InlineMarkdownLabel({
         allowedElements={inlineMarkdownElements}
         unwrapDisallowed
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+        rehypePlugins={[
+          rehypeRaw,
+          rehypeSanitizeInlineStyles,
+          [rehypeSanitize, sanitizeSchema],
+        ]}
         components={{ a: MarkdownLink, img: MarkdownImage }}
       >
         {text}

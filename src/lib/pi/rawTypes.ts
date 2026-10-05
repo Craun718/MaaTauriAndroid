@@ -52,5 +52,6 @@ export type ProjectTextReader = (relativePath: string) => Promise<string>;
 export interface ProjectSource {
   root: string;
   document: RawProjectInterface;
+  languages: string[];
   translations: Record<string, Record<string, string>>;
 }

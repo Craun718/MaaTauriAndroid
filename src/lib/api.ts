@@ -6,6 +6,7 @@ import {
 import type {
   AppStateSnapshot,
   LogExport,
+  PreparationState,
   PrivilegedBackend,
   PrivilegedStatus,
   ResolvedRun,
@@ -24,6 +25,18 @@ import type {
 
 export async function bootstrapApp() {
   return invoke<AppStateSnapshot>("bootstrap");
+}
+
+export async function prepareApp() {
+  return invoke<AppStateSnapshot>("prepare_app");
+}
+
+export async function getPreparationStatus() {
+  return invoke<PreparationState>("get_preparation_status");
+}
+
+export async function retryPreparation() {
+  return invoke<PreparationState>("retry_preparation");
 }
 
 export async function loadProject(path: string, language?: string) {

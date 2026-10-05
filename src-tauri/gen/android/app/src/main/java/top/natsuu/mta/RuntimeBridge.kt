@@ -245,6 +245,12 @@ object RuntimeBridge {
         controlClient = client
     }
 
+    /** Queues another preparation attempt; returns a machine-readable result for Rust. */
+    @JvmStatic
+    fun retryPreparation(): String {
+        return AppPreparationManager.retry()
+    }
+
     @JvmStatic
     fun detachControlClient(client: ControlServiceClient) {
         if (controlClient === client) {
@@ -784,16 +790,25 @@ object RuntimeBridge {
     external fun setPrivilegedBackend(backend: String)
 
     @JvmStatic
-    external fun initializeSecretBridge()
+    external fun initializeSecretBridge(): Boolean
 
     @JvmStatic
-    external fun setBootstrapProjectRoot(projectRoot: String)
+    external fun reportPreparationState(stateJson: String)
 
     @JvmStatic
     external fun scheduleRulesJson(): String?
 
     @JvmStatic
     external fun isAppReady(): Boolean
+
+    @JvmStatic
+    external fun isProjectReady(): Boolean
+
+    @JvmStatic
+    external fun isEngineReady(): Boolean
+
+    @JvmStatic
+    external fun isPreparationFailed(): Boolean
 
     @JvmStatic
     external fun recordScheduleForegroundServiceDenied(

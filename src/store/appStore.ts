@@ -1,10 +1,11 @@
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import {
-  bootstrapApp,
   applyPreset as invokeApplyPreset,
   loadProject as invokeLoadProject,
   reinstallResources as invokeReinstallResources,
   saveConfiguration as invokeSaveConfiguration,
+  prepareApp,
   readProjectText,
 } from "../lib/api";
 import {
@@ -18,6 +19,7 @@ import type {
   AppStateSnapshot,
   Project,
   UserConfiguration,
+  WelcomeState,
 } from "../lib/types";
 import { useNotificationStore } from "./notificationStore";
 
@@ -36,6 +38,7 @@ interface AppStore {
   saveConfiguration: (configuration: UserConfiguration) => Promise<void>;
   setError: (error?: string) => void;
   dismissWelcome: (fingerprint: string) => void;
+  applyWelcomeState: (state: WelcomeState) => void;
 }
 
 function message(error: unknown) {
@@ -50,6 +53,20 @@ function reportError(error: unknown) {
 let saveQueue: Promise<void> = Promise.resolve();
 let pendingSaves = 0;
 let configurationRevision = 0;
+let welcomeListener: Promise<UnlistenFn> | undefined;
+
+function ensureWelcomeListener() {
+  if (!welcomeListener) {
+    const pending = listen<WelcomeState>("welcome-state", (event) => {
+      useAppStore.getState().applyWelcomeState(event.payload);
+    });
+    welcomeListener = pending;
+    void pending.catch(() => {
+      if (welcomeListener === pending) welcomeListener = undefined;
+    });
+  }
+  return welcomeListener;
+}
 
 function revisedSnapshot(snapshot: AppStateSnapshot) {
   configurationRevision += 1;
@@ -78,10 +95,7 @@ function preferredProjectLanguage(configuration: UserConfiguration): string {
   );
 }
 
-function preserveResolvedWelcome(
-  project: Project,
-  backend?: Project,
-): Project {
+function preserveResolvedWelcome(project: Project, backend?: Project): Project {
   if (!backend?.metadata) return project;
   return {
     ...project,
@@ -89,6 +103,7 @@ function preserveResolvedWelcome(
       ...project.metadata,
       welcome: backend.metadata.welcome,
       welcomeFingerprint: backend.metadata.welcomeFingerprint,
+      welcomePending: backend.metadata.welcomePending,
       welcomeErrors: backend.metadata.welcomeErrors,
     },
   };
@@ -124,6 +139,16 @@ async function adoptSnapshot(snapshot: AppStateSnapshot) {
   return parsed.snapshot;
 }
 
+export function canApplyWelcomeState(
+  snapshot: AppStateSnapshot | undefined,
+  state: WelcomeState,
+): boolean {
+  return (
+    snapshot?.welcomeRevision === undefined ||
+    state.revision === snapshot.welcomeRevision
+  );
+}
+
 /**
  * 等所有已入队的配置保存和预设套用真正落到后端。启动运行前用它替代「保存
  * 中禁用开始按钮」：任务列表的改动是乐观更新加后台落盘，`saving` 只表示还有
@@ -141,8 +166,9 @@ export const useAppStore = create<AppStore>((set) => ({
   dismissedWelcomeFingerprint: undefined,
   async bootstrap() {
     set({ busy: true, error: undefined });
+    void ensureWelcomeListener();
     try {
-      await adoptSnapshot(await bootstrapApp());
+      await adoptSnapshot(await prepareApp());
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
@@ -245,5 +271,30 @@ export const useAppStore = create<AppStore>((set) => ({
   },
   dismissWelcome(fingerprint) {
     set({ dismissedWelcomeFingerprint: fingerprint });
+  },
+  applyWelcomeState(state) {
+    set((current) => {
+      if (
+        !current.snapshot?.project ||
+        !canApplyWelcomeState(current.snapshot, state)
+      ) {
+        return {};
+      }
+      return {
+        snapshot: {
+          ...current.snapshot,
+          project: {
+            ...current.snapshot.project,
+            metadata: {
+              ...current.snapshot.project.metadata,
+              welcome: state.welcome,
+              welcomeFingerprint: state.welcomeFingerprint,
+              welcomePending: state.welcomePending,
+              welcomeErrors: state.welcomeErrors,
+            },
+          },
+        },
+      };
+    });
   },
 }));

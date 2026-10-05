@@ -24,16 +24,16 @@ use persistence::{PersistenceError, UserConfigurationStore};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Condvar, Mutex, RwLock,
+};
 
 #[cfg(target_os = "android")]
 use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use uuid::Uuid;
-
-#[cfg(target_os = "android")]
-static BOOTSTRAP_PROJECT_ROOT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 #[cfg(target_os = "android")]
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
@@ -43,13 +43,8 @@ pub fn android_app_handle() -> Option<&'static AppHandle> {
     APP_HANDLE.get()
 }
 
-#[cfg(target_os = "android")]
-fn bootstrap_project_root() -> Option<&'static str> {
-    BOOTSTRAP_PROJECT_ROOT.get().map(String::as_str)
-}
-
 #[cfg(not(target_os = "android"))]
-fn bootstrap_project_root() -> Option<&'static str> {
+fn android_app_handle() -> Option<&'static AppHandle> {
     None
 }
 
@@ -59,9 +54,250 @@ struct AppStateSnapshot {
     project: Option<Project>,
     configuration: UserConfiguration,
     project_path: Option<String>,
+    welcome_revision: u64,
     /// Rides along with the snapshot so the About card reflects the project that
     /// was just loaded, without a second IPC round trip.
     versions: version::VersionInfo,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct PreparationProgress {
+    phase: String,
+    copied_bytes: u64,
+    total_archive_bytes: u64,
+    extracted_entries: u32,
+    total_entries: u32,
+    current_file: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct PreparationState {
+    revision: u64,
+    status: String,
+    stage: String,
+    project_ready: bool,
+    ui_ready: bool,
+    engine_ready: bool,
+    project_root: Option<String>,
+    progress: Option<PreparationProgress>,
+    error: Option<String>,
+}
+
+impl Default for PreparationState {
+    fn default() -> Self {
+        Self {
+            revision: 0,
+            status: "idle".to_string(),
+            stage: "idle".to_string(),
+            project_ready: false,
+            ui_ready: false,
+            engine_ready: false,
+            project_root: None,
+            progress: None,
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct WelcomeState {
+    revision: u64,
+    welcome: Vec<String>,
+    welcome_fingerprint: Option<String>,
+    welcome_pending: bool,
+    welcome_errors: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativePreparationUpdate {
+    status: String,
+    stage: String,
+    #[serde(default)]
+    project_ready: bool,
+    #[serde(default)]
+    engine_ready: bool,
+    #[serde(default)]
+    project_root: Option<String>,
+    #[serde(default)]
+    progress: Option<PreparationProgress>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+#[derive(Default)]
+struct PreparationStore {
+    state: Mutex<PreparationState>,
+    project_ready: Condvar,
+}
+
+static PREPARATION_STORE: std::sync::OnceLock<PreparationStore> = std::sync::OnceLock::new();
+
+fn preparation_store() -> &'static PreparationStore {
+    PREPARATION_STORE.get_or_init(PreparationStore::default)
+}
+
+fn preparation_state() -> PreparationState {
+    preparation_store()
+        .state
+        .lock()
+        .expect("preparation state lock poisoned")
+        .clone()
+}
+
+fn set_preparation_stage(stage: &str) {
+    let app = android_app_handle().cloned();
+    let state = {
+        let mut guard = preparation_store()
+            .state
+            .lock()
+            .expect("preparation state lock poisoned");
+        guard.revision += 1;
+        guard.status = "running".to_string();
+        guard.stage = stage.to_string();
+        guard.progress = None;
+        guard.error = None;
+        guard.clone()
+    };
+    if let Some(app) = app {
+        let _ = app.emit("preparation-state", state);
+    }
+}
+
+fn mark_preparation_ui_ready() -> Result<(), String> {
+    let app = android_app_handle().cloned();
+    let state = {
+        let mut guard = preparation_store()
+            .state
+            .lock()
+            .expect("preparation state lock poisoned");
+        if let Some(error) = guard.error.clone() {
+            return Err(error);
+        }
+        guard.revision += 1;
+        guard.status = "running".to_string();
+        guard.stage = "uiReady".to_string();
+        guard.ui_ready = true;
+        #[cfg(not(target_os = "android"))]
+        {
+            guard.engine_ready = true;
+        }
+        if guard.engine_ready {
+            guard.status = "ready".to_string();
+            guard.stage = "engineReady".to_string();
+        }
+        guard.error = None;
+        guard.clone()
+    };
+    if let Some(app) = app {
+        let _ = app.emit("preparation-state", state);
+    }
+    Ok(())
+}
+
+fn mark_preparation_failed(error: String) {
+    let app = android_app_handle().cloned();
+    let state = {
+        let mut guard = preparation_store()
+            .state
+            .lock()
+            .expect("preparation state lock poisoned");
+        guard.revision += 1;
+        guard.status = "failed".to_string();
+        guard.stage = "failed".to_string();
+        guard.project_ready = false;
+        guard.engine_ready = false;
+        guard.error = Some(error);
+        guard.clone()
+    };
+    if let Some(app) = app {
+        let _ = app.emit("preparation-state", state);
+    }
+}
+
+#[cfg(target_os = "android")]
+fn report_native_preparation(update: NativePreparationUpdate) {
+    let app = android_app_handle().cloned();
+    let state = {
+        let mut guard = preparation_store()
+            .state
+            .lock()
+            .expect("preparation state lock poisoned");
+        apply_native_preparation(&mut guard, update);
+        let state = guard.clone();
+        preparation_store().project_ready.notify_all();
+        state
+    };
+    if let Some(app) = app {
+        let _ = app.emit("preparation-state", state);
+    }
+}
+
+fn apply_native_preparation(current: &mut PreparationState, update: NativePreparationUpdate) {
+    current.revision += 1;
+    current.status = if update.engine_ready {
+        "ready".to_string()
+    } else {
+        update.status
+    };
+    current.stage = update.stage;
+    current.project_ready = update.project_ready;
+    current.engine_ready = update.engine_ready;
+    if let Some(project_root) = update.project_root {
+        current.project_root = Some(project_root);
+    }
+    current.progress = update.progress;
+    current.error = update.error;
+}
+
+fn reset_preparation_for_retry(current: &mut PreparationState) {
+    current.revision += 1;
+    current.status = "running".to_string();
+    current.stage = "retrying".to_string();
+    current.project_ready = false;
+    current.ui_ready = false;
+    current.engine_ready = false;
+    current.project_root = None;
+    current.progress = None;
+    current.error = None;
+}
+
+#[cfg(target_os = "android")]
+fn wait_for_native_project(timeout: std::time::Duration) -> Result<String, AppError> {
+    let deadline = std::time::Instant::now() + timeout;
+    let mut guard = preparation_store()
+        .state
+        .lock()
+        .expect("preparation state lock poisoned");
+    loop {
+        if let Some(error) = guard.error.clone() {
+            return Err(AppError::Message(error));
+        }
+        if guard.project_ready {
+            return Ok(guard.project_root.clone().ok_or_else(|| {
+                AppError::Message("The prepared project root is missing".to_string())
+            })?);
+        }
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return Err(AppError::Message(
+                "App preparation timed out before the project was ready".to_string(),
+            ));
+        }
+        let (updated, timeout_result) = preparation_store()
+            .project_ready
+            .wait_timeout(guard, deadline - now)
+            .expect("preparation state lock poisoned");
+        if timeout_result.timed_out() && !updated.project_ready {
+            return Err(AppError::Message(
+                "App preparation timed out before the project was ready".to_string(),
+            ));
+        }
+        guard = updated;
+    }
 }
 
 struct AppState {
@@ -73,6 +309,8 @@ struct AppState {
     runs_dir: RwLock<Option<PathBuf>>,
     latest_log: RwLock<Option<Arc<run_log::RunLogger>>>,
     run_storage: tokio::sync::Mutex<()>,
+    preparation_task: Arc<tokio::sync::Mutex<()>>,
+    welcome_revision: AtomicU64,
     schedule_store: RwLock<Option<Arc<schedule::ScheduleStore>>>,
 }
 
@@ -87,6 +325,8 @@ impl Default for AppState {
             runs_dir: RwLock::new(None),
             latest_log: RwLock::new(None),
             run_storage: tokio::sync::Mutex::new(()),
+            preparation_task: Arc::new(tokio::sync::Mutex::new(())),
+            welcome_revision: AtomicU64::new(0),
             schedule_store: RwLock::new(None),
         }
     }
@@ -127,6 +367,25 @@ impl AppState {
             .project_path
             .write()
             .expect("project path lock poisoned") = path;
+    }
+
+    fn current_welcome_revision(&self) -> u64 {
+        self.welcome_revision.load(Ordering::SeqCst)
+    }
+
+    fn apply_welcome_state(&self, revision: u64, state: WelcomeState) -> bool {
+        if self.current_welcome_revision() != revision {
+            return false;
+        }
+        let mut project = self.project.write().expect("project lock poisoned");
+        let Some(project) = project.as_mut() else {
+            return false;
+        };
+        project.metadata.welcome = state.welcome;
+        project.metadata.welcome_fingerprint = state.welcome_fingerprint;
+        project.metadata.welcome_pending = state.welcome_pending;
+        project.metadata.welcome_errors = state.welcome_errors;
+        true
     }
 
     fn runs_dir(&self) -> Result<PathBuf, AppError> {
@@ -215,6 +474,7 @@ impl AppState {
         project: Project,
         mut configuration: UserConfiguration,
     ) -> Result<UserConfiguration, AppError> {
+        let _welcome_revision = self.welcome_revision.fetch_add(1, Ordering::SeqCst);
         normalize_configuration(&project, &mut configuration);
         *self.store.write().expect("store lock poisoned") =
             Some(UserConfigurationStore::new(config_path));
@@ -428,12 +688,105 @@ async fn bootstrap(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppStateSnapshot, AppError> {
+    prepare_app(app, state).await
+}
+
+#[tauri::command]
+async fn prepare_app(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AppStateSnapshot, AppError> {
+    let _preparation_guard = state.preparation_task.lock().await;
+    let current = preparation_state();
+    if current.ui_ready && state.project().is_ok() {
+        return Ok(current_snapshot(&state));
+    }
+
+    #[cfg(target_os = "android")]
+    let bundled_root = {
+        if let Some(error) = preparation_state().error {
+            let error = AppError::Message(error);
+            return Err(error);
+        }
+        set_preparation_stage("waitingForNativePreparation");
+        let root = tauri::async_runtime::spawn_blocking(|| {
+            wait_for_native_project(std::time::Duration::from_secs(120))
+        })
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))??;
+        set_preparation_stage("loadingProject");
+        Some(root)
+    };
+
+    #[cfg(not(target_os = "android"))]
+    let bundled_root = {
+        set_preparation_stage("loadingProject");
+        Option::<PathBuf>::None
+    };
+
+    let result = bootstrap_snapshot(&app, &state, bundled_root.as_deref()).await;
+    match result {
+        Ok(snapshot) => {
+            mark_preparation_ui_ready().map_err(AppError::Message)?;
+            Ok(snapshot)
+        }
+        Err(error) => {
+            mark_preparation_failed(error.to_string());
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+fn get_preparation_status() -> Result<PreparationState, AppError> {
+    Ok(preparation_state())
+}
+
+#[tauri::command]
+async fn retry_preparation() -> Result<PreparationState, AppError> {
+    let app = android_app_handle().cloned();
+    let state = {
+        let mut guard = preparation_store()
+            .state
+            .lock()
+            .expect("preparation state lock poisoned");
+        reset_preparation_for_retry(&mut guard);
+        guard.clone()
+    };
+    if let Some(app) = app {
+        let _ = app.emit("preparation-state", state.clone());
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        let result = match crate::diagnostics::bridge_string("retryPreparation") {
+            Ok(result) => result,
+            Err(error) => {
+                let message = error.to_string();
+                mark_preparation_failed(message.clone());
+                return Err(AppError::Message(message));
+            }
+        };
+        if result != "started" {
+            let message = format!("App preparation retry was not started: {result}");
+            mark_preparation_failed(message.clone());
+            return Err(AppError::Message(message));
+        }
+    }
+
+    Ok(state)
+}
+
+async fn bootstrap_snapshot(
+    app: &AppHandle,
+    state: &AppState,
+    bundled_root: Option<&str>,
+) -> Result<AppStateSnapshot, AppError> {
     let config_path = app
         .path()
         .app_data_dir()
         .map_err(|error| AppError::Path(error.to_string()))?
         .join("configuration.json");
-    let bundled_root = bootstrap_project_root();
     let mut project = match bundled_root {
         Some(root) => {
             ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), "zh_cn")?
@@ -448,11 +801,13 @@ async fn bootstrap(
             ProjectLoader::default().load_embedded(fixture, translations, "zh_cn")?
         }
     };
-    welcome::resolve_project(&mut project).await;
+    welcome::defer_remote_announcements(&mut project.metadata);
     #[cfg(target_os = "android")]
     runtime::validate_ocr_models(&project.root, &project.resources)?;
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;
+    let welcome_revision = state.current_welcome_revision();
+    spawn_welcome_resolution(app.clone(), welcome_revision);
     runtime::apply_debug_mode(configuration.debug_mode);
     let environment = version::environment();
     Ok(AppStateSnapshot {
@@ -460,7 +815,46 @@ async fn bootstrap(
         project: state.project().ok(),
         configuration,
         project_path: bundled_root.map(str::to_string),
+        welcome_revision,
     })
+}
+
+fn spawn_welcome_resolution(app: AppHandle, revision: u64) {
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let Some(mut project) = state.project().ok() else {
+            return;
+        };
+        if !project.metadata.welcome_pending {
+            return;
+        }
+
+        welcome::resolve_project(&mut project).await;
+        let payload = WelcomeState {
+            revision,
+            welcome: project.metadata.welcome.clone(),
+            welcome_fingerprint: project.metadata.welcome_fingerprint.clone(),
+            welcome_pending: project.metadata.welcome_pending,
+            welcome_errors: project.metadata.welcome_errors.clone(),
+        };
+        if state.apply_welcome_state(revision, payload.clone()) {
+            let _ = app.emit("welcome-state", payload);
+        }
+    });
+}
+
+fn current_snapshot(state: &AppState) -> AppStateSnapshot {
+    AppStateSnapshot {
+        versions: version::VersionInfo::new(version::environment()),
+        project: state.project().ok(),
+        configuration: state.configuration().unwrap_or_default(),
+        project_path: state
+            .project_path
+            .read()
+            .expect("project path lock poisoned")
+            .map(|path| path.to_string_lossy().into_owned()),
+        welcome_revision: state.current_welcome_revision(),
+    }
 }
 
 #[tauri::command]
@@ -587,13 +981,15 @@ fn project_text_path(root: &Path, relative: &str) -> Result<PathBuf, AppError> {
 
 #[tauri::command]
 async fn load_project(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
     language: Option<String>,
 ) -> Result<AppStateSnapshot, AppError> {
+    let _preparation_guard = state.preparation_task.lock().await;
     let preferred_language = language.unwrap_or_else(|| "zh_cn".to_string());
     let mut project = ProjectLoader::default().load(&path, &preferred_language)?;
-    welcome::resolve_project(&mut project).await;
+    welcome::defer_remote_announcements(&mut project.metadata);
     let stored = state.configuration()?;
     let config_path = state
         .store
@@ -608,12 +1004,15 @@ async fn load_project(
         project,
         stored,
     )?;
+    let welcome_revision = state.current_welcome_revision();
+    spawn_welcome_resolution(app, welcome_revision);
     let environment = version::environment();
     Ok(AppStateSnapshot {
         versions: version::VersionInfo::new(environment),
         project: state.project().ok(),
         configuration,
         project_path: Some(path),
+        welcome_revision,
     })
 }
 
@@ -1561,13 +1960,25 @@ async fn reinstall_project_interface(app: &AppHandle) -> Result<AppStateSnapshot
         ));
     }
     let _storage_guard = state.run_storage.lock().await;
+    let _preparation_guard = state.preparation_task.lock().await;
+    set_preparation_stage("reinstallingResources");
     let root =
         call_runtime_bridge_optional_string("reinstallProjectInterface")?.ok_or_else(|| {
             AppError::Message(
                 "the packaged Project Interface resources are unavailable".to_string(),
             )
         })?;
-    reload_project(&root, "zh_cn", app).await
+    let result = reload_project(&root, "zh_cn", app).await;
+    match result {
+        Ok(snapshot) => {
+            mark_preparation_ui_ready().map_err(AppError::Message)?;
+            Ok(snapshot)
+        }
+        Err(error) => {
+            mark_preparation_failed(error.to_string());
+            Err(error)
+        }
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -1584,16 +1995,19 @@ async fn reload_project(
         .join("configuration.json");
     let mut project =
         ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), language)?;
-    welcome::resolve_project(&mut project).await;
+    welcome::defer_remote_announcements(&mut project.metadata);
     runtime::validate_ocr_models(&project.root, &project.resources)?;
     let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let configuration = state.install(config_path, None, project, stored)?;
+    let welcome_revision = state.current_welcome_revision();
+    spawn_welcome_resolution(app.clone(), welcome_revision);
     runtime::apply_debug_mode(configuration.debug_mode);
     Ok(AppStateSnapshot {
         versions: version::VersionInfo::new(version::environment()),
         project: state.project().ok(),
         configuration,
         project_path: Some(root.to_string()),
+        welcome_revision,
     })
 }
 
@@ -1696,6 +2110,16 @@ async fn start_run_core(
     run_configuration_id: Option<String>,
     scheduled_trigger: Option<(String, i64)>,
 ) -> Result<StartRunStatus, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        let preparation = preparation_state();
+        if !preparation.ui_ready || !preparation.engine_ready {
+            return Err(AppError::Message(
+                "The app engine is still preparing; try again when preparation finishes"
+                    .to_string(),
+            ));
+        }
+    }
     if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.clone() {
         if state.maa.status() != runtime::RunState::Idle {
             state
@@ -2746,6 +3170,114 @@ mod tests {
     }
 
     #[test]
+    fn native_preparation_update_parses_camel_case_json() {
+        let update: NativePreparationUpdate = serde_json::from_str(
+            r#"{
+                "status": "running",
+                "stage": "installingProject",
+                "projectReady": true,
+                "engineReady": false,
+                "projectRoot": "/data/pi",
+                "progress": {
+                    "phase": "extracting",
+                    "copiedBytes": 100,
+                    "totalArchiveBytes": 100,
+                    "extractedEntries": 2,
+                    "totalEntries": 4,
+                    "currentFile": "interface.json"
+                }
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(update.stage, "installingProject");
+        assert!(update.project_ready);
+        assert_eq!(update.project_root.as_deref(), Some("/data/pi"));
+        let progress = update.progress.unwrap();
+        assert_eq!(progress.phase, "extracting");
+        assert_eq!(progress.extracted_entries, 2);
+        assert_eq!(progress.current_file.as_deref(), Some("interface.json"));
+    }
+
+    #[test]
+    fn later_native_preparation_updates_preserve_ui_readiness() {
+        let mut current = PreparationState::default();
+        current.revision = 8;
+        current.ui_ready = true;
+        current.project_root = Some("/data/pi".to_string());
+        let update = NativePreparationUpdate {
+            status: "running".to_string(),
+            stage: "loadingRuntimeLibraries".to_string(),
+            project_ready: true,
+            engine_ready: false,
+            project_root: None,
+            progress: None,
+            error: None,
+        };
+
+        apply_native_preparation(&mut current, update);
+
+        assert_eq!(current.revision, 9);
+        assert!(current.ui_ready);
+        assert!(current.project_ready);
+        assert_eq!(current.project_root.as_deref(), Some("/data/pi"));
+    }
+
+    #[test]
+    fn engine_ready_native_update_maps_to_ready_status() {
+        let mut current = PreparationState::default();
+        let update = NativePreparationUpdate {
+            status: "running".to_string(),
+            stage: "engineReady".to_string(),
+            project_ready: true,
+            engine_ready: true,
+            project_root: Some("/data/pi".to_string()),
+            progress: None,
+            error: None,
+        };
+
+        apply_native_preparation(&mut current, update);
+
+        assert_eq!(current.status, "ready");
+        assert_eq!(current.stage, "engineReady");
+        assert!(current.engine_ready);
+    }
+
+    #[test]
+    fn retry_reset_clears_preparation_and_advances_revision() {
+        let mut current = PreparationState {
+            revision: 8,
+            status: "failed".to_string(),
+            stage: "loadingRuntimeLibraries".to_string(),
+            project_ready: true,
+            ui_ready: true,
+            engine_ready: true,
+            project_root: Some("/data/pi".to_string()),
+            progress: Some(PreparationProgress {
+                phase: "extracting".to_string(),
+                copied_bytes: 100,
+                total_archive_bytes: 100,
+                extracted_entries: 2,
+                total_entries: 4,
+                current_file: Some("interface.json".to_string()),
+            }),
+            error: Some("extract failed".to_string()),
+        };
+
+        reset_preparation_for_retry(&mut current);
+
+        assert_eq!(current.revision, 9);
+        assert_eq!(current.status, "running");
+        assert_eq!(current.stage, "retrying");
+        assert!(!current.project_ready);
+        assert!(!current.ui_ready);
+        assert!(!current.engine_ready);
+        assert_eq!(current.project_root, None);
+        assert_eq!(current.progress, None);
+        assert_eq!(current.error, None);
+    }
+
+    #[test]
     fn normalize_configuration_preserves_welcome_fingerprint() {
         let mut project = project();
         project.metadata.welcome_fingerprint = Some("project".to_string());
@@ -2978,36 +3510,39 @@ mod tests {
 pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_initializeSecretBridge(
     env: *mut std::ffi::c_void,
     class: *mut std::ffi::c_void,
-) {
-    if let Ok(mut env) = unsafe { jni::JNIEnv::from_raw(env.cast()) } {
-        let runtime_bridge_class = unsafe { jni::objects::JClass::from_raw(class.cast()) };
-        if let Err(error) = runtime::initialize_secret_bridge(&mut env, &runtime_bridge_class) {
-            eprintln!("Failed to initialize the secret bridge: {error}");
-        }
+) -> jni::sys::jboolean {
+    let Ok(mut env) = (unsafe { jni::JNIEnv::from_raw(env.cast()) }) else {
+        eprintln!("Could not initialize the JNI environment for the secret bridge");
+        return false.into();
+    };
+    let runtime_bridge_class = unsafe { jni::objects::JClass::from_raw(class.cast()) };
+    if let Err(error) = runtime::initialize_secret_bridge(&mut env, &runtime_bridge_class) {
+        eprintln!("Failed to initialize the secret bridge: {error}");
+        return false.into();
     }
+    true.into()
 }
 
 #[cfg(target_os = "android")]
 #[no_mangle]
-pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setBootstrapProjectRoot(
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_reportPreparationState(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
-    project_root: *mut std::ffi::c_void,
+    state_json: *mut std::ffi::c_void,
 ) {
-    if let Ok(mut env) = unsafe { jni::JNIEnv::from_raw(env.cast()) } {
-        let raw_project_root = unsafe { jni::objects::JObject::from_raw(project_root.cast()) };
-        let project_root = jni::objects::JString::from(raw_project_root);
-        match env.get_string(&project_root) {
-            Ok(project_root) => {
-                if BOOTSTRAP_PROJECT_ROOT
-                    .set(project_root.to_string_lossy().into_owned())
-                    .is_err()
-                {
-                    eprintln!("The bootstrap project root was already initialized");
-                }
-            }
-            Err(error) => eprintln!("Failed to read the bootstrap project root: {error}"),
-        };
+    let Ok(mut environment) = (unsafe { jni::JNIEnv::from_raw(env.cast()) }) else {
+        return;
+    };
+    let raw_state = unsafe { jni::objects::JObject::from_raw(state_json.cast()) };
+    let java_state = jni::objects::JString::from(raw_state);
+    let Ok(state_json) = environment.get_string(&java_state) else {
+        eprintln!("Failed to read the native preparation state");
+        return;
+    };
+    let state_json = state_json.to_string_lossy().into_owned();
+    match serde_json::from_str::<NativePreparationUpdate>(&state_json) {
+        Ok(update) => report_native_preparation(update),
+        Err(error) => eprintln!("Could not parse the native preparation state: {error}"),
     }
 }
 
@@ -3100,6 +3635,9 @@ pub fn run() {
         .manage(update::UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             bootstrap,
+            prepare_app,
+            get_preparation_status,
+            retry_preparation,
             window_insets,
             load_project,
             read_project_image,
@@ -3168,7 +3706,10 @@ pub fn run() {
             // the default until bootstrap applies the stored debug switch.
             runtime::apply_debug_mode(false);
             if let Ok(dirs) = update::resolve_dirs(app.handle()) {
-                app.state::<update::UpdateState>().load_prefs(&dirs);
+                let update_state = app.state::<update::UpdateState>().inner().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    update_state.load_prefs(&dirs);
+                });
             }
             // Plugins are initialized before `setup` runs, so the banner below is
             // the first record both log targets receive.
@@ -3216,6 +3757,43 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_isAppReady(
 
 #[cfg(target_os = "android")]
 #[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_isProjectReady(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> jni::sys::jboolean {
+    let Some(app) = android_app_handle() else {
+        return false.into();
+    };
+    let state = app.state::<AppState>();
+    if let Err(error) =
+        tauri::async_runtime::block_on(ensure_background_project(app, state.inner()))
+    {
+        log::error!("Could not prepare the background project: {error}");
+        return false.into();
+    }
+    state.project().is_ok().into()
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_isEngineReady(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> jni::sys::jboolean {
+    preparation_state().engine_ready.into()
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_isPreparationFailed(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> jni::sys::jboolean {
+    matches!(preparation_state().status.as_str(), "failed").into()
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
 pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_scheduleRulesJson(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
@@ -3242,23 +3820,25 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_scheduleRulesJson(
 }
 
 #[cfg(target_os = "android")]
-fn ensure_background_project(app: &AppHandle, state: &AppState) -> Result<(), AppError> {
+async fn ensure_background_project(app: &AppHandle, state: &AppState) -> Result<(), AppError> {
     if state.project().is_ok() {
         return Ok(());
     }
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| AppError::Path(error.to_string()))?;
-    let config_path = data_dir.join("configuration.json");
-    let Some(root) = bootstrap_project_root() else {
-        return Err(AppError::NoProject);
-    };
-    let project =
-        ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), "zh_cn")?;
-    let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
-    state.install(config_path, None, project, stored)?;
-    Ok(())
+    let _preparation_guard = state.preparation_task.lock().await;
+    if state.project().is_ok() {
+        return Ok(());
+    }
+    let root = wait_for_native_project(std::time::Duration::from_secs(120))?;
+    match bootstrap_snapshot(app, state, Some(&root)).await {
+        Ok(_) => {
+            mark_preparation_ui_ready().map_err(AppError::Message)?;
+            Ok(())
+        }
+        Err(error) => {
+            mark_preparation_failed(error.to_string());
+            Err(error)
+        }
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -3317,7 +3897,7 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
     };
     let rule_id = rule_id.to_string_lossy().into_owned();
     let state = app.state::<AppState>();
-    if ensure_background_project(&app, &state).is_err() {
+    if tauri::async_runtime::block_on(ensure_background_project(&app, state.inner())).is_err() {
         return 0;
     }
     let Ok(store) = state.schedule_store() else {

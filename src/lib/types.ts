@@ -116,8 +116,38 @@ export interface ProjectMetadata {
   license?: string;
   welcome: string[];
   welcomeFingerprint?: string;
+  welcomePending?: boolean;
   welcomeErrors?: string[];
   telemetry?: TelemetryConfig;
+}
+
+export interface PreparationProgress {
+  phase: "copying" | "extracting";
+  copiedBytes: number;
+  totalArchiveBytes: number;
+  extractedEntries: number;
+  totalEntries: number;
+  currentFile?: string;
+}
+
+export interface PreparationState {
+  revision: number;
+  status: "idle" | "running" | "ready" | "failed";
+  stage: string;
+  projectReady: boolean;
+  uiReady: boolean;
+  engineReady: boolean;
+  projectRoot?: string;
+  progress?: PreparationProgress;
+  error?: string;
+}
+
+export interface WelcomeState {
+  revision: number;
+  welcome: string[];
+  welcomeFingerprint?: string;
+  welcomePending: boolean;
+  welcomeErrors?: string[];
 }
 
 export interface TelemetryConfig {
@@ -272,6 +302,8 @@ export interface AppStateSnapshot {
   project?: Project;
   configuration: UserConfiguration;
   projectPath?: string;
+  /** Welcome event revision represented by this snapshot; absent in legacy snapshots. */
+  welcomeRevision?: number;
   /** Versions for the About card, filled by the shell on bootstrap and project load. */
   versions?: VersionInfo;
 }

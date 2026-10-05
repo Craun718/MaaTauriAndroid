@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyPreset,
-  bootstrapApp,
   loadProject,
+  prepareApp,
   readProjectText,
   reinstallResources,
   saveConfiguration,
@@ -12,13 +12,22 @@ import type {
   AppStateSnapshot,
   Project,
   UserConfiguration,
+  WelcomeState,
 } from "../lib/types";
-import { useAppStore, waitForPendingSaves } from "./appStore";
+import {
+  canApplyWelcomeState,
+  useAppStore,
+  waitForPendingSaves,
+} from "./appStore";
 import { useNotificationStore } from "./notificationStore";
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => undefined),
+}));
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
-  bootstrapApp: vi.fn(),
+  prepareApp: vi.fn(),
   loadProject: vi.fn(),
   readProjectText: vi.fn(),
   reinstallResources: vi.fn(),
@@ -32,7 +41,7 @@ vi.mock("../lib/pi", () => ({
 
 const mockedSaveConfiguration = vi.mocked(saveConfiguration);
 const mockedApplyPreset = vi.mocked(applyPreset);
-const mockedBootstrapApp = vi.mocked(bootstrapApp);
+const mockedPrepareApp = vi.mocked(prepareApp);
 const mockedLoadProject = vi.mocked(loadProject);
 const mockedReadProjectText = vi.mocked(readProjectText);
 const mockedReinstallResources = vi.mocked(reinstallResources);
@@ -92,6 +101,38 @@ function deferred<T>() {
   });
   return { promise, reject, resolve };
 }
+
+function welcomeState(revision: number): WelcomeState {
+  return {
+    revision,
+    welcome: ["Welcome"],
+    welcomePending: false,
+    welcomeErrors: [],
+  };
+}
+
+describe("canApplyWelcomeState", () => {
+  it("applies only the event revision represented by the snapshot", () => {
+    const snapshot: AppStateSnapshot = {
+      configuration,
+      welcomeRevision: 3,
+    };
+
+    expect(canApplyWelcomeState(snapshot, welcomeState(2))).toBe(false);
+    expect(canApplyWelcomeState(snapshot, welcomeState(3))).toBe(true);
+    expect(canApplyWelcomeState(snapshot, welcomeState(4))).toBe(false);
+  });
+
+  it("keeps accepting snapshots from versions without a welcome revision", () => {
+    expect(canApplyWelcomeState(undefined, welcomeState(1))).toBe(true);
+    expect(
+      canApplyWelcomeState(
+        { configuration, welcomeRevision: undefined },
+        welcomeState(0),
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("appStore saveConfiguration", () => {
   beforeEach(() => {
@@ -280,7 +321,7 @@ describe("appStore WebView Project Interface parsing", () => {
     const backendSnapshot = snapshot("/project");
     const parsed = project("WebView view");
     const projectSource = source();
-    mockedBootstrapApp.mockResolvedValue(backendSnapshot);
+    mockedPrepareApp.mockResolvedValue(backendSnapshot);
     mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValue(parsed);
@@ -342,7 +383,7 @@ describe("appStore WebView Project Interface parsing", () => {
 
   it("keeps an embedded desktop project when no project path is present", async () => {
     const backendSnapshot = snapshot();
-    mockedBootstrapApp.mockResolvedValue(backendSnapshot);
+    mockedPrepareApp.mockResolvedValue(backendSnapshot);
 
     await useAppStore.getState().bootstrap();
 
@@ -358,7 +399,7 @@ describe("appStore WebView Project Interface parsing", () => {
     const projectSource = source();
     const english = project("English view");
     const chinese = project("Chinese view");
-    mockedBootstrapApp.mockResolvedValue(backendSnapshot);
+    mockedPrepareApp.mockResolvedValue(backendSnapshot);
     mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValueOnce(english);
@@ -385,6 +426,7 @@ describe("appStore WebView Project Interface parsing", () => {
     backendSnapshot.project.metadata = {
       welcome: ["Remote announcement"],
       welcomeFingerprint: "resolved-fingerprint",
+      welcomePending: true,
       welcomeErrors: [],
     } as Project["metadata"];
     const parsed = project("WebView view");
@@ -394,7 +436,7 @@ describe("appStore WebView Project Interface parsing", () => {
       welcomeErrors: [],
     } as Project["metadata"];
     const projectSource = source();
-    mockedBootstrapApp.mockResolvedValue(backendSnapshot);
+    mockedPrepareApp.mockResolvedValue(backendSnapshot);
     mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValueOnce(parsed);
@@ -411,12 +453,13 @@ describe("appStore WebView Project Interface parsing", () => {
     expect(useAppStore.getState().snapshot?.project.metadata).toMatchObject({
       welcome: ["Remote announcement"],
       welcomeFingerprint: "resolved-fingerprint",
+      welcomePending: true,
       welcomeErrors: [],
     });
   });
 
   it("reports a parser failure and clears busy state", async () => {
-    mockedBootstrapApp.mockResolvedValue(snapshot("/project"));
+    mockedPrepareApp.mockResolvedValue(snapshot("/project"));
     mockedLoadProjectSource.mockRejectedValue(new Error("Parse failed"));
 
     await useAppStore.getState().bootstrap();

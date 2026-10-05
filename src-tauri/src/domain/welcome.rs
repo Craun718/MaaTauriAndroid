@@ -19,7 +19,22 @@ pub(crate) async fn resolve_project(project: &mut Project) {
     resolve(&mut project.metadata, &fetcher).await;
 }
 
+/// Installs a project without waiting for remote announcements. Local entries
+/// remain visible immediately; remote declarations are hidden until fetched.
+pub(crate) fn defer_remote_announcements(metadata: &mut ProjectMetadata) {
+    metadata.welcome_pending = metadata.welcome.iter().any(|value| is_remote_url(value));
+    if !metadata.welcome_pending {
+        metadata.welcome_fingerprint = Some(welcome_fingerprint(&metadata.welcome_declarations));
+        return;
+    }
+
+    metadata.welcome.retain(|value| !is_remote_url(value));
+    metadata.welcome_fingerprint = None;
+    metadata.welcome_errors.clear();
+}
+
 async fn resolve(metadata: &mut ProjectMetadata, fetcher: &dyn WelcomeFetcher) {
+    metadata.welcome_pending = false;
     if metadata.welcome.is_empty() {
         metadata.welcome_fingerprint = None;
         return;
@@ -49,7 +64,14 @@ async fn resolve(metadata: &mut ProjectMetadata, fetcher: &dyn WelcomeFetcher) {
     if !failed {
         for declaration in &declarations {
             match resolve_entry(declaration, &mut fetched, fetcher).await {
-                Ok(value) => declaration_bodies.push(value),
+                Ok(value) => {
+                    declaration_bodies.push(value.clone());
+                    // Deferred projects keep only local entries in `welcome`;
+                    // put the fetched remote bodies back when they arrive.
+                    if is_remote_url(declaration) && !metadata.welcome.contains(declaration) {
+                        bodies.push(value);
+                    }
+                }
                 Err(error) => {
                     failed = true;
                     metadata.welcome_errors.push(error);
@@ -285,6 +307,45 @@ mod tests {
         assert!(project.welcome.is_empty());
         assert_eq!(project.welcome_fingerprint, None);
         assert_eq!(project.welcome_errors, vec!["HTTP 404".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn deferring_remote_announcements_keeps_local_content_without_urls() {
+        let mut project = metadata(vec![
+            "local".to_string(),
+            "https://example.test/announcement.md".to_string(),
+        ]);
+
+        defer_remote_announcements(&mut project);
+
+        assert_eq!(project.welcome, vec!["local".to_string()]);
+        assert!(project.welcome_pending);
+        assert_eq!(project.welcome_fingerprint, None);
+        assert!(project.welcome_errors.is_empty());
+
+        let fetcher = StubFetcher::new(vec![(
+            "announcement.md",
+            Ok("# Remote announcement".to_string()),
+        )]);
+        resolve(&mut project, &fetcher).await;
+        assert!(!project.welcome_pending);
+        assert_eq!(
+            project.welcome,
+            vec!["local".to_string(), "# Remote announcement".to_string()]
+        );
+    }
+
+    #[test]
+    fn deferring_local_announcements_completes_without_a_pending_marker() {
+        let mut project = metadata(vec!["local".to_string()]);
+
+        defer_remote_announcements(&mut project);
+
+        assert!(!project.welcome_pending);
+        assert_eq!(
+            project.welcome_fingerprint,
+            Some(welcome_fingerprint(&project.welcome_declarations))
+        );
     }
 
     #[tokio::test]

@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import { useAppStore } from "../store/appStore";
-import type { AppLanguage } from "./language";
+import {
+  type AppLanguage,
+  isChineseLocale,
+  projectLanguage,
+  resolveLanguage,
+  systemLanguageTags,
+} from "./language";
 import type { PrivilegedStatus, RunEvent } from "./types";
 
 export type { AppLanguage } from "./language";
@@ -9,7 +15,7 @@ export {
   projectLanguage,
   resolveLanguage,
   systemLanguageTags,
-} from "./language";
+};
 
 /** Backend diagnostic for a run start rejected because Shizuku was never
  * authorized. Shared by the English catalog and the localization table that

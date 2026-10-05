@@ -547,11 +547,24 @@ fn project_text_path(root: &Path, relative: &str) -> Result<PathBuf, AppError> {
     }
 
     let relative_path = Path::new(relative);
-    if relative_path.is_absolute()
-        || relative_path
-            .components()
-            .any(|component| !matches!(component, std::path::Component::Normal(_)))
-    {
+    let mut depth = 0usize;
+    let mut safe_components = true;
+    for component in relative_path.components() {
+        match component {
+            std::path::Component::Normal(_) => depth += 1,
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                depth = match depth.checked_sub(1) {
+                    Some(depth) => depth,
+                    None => safe_components = false,
+                };
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                safe_components = false;
+            }
+        }
+    }
+    if !safe_components {
         return Err(AppError::Message(
             "Project Interface text paths must use a safe relative path".to_string(),
         ));
@@ -2659,6 +2672,12 @@ mod tests {
 
         let path = project_text_path(&root, "locale/interface.jsonc").unwrap();
         assert!(path.ends_with("locale/interface.jsonc"));
+        assert!(project_text_path(&root, "./locale/interface.jsonc")
+            .unwrap()
+            .ends_with("locale/interface.jsonc"));
+        assert!(project_text_path(&root, "locale/../locale/interface.jsonc")
+            .unwrap()
+            .ends_with("locale/interface.jsonc"));
         assert!(project_text_path(&root, "").is_err());
         assert!(project_text_path(&root, "/etc/passwd").is_err());
         assert!(project_text_path(&root, "../outside.json").is_err());

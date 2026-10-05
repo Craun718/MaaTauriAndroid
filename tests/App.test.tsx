@@ -14,6 +14,7 @@ const hideVirtualDisplayPreview = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
   bootstrapApp: () => bootstrap(),
+  prepareApp: () => bootstrap(),
   resolveCurrent: () => resolveCurrent(),
   getPrivilegedStatus: () => getPrivilegedStatus(),
   getRunStatus: () => getRunStatus(),

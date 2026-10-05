@@ -327,6 +327,7 @@ impl ProjectLoader {
                 welcome,
                 welcome_declarations,
                 welcome_fingerprint: None,
+                welcome_pending: false,
                 welcome_errors,
                 mirrorchyan_rid: document
                     .get("mirrorchyan_rid")

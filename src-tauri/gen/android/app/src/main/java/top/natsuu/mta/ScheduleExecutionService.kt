@@ -6,34 +6,13 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import kotlin.concurrent.thread
-import top.natsuu.mta.control.ControlHost
-import top.natsuu.mta.control.ControlServiceClient
 
 class ScheduleExecutionService : Service() {
-    private lateinit var controlClient: ControlServiceClient
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        MaaRuntime.load()
-        RuntimeBridge.attachContext(this)
-        RuntimeBridge.initializeSecretBridge()
-        PiInstaller.install(this)?.let { projectRoot ->
-            RuntimeBridge.setBootstrapProjectRoot(projectRoot.absolutePath)
-        }
-        RuntimeBridge.configureScreen(
-            resources.displayMetrics.widthPixels,
-            resources.displayMetrics.heightPixels,
-        )
-        ControlHost.configure(
-            0,
-            resources.displayMetrics.widthPixels,
-            resources.displayMetrics.heightPixels,
-        )
-        controlClient = ControlServiceClient(this)
-        RuntimeBridge.attachControlClient(controlClient)
-        RuntimeBridge.setPrivilegedBackend(controlClient.getSelectedPrivilegedBackend())
+        AppPreparationManager.start(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -52,7 +31,7 @@ class ScheduleExecutionService : Service() {
             ScheduleAlarmManager.sync(this)
         }
         thread(name = "mta-schedule-execution") {
-            if (!RuntimeBridge.isAppReady()) {
+            if (!RuntimeBridge.isProjectReady()) {
                 if (!ScheduleAlarmManager.isAutoStartAllowed(this@ScheduleExecutionService, ruleId)) {
                     android.util.Log.i(
                         TAG,
@@ -61,15 +40,25 @@ class ScheduleExecutionService : Service() {
                     stopSelf()
                     return@thread
                 }
-                launchMainActivityToInitialize()
-                if (!waitForAppReady()) {
+                if (!RuntimeBridge.isAppReady()) {
+                    launchMainActivityToInitialize()
+                }
+                if (!waitForProjectReady()) {
                     android.util.Log.w(
                         TAG,
-                        "The Tauri app was not ready before the schedule timeout expired",
+                        "The app project was not ready before the schedule timeout expired",
                     )
                     stopSelf()
                     return@thread
                 }
+            }
+            if (!waitForEngineReady()) {
+                android.util.Log.w(
+                    TAG,
+                    "The app engine was not ready before the scheduled run",
+                )
+                stopSelf()
+                return@thread
             }
             if (!RuntimeBridge.connectPrivilegedService(CONNECT_TIMEOUT_MS)) {
                 android.util.Log.w(
@@ -88,6 +77,16 @@ class ScheduleExecutionService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun waitForProjectReady(): Boolean {
+        val deadline = System.currentTimeMillis() + APP_READY_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (RuntimeBridge.isProjectReady()) return true
+            if (RuntimeBridge.isPreparationFailed()) return false
+            Thread.sleep(APP_READY_POLL_INTERVAL_MS)
+        }
+        return RuntimeBridge.isProjectReady()
+    }
+
     private fun launchMainActivityToInitialize() {
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -99,20 +98,17 @@ class ScheduleExecutionService : Service() {
         }
     }
 
-    private fun waitForAppReady(): Boolean {
+    private fun waitForEngineReady(): Boolean {
         val deadline = System.currentTimeMillis() + APP_READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
-            if (RuntimeBridge.isAppReady()) return true
+            if (RuntimeBridge.isEngineReady()) return true
+            if (RuntimeBridge.isPreparationFailed()) return false
             Thread.sleep(APP_READY_POLL_INTERVAL_MS)
         }
-        return RuntimeBridge.isAppReady()
+        return RuntimeBridge.isEngineReady()
     }
 
     override fun onDestroy() {
-        RuntimeBridge.detachControlClient(controlClient)
-        if (::controlClient.isInitialized) {
-            controlClient.disconnect()
-        }
         super.onDestroy()
     }
 
@@ -157,7 +153,7 @@ class ScheduleExecutionService : Service() {
         private const val CHANNEL_ID = "mta-schedule"
         private const val NOTIFICATION_ID = 2
         private const val CONNECT_TIMEOUT_MS = 15_000L
-        private const val APP_READY_TIMEOUT_MS = 30_000L
+        private const val APP_READY_TIMEOUT_MS = 120_000L
         private const val APP_READY_POLL_INTERVAL_MS = 500L
 
         fun start(context: Context, ruleId: String, scheduledTimeMs: Long) {

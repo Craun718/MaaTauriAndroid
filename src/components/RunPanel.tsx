@@ -27,6 +27,7 @@ import { useLogExport } from "../lib/useLogExport";
 import { useRunStartRetry } from "../lib/useRunStartRetry";
 import { useAppStore, waitForPendingSaves } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
+import { usePreparationStore } from "../store/preparationStore";
 import { BottomDrawer } from "./ui/BottomDrawer";
 
 /**
@@ -45,6 +46,7 @@ export function RunPanel({
 }) {
   const snapshot = useAppStore((state) => state.snapshot);
   const busy = useAppStore((state) => state.busy);
+  const preparation = usePreparationStore((state) => state.state);
   const { t, language } = useTranslation();
   const [run, setRun] = useState<ResolvedRun>();
   const [status, setStatus] = useState<string>();
@@ -215,6 +217,7 @@ export function RunPanel({
   }, [notify, notifyOnce, reportError, language, retryAfterRunFailure]);
 
   const running = Boolean(executionId) && runState !== "Idle";
+  const enginePreparing = Boolean(preparation && !preparation.engineReady);
 
   useEffect(() => {
     onRunActiveChange?.(running);
@@ -224,7 +227,7 @@ export function RunPanel({
   const enabled =
     run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
   const startUnavailable =
-    !running && (enabled.length === 0 || busy || starting);
+    !running && (enginePreparing || enabled.length === 0 || busy || starting);
 
   async function start() {
     onRunStarted?.();
@@ -276,6 +279,7 @@ export function RunPanel({
             aria-disabled={startUnavailable}
             onClick={() => {
               if (running) void stop();
+              else if (enginePreparing) notify(t("enginePreparingNotice"));
               else if (busy || starting) notify(t("startUnavailableNotice"));
               else if (enabled.length === 0) notify(t("noRunnableTasksNotice"));
               else void start();
@@ -298,6 +302,9 @@ export function RunPanel({
             <MoreVertical size="1rem" />
           </button>
         </div>
+        {enginePreparing && (
+          <p className="text-sm text-ink-muted">{t("enginePreparingNotice")}</p>
+        )}
         {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
       </div>
       <BottomDrawer

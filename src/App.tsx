@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { FocusModalHost } from "./components/FocusModalHost";
+import { PreparationOverlay } from "./components/PreparationOverlay";
 import { useTranslation } from "./lib/i18n";
 import { HomePage } from "./pages/HomePage";
 import { RunHistoryPage } from "./pages/RunHistoryPage";
@@ -9,12 +10,20 @@ import { SchedulesPage } from "./pages/SchedulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
 import { useAppStore } from "./store/appStore";
+import { usePreparationStore } from "./store/preparationStore";
 
 function App() {
   const bootstrap = useAppStore((state) => state.bootstrap);
   const busy = useAppStore((state) => state.busy);
   const saving = useAppStore((state) => state.saving);
+  const initializePreparation = usePreparationStore(
+    (state) => state.initialize,
+  );
   const { t } = useTranslation();
+
+  useEffect(() => {
+    void initializePreparation();
+  }, [initializePreparation]);
 
   useEffect(() => {
     void bootstrap();
@@ -36,6 +45,7 @@ function App() {
           {busy || saving ? t("working") : ""}
         </div>
         <FocusModalHost />
+        <PreparationOverlay />
       </AppShell>
     </HashRouter>
   );

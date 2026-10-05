@@ -1,13 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyPreset, saveConfiguration } from "../lib/api";
-import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
-import { useAppStore, waitForPendingSaves } from "./appStore";
+import type {
+  AppStateSnapshot,
+  UserConfiguration,
+  WelcomeState,
+} from "../lib/types";
+import {
+  canApplyWelcomeState,
+  useAppStore,
+  waitForPendingSaves,
+} from "./appStore";
 import { useNotificationStore } from "./notificationStore";
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
-  bootstrapApp: vi.fn(),
   loadProject: vi.fn(),
+  prepareApp: vi.fn(),
   reinstallResources: vi.fn(),
   saveConfiguration: vi.fn(),
 }));
@@ -43,6 +51,38 @@ function deferred<T>() {
   });
   return { promise, reject, resolve };
 }
+
+function welcomeState(revision: number): WelcomeState {
+  return {
+    revision,
+    welcome: ["Welcome"],
+    welcomePending: false,
+    welcomeErrors: [],
+  };
+}
+
+describe("canApplyWelcomeState", () => {
+  it("applies only the event revision represented by the snapshot", () => {
+    const snapshot: AppStateSnapshot = {
+      configuration,
+      welcomeRevision: 3,
+    };
+
+    expect(canApplyWelcomeState(snapshot, welcomeState(2))).toBe(false);
+    expect(canApplyWelcomeState(snapshot, welcomeState(3))).toBe(true);
+    expect(canApplyWelcomeState(snapshot, welcomeState(4))).toBe(false);
+  });
+
+  it("keeps accepting snapshots from versions without a welcome revision", () => {
+    expect(canApplyWelcomeState(undefined, welcomeState(1))).toBe(true);
+    expect(
+      canApplyWelcomeState(
+        { configuration, welcomeRevision: undefined },
+        welcomeState(0),
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("appStore saveConfiguration", () => {
   beforeEach(() => {

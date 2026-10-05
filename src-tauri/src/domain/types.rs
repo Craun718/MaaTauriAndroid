@@ -293,6 +293,8 @@ pub struct ProjectMetadata {
     #[serde(skip_serializing, default)]
     pub welcome_declarations: Vec<String>,
     pub welcome_fingerprint: Option<String>,
+    #[serde(default)]
+    pub welcome_pending: bool,
     pub welcome_errors: Vec<String>,
     pub mirrorchyan_rid: Option<String>,
     pub mirrorchyan_multiplatform: bool,

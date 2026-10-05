@@ -1,4 +1,4 @@
-import { Megaphone } from "lucide-react";
+import { Loader2, Megaphone } from "lucide-react";
 import { useState } from "react";
 import { AnnouncementModal } from "../components/AnnouncementModal";
 import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
@@ -15,6 +15,7 @@ import { useAppStore } from "../store/appStore";
 
 export function HomePage() {
   const snapshot = useAppStore((state) => state.snapshot);
+  const busy = useAppStore((state) => state.busy);
   const saving = useAppStore((state) => state.saving);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const { t } = useTranslation();
@@ -23,7 +24,9 @@ export function HomePage() {
     return (
       <div className="space-y-3">
         <h1 className="text-2xl font-semibold">{t("project")}</h1>
-        <p className="text-ink-muted">{t("noProject")}</p>
+        <p className="text-ink-muted">
+          {busy ? t("preparing") : t("noProject")}
+        </p>
       </div>
     );
   }
@@ -77,7 +80,8 @@ function ProjectAnnouncements({
     (state) => state.dismissedWelcomeFingerprint,
   );
   const dismissWelcome = useAppStore((state) => state.dismissWelcome);
-  const { welcome, welcomeFingerprint } = project.metadata;
+  const { welcome, welcomeFingerprint, welcomePending, welcomeErrors } =
+    project.metadata;
   const contentFingerprint = welcomeFingerprint ?? welcome.join("\u0000");
   const [manualFingerprint, setManualFingerprint] = useState<string>();
   const [rememberSelection, setRememberSelection] = useState(
@@ -117,6 +121,21 @@ function ProjectAnnouncements({
         { fingerprint: welcomeFingerprint, appVersion },
         remember,
       ),
+    );
+  }
+
+  if (welcomePending) {
+    return (
+      <p className="flex items-center gap-2 text-sm text-ink-muted">
+        <Loader2 className="animate-spin text-accent" size="1rem" />
+        {t("announcementPreparing")}
+      </p>
+    );
+  }
+
+  if (welcomeErrors?.length && welcome.length === 0) {
+    return (
+      <p className="text-sm text-ink-muted">{t("announcementUnavailable")}</p>
     );
   }
 

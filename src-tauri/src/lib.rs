@@ -108,6 +108,18 @@ impl AppState {
             .clone())
     }
 
+    fn project_and_configuration(&self) -> Result<(Project, UserConfiguration), AppError> {
+        let project = self.project.read().expect("project lock poisoned");
+        let configuration = self
+            .configuration
+            .read()
+            .expect("configuration lock poisoned");
+        project
+            .as_ref()
+            .map(|project| (project.clone(), configuration.clone()))
+            .ok_or(AppError::NoProject)
+    }
+
     fn set_project(&self, path: Option<PathBuf>, project: Project) {
         *self.project.write().expect("project lock poisoned") = Some(project);
         *self
@@ -2285,7 +2297,7 @@ fn export_log_archive_via_bridge(path: &str) -> Result<String, AppError> {
 }
 
 #[tauri::command]
-async fn export_logs(app: AppHandle) -> Result<LogExport, AppError> {
+async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogExport, AppError> {
     let cache_dir = app
         .path()
         .cache_dir()
@@ -2309,6 +2321,13 @@ async fn export_logs(app: AppHandle) -> Result<LogExport, AppError> {
             path: data_dir.join("maa-logs"),
         },
     ];
+    let snapshots = match state.project_and_configuration() {
+        Ok((project, configuration)) => Some(diagnostics::LogExportSnapshots {
+            project,
+            configuration,
+        }),
+        Err(_) => None,
+    };
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis())
@@ -2316,7 +2335,7 @@ async fn export_logs(app: AppHandle) -> Result<LogExport, AppError> {
     let output = exports_dir.join(format!("maa_tauri_android-logs-{timestamp}.zip"));
     let archive = tokio::task::spawn_blocking(move || {
         let source = diagnostics::log_export_source();
-        diagnostics::export_log_archive(&source, &roots, output)
+        diagnostics::export_log_archive(&source, &roots, snapshots, output)
     })
     .await
     .map_err(|error| AppError::Message(error.to_string()))??;

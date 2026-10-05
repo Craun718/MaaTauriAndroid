@@ -1,5 +1,7 @@
+use crate::domain::types::{OptionValue, Project, UserConfiguration};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
 #[cfg(target_os = "android")]
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::{Path, PathBuf};
@@ -51,6 +53,12 @@ pub struct LogExportRoot {
     pub entry: String,
     /// Source directory walked recursively.
     pub path: PathBuf,
+}
+
+/// Application state captured into the standalone log export.
+pub struct LogExportSnapshots {
+    pub project: Project,
+    pub configuration: UserConfiguration,
 }
 
 pub fn collect_artifacts(
@@ -213,6 +221,7 @@ pub fn capture_manual_screenshot(
 pub fn export_log_archive(
     source: &dyn DiagnosticSource,
     roots: &[LogExportRoot],
+    snapshots: Option<LogExportSnapshots>,
     output_path: PathBuf,
 ) -> Result<PathBuf, DiagnosticError> {
     if let Some(parent) = output_path.parent() {
@@ -250,6 +259,9 @@ pub fn export_log_archive(
         )?;
     }
     write_device_snapshot(source, &staging_dir);
+    if let Some(snapshots) = snapshots {
+        write_log_export_snapshots(&staging_dir, &snapshots)?;
+    }
     for root in roots {
         copy_log_root(root, &staging_dir);
     }
@@ -284,6 +296,73 @@ fn with_version_rows(payload: Vec<u8>) -> Vec<u8> {
     }
     snapshot.extend_from_slice(crate::version::device_info_rows().as_bytes());
     snapshot
+}
+
+fn write_log_export_snapshots(
+    staging_dir: &Path,
+    snapshots: &LogExportSnapshots,
+) -> Result<(), DiagnosticError> {
+    let snapshots_dir = staging_dir.join("snapshots");
+    fs::create_dir_all(&snapshots_dir).map_err(|source| DiagnosticError::CreateDirectory {
+        path: snapshots_dir.clone(),
+        source,
+    })?;
+    let configuration = remove_password_values(&snapshots.project, snapshots.configuration.clone());
+    write_json_snapshot(&snapshots_dir.join("settings.json"), &configuration)?;
+    write_json_snapshot(&snapshots_dir.join("project.json"), &snapshots.project)
+}
+
+fn write_json_snapshot<T: Serialize>(path: &Path, value: &T) -> Result<(), DiagnosticError> {
+    let bytes = serde_json::to_vec_pretty(value).map_err(|source| DiagnosticError::Write {
+        path: path.to_path_buf(),
+        source: io::Error::new(io::ErrorKind::InvalidData, source),
+    })?;
+    write_file(path, &bytes)
+}
+
+fn remove_password_values(
+    project: &Project,
+    mut configuration: UserConfiguration,
+) -> UserConfiguration {
+    let password_fields = declared_password_fields(project);
+    remove_password_option_values(&mut configuration.global_option_values, &password_fields);
+    for values in configuration.controller_option_values.values_mut() {
+        remove_password_option_values(values, &password_fields);
+    }
+    for values in configuration.resource_option_values.values_mut() {
+        remove_password_option_values(values, &password_fields);
+    }
+    for run in &mut configuration.run_configurations {
+        for task in &mut run.tasks {
+            remove_password_option_values(&mut task.option_values, &password_fields);
+        }
+    }
+    configuration
+}
+
+fn declared_password_fields(project: &Project) -> BTreeSet<(String, String)> {
+    let mut fields = BTreeSet::new();
+    for option in project.options.values() {
+        if let crate::domain::types::OptionDefinition::Input { name, inputs, .. } = option {
+            for field in inputs.iter().filter(|field| field.password) {
+                fields.insert((name.clone(), field.name.clone()));
+            }
+        }
+    }
+    fields
+}
+
+fn remove_password_option_values(
+    values: &mut BTreeMap<String, OptionValue>,
+    password_fields: &BTreeSet<(String, String)>,
+) {
+    for (option_name, value) in values.iter_mut() {
+        if let OptionValue::Inputs { values } = value {
+            values.retain(|field_name, _| {
+                !password_fields.contains(&(option_name.clone(), field_name.clone()))
+            });
+        }
+    }
 }
 
 /// Device snapshots are best-effort: a missing collector must not fail the
@@ -1166,7 +1245,73 @@ impl ZipWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::types::{
+        ConfiguredTask, InputFieldDefinition, InputType, OptionApplicability, OptionDefinition,
+        PipelineType, RunConfiguration,
+    };
+    use std::collections::BTreeMap;
+    use std::io::Cursor;
     use std::sync::Mutex;
+
+    fn input_field(name: &str, password: bool) -> InputFieldDefinition {
+        InputFieldDefinition {
+            name: name.to_string(),
+            label: name.to_string(),
+            description: None,
+            placeholder: None,
+            default: None,
+            pipeline_type: PipelineType::String,
+            verify: None,
+            pattern_message: None,
+            password,
+            input_type: InputType::Text,
+        }
+    }
+
+    fn input_option(name: &str, field: &str, password: bool) -> OptionDefinition {
+        OptionDefinition::Input {
+            name: name.to_string(),
+            label: name.to_string(),
+            description: None,
+            inputs: vec![input_field(field, password)],
+            pipeline_override: serde_json::Value::Null,
+            icon: None,
+            applicability: OptionApplicability {
+                controllers: Vec::new(),
+                resources: Vec::new(),
+            },
+        }
+    }
+
+    fn minimal_project(options: BTreeMap<String, OptionDefinition>) -> Project {
+        Project {
+            root: "/project".to_string(),
+            interface_version: 2,
+            name: "minimal".to_string(),
+            label: "Minimal".to_string(),
+            version: Some("1.2.3".to_string()),
+            language: "zh_cn".to_string(),
+            languages: vec!["zh_cn".to_string()],
+            controllers: Vec::new(),
+            resources: Vec::new(),
+            groups: Vec::new(),
+            setting_sections: Vec::new(),
+            tasks: Vec::new(),
+            options,
+            global_options: Vec::new(),
+            presets: Vec::new(),
+            agents: Vec::new(),
+            metadata: Default::default(),
+        }
+    }
+
+    fn zip_entry(zip: &[u8], name: &str) -> Vec<u8> {
+        let mut archive = zip::ZipArchive::new(Cursor::new(zip.to_vec())).unwrap();
+        let mut file = archive.by_name(name).unwrap();
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut file, &mut bytes).unwrap();
+        bytes
+    }
 
     #[test]
     fn export_reports_missing_artifacts_and_creates_a_valid_zip() {
@@ -1246,7 +1391,7 @@ mod tests {
         }];
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        let path = export_log_archive(&source, &roots, output.clone()).unwrap();
+        let path = export_log_archive(&source, &roots, None, output.clone()).unwrap();
 
         assert_eq!(path, output);
         let zip = fs::read(&output).unwrap();
@@ -1296,7 +1441,7 @@ mod tests {
 
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        let error = export_log_archive(&EmptySource, &[], output.clone()).unwrap_err();
+        let error = export_log_archive(&EmptySource, &[], None, output.clone()).unwrap_err();
 
         assert!(error.to_string().contains("logcat capture was empty"));
         assert!(!output.exists());
@@ -1341,7 +1486,7 @@ mod tests {
         }];
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        export_log_archive(&LogOnlySource, &roots, output.clone()).unwrap();
+        export_log_archive(&LogOnlySource, &roots, None, output.clone()).unwrap();
 
         let zip = fs::read(&output).unwrap();
         assert!(!zip.windows(15).any(|window| window == b"device-info.txt"));
@@ -1352,6 +1497,117 @@ mod tests {
         assert!(zip.windows(17).any(|window| window == b"maa framework log"));
         fs::remove_dir_all(log_root).unwrap();
         fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn log_archive_contains_project_and_settings_snapshots_without_password_values() {
+        let source = FakeSource {
+            capture_failures: Mutex::new(Vec::new()),
+            capture_bytes: Vec::new(),
+        };
+        let project = minimal_project(BTreeMap::from([(
+            "account".to_string(),
+            input_option("account", "token", true),
+        )]));
+        let mut configuration = UserConfiguration::default();
+        configuration.active_resource = Some("default".to_string());
+        configuration.global_option_values.insert(
+            "account".to_string(),
+            OptionValue::Inputs {
+                values: BTreeMap::from([("token".to_string(), "secret".to_string())]),
+            },
+        );
+        let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
+
+        export_log_archive(
+            &source,
+            &[],
+            Some(LogExportSnapshots {
+                project,
+                configuration,
+            }),
+            output.clone(),
+        )
+        .unwrap();
+
+        let zip = fs::read(&output).unwrap();
+        let settings: UserConfiguration =
+            serde_json::from_slice(&zip_entry(&zip, "snapshots/settings.json")).unwrap();
+        let exported_project: Project =
+            serde_json::from_slice(&zip_entry(&zip, "snapshots/project.json")).unwrap();
+        let OptionValue::Inputs { values } = &settings.global_option_values["account"] else {
+            panic!("account should be an input option");
+        };
+
+        assert!(!values.contains_key("token"));
+        assert_eq!(exported_project.name, "minimal");
+        fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn removes_declared_password_inputs_but_preserves_ordinary_inputs() {
+        let project = minimal_project(BTreeMap::from([(
+            "credentials".to_string(),
+            OptionDefinition::Input {
+                name: "credentials".to_string(),
+                label: "Credentials".to_string(),
+                description: None,
+                inputs: vec![
+                    input_field("password", true),
+                    input_field("secondary", false),
+                ],
+                pipeline_override: serde_json::Value::Null,
+                icon: None,
+                applicability: OptionApplicability {
+                    controllers: Vec::new(),
+                    resources: Vec::new(),
+                },
+            },
+        )]));
+        let mut configuration = UserConfiguration::default();
+        configuration.run_configurations.push(RunConfiguration {
+            id: "run".to_string(),
+            name: "Run".to_string(),
+            tasks: vec![ConfiguredTask {
+                instance_id: "login".to_string(),
+                task_name: "Login".to_string(),
+                enabled: true,
+                option_values: BTreeMap::from([
+                    (
+                        "credentials".to_string(),
+                        OptionValue::Inputs {
+                            values: BTreeMap::from([
+                                ("password".to_string(), "123456".to_string()),
+                                ("secondary".to_string(), "654321".to_string()),
+                            ]),
+                        },
+                    ),
+                    (
+                        "mode".to_string(),
+                        OptionValue::Single {
+                            case: "fast".to_string(),
+                        },
+                    ),
+                ]),
+                custom_label: None,
+            }],
+        });
+
+        let exported = remove_password_values(&project, configuration);
+        let task = &exported.run_configurations[0].tasks[0];
+        let OptionValue::Inputs { values } = &task.option_values["credentials"] else {
+            panic!("credentials should be an input option");
+        };
+
+        assert!(!values.contains_key("password"));
+        assert_eq!(values["secondary"], "654321");
+        assert_eq!(
+            task.option_values["mode"],
+            OptionValue::Single {
+                case: "fast".to_string(),
+            }
+        );
+        assert!(task.enabled);
     }
 
     struct FakeSource {

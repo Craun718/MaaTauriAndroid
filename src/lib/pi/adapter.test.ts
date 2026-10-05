@@ -25,12 +25,12 @@ function source(): ProjectSource {
     languages: ["en_us", "zh_cn"],
     translations: {
       en_us: {
-        $label: "Profiled Project",
+        label: "Profiled Project",
         "preset.start": "Start every day",
         "input.placeholder": "Enter a value",
         welcome: "Welcome body",
       },
-      zh_cn: { $label: "配置项目" },
+      zh_cn: { label: "配置项目" },
     },
     document: {
       interface_version: 2,

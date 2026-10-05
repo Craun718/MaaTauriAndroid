@@ -4,6 +4,7 @@ import {
   getPrivilegedBackend,
   loadProject,
   pressVirtualDisplayBack,
+  readProjectText,
   reinstallResources,
   resolveFocusModal,
   setPrivilegedBackend,
@@ -92,6 +93,33 @@ describe("resource reinstall", () => {
 
     await expect(reinstallResources()).rejects.toThrow("a run is active");
     expect(invoke).toHaveBeenCalledWith("reinstall_resources");
+  });
+});
+
+describe("project text reader", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("requests text relative to the loaded project", async () => {
+    invoke.mockResolvedValue('{"name":"fixture"}');
+
+    await expect(readProjectText("interface.jsonc")).resolves.toBe(
+      '{"name":"fixture"}',
+    );
+    expect(invoke).toHaveBeenCalledWith("read_project_text", {
+      path: "interface.jsonc",
+    });
+  });
+
+  it("propagates unsafe or failed reads", async () => {
+    invoke.mockRejectedValue(
+      new Error("Project Interface text paths must stay inside the project"),
+    );
+
+    await expect(readProjectText("../interface.json")).rejects.toThrow(
+      "Project Interface text paths must stay inside the project",
+    );
   });
 });
 

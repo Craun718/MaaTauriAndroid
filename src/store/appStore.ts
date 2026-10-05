@@ -6,9 +6,18 @@ import {
   reinstallResources as invokeReinstallResources,
   saveConfiguration as invokeSaveConfiguration,
   prepareApp,
+  readProjectText,
 } from "../lib/api";
+import {
+  projectLanguage,
+  resolveLanguage,
+  systemLanguageTags,
+} from "../lib/language";
+import { buildAndroidProject, loadProjectSource } from "../lib/pi";
+import type { ProjectSource } from "../lib/pi/rawTypes";
 import type {
   AppStateSnapshot,
+  Project,
   UserConfiguration,
   WelcomeState,
 } from "../lib/types";
@@ -16,6 +25,7 @@ import { useNotificationStore } from "./notificationStore";
 
 interface AppStore {
   snapshot?: AppStateSnapshot;
+  projectSource?: ProjectSource;
   busy: boolean;
   saving: boolean;
   error?: string;
@@ -23,6 +33,7 @@ interface AppStore {
   bootstrap: () => Promise<void>;
   reinstallResources: () => Promise<void>;
   loadProject: (path: string, language?: string) => Promise<void>;
+  setProjectLanguage: (language: string) => Promise<void>;
   applyPreset: (presetName: string) => Promise<void>;
   saveConfiguration: (configuration: UserConfiguration) => Promise<void>;
   setError: (error?: string) => void;
@@ -62,6 +73,73 @@ function revisedSnapshot(snapshot: AppStateSnapshot) {
   return { snapshot, busy: false };
 }
 
+function normalizedDirectory(path: string): string {
+  return path.replace(/[\\/]+$/, "");
+}
+
+function interfacePath(snapshot: AppStateSnapshot): string | undefined {
+  const projectPath = snapshot.projectPath;
+  const project = snapshot.project;
+  if (!projectPath || !project) return undefined;
+
+  const root = normalizedDirectory(project.root);
+  const path = normalizedDirectory(projectPath);
+  if (path === root) return "interface.json";
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return separator === -1 ? path : path.slice(separator + 1);
+}
+
+function preferredProjectLanguage(configuration: UserConfiguration): string {
+  return projectLanguage(
+    resolveLanguage(configuration.uiLanguage, systemLanguageTags()),
+  );
+}
+
+function preserveResolvedWelcome(project: Project, backend?: Project): Project {
+  if (!backend?.metadata) return project;
+  return {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      welcome: backend.metadata.welcome,
+      welcomeFingerprint: backend.metadata.welcomeFingerprint,
+      welcomePending: backend.metadata.welcomePending,
+      welcomeErrors: backend.metadata.welcomeErrors,
+    },
+  };
+}
+
+async function parseSnapshotProject(
+  snapshot: AppStateSnapshot,
+): Promise<{ snapshot: AppStateSnapshot; source?: ProjectSource }> {
+  const interfacePathValue = interfacePath(snapshot);
+  if (!interfacePathValue || !snapshot.project) return { snapshot };
+
+  const readProjectFile = (path: string) => readProjectText(path);
+  const source = await loadProjectSource(
+    snapshot.project.root,
+    readProjectFile,
+    interfacePathValue,
+  );
+  const parsed = await buildAndroidProject(
+    source,
+    preferredProjectLanguage(snapshot.configuration),
+    readProjectFile,
+  );
+  const project = preserveResolvedWelcome(parsed, snapshot.project);
+  return { snapshot: { ...snapshot, project }, source };
+}
+
+async function adoptSnapshot(
+  snapshot: AppStateSnapshot,
+): Promise<Partial<AppStore>> {
+  const parsed = await parseSnapshotProject(snapshot);
+  return {
+    ...revisedSnapshot(parsed.snapshot),
+    projectSource: parsed.source,
+  };
+}
+
 export function canApplyWelcomeState(
   snapshot: AppStateSnapshot | undefined,
   state: WelcomeState,
@@ -91,7 +169,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({ busy: true, error: undefined });
     void ensureWelcomeListener();
     try {
-      set(revisedSnapshot(await prepareApp()));
+      set(await adoptSnapshot(await prepareApp()));
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
@@ -100,7 +178,7 @@ export const useAppStore = create<AppStore>((set) => ({
   async reinstallResources() {
     set({ busy: true, error: undefined });
     try {
-      set(revisedSnapshot(await invokeReinstallResources()));
+      set(await adoptSnapshot(await invokeReinstallResources()));
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
@@ -109,7 +187,23 @@ export const useAppStore = create<AppStore>((set) => ({
   async loadProject(path, language) {
     set({ busy: true, error: undefined });
     try {
-      set(revisedSnapshot(await invokeLoadProject(path, language)));
+      set(await adoptSnapshot(await invokeLoadProject(path, language)));
+    } catch (error) {
+      set({ error: message(error), busy: false });
+      reportError(error);
+    }
+  },
+  async setProjectLanguage(language) {
+    const current = useAppStore.getState().snapshot;
+    const source = useAppStore.getState().projectSource;
+    if (!current?.project || !source) return;
+    set({ busy: true, error: undefined });
+    try {
+      const parsed = await buildAndroidProject(source, language, (path) =>
+        readProjectText(path),
+      );
+      const project = preserveResolvedWelcome(parsed, current.project);
+      set({ snapshot: { ...current, project }, busy: false });
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);

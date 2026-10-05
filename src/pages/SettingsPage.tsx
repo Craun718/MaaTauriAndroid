@@ -17,6 +17,11 @@ import { VersionCard } from "../components/VersionCard";
 import { clearDiagnosticData, restartApp } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
+import {
+  projectLanguage,
+  resolveLanguage,
+  systemLanguageTags,
+} from "../lib/language";
 import type { VisibleOption } from "../lib/options";
 import {
   activeResource,
@@ -41,6 +46,7 @@ function isUiLanguage(value: string): value is UiLanguage {
 export function SettingsPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
+  const setProjectLanguage = useAppStore((state) => state.setProjectLanguage);
   const reinstallResources = useAppStore((state) => state.reinstallResources);
   const busy = useAppStore((state) => state.busy);
   const saving = useAppStore((state) => state.saving);
@@ -103,6 +109,11 @@ export function SettingsPage() {
               const next = structuredClone(snapshot.configuration);
               next.uiLanguage = languageDraft;
               await saveConfiguration(next);
+              await setProjectLanguage(
+                projectLanguage(
+                  resolveLanguage(languageDraft, systemLanguageTags()),
+                ),
+              );
               setLanguageDraft(undefined);
             }}
             className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:opacity-50"

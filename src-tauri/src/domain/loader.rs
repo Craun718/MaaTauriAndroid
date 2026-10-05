@@ -1,4 +1,5 @@
 use super::types::*;
+use jsonc_parser::{errors::ParseError, parse_to_serde_value, ParseOptions};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::fs;
@@ -12,10 +13,7 @@ pub enum ProjectError {
         source: std::io::Error,
     },
     #[error("could not parse {path}: {source}")]
-    Json {
-        path: PathBuf,
-        source: serde_json::Error,
-    },
+    Json { path: PathBuf, source: ParseError },
     #[error("unsupported Project Interface version: {0}")]
     UnsupportedVersion(i64),
     #[error("missing required field: {0}")]
@@ -740,7 +738,19 @@ fn read_json(path: &Path) -> Result<Value, ProjectError> {
         path: path.to_path_buf(),
         source,
     })?;
-    serde_json::from_str(&contents).map_err(|source| ProjectError::Json {
+    let options = ParseOptions {
+        allow_comments: true,
+        allow_trailing_commas: true,
+        allow_loose_object_property_names: false,
+        allow_missing_commas: false,
+        allow_single_quoted_strings: false,
+        allow_hexadecimal_numbers: false,
+        allow_unary_plus_numbers: false,
+        allow_bare_decimal_point_numbers: false,
+        allow_non_finite_numbers: false,
+        allow_extended_string_escapes: false,
+    };
+    parse_to_serde_value(&contents, &options).map_err(|source| ProjectError::Json {
         path: path.to_path_buf(),
         source,
     })
@@ -920,6 +930,75 @@ mod tests {
             project.tasks[0].pipeline_override,
             json!({"Start": {"next": ["Login"]}})
         );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn loads_interface_and_locale_with_jsonc_syntax() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-jsonc",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("locale")).expect("temp project locale should be created");
+        fs::write(
+            root.join("interface.json"),
+            r#"{
+                // Desktop Project Interface files commonly carry comments.
+                "interface_version": 2,
+                "name": "profiled",
+                "label": "$profiled",
+                "languages": {"zh_cn": "locale/zh_cn.jsonc"},
+                "resource": [{
+                    "name": "base",
+                    "path": ["resource/base"],
+                }],
+                "task": [{
+                    "name": "Start",
+                    "entry": "Start",
+                }],
+            }"#,
+        )
+        .expect("interface should be written");
+        fs::write(
+            root.join("locale/zh_cn.jsonc"),
+            r#"{
+                /* Locale files use the same reader. */
+                "profiled": "配置项目",
+            }"#,
+        )
+        .expect("locale should be written");
+
+        let project = ProjectLoader::default()
+            .load(root.join("interface.json"), "zh_cn")
+            .expect("JSONC interface should load");
+
+        assert_eq!(project.label, "配置项目");
+        assert_eq!(
+            project
+                .tasks
+                .iter()
+                .map(|task| task.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Start"]
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn rejects_malformed_jsonc() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-malformed-jsonc",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("temp project should be created");
+        fs::write(root.join("interface.json"), r#"{ "name": "#)
+            .expect("interface should be written");
+
+        let result = ProjectLoader::default().load(root.join("interface.json"), "zh_cn");
+
+        assert!(matches!(result, Err(ProjectError::Json { .. })));
 
         fs::remove_dir_all(&root).ok();
     }

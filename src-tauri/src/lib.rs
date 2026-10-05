@@ -724,7 +724,7 @@ async fn prepare_app(
         Option::<PathBuf>::None
     };
 
-    let result = bootstrap_snapshot(&app, &state, bundled_root.as_deref()).await;
+    let result = bootstrap_snapshot(&app, &state, bundled_root.to_str()).await;
     match result {
         Ok(snapshot) => {
             mark_preparation_ui_ready().map_err(AppError::Message)?;
@@ -852,6 +852,7 @@ fn current_snapshot(state: &AppState) -> AppStateSnapshot {
             .project_path
             .read()
             .expect("project path lock poisoned")
+            .as_deref()
             .map(|path| path.to_string_lossy().into_owned()),
         welcome_revision: state.current_welcome_revision(),
     }

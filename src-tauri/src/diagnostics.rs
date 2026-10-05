@@ -1533,14 +1533,14 @@ mod tests {
         let zip = fs::read(&output).unwrap();
         let settings: UserConfiguration =
             serde_json::from_slice(&zip_entry(&zip, "snapshots/settings.json")).unwrap();
-        let exported_project: Project =
+        let exported_project: serde_json::Value =
             serde_json::from_slice(&zip_entry(&zip, "snapshots/project.json")).unwrap();
         let OptionValue::Inputs { values } = &settings.global_option_values["account"] else {
             panic!("account should be an input option");
         };
 
         assert!(!values.contains_key("token"));
-        assert_eq!(exported_project.name, "minimal");
+        assert_eq!(exported_project["name"], serde_json::json!("minimal"));
         fs::remove_file(output).unwrap();
     }
 
@@ -1601,12 +1601,10 @@ mod tests {
 
         assert!(!values.contains_key("password"));
         assert_eq!(values["secondary"], "654321");
-        assert_eq!(
-            task.option_values["mode"],
-            OptionValue::Single {
-                case: "fast".to_string(),
-            }
-        );
+        let OptionValue::Single { case } = &task.option_values["mode"] else {
+            panic!("mode should be a single-choice option");
+        };
+        assert_eq!(case, "fast");
         assert!(task.enabled);
     }
 

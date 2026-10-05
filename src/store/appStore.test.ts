@@ -380,6 +380,41 @@ describe("appStore WebView Project Interface parsing", () => {
     expect(useAppStore.getState().snapshot?.project).toBe(chinese);
   });
 
+  it("keeps backend-resolved welcome metadata in the WebView view", async () => {
+    const backendSnapshot = snapshot("/project");
+    backendSnapshot.project.metadata = {
+      welcome: ["Remote announcement"],
+      welcomeFingerprint: "resolved-fingerprint",
+      welcomeErrors: [],
+    } as Project["metadata"];
+    const parsed = project("WebView view");
+    parsed.metadata = {
+      welcome: ["https://example.test/announcement.md"],
+      welcomeFingerprint: undefined,
+      welcomeErrors: [],
+    } as Project["metadata"];
+    const projectSource = source();
+    mockedBootstrapApp.mockResolvedValue(backendSnapshot);
+    mockedReadProjectText.mockResolvedValue("interface text");
+    mockedLoadProjectSource.mockResolvedValue(projectSource);
+    mockedBuildAndroidProject.mockResolvedValueOnce(parsed);
+
+    await useAppStore.getState().bootstrap();
+    mockedBuildAndroidProject.mockClear();
+    mockedBuildAndroidProject.mockResolvedValueOnce({
+      ...parsed,
+      label: "Chinese view",
+    });
+
+    await useAppStore.getState().setProjectLanguage("zh_cn");
+
+    expect(useAppStore.getState().snapshot?.project.metadata).toMatchObject({
+      welcome: ["Remote announcement"],
+      welcomeFingerprint: "resolved-fingerprint",
+      welcomeErrors: [],
+    });
+  });
+
   it("reports a parser failure and clears busy state", async () => {
     mockedBootstrapApp.mockResolvedValue(snapshot("/project"));
     mockedLoadProjectSource.mockRejectedValue(new Error("Parse failed"));

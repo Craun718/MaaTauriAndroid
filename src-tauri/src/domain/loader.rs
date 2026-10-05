@@ -1,7 +1,6 @@
 use super::types::*;
 use jsonc_parser::{parse_to_serde_value, ParseOptions};
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -294,8 +293,8 @@ impl ProjectLoader {
             None => Vec::new(),
         };
 
-        let (welcome, welcome_fingerprint, welcome_errors) =
-            parse_welcome(document.get("welcome"), &translations);
+        let (welcome, welcome_declarations, welcome_errors) =
+            parse_welcome(document.get("welcome"), root, &translations);
 
         Ok(Project {
             root: root.to_string_lossy().into_owned(),
@@ -327,7 +326,8 @@ impl ProjectLoader {
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 welcome,
-                welcome_fingerprint: Some(welcome_fingerprint),
+                welcome_declarations,
+                welcome_fingerprint: None,
                 welcome_errors,
                 mirrorchyan_rid: document
                     .get("mirrorchyan_rid")
@@ -411,8 +411,9 @@ fn android_controller(document: &Value) -> ControllerDefinition {
 
 fn parse_welcome(
     value: Option<&Value>,
+    root: &Path,
     translations: &BTreeMap<String, String>,
-) -> (Vec<String>, String, Vec<String>) {
+) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut raw_values = Vec::new();
     let mut errors = Vec::new();
     match value {
@@ -429,15 +430,30 @@ fn parse_welcome(
         None => {}
         Some(other) => errors.push(format!("welcome is not a string or array: {other}")),
     }
-    let welcome = raw_values
-        .iter()
-        .filter_map(|value| localize(Some(value), translations))
-        .collect();
-    let canonical =
-        serde_json::to_string(&raw_values).unwrap_or_else(|_| format!("{:?}", raw_values));
-    let digest = Sha256::digest(canonical.as_bytes());
+    raw_values.retain(|value| !value.trim().is_empty());
+    let mut welcome = Vec::with_capacity(raw_values.len());
+    let mut declarations = Vec::with_capacity(raw_values.len());
+    for declaration in &raw_values {
+        let value = localize(Some(declaration), translations).unwrap_or_else(|| {
+            declaration
+                .strip_prefix('$')
+                .unwrap_or(declaration)
+                .to_string()
+        });
+        if value.starts_with("https://") || value.starts_with("http://") {
+            declarations.push(value.clone());
+            welcome.push(value);
+        } else if is_file_path(&value) {
+            declarations.push(declaration.clone());
+            let relative = value.strip_prefix("./").unwrap_or(&value);
+            welcome.push(read_project_text(root, relative).unwrap_or(value));
+        } else {
+            declarations.push(declaration.clone());
+            welcome.push(value);
+        }
+    }
     errors.sort();
-    (welcome, hex::encode(digest), errors)
+    (welcome, declarations, errors)
 }
 
 fn parse_agent(item: &Value) -> Option<AgentDefinition> {
@@ -1424,6 +1440,102 @@ mod tests {
 
         assert_eq!(project.metadata.contact.as_deref(), Some("QQ群: 669689256"));
         assert_eq!(project.metadata.license.as_deref(), Some("MIT"));
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn materializes_welcome_text_local_files_and_i18n_in_declaration_order() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-welcome",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("temp project root should be created");
+        fs::create_dir_all(root.join("locale")).expect("temp locale should be created");
+        fs::write(root.join("LOCAL.md"), "# Local announcement\n")
+            .expect("welcome file should be written");
+        fs::write(
+            root.join("interface.json"),
+            r#"{
+                "interface_version": 2,
+                "name": "profiled",
+                "languages": {"en_us": "locale/en_us.json"},
+                "welcome": ["direct", "$welcome", "./LOCAL.md", "https://example.test/anno.md"],
+                "resource": [{"name": "base", "path": ["resource/base"]}]
+            }"#,
+        )
+        .expect("interface should be written");
+        fs::write(
+            root.join("locale/en_us.json"),
+            r#"{"welcome": "translated announcement"}"#,
+        )
+        .expect("locale should be written");
+        let project = ProjectLoader::default()
+            .load(root.join("interface.json"), "en_us")
+            .expect("a project with mixed welcome entries should load");
+
+        assert_eq!(
+            project.metadata.welcome,
+            vec![
+                "direct".to_string(),
+                "translated announcement".to_string(),
+                "# Local announcement\n".to_string(),
+                "https://example.test/anno.md".to_string()
+            ]
+        );
+        assert_eq!(
+            project.metadata.welcome_declarations,
+            vec![
+                "direct".to_string(),
+                "$welcome".to_string(),
+                "./LOCAL.md".to_string(),
+                "https://example.test/anno.md".to_string()
+            ]
+        );
+        assert_eq!(project.metadata.welcome_fingerprint, None);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn keeps_welcome_declarations_before_i18n_resolution() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-welcome-i18n-url",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("locale")).expect("temp locale should be created");
+        fs::write(
+            root.join("locale/en_us.json"),
+            r#"{"notice": "https://example.test/notice.md"}"#,
+        )
+        .expect("locale should be written");
+        let project = ProjectLoader::default()
+            .load_value(
+                &root,
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "languages": {"en_us": "locale/en_us.json"},
+                    "welcome": ["$notice", "$missing"],
+                    "resource": [{"name": "base", "path": ["resource/base"]}]
+                }),
+                "en_us",
+            )
+            .expect("an interface with localized welcome entries should load");
+
+        assert_eq!(
+            project.metadata.welcome,
+            vec![
+                "https://example.test/notice.md".to_string(),
+                "missing".to_string()
+            ]
+        );
+        assert_eq!(
+            project.metadata.welcome_declarations,
+            vec![
+                "https://example.test/notice.md".to_string(),
+                "$missing".to_string()
+            ]
+        );
 
         fs::remove_dir_all(&root).ok();
     }

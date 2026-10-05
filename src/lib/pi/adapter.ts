@@ -273,10 +273,11 @@ function parseTemplateTask(
   };
 }
 
-function parseWelcome(
+async function parseWelcome(
   value: unknown,
   translations: Record<string, string>,
-): [string[], string, string[]] {
+  readFile: ProjectTextReader,
+): Promise<[string[], string[]]> {
   const rawValues: string[] = [];
   const errors: string[] = [];
   if (typeof value === "string") rawValues.push(value);
@@ -289,20 +290,24 @@ function parseWelcome(
   } else if (value !== undefined) {
     errors.push(`welcome is not a string or array: ${JSON.stringify(value)}`);
   }
-  const welcome = rawValues
-    .map((item) => localize(item, translations))
-    .filter((item): item is string => item !== undefined);
-  return [welcome, JSON.stringify(rawValues), errors.sort()];
-}
-
-async function sha256Hex(content: string): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(content),
-  );
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  const declarations = rawValues.filter((item) => item.trim() !== "");
+  const welcome: string[] = [];
+  for (const declaration of declarations) {
+    const value =
+      localize(declaration, translations) ??
+      declaration.replace(/^\$/, "");
+    if (isFilePath(value)) {
+      const relative = value.replace(/^\.\//, "");
+      try {
+        welcome.push(await readFile(relative));
+      } catch {
+        welcome.push(value);
+      }
+    } else {
+      welcome.push(value);
+    }
+  }
+  return [welcome, errors.sort()];
 }
 
 function isFilePath(content: string): boolean {
@@ -475,9 +480,10 @@ export async function buildAndroidProject(
     ];
   });
 
-  const [welcome, welcomeCanonical, welcomeErrors] = parseWelcome(
+  const [welcome, welcomeErrors] = await parseWelcome(
     document.welcome,
     translations,
+    readFile,
   );
   const metadata: ProjectMetadata = {
     title: localizeText(document.title),
@@ -485,7 +491,9 @@ export async function buildAndroidProject(
     contact: await descriptionBody(document.contact, translations, readFile),
     license: await descriptionBody(document.license, translations, readFile),
     welcome,
-    welcomeFingerprint: await sha256Hex(welcomeCanonical),
+    // Remote welcome bodies are resolved and fingerprinted by Rust. A URL is
+    // not a body, so the WebView parser intentionally leaves this unset.
+    welcomeFingerprint: undefined,
     welcomeErrors,
     telemetry: parseTelemetry(document.telemetry),
   };

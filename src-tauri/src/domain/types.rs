@@ -288,6 +288,10 @@ pub struct ProjectMetadata {
     pub license: Option<String>,
     pub github: Option<String>,
     pub welcome: Vec<String>,
+    /// Fingerprint inputs: non-URL declarations stay raw, while URL declarations
+    /// are replaced with fetched bodies by the welcome resolver.
+    #[serde(skip_serializing, default)]
+    pub welcome_declarations: Vec<String>,
     pub welcome_fingerprint: Option<String>,
     pub welcome_errors: Vec<String>,
     pub mirrorchyan_rid: Option<String>,

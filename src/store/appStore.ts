@@ -14,7 +14,11 @@ import {
 } from "../lib/language";
 import { buildAndroidProject, loadProjectSource } from "../lib/pi";
 import type { ProjectSource } from "../lib/pi/rawTypes";
-import type { AppStateSnapshot, UserConfiguration } from "../lib/types";
+import type {
+  AppStateSnapshot,
+  Project,
+  UserConfiguration,
+} from "../lib/types";
 import { useNotificationStore } from "./notificationStore";
 
 interface AppStore {
@@ -74,6 +78,22 @@ function preferredProjectLanguage(configuration: UserConfiguration): string {
   );
 }
 
+function preserveResolvedWelcome(
+  project: Project,
+  backend?: Project,
+): Project {
+  if (!backend?.metadata) return project;
+  return {
+    ...project,
+    metadata: {
+      ...project.metadata,
+      welcome: backend.metadata.welcome,
+      welcomeFingerprint: backend.metadata.welcomeFingerprint,
+      welcomeErrors: backend.metadata.welcomeErrors,
+    },
+  };
+}
+
 async function parseSnapshotProject(
   snapshot: AppStateSnapshot,
 ): Promise<{ snapshot: AppStateSnapshot; source?: ProjectSource }> {
@@ -86,11 +106,12 @@ async function parseSnapshotProject(
     readProjectFile,
     interfacePathValue,
   );
-  const project = await buildAndroidProject(
+  const parsed = await buildAndroidProject(
     source,
     preferredProjectLanguage(snapshot.configuration),
     readProjectFile,
   );
+  const project = preserveResolvedWelcome(parsed, snapshot.project);
   return { snapshot: { ...snapshot, project }, source };
 }
 
@@ -151,9 +172,10 @@ export const useAppStore = create<AppStore>((set) => ({
     if (!current?.project || !source) return;
     set({ busy: true, error: undefined });
     try {
-      const project = await buildAndroidProject(source, language, (path) =>
+      const parsed = await buildAndroidProject(source, language, (path) =>
         readProjectText(path),
       );
+      const project = preserveResolvedWelcome(parsed, current.project);
       set({ snapshot: { ...current, project }, busy: false });
     } catch (error) {
       set({ error: message(error), busy: false });

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { buildAndroidProject } from "./adapter";
 import type { ProjectSource, ProjectTextReader } from "./rawTypes";
@@ -6,6 +5,7 @@ import type { ProjectSource, ProjectTextReader } from "./rawTypes";
 const files: Record<string, string> = {
   CONTACT: "Contact body",
   LICENSE: "License body",
+  "WELCOME.md": "# Local announcement",
   "en_us.json": JSON.stringify({
     $label: "Profiled Project",
     "preset.start": "Start every day",
@@ -28,6 +28,7 @@ function source(): ProjectSource {
         $label: "Profiled Project",
         "preset.start": "Start every day",
         "input.placeholder": "Enter a value",
+        welcome: "Welcome body",
       },
       zh_cn: { $label: "配置项目" },
     },
@@ -94,7 +95,7 @@ function source(): ProjectSource {
           ],
         },
       ],
-      welcome: ["$welcome"],
+      welcome: ["$welcome", "./WELCOME.md", "https://example.test/anno.md"],
       contact: "CONTACT",
       license: "./LICENSE",
       telemetry: { sentry: { dsn: "https://key@sentry.test/1" } },
@@ -154,7 +155,6 @@ describe("buildAndroidProject", () => {
     expect(project.metadata).toMatchObject({
       contact: "Contact body",
       license: "License body",
-      welcome: [],
       welcomeErrors: [],
       telemetry: {
         dsn: "https://key@sentry.test/1",
@@ -163,9 +163,12 @@ describe("buildAndroidProject", () => {
         failureAttachmentsSampleRate: 1,
       },
     });
-    expect(project.metadata.welcomeFingerprint).toBe(
-      createHash("sha256").update('["$welcome"]').digest("hex"),
-    );
+    expect(project.metadata.welcome).toEqual([
+      "Welcome body",
+      "# Local announcement",
+      "https://example.test/anno.md",
+    ]);
+    expect(project.metadata.welcomeFingerprint).toBeUndefined();
   });
 
   it("falls back to Chinese and then the first declared language", async () => {

@@ -19,7 +19,7 @@ pub(crate) async fn resolve_project(project: &mut Project) {
     resolve(&mut project.metadata, &fetcher).await;
 }
 
-pub(crate) async fn resolve(metadata: &mut ProjectMetadata, fetcher: &dyn WelcomeFetcher) {
+async fn resolve(metadata: &mut ProjectMetadata, fetcher: &dyn WelcomeFetcher) {
     if metadata.welcome.is_empty() {
         metadata.welcome_fingerprint = None;
         return;
@@ -189,8 +189,8 @@ mod tests {
 
     fn metadata(welcome: Vec<String>) -> ProjectMetadata {
         ProjectMetadata {
-            welcome,
             welcome_declarations: welcome.clone(),
+            welcome,
             ..ProjectMetadata::default()
         }
     }

@@ -83,6 +83,11 @@ async fn resolve_entry<'a>(
         return Ok(body.clone());
     }
     let body = fetcher.fetch(value).await?;
+    if body.len() > MAX_WELCOME_BYTES {
+        return Err(format!(
+            "the announcement from {value} exceeds the {MAX_WELCOME_BYTES} byte cap"
+        ));
+    }
     fetched.insert(value.to_string(), body.clone());
     Ok(body)
 }

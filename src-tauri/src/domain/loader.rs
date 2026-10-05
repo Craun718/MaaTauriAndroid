@@ -1,5 +1,5 @@
 use super::types::*;
-use jsonc_parser::{parse_to_serde_value, ParseOptions};
+use jsonc_parser::{errors::ParseError, parse_to_serde_value, ParseOptions};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::fs;
@@ -13,10 +13,7 @@ pub enum ProjectError {
         source: std::io::Error,
     },
     #[error("could not parse {path}: {source}")]
-    Json {
-        path: PathBuf,
-        source: jsonc_parser::ParseError,
-    },
+    Json { path: PathBuf, source: ParseError },
     #[error("unsupported Project Interface version: {0}")]
     UnsupportedVersion(i64),
     #[error("missing required field: {0}")]

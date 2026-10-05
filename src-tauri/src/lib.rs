@@ -724,7 +724,12 @@ async fn prepare_app(
         Option::<PathBuf>::None
     };
 
-    let result = bootstrap_snapshot(&app, &state, bundled_root.to_str()).await;
+    let result = bootstrap_snapshot(
+        &app,
+        &state,
+        bundled_root.as_deref().and_then(std::path::Path::to_str),
+    )
+    .await;
     match result {
         Ok(snapshot) => {
             mark_preparation_ui_ready().map_err(AppError::Message)?;
@@ -954,10 +959,11 @@ fn project_text_path(root: &Path, relative: &str) -> Result<PathBuf, AppError> {
             std::path::Component::Normal(_) => depth += 1,
             std::path::Component::CurDir => {}
             std::path::Component::ParentDir => {
-                depth = match depth.checked_sub(1) {
-                    Some(depth) => depth,
-                    None => safe_components = false,
-                };
+                if depth == 0 {
+                    safe_components = false;
+                } else {
+                    depth -= 1;
+                }
             }
             std::path::Component::RootDir | std::path::Component::Prefix(_) => {
                 safe_components = false;

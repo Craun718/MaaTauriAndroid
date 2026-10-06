@@ -1190,6 +1190,16 @@ pub enum RunOutcome {
         /// `crate::run_diagnosis`), or `None` when the controlled display
         /// could not be interrogated.
         diagnosis: Option<String>,
+        /// Failure screenshot taken at the moment of the failure, or why it
+        /// could not be captured. Captured there rather than at the end of the
+        /// run because later tasks keep changing the picture.
+        screenshot: Result<PathBuf, String>,
+        /// The user stopped the run while a later task was still running, so
+        /// this failure is the run's real result even though the run was cut
+        /// short (MXU reports it the same way instead of discarding it).
+        /// Reported like any other failure, but a stop is not a natural ending:
+        /// the target app stays open.
+        stopped: bool,
     },
 }
 
@@ -1197,8 +1207,14 @@ impl RunOutcome {
     /// Whether the run executed to its natural end (the MaaFwApp
     /// "closeAppAfterTask" semantics): completed and failed runs qualify, a
     /// user stop leaves the device exactly as the user left it.
+    ///
+    /// A failure followed by a user stop is reported as that failure but is not
+    /// a natural ending — the user cut the run short on purpose.
     pub fn is_natural_end(&self) -> bool {
-        matches!(self, RunOutcome::Completed | RunOutcome::Failed { .. })
+        matches!(
+            self,
+            RunOutcome::Completed | RunOutcome::Failed { stopped: false, .. }
+        )
     }
 }
 
@@ -1228,11 +1244,83 @@ fn wait_for_modal_acks(tasker: &Arc<Tasker>) {
     }
 }
 
+/// Collects task failures while the queue keeps advancing. MaaFwApp (and MXU)
+/// semantics: one failing task never aborts the rest of the run, and the run
+/// reports the *first* failure — it is the causal one, later ones are usually
+/// cascades of the same root cause (an empty display, a lost virtual display).
+#[derive(Default)]
+struct FailureLog {
+    first: Option<TaskFailure>,
+}
+
+struct TaskFailure {
+    entry: String,
+    task_name: String,
+    status: MaaStatus,
+    diagnosis: Option<String>,
+    screenshot: Result<PathBuf, String>,
+}
+
+impl FailureLog {
+    /// Keeps only the first failure; the rest are already in the live feed.
+    fn record(
+        &mut self,
+        entry: String,
+        task_name: String,
+        status: MaaStatus,
+        diagnosis: Option<String>,
+        screenshot: Result<PathBuf, String>,
+    ) {
+        if self.first.is_none() {
+            self.first = Some(TaskFailure {
+                entry,
+                task_name,
+                status,
+                diagnosis,
+                screenshot,
+            });
+        }
+    }
+
+    fn into_outcome(self) -> Option<RunOutcome> {
+        self.into_failed(false)
+    }
+
+    /// The run was stopped by the user. A failure recorded before the stop is
+    /// still the run's result — it happened, and it is what the user needs to
+    /// see — but it is flagged as cut short. Without one, the stop itself is
+    /// the outcome.
+    fn into_stopped_outcome(self) -> RunOutcome {
+        self.into_failed(true).unwrap_or(RunOutcome::Stopped)
+    }
+
+    fn into_failed(self, stopped: bool) -> Option<RunOutcome> {
+        self.first.map(|failure| RunOutcome::Failed {
+            entry: failure.entry,
+            task_name: failure.task_name,
+            status: failure.status,
+            diagnosis: failure.diagnosis,
+            screenshot: failure.screenshot,
+            stopped,
+        })
+    }
+}
+
 /// `state_probe` asks the privileged side for one snapshot of the controlled
 /// display (`crate::run_diagnosis`); on desktop builds or a failed query it
 /// answers `None` and diagnosis stays silent. The snapshot is
 /// consumed before the first task (an empty-display hint) and on a task
 /// failure (the concrete cause).
+///
+/// A failing task never aborts the queue: it is logged, remembered as the run's
+/// failure, and the next task still runs. Only a user stop ends the run early —
+/// tasks are posted one at a time rather than pre-queued because the modal focus
+/// gate holds back the *next* post until the user confirms a dialog.
+///
+/// A stop reports a failure that already happened (MXU does the same) rather than
+/// swallowing it, but keeps this repo's distinct `Stopped` outcome when nothing
+/// failed: MXU marks still-pending tasks failed, so every cancel reads as a
+/// failure there, while this app has a real cancelled state to report.
 pub fn run_tasks(
     tasker: &Arc<Tasker>,
     tasks: &[ResolvedTask],
@@ -1256,9 +1344,10 @@ pub fn run_tasks(
         );
     }
     let total = tasks.iter().filter(|task| task.enabled).count() as u32;
+    let mut failures = FailureLog::default();
     for (index, task) in tasks.iter().filter(|task| task.enabled).enumerate() {
         if tasker.stopping() {
-            return Ok(RunOutcome::Stopped);
+            return Ok(failures.into_stopped_outcome());
         }
         wait_for_modal_acks(tasker);
         progress(index as u32 + 1, total, task);
@@ -1272,16 +1361,17 @@ pub fn run_tasks(
             )
             .map_err(|error| RuntimeError::Maa(error.to_string()))?;
         let pipeline = task_pipeline(base_pipeline, Some(task));
+        // A failure to *post* is not a task failure: the queue never started,
+        // so it ends the run instead of being remembered and stepped over.
         let job = tasker
             .post_task(&task.task.entry, &pipeline.to_string())
-            .map_err(RuntimeError::from)
-            .expect("Maa task could not be posted");
+            .map_err(RuntimeError::from)?;
         let status = job.wait();
         if status.is_success() {
             continue;
         }
         if tasker.stopping() {
-            return Ok(RunOutcome::Stopped);
+            return Ok(failures.into_stopped_outcome());
         }
         let entry = task.task.entry.clone();
         let task_name = task.task.name.clone();
@@ -1294,19 +1384,27 @@ pub fn run_tasks(
                 None,
             )
             .map_err(|error| RuntimeError::Maa(error.to_string()))?;
-        let cause = crate::run_diagnosis::classify(
-            state_probe().as_ref(),
-            &crate::run_diagnosis::missed_nodes(),
-        );
-        let diagnosis = crate::run_diagnosis::render(&cause);
-        return Ok(RunOutcome::Failed {
-            entry,
-            task_name,
-            status,
-            diagnosis,
-        });
+        // Capture and classify right away: the picture, the miss trail and the
+        // display snapshot all describe *this* failure, and every one of them
+        // has moved on by the time the run ends. Later failures are the same
+        // work again — usually cascades of the first one — so they stay in the
+        // live feed and only the first is recorded for the run outcome.
+        if failures.first.is_none() {
+            let cause = crate::run_diagnosis::classify(
+                state_probe().as_ref(),
+                &crate::run_diagnosis::missed_nodes(),
+            );
+            let diagnosis = crate::run_diagnosis::render(&cause);
+            let screenshot =
+                crate::diagnostics::capture_failure_screenshot(logger.run_dir(), &entry)
+                    .map_err(|error| error.to_string());
+            failures.record(entry, task_name, status, diagnosis, screenshot);
+        }
     }
-    Ok(RunOutcome::Completed)
+    match failures.into_outcome() {
+        Some(outcome) => Ok(outcome),
+        None => Ok(RunOutcome::Completed),
+    }
 }
 
 #[cfg(test)]
@@ -1327,9 +1425,108 @@ mod tests {
             task_name: "Login".to_string(),
             status: MaaStatus::FAILED,
             diagnosis: None,
+            screenshot: Err("not captured in this test".to_string()),
+            stopped: false,
         }
         .is_natural_end());
         assert!(!RunOutcome::Stopped.is_natural_end());
+        // A failure the user cut short is still a failure, but stopping is not a
+        // natural ending: the target app must stay open.
+        assert!(!RunOutcome::Failed {
+            entry: "login".to_string(),
+            task_name: "Login".to_string(),
+            status: MaaStatus::FAILED,
+            diagnosis: None,
+            screenshot: Err("not captured in this test".to_string()),
+            stopped: true,
+        }
+        .is_natural_end());
+    }
+
+    #[test]
+    fn a_run_without_failures_completes() {
+        assert!(FailureLog::default().into_outcome().is_none());
+    }
+
+    #[test]
+    fn stopping_without_a_failure_is_a_stop() {
+        assert!(matches!(
+            FailureLog::default().into_stopped_outcome(),
+            RunOutcome::Stopped
+        ));
+    }
+
+    #[test]
+    fn stopping_after_a_failure_still_reports_that_failure() {
+        let mut failures = FailureLog::default();
+        failures.record(
+            "SellProduct".to_string(),
+            "OutpostTrading".to_string(),
+            MaaStatus::FAILED,
+            Some("no app was running on the controlled display".to_string()),
+            Err("not captured in this test".to_string()),
+        );
+
+        match failures.into_stopped_outcome() {
+            RunOutcome::Failed {
+                entry,
+                diagnosis,
+                stopped,
+                ..
+            } => {
+                assert_eq!(entry, "SellProduct");
+                // The diagnosis only ever travels in the run's final event, so
+                // discarding it here would hide it from the user entirely.
+                assert_eq!(
+                    diagnosis.as_deref(),
+                    Some("no app was running on the controlled display")
+                );
+                assert!(stopped);
+            }
+            _ => panic!("a failure that already happened must still be reported"),
+        }
+    }
+
+    #[test]
+    fn a_failing_task_does_not_hide_later_tasks_and_the_first_failure_is_reported() {
+        let mut failures = FailureLog::default();
+        failures.record(
+            "SellProduct".to_string(),
+            "OutpostTrading".to_string(),
+            MaaStatus::FAILED,
+            Some("the virtual display was lost".to_string()),
+            Ok(PathBuf::from("screens/failure.png")),
+        );
+        // The queue kept going: a later task succeeded, then another failed.
+        failures.record(
+            "Collect".to_string(),
+            "DailyRewards".to_string(),
+            MaaStatus::FAILED,
+            Some("this diagnosis must be dropped".to_string()),
+            Ok(PathBuf::from("screens/failure.png")),
+        );
+
+        let outcome = failures
+            .into_outcome()
+            .expect("a failure must be reported as the run outcome");
+        match outcome {
+            RunOutcome::Failed {
+                entry,
+                task_name,
+                status,
+                diagnosis,
+                screenshot,
+                stopped,
+            } => {
+                assert_eq!(entry, "SellProduct");
+                assert_eq!(task_name, "OutpostTrading");
+                assert_eq!(status, MaaStatus::FAILED);
+                assert_eq!(diagnosis.as_deref(), Some("the virtual display was lost"));
+                assert_eq!(screenshot.unwrap(), PathBuf::from("screens/failure.png"));
+                assert!(!stopped);
+            }
+            _ => panic!("a run that contains a failure must not report success"),
+        }
     }
 
     #[test]

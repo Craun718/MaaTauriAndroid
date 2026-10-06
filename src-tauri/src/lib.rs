@@ -2657,12 +2657,17 @@ async fn start_run_core(
                             task_name: _,
                             status,
                             diagnosis,
+                            screenshot,
+                            // Already consumed by `is_natural_end()` above: a
+                            // failure the user cut short is reported exactly like
+                            // any other failure, only it never closes the app.
+                            stopped: _,
                         } => {
+                            // The screenshot was taken where the failure
+                            // happened, while the picture still showed it; here
+                            // it is only forwarded (sampled) to telemetry.
                             let mut attachment_path = None;
-                            match diagnostics::capture_failure_screenshot(
-                                logger_for_run.run_dir(),
-                                &entry,
-                            ) {
+                            match screenshot {
                                 Err(error) => {
                                     let _ = logger_for_run.append(
                                         run_log::RunEventKind::Failure,

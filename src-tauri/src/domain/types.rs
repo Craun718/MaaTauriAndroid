@@ -675,3 +675,23 @@ pub struct ResolvedRun {
     pub base_pipeline: Value,
     pub pipeline_override: Value,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunTaskSnapshot {
+    pub run_configuration_id: Option<String>,
+    pub tasks: Vec<RunTaskSnapshotEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunTaskSnapshotEntry {
+    pub instance_id: Option<String>,
+    pub task_name: String,
+    pub task_label: String,
+    pub custom_label: Option<String>,
+    pub enabled: bool,
+    pub unavailable_reason: Option<String>,
+    pub selected: bool,
+    pub option_values: BTreeMap<String, OptionValue>,
+}

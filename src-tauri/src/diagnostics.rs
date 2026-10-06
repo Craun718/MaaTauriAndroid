@@ -1,4 +1,6 @@
-use crate::domain::types::{OptionValue, Project, UserConfiguration};
+use crate::domain::types::{
+    OptionValue, Project, ResolvedTask, RunTaskSnapshot, RunTaskSnapshotEntry, UserConfiguration,
+};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -59,6 +61,43 @@ pub struct LogExportRoot {
 pub struct LogExportSnapshots {
     pub project: Project,
     pub configuration: UserConfiguration,
+}
+
+/// Captures the resolved task list at run start. Password input values are
+/// removed before the snapshot enters the run history or a log export.
+pub fn build_run_task_snapshot(
+    project: &Project,
+    resolved_tasks: &[ResolvedTask],
+    selected_instance_ids: &BTreeSet<String>,
+    run_configuration_id: Option<String>,
+) -> RunTaskSnapshot {
+    let password_fields = declared_password_fields(project);
+    let tasks = resolved_tasks
+        .iter()
+        .map(|task| {
+            let configured = task.configured.as_ref();
+            let mut option_values = configured
+                .map(|configured| configured.option_values.clone())
+                .unwrap_or_default();
+            remove_password_option_values(&mut option_values, &password_fields);
+            RunTaskSnapshotEntry {
+                instance_id: configured.map(|configured| configured.instance_id.clone()),
+                task_name: task.task.name.clone(),
+                task_label: crate::run_progress::task_progress_label(task).to_string(),
+                custom_label: configured.and_then(|configured| configured.custom_label.clone()),
+                enabled: task.enabled,
+                unavailable_reason: task.unavailable_reason.clone(),
+                selected: configured.is_some_and(|configured| {
+                    selected_instance_ids.contains(&configured.instance_id)
+                }),
+                option_values,
+            }
+        })
+        .collect();
+    RunTaskSnapshot {
+        run_configuration_id,
+        tasks,
+    }
 }
 
 pub fn collect_artifacts(
@@ -222,6 +261,7 @@ pub fn export_log_archive(
     source: &dyn DiagnosticSource,
     roots: &[LogExportRoot],
     snapshots: Option<LogExportSnapshots>,
+    runs_dir: Option<&Path>,
     output_path: PathBuf,
 ) -> Result<PathBuf, DiagnosticError> {
     if let Some(parent) = output_path.parent() {
@@ -265,6 +305,7 @@ pub fn export_log_archive(
     for root in roots {
         copy_log_root(root, &staging_dir);
     }
+    copy_run_histories(runs_dir, &staging_dir);
 
     let staging_zip = output_path.with_extension("zip.partial");
     let mut archive = ZipWriter::create(staging_zip.clone())?;
@@ -393,6 +434,30 @@ fn copy_log_root(root: &LogExportRoot, staging_dir: &Path) {
             continue;
         }
         let _ = fs::copy(&source_path, &destination);
+    }
+}
+
+/// Copies only the top-level JSONL run records so exported logs can include
+/// the Started task snapshot without also shipping screenshots or bug reports.
+fn copy_run_histories(runs_dir: Option<&Path>, staging_dir: &Path) {
+    let Some(runs_dir) = runs_dir else {
+        return;
+    };
+    for entry in crate::run_history::list(runs_dir).into_iter().take(20) {
+        let source = runs_dir
+            .join(crate::run_log::sanitize(&entry.execution_id))
+            .join(&entry.file_name);
+        let destination = staging_dir
+            .join("logs/runs")
+            .join(crate::run_log::sanitize(&entry.execution_id))
+            .join(crate::run_log::sanitize(&entry.file_name));
+        let Some(parent) = destination.parent() else {
+            continue;
+        };
+        if fs::create_dir_all(parent).is_err() {
+            continue;
+        }
+        let _ = fs::copy(&source, &destination);
     }
 }
 
@@ -1247,7 +1312,7 @@ mod tests {
     use super::*;
     use crate::domain::types::{
         ConfiguredTask, InputFieldDefinition, InputType, OptionApplicability, OptionDefinition,
-        PipelineType, RunConfiguration,
+        PipelineType, RunConfiguration, TaskDefinition,
     };
     use std::collections::BTreeMap;
     use std::io::Cursor;
@@ -1391,7 +1456,7 @@ mod tests {
         }];
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        let path = export_log_archive(&source, &roots, None, output.clone()).unwrap();
+        let path = export_log_archive(&source, &roots, None, None, output.clone()).unwrap();
 
         assert_eq!(path, output);
         let zip = fs::read(&output).unwrap();
@@ -1441,7 +1506,7 @@ mod tests {
 
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        let error = export_log_archive(&EmptySource, &[], None, output.clone()).unwrap_err();
+        let error = export_log_archive(&EmptySource, &[], None, None, output.clone()).unwrap_err();
 
         assert!(error.to_string().contains("logcat capture was empty"));
         assert!(!output.exists());
@@ -1486,7 +1551,7 @@ mod tests {
         }];
         let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
 
-        export_log_archive(&LogOnlySource, &roots, None, output.clone()).unwrap();
+        export_log_archive(&LogOnlySource, &roots, None, None, output.clone()).unwrap();
 
         let zip = fs::read(&output).unwrap();
         assert!(!zip.windows(15).any(|window| window == b"device-info.txt"));
@@ -1526,6 +1591,7 @@ mod tests {
                 project,
                 configuration,
             }),
+            None,
             output.clone(),
         )
         .unwrap();
@@ -1606,6 +1672,194 @@ mod tests {
         };
         assert_eq!(case, "fast");
         assert!(task.enabled);
+    }
+
+    #[test]
+    fn run_task_snapshot_removes_passwords_and_marks_selected_tasks() {
+        let project = minimal_project(BTreeMap::from([(
+            "credentials".to_string(),
+            input_option("credentials", "password", true),
+        )]));
+        let configured = ConfiguredTask {
+            instance_id: "login".to_string(),
+            task_name: "Login".to_string(),
+            enabled: true,
+            option_values: BTreeMap::from([
+                (
+                    "credentials".to_string(),
+                    OptionValue::Inputs {
+                        values: BTreeMap::from([
+                            ("password".to_string(), "secret".to_string()),
+                            ("secondary".to_string(), "visible".to_string()),
+                        ]),
+                    },
+                ),
+                (
+                    "mode".to_string(),
+                    OptionValue::Single {
+                        case: "fast".to_string(),
+                    },
+                ),
+            ]),
+            custom_label: Some("Daily login".to_string()),
+        };
+        let selected = BTreeSet::from(["login".to_string()]);
+
+        let snapshot = build_run_task_snapshot(
+            &project,
+            &[
+                ResolvedTask {
+                    task: TaskDefinition {
+                        name: "Login".to_string(),
+                        label: "Login".to_string(),
+                        entry: "Login".to_string(),
+                        description: None,
+                        groups: Vec::new(),
+                        controllers: Vec::new(),
+                        resources: Vec::new(),
+                        options: vec!["credentials".to_string(), "mode".to_string()],
+                        pipeline_override: serde_json::Value::Null,
+                        default_check: true,
+                        icon: None,
+                    },
+                    configured: Some(configured),
+                    enabled: true,
+                    unavailable_reason: None,
+                    pipeline_override: serde_json::Value::Null,
+                },
+                ResolvedTask {
+                    task: TaskDefinition {
+                        name: "Arena".to_string(),
+                        label: "Arena".to_string(),
+                        entry: "Arena".to_string(),
+                        description: None,
+                        groups: Vec::new(),
+                        controllers: Vec::new(),
+                        resources: Vec::new(),
+                        options: Vec::new(),
+                        pipeline_override: serde_json::Value::Null,
+                        default_check: false,
+                        icon: None,
+                    },
+                    configured: None,
+                    enabled: false,
+                    unavailable_reason: Some("controller unavailable".to_string()),
+                    pipeline_override: serde_json::Value::Null,
+                },
+            ],
+            &selected,
+            Some("run-config".to_string()),
+        );
+
+        assert_eq!(snapshot.run_configuration_id.as_deref(), Some("run-config"));
+        assert_eq!(snapshot.tasks.len(), 2);
+        let login = &snapshot.tasks[0];
+        assert_eq!(login.instance_id.as_deref(), Some("login"));
+        assert_eq!(login.task_name, "Login");
+        assert_eq!(login.task_label, "Login");
+        assert_eq!(login.custom_label.as_deref(), Some("Daily login"));
+        assert!(login.enabled);
+        assert!(login.selected);
+        let OptionValue::Inputs { values } = &login.option_values["credentials"] else {
+            panic!("credentials should be an input option");
+        };
+        assert!(!values.contains_key("password"));
+        assert_eq!(values["secondary"], "visible");
+
+        let arena = &snapshot.tasks[1];
+        assert_eq!(arena.instance_id, None);
+        assert!(!arena.enabled);
+        assert!(!arena.selected);
+        assert_eq!(
+            arena.unavailable_reason.as_deref(),
+            Some("controller unavailable")
+        );
+    }
+
+    fn write_run_record(runs_dir: &Path, execution_id: &str, file_name: &str, body: &[u8]) {
+        let run_dir = runs_dir.join(execution_id);
+        fs::create_dir_all(run_dir.join("logs")).unwrap();
+        fs::create_dir_all(run_dir.join("screens")).unwrap();
+        fs::write(run_dir.join(file_name), body).unwrap();
+        fs::write(run_dir.join("screens/main.png"), [1, 2, 3]).unwrap();
+        fs::write(run_dir.join("logs/nested.log"), b"nested").unwrap();
+    }
+
+    #[test]
+    fn copy_run_histories_copies_recent_top_level_jsonl_only() {
+        let runs_dir = std::env::temp_dir().join(format!(
+            "maa_tauri_android-export-runs-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let staging_dir = std::env::temp_dir().join(format!(
+            "maa_tauri_android-export-staging-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&staging_dir).unwrap();
+        for index in 1..=21 {
+            let execution_id = format!("run-{index:02}");
+            let file_name = format!("run_20240101_{index:02}0000_2.jsonl");
+            write_run_record(&runs_dir, &execution_id, &file_name, b"run record\n");
+        }
+
+        copy_run_histories(Some(&runs_dir), &staging_dir);
+
+        let exported_runs = staging_dir.join("logs/runs");
+        let exported_dirs: Vec<_> = fs::read_dir(&exported_runs)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(exported_dirs.len(), 20);
+        assert!(exported_runs
+            .join("run-21/run_20240101_210000_2.jsonl")
+            .is_file());
+        assert!(exported_runs
+            .join("run-02/run_20240101_020000_2.jsonl")
+            .is_file());
+        assert!(!exported_runs.join("run-01").exists());
+        assert!(!exported_runs.join("run-21/screens/main.png").exists());
+        assert!(!exported_runs.join("run-21/logs/nested.log").exists());
+        fs::remove_dir_all(runs_dir).unwrap();
+        fs::remove_dir_all(staging_dir).unwrap();
+    }
+
+    #[test]
+    fn copy_run_histories_ignores_a_missing_runs_directory() {
+        let staging_dir = std::env::temp_dir().join(format!(
+            "maa_tauri_android-export-missing-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&staging_dir).unwrap();
+
+        copy_run_histories(Some(&staging_dir.join("missing")), &staging_dir);
+
+        assert!(!staging_dir.join("logs/runs").exists());
+        fs::remove_dir_all(staging_dir).unwrap();
+    }
+
+    #[test]
+    fn log_archive_includes_recent_run_history_files() {
+        let source = LogOnlySource;
+        let runs_dir = std::env::temp_dir().join(format!(
+            "maa_tauri_android-archive-runs-{}",
+            uuid::Uuid::new_v4()
+        ));
+        write_run_record(
+            &runs_dir,
+            "run-1",
+            "run_20240101_120000_2.jsonl",
+            b"started with snapshot\n",
+        );
+        let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
+
+        export_log_archive(&source, &[], None, Some(&runs_dir), output.clone()).unwrap();
+
+        let zip = fs::read(&output).unwrap();
+        let history = zip_entry(&zip, "logs/runs/run-1/run_20240101_120000_2.jsonl");
+        assert_eq!(history, b"started with snapshot\n");
+        fs::remove_dir_all(runs_dir).unwrap();
+        fs::remove_file(output).unwrap();
     }
 
     struct FakeSource {

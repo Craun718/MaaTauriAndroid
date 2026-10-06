@@ -22,7 +22,7 @@ use domain::types::{ConfiguredTask, Project, RunConfiguration, UserConfiguration
 use domain::welcome;
 use persistence::{PersistenceError, UserConfigurationStore};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -2405,6 +2405,20 @@ async fn start_run_core(
     }
     let resolved_for_run = resolved.clone();
     let base_pipeline = resolved.base_pipeline.clone();
+    let selected_instance_ids: BTreeSet<String> = tasks
+        .iter()
+        .filter_map(|task| {
+            task.configured
+                .as_ref()
+                .map(|item| item.instance_id.clone())
+        })
+        .collect();
+    let task_snapshot = diagnostics::build_run_task_snapshot(
+        &project,
+        &resolved.tasks,
+        &selected_instance_ids,
+        run_configuration_id.clone(),
+    );
     let force_stop_target_app = configuration.force_stop_target_app;
     let close_target_app_after_run = configuration.close_target_app_after_run;
     let pi_env = if agent_count > 0 {
@@ -2484,18 +2498,23 @@ async fn start_run_core(
                         let _ = app.emit("run-event", &event);
                     }
                 }
-                // The enabled task labels travel with the Started event so
-                // the run history detail page can show the task snapshot.
+                // Enabled labels keep the existing run-history UI working;
+                // the full resolved-task snapshot preserves the configured
+                // choices and availability state for diagnostics.
                 let task_labels: Vec<String> = tasks
                     .iter()
                     .map(|task| run_progress::task_progress_label(task).to_string())
                     .collect();
+                let started_data = serde_json::json!({
+                    "tasks": task_labels,
+                    "taskSnapshot": task_snapshot,
+                });
                 if let Ok(event) = logger_for_run.append(
                     run_log::RunEventKind::Started,
                     runtime::RunState::Running,
                     "The run started".to_string(),
                     None,
-                    Some(serde_json::json!({ "tasks": task_labels })),
+                    Some(started_data),
                 ) {
                     let _ = app.emit("run-event", &event);
                 }
@@ -2894,6 +2913,7 @@ async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogEx
         }),
         Err(_) => None,
     };
+    let runs_dir = state.runs_dir().ok();
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis())
@@ -2901,7 +2921,7 @@ async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogEx
     let output = exports_dir.join(format!("maa_tauri_android-logs-{timestamp}.zip"));
     let archive = tokio::task::spawn_blocking(move || {
         let source = diagnostics::log_export_source();
-        diagnostics::export_log_archive(&source, &roots, snapshots, output)
+        diagnostics::export_log_archive(&source, &roots, snapshots, runs_dir.as_deref(), output)
     })
     .await
     .map_err(|error| AppError::Message(error.to_string()))??;

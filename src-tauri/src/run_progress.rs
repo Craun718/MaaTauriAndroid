@@ -193,7 +193,7 @@ mod tests {
         );
         assert_eq!(
             strip_inline_rich_text("Emulator <MuMu> startup"),
-            "Emulator MuMu startup"
+            "Emulator startup"
         );
         assert_eq!(
             strip_inline_rich_text("\n  第二步：登录  \n"),

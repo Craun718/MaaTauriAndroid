@@ -468,7 +468,7 @@ fn hotkey_values(
             return Err(ResolverError::InvalidInput {
                 option: option.to_string(),
                 field: field.name.clone(),
-                message: "expected a key name such as F, 1, or F1".to_string(),
+                message: format!("invalid key {raw:?}: expected a key name such as F, 1, or F1"),
             });
         }
         resolved.insert(field.name.clone(), raw);
@@ -560,7 +560,9 @@ fn substitute_hotkeys(
                     let code = hotkey_code(raw).ok_or_else(|| ResolverError::InvalidInput {
                         option: option.to_string(),
                         field: field.name.clone(),
-                        message: "expected a key name such as F, 1, or F1".to_string(),
+                        message: format!(
+                            "invalid key {raw:?}: expected a key name such as F, 1, or F1"
+                        ),
                     })?;
                     return Ok(Value::Number(code.into()));
                 }
@@ -575,7 +577,9 @@ fn substitute_hotkeys(
                 let code = hotkey_code(raw).ok_or_else(|| ResolverError::InvalidInput {
                     option: option.to_string(),
                     field: field.name.clone(),
-                    message: "expected a key name such as F, 1, or F1".to_string(),
+                    message: format!(
+                        "invalid key {raw:?}: expected a key name such as F, 1, or F1"
+                    ),
                 })?;
                 let replacement = code.to_string();
                 output = output.replace(&format!("{{{}.primary}}", field.name), &replacement);

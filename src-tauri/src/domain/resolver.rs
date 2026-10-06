@@ -328,21 +328,6 @@ impl<'a> PipelineMerger<'a> {
                 pipeline_override,
                 ..
             } => {
-                let inputs = hotkeys
-                    .iter()
-                    .map(|field| InputFieldDefinition {
-                        name: field.name.clone(),
-                        label: field.label.clone(),
-                        description: field.description.clone(),
-                        placeholder: None,
-                        default: field.default.clone(),
-                        pipeline_type: PipelineType::String,
-                        verify: None,
-                        pattern_message: None,
-                        password: false,
-                        input_type: InputType::Text,
-                    })
-                    .collect::<Vec<_>>();
                 let values = match configured {
                     Some(OptionValue::Inputs { values }) => values.clone(),
                     None => BTreeMap::new(),
@@ -353,8 +338,8 @@ impl<'a> PipelineMerger<'a> {
                         })
                     }
                 };
-                let values = self.input_values(name, &inputs, &values)?;
-                let override_value = substitute_inputs(pipeline_override, &inputs, &values)?;
+                let values = hotkey_values(name, hotkeys, &values)?;
+                let override_value = substitute_hotkeys(pipeline_override, name, hotkeys, &values)?;
                 self.merge_override(Some(&override_value));
                 Ok(())
             }
@@ -465,6 +450,157 @@ fn is_24_hour_time(value: &str) -> bool {
     let hour = (bytes[0] - b'0') * 10 + bytes[1] - b'0';
     let minute = (bytes[3] - b'0') * 10 + bytes[4] - b'0';
     hour <= 23 && minute <= 59
+}
+
+fn hotkey_values(
+    option: &str,
+    hotkeys: &[HotkeyFieldDefinition],
+    values: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, ResolverError> {
+    let mut resolved = BTreeMap::new();
+    for field in hotkeys {
+        let raw = values
+            .get(&field.name)
+            .cloned()
+            .or_else(|| field.default.clone())
+            .unwrap_or_default();
+        if hotkey_code(&raw).is_none() {
+            return Err(ResolverError::InvalidInput {
+                option: option.to_string(),
+                field: field.name.clone(),
+                message: "expected a key name such as F, 1, or F1".to_string(),
+            });
+        }
+        resolved.insert(field.name.clone(), raw);
+    }
+    for field in values.keys() {
+        if !hotkeys.iter().any(|definition| &definition.name == field) {
+            return Err(ResolverError::UnknownInputField {
+                option: option.to_string(),
+                field: field.clone(),
+            });
+        }
+    }
+    Ok(resolved)
+}
+
+fn hotkey_code(value: &str) -> Option<i64> {
+    let primary = value
+        .rsplit_once('+')
+        .map(|(_, key)| key)
+        .unwrap_or(value)
+        .trim();
+    if primary.is_empty() {
+        return None;
+    }
+
+    let primary = primary.to_ascii_uppercase();
+    let code = match primary.as_str() {
+        "CTRL" | "CONTROL" => 0x11,
+        "SHIFT" => 0x10,
+        "ALT" => 0x12,
+        "META" | "WIN" => 0x5B,
+        "BACKSPACE" => 0x08,
+        "TAB" => 0x09,
+        "ENTER" => 0x0D,
+        "ESCAPE" => 0x1B,
+        "SPACE" => 0x20,
+        "PAGE_UP" | "PAGEUP" => 0x21,
+        "PAGE_DOWN" | "PAGEDOWN" => 0x22,
+        "END" => 0x23,
+        "HOME" => 0x24,
+        "LEFT" => 0x25,
+        "UP" => 0x26,
+        "RIGHT" => 0x27,
+        "DOWN" => 0x28,
+        "INSERT" => 0x2D,
+        "DELETE" => 0x2E,
+        _ => {
+            if let Some(function) = primary
+                .strip_prefix('F')
+                .and_then(|number| number.parse::<u8>().ok())
+            {
+                (1..=24)
+                    .contains(&function)
+                    .then_some(0x6F + i64::from(function))?
+            } else {
+                let mut characters = primary.chars();
+                let character = characters.next()?;
+                (characters.next().is_none() && character.is_ascii_alphanumeric())
+                    .then_some(i64::from(u32::from(character as u8)))?
+            }
+        }
+    };
+    Some(code)
+}
+
+fn hotkey_placeholder(text: &str) -> Option<(&str, bool)> {
+    let name = text.trim().strip_prefix('{')?.strip_suffix('}')?;
+    match name.split_once('.') {
+        Some((field, "primary")) => Some((field, true)),
+        Some(_) => None,
+        None => Some((name, false)),
+    }
+}
+
+fn substitute_hotkeys(
+    value: &Value,
+    option: &str,
+    hotkeys: &[HotkeyFieldDefinition],
+    values: &BTreeMap<String, String>,
+) -> Result<Value, ResolverError> {
+    match value {
+        Value::String(text) => {
+            if let Some((field_name, _)) = hotkey_placeholder(text) {
+                if let Some(field) = hotkeys.iter().find(|field| field.name == field_name) {
+                    let raw = values
+                        .get(&field.name)
+                        .map(String::as_str)
+                        .unwrap_or_default();
+                    let code = hotkey_code(raw).ok_or_else(|| ResolverError::InvalidInput {
+                        option: option.to_string(),
+                        field: field.name.clone(),
+                        message: "expected a key name such as F, 1, or F1".to_string(),
+                    })?;
+                    return Ok(Value::Number(code.into()));
+                }
+            }
+
+            let mut output = text.clone();
+            for field in hotkeys {
+                let raw = values
+                    .get(&field.name)
+                    .map(String::as_str)
+                    .unwrap_or_default();
+                let code = hotkey_code(raw).ok_or_else(|| ResolverError::InvalidInput {
+                    option: option.to_string(),
+                    field: field.name.clone(),
+                    message: "expected a key name such as F, 1, or F1".to_string(),
+                })?;
+                let replacement = code.to_string();
+                output = output.replace(&format!("{{{}.primary}}", field.name), &replacement);
+                output = output.replace(&format!("{{{}}}", field.name), &replacement);
+            }
+            Ok(Value::String(output))
+        }
+        Value::Array(items) => Ok(Value::Array(
+            items
+                .iter()
+                .map(|item| substitute_hotkeys(item, option, hotkeys, values))
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        Value::Object(items) => {
+            let mut output = Map::new();
+            for (key, item) in items {
+                output.insert(
+                    key.clone(),
+                    substitute_hotkeys(item, option, hotkeys, values)?,
+                );
+            }
+            Ok(Value::Object(output))
+        }
+        other => Ok(other.clone()),
+    }
 }
 
 fn substitute_inputs(
@@ -691,6 +827,89 @@ mod tests {
             resolved.pipeline_override.get("AutoBattle"),
             Some(&json!({ "enabled": true }))
         );
+    }
+
+    #[test]
+    fn resolves_hotkey_primary_placeholders_to_key_codes() {
+        let mut project = fixture_project();
+        project.global_options.push("hotkeys".to_string());
+        project.options.insert(
+            "hotkeys".to_string(),
+            OptionDefinition::Hotkey {
+                name: "hotkeys".to_string(),
+                label: "Hotkeys".to_string(),
+                description: None,
+                hotkeys: vec![
+                    HotkeyFieldDefinition {
+                        name: "Interact".to_string(),
+                        label: "Interact".to_string(),
+                        description: None,
+                        default: Some("F".to_string()),
+                    },
+                    HotkeyFieldDefinition {
+                        name: "Combo".to_string(),
+                        label: "Combo".to_string(),
+                        description: None,
+                        default: Some("F1".to_string()),
+                    },
+                ],
+                pipeline_override: json!({
+                    "Interact": { "key": "{Interact.primary}" },
+                    "Combo": {
+                        "key": "{Combo.primary}",
+                        "description": "combo {Combo.primary}"
+                    }
+                }),
+                icon: None,
+                applicability: OptionApplicability {
+                    controllers: Vec::new(),
+                    resources: Vec::new(),
+                },
+            },
+        );
+
+        let resolved = resolve_run(&project, &configuration(&project, "normal", None, "Yes"))
+            .expect("default hotkeys should resolve");
+        assert_eq!(
+            resolved.pipeline_override.get("Interact"),
+            Some(&json!({ "key": 70 }))
+        );
+        assert_eq!(
+            resolved.pipeline_override.get("Combo"),
+            Some(&json!({ "key": 112, "description": "combo 112" }))
+        );
+
+        let mut config = configuration(&project, "normal", None, "Yes");
+        config.global_option_values.insert(
+            "hotkeys".to_string(),
+            OptionValue::Inputs {
+                values: BTreeMap::from([
+                    ("Interact".to_string(), "f".to_string()),
+                    ("Combo".to_string(), "Ctrl+F1".to_string()),
+                ]),
+            },
+        );
+        let resolved = resolve_run(&project, &config).expect("custom hotkeys should resolve");
+        assert_eq!(
+            resolved.pipeline_override.get("Interact"),
+            Some(&json!({ "key": 70 }))
+        );
+        assert_eq!(
+            resolved.pipeline_override.get("Combo"),
+            Some(&json!({ "key": 112, "description": "combo 112" }))
+        );
+
+        config.global_option_values.insert(
+            "hotkeys".to_string(),
+            OptionValue::Inputs {
+                values: BTreeMap::from([
+                    ("Interact".to_string(), "not-a-key".to_string()),
+                    ("Combo".to_string(), "F1".to_string()),
+                ]),
+            },
+        );
+        let error = resolve_run(&project, &config).expect_err("an invalid hotkey should fail");
+        assert!(error.to_string().contains("not-a-key"));
     }
 
     #[test]

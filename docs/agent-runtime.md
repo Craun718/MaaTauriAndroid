@@ -76,7 +76,7 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项
 
 ### MaaEnd 例外
 
-MaaEnd 有两个编译型 agent。CI 默认解析 GitHub 最新稳定 release（非 draft、非 prerelease），手动触发时可用 `maaend_ref` 钉到分支、tag 或 commit。它先用 `build-resource.py --submodules --prepare ... --skip-runtime` 组装 PI，并把 `AndroidOpenGame` 插到 `DailyFull` / `QuickDaily` / `RealtimeAssist` 三个预设首位；随后按上游 `tools/build_android_agents.py` 交叉编译，再用 `scripts/pack_compiled_agent.py` 分别产出两个 ZIP。两个 ZIP 与 `interface.json` 的 agent 顺序一一对应，不能合成一个 bundle，否则 APK 会把同一份 agent 负载重复打包两次。
+MaaEnd `v2.31.0`（commit `f6e3b5f8b27a8f84391bb73d85a296dabaddfb5d`）有两个编译型 agent。CI 先用 `build-resource.py --submodules --prepare ... --skip-runtime` 组装 PI，并把 `AndroidOpenGame` 插到 `DailyFull` / `QuickDaily` / `RealtimeAssist` 三个预设首位；随后按上游 `tools/build_android_agents.py` 交叉编译，再用 `scripts/pack_compiled_agent.py` 分别产出两个 ZIP。两个 ZIP 与 `interface.json` 的 agent 顺序一一对应，不能合成一个 bundle，否则 APK 会把同一份 agent 负载重复打包两次。
 
 ## 给下游：为自己的资源构建
 

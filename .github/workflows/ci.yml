@@ -1,9 +1,5 @@
 name: CI
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
   push:
   pull_request:
@@ -16,25 +12,6 @@ on:
           - arm64-v8a
           - x86_64
         default: arm64-v8a
-      resource:
-        description: Resource APK job to run on manual dispatch
-        type: choice
-        options:
-          - maaend
-          - m9a
-          - narutomobile
-          - maapvz
-          - all
-        default: maaend
-      maaend_ref:
-        description: MaaEnd branch, tag, or commit; latest-stable resolves the newest stable release
-        required: false
-        type: string
-        default: latest-stable
-      proxy_url:
-        description: Optional HTTP/SOCKS proxy for MaaEnd downloads; falls back to PROXY_URL
-        required: false
-        type: string
 
 jobs:
   changes:
@@ -202,11 +179,11 @@ jobs:
       # tests from buildSrc so they do not depend on generated files.
       - name: Run buildSrc tests
         working-directory: src-tauri/gen/android/buildSrc
-        run: ../gradlew test --fail-fast
+        run: ../gradlew test
 
   m9a-android:
     needs: [changes, android-gradle]
-    if: always() && ((github.event_name == 'workflow_dispatch' && (inputs.resource == 'all' || inputs.resource == 'm9a')) || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.m9a == 'true') && needs.android-gradle.result == 'success'
+    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.m9a == 'true') && needs.android-gradle.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -328,7 +305,7 @@ jobs:
         working-directory: src-tauri/gen/android
         run: |
           flavor="${ANDROID_ABI%-v8a}"
-          ./gradlew ":app:test${flavor^}DebugUnitTest" --fail-fast
+          ./gradlew ":app:test${flavor^}DebugUnitTest"
 
       # Rename the runtime ZIP and the APKs so every downloadable file names the
       # commit it was built from. This runs after the Gradle build: the profile
@@ -361,7 +338,7 @@ jobs:
 
   narutomobile-android:
     needs: [changes, android-gradle]
-    if: always() && ((github.event_name == 'workflow_dispatch' && (inputs.resource == 'all' || inputs.resource == 'narutomobile')) || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.narutomobile == 'true') && needs.android-gradle.result == 'success'
+    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.narutomobile == 'true') && needs.android-gradle.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -486,7 +463,7 @@ jobs:
 
   maapvz-android:
     needs: [changes, android-gradle]
-    if: always() && ((github.event_name == 'workflow_dispatch' && (inputs.resource == 'all' || inputs.resource == 'maapvz')) || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.maapvz == 'true') && needs.android-gradle.result == 'success'
+    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.maapvz == 'true') && needs.android-gradle.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -612,9 +589,8 @@ jobs:
 
   maaend-android:
     needs: [changes, android-gradle]
-    if: always() && ((github.event_name == 'workflow_dispatch' && (inputs.resource == 'all' || inputs.resource == 'maaend')) || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.maaend == 'true') && needs.android-gradle.result == 'success'
+    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || needs.changes.outputs.maaend == 'true') && needs.android-gradle.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     permissions:
       actions: write
       contents: read
@@ -622,48 +598,13 @@ jobs:
       # The application build still uses NDK 28.2. MaaEnd's upstream Android
       # agent recipe requires NDK 29 and CMake 3.31 for cpp-algo.
       MAAFW_VERSION: v5.14.2
+      MAAEND_VERSION: v2.31.0
       AGENT_NDK_VERSION: 29.0.13599879
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
-      http_proxy: ${{ inputs.proxy_url || vars.PROXY_URL || secrets.PROXY_URL }}
-      https_proxy: ${{ inputs.proxy_url || vars.PROXY_URL || secrets.PROXY_URL }}
-      all_proxy: ${{ inputs.proxy_url || vars.PROXY_URL || secrets.PROXY_URL }}
-      no_proxy: localhost,127.0.0.1
-      MAAEND_REF: ${{ inputs.maaend_ref || 'latest-stable' }}
-      MAAEND_VERSION: latest-stable
     steps:
       - uses: actions/checkout@v7
-
-      - name: Fail fast on an unusable download proxy
-        if: env.http_proxy != ''
-        run: |
-          case "$http_proxy" in
-            http://*|https://*|socks5://*|socks5h://*) ;;
-            *)
-              echo "error: PROXY_URL must use http, https, socks5, or socks5h" >&2
-              exit 2
-              ;;
-          esac
-          curl --fail --silent --show-error --head https://github.com/ >/dev/null
-
-      - name: Resolve the latest stable MaaEnd release
-        if: env.MAAEND_REF == 'latest-stable'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="$(curl --fail --silent --show-error \
-            --header "Authorization: Bearer $GITHUB_TOKEN" \
-            --header "Accept: application/vnd.github+json" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/MaaEnd/MaaEnd/releases/latest |
-            jq --raw-output '.tag_name')"
-          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
-            echo "error: MaaEnd has no stable release" >&2
-            exit 1
-          fi
-          echo "MAAEND_REF=$tag" >> "$GITHUB_ENV"
-          echo "MAAEND_VERSION=$tag" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -734,20 +675,16 @@ jobs:
             echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
           } >> "$GITHUB_ENV"
 
-      - name: Clone and prepare the MaaEnd resource
+      - name: Clone and prepare the pinned MaaEnd resource
         run: |
-          resource_args=(
-            https://github.com/MaaEnd/MaaEnd.git
-            --id maaend
-            --ref "$MAAEND_REF"
-            --submodules
-            --prepare "python3 scripts/prepare-maaend.py resource/maaend/Android/pi-root"
-            --skip-runtime
+          python3 scripts/build-resource.py \
+            https://github.com/MaaEnd/MaaEnd.git \
+            --id maaend \
+            --ref f6e3b5f8b27a8f84391bb73d85a296dabaddfb5d \
+            --submodules \
+            --prepare "python3 scripts/prepare-maaend.py resource/maaend/Android/pi-root" \
+            --skip-runtime \
             --abi "$ANDROID_ABI"
-          )
-          python3 scripts/build-resource.py "${resource_args[@]}"
-          maaend_version="$(git -C resource/maaend describe --tags --always --dirty)"
-          echo "MAAEND_VERSION=$maaend_version" >> "$GITHUB_ENV"
           source_date_epoch="$(git -C resource/maaend log -1 --format=%ct HEAD)"
           echo "SOURCE_DATE_EPOCH=$source_date_epoch" >> "$GITHUB_ENV"
 
@@ -761,7 +698,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: resource/maaend/agent/cpp-algo/MaaUtils/MaaDeps
-          key: maaend-${{ env.MAAEND_VERSION }}-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
+          key: maaend-v2.31.0-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
 
       - name: Build the MaaEnd Android agents
         env:
@@ -827,7 +764,7 @@ jobs:
         working-directory: src-tauri/gen/android
         run: |
           flavor="${ANDROID_ABI%-v8a}"
-          ./gradlew ":app:test${flavor^}DebugUnitTest" --fail-fast
+          ./gradlew ":app:test${flavor^}DebugUnitTest"
 
       - name: Suffix the artifacts with the commit hash
         run: |

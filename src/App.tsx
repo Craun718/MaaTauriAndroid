@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { BusyModal } from "./components/BusyModal";
 import { FocusModalHost } from "./components/FocusModalHost";
 import { PreparationOverlay } from "./components/PreparationOverlay";
-import { useTranslation } from "./lib/i18n";
 import { HomePage } from "./pages/HomePage";
 import { RunHistoryPage } from "./pages/RunHistoryPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
@@ -15,11 +15,9 @@ import { usePreparationStore } from "./store/preparationStore";
 function App() {
   const bootstrap = useAppStore((state) => state.bootstrap);
   const busy = useAppStore((state) => state.busy);
-  const saving = useAppStore((state) => state.saving);
   const initializePreparation = usePreparationStore(
     (state) => state.initialize,
   );
-  const { t } = useTranslation();
 
   useEffect(() => {
     void initializePreparation();
@@ -40,10 +38,7 @@ function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        {/* 常驻占位：busy 文案出现/消失时内容高度不变，避免整页抖动。 */}
-        <div aria-live="polite" className="mt-4 min-h-5 text-sm text-ink-muted">
-          {busy || saving ? t("working") : ""}
-        </div>
+        {busy && <BusyModal />}
         <FocusModalHost />
         <PreparationOverlay />
       </AppShell>

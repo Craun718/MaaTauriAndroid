@@ -101,12 +101,35 @@ pub fn resolve_run(
     let base_pipeline = global_pipeline.as_object().cloned().unwrap_or_default();
     let mut combined_pipeline = base_pipeline.clone();
 
-    let mut tasks = Vec::new();
+    // The run configuration is the single source of truth for run order: the user
+    // reorders tasks in the UI and expects exactly that sequence on device, while
+    // `project.tasks` only mirrors the interface `import` order (the task that
+    // starts the game can legitimately sit at the very end of it). Tasks the
+    // configuration never mentions are appended at the tail so the UI still
+    // receives the complete set to pick from.
+    let mut ordered: Vec<(&TaskDefinition, Option<&ConfiguredTask>)> = configured_tasks
+        .tasks
+        .iter()
+        .filter_map(|configured| {
+            project
+                .tasks
+                .iter()
+                .find(|task| task.name == configured.task_name)
+                .map(|task| (task, Some(configured)))
+        })
+        .collect();
     for task in &project.tasks {
-        let configured = configured_tasks
+        if !configured_tasks
             .tasks
             .iter()
-            .find(|item| item.task_name == task.name);
+            .any(|item| item.task_name == task.name)
+        {
+            ordered.push((task, None));
+        }
+    }
+
+    let mut tasks = Vec::new();
+    for (task, configured) in ordered {
         let unavailable_reason = task_unavailable_reason(task, &controller.name, &resource.name);
         let available = unavailable_reason.is_none();
         if available {
@@ -978,6 +1001,33 @@ mod tests {
 
         assert!(!resolved.tasks[0].enabled);
         assert_eq!(resolved.pipeline_override.get("Start"), None);
+    }
+
+    #[test]
+    fn keeps_run_configuration_order_over_interface_import_order() {
+        let project = fixture_project();
+        let mut config = configuration(&project, "normal", None, "Yes");
+        // The user dragged the second task above the first in the UI. The
+        // interface `import` order (start, collect, exclusive) must not win.
+        config.run_configurations[0].tasks.reverse();
+
+        let resolved = resolve_run(&project, &config).expect("reordered plan should resolve");
+
+        let names: Vec<&str> = resolved
+            .tasks
+            .iter()
+            .map(|task| task.task.name.as_str())
+            .collect();
+        // Configured order first, then tasks the configuration never mentions.
+        assert_eq!(names, vec!["collect", "start", "exclusive"]);
+        assert_eq!(
+            resolved.tasks[0]
+                .configured
+                .as_ref()
+                .map(|task| task.instance_id.as_str()),
+            Some("collect")
+        );
+        assert!(resolved.tasks[2].configured.is_none());
     }
 
     #[test]

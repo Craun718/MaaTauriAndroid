@@ -18,7 +18,9 @@ mod version;
 
 use domain::loader::ProjectLoader;
 use domain::resolver::{resolve_run, ResolverError};
-use domain::types::{ConfiguredTask, Project, RunConfiguration, UserConfiguration};
+use domain::types::{
+    ConfigurationTemplate, ConfiguredTask, Project, RunConfiguration, UserConfiguration,
+};
 use domain::welcome;
 use persistence::{PersistenceError, UserConfigurationStore};
 use serde::{Deserialize, Serialize};
@@ -1136,37 +1138,60 @@ fn apply_preset(
         .find(|run| run.id == active_run)
         .ok_or_else(|| AppError::Message("Active run configuration disappeared".to_string()))?;
     let existing_tasks = run.tasks.clone();
-    run.tasks = project
-        .tasks
-        .iter()
-        .map(|task| {
-            let configured = preset.tasks.iter().find(|item| item.task_name == task.name);
-            let existing = existing_tasks
-                .iter()
-                .find(|item| item.task_name == task.name);
-            ConfiguredTask {
-                instance_id: existing
-                    .map(|item| item.instance_id.clone())
-                    .unwrap_or_else(|| format!("{}:{}", task.name, Uuid::new_v4())),
-                task_name: task.name.clone(),
-                enabled: configured
-                    .map(|item| item.enabled)
-                    .unwrap_or(task.default_check),
-                option_values: configured
-                    .map(|item| item.option.clone())
-                    .unwrap_or_default(),
-                custom_label: configured.and_then(|item| {
-                    if item.label == task.name {
-                        None
-                    } else {
-                        Some(item.label.clone())
-                    }
-                }),
-            }
-        })
-        .collect();
+    run.tasks = configuration_tasks_from_preset(&project, &preset, &existing_tasks);
     state.set_configuration(configuration.clone())?;
     Ok(configuration)
+}
+
+/// Rebuilds one run configuration from a preset.
+///
+/// MXU semantics: the preset's `task` array is the run order the profile author
+/// intended ("start the game, then …"), so it becomes the configuration order.
+/// Tasks the preset never mentions keep their place afterwards, and existing
+/// instance ids are reused so per-task UI state survives applying a preset.
+fn configuration_tasks_from_preset(
+    project: &Project,
+    preset: &ConfigurationTemplate,
+    existing: &[ConfiguredTask],
+) -> Vec<ConfiguredTask> {
+    let instance_id = |task_name: &str| {
+        existing
+            .iter()
+            .find(|item| item.task_name == task_name)
+            .map(|item| item.instance_id.clone())
+            .unwrap_or_else(|| format!("{task_name}:{}", Uuid::new_v4()))
+    };
+
+    let mut tasks: Vec<ConfiguredTask> = preset
+        .tasks
+        .iter()
+        .filter_map(|item| {
+            let task = project
+                .tasks
+                .iter()
+                .find(|task| task.name == item.task_name)?;
+            Some(ConfiguredTask {
+                instance_id: instance_id(&task.name),
+                task_name: task.name.clone(),
+                enabled: item.enabled,
+                option_values: item.option.clone(),
+                custom_label: (item.label != task.name).then(|| item.label.clone()),
+            })
+        })
+        .collect();
+    for task in &project.tasks {
+        if tasks.iter().any(|item| item.task_name == task.name) {
+            continue;
+        }
+        tasks.push(ConfiguredTask {
+            instance_id: instance_id(&task.name),
+            task_name: task.name.clone(),
+            enabled: task.default_check,
+            option_values: BTreeMap::new(),
+            custom_label: None,
+        });
+    }
+    tasks
 }
 
 #[tauri::command]
@@ -3220,6 +3245,72 @@ mod tests {
             agents: Vec::new(),
             metadata: ProjectMetadata::default(),
         }
+    }
+
+    #[test]
+    fn applying_a_preset_keeps_the_preset_order_instead_of_the_import_order() {
+        let mut project = project();
+        project.tasks = ["AndroidOpenGame", "SellProduct", "DailyRewards"]
+            .iter()
+            .map(|name| crate::domain::types::TaskDefinition {
+                name: name.to_string(),
+                label: name.to_string(),
+                entry: name.to_string(),
+                description: None,
+                groups: Vec::new(),
+                controllers: Vec::new(),
+                resources: Vec::new(),
+                options: Vec::new(),
+                pipeline_override: serde_json::Value::Null,
+                default_check: false,
+                icon: None,
+            })
+            .collect();
+        let preset = ConfigurationTemplate {
+            name: "DailyFull".to_string(),
+            label: "Daily".to_string(),
+            description: None,
+            icon: None,
+            tasks: vec![
+                crate::domain::types::TemplateTask {
+                    task_name: "DailyRewards".to_string(),
+                    enabled: true,
+                    option: BTreeMap::new(),
+                    label: "DailyRewards".to_string(),
+                },
+                crate::domain::types::TemplateTask {
+                    task_name: "AndroidOpenGame".to_string(),
+                    enabled: true,
+                    option: BTreeMap::new(),
+                    label: "Start the game".to_string(),
+                },
+            ],
+        };
+        let existing = vec![ConfiguredTask {
+            instance_id: "kept-instance".to_string(),
+            task_name: "AndroidOpenGame".to_string(),
+            enabled: true,
+            option_values: BTreeMap::new(),
+            custom_label: None,
+        }];
+
+        let tasks = configuration_tasks_from_preset(&project, &preset, &existing);
+
+        let names: Vec<&str> = tasks.iter().map(|task| task.task_name.as_str()).collect();
+        // Preset order first, then the tasks the preset never mentions.
+        assert_eq!(
+            names,
+            vec!["DailyRewards", "AndroidOpenGame", "SellProduct"]
+        );
+        // A reused instance id keeps the per-task UI state attached.
+        let game = tasks
+            .iter()
+            .find(|task| task.task_name == "AndroidOpenGame")
+            .expect("the game task should survive");
+        assert_eq!(game.instance_id, "kept-instance");
+        assert_eq!(game.custom_label.as_deref(), Some("Start the game"));
+        // Tasks left out of the preset fall back to their own default check.
+        assert!(!tasks[2].enabled);
     }
 
     #[test]

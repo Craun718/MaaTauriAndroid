@@ -12,21 +12,23 @@ import {
 import { useTranslation } from "../lib/i18n";
 import type { Project, UserConfiguration } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { usePreparationStore } from "../store/preparationStore";
 
 export function HomePage() {
   const snapshot = useAppStore((state) => state.snapshot);
-  const busy = useAppStore((state) => state.busy);
+  const preparation = usePreparationStore((state) => state.state);
   const saving = useAppStore((state) => state.saving);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const { t } = useTranslation();
 
   if (!snapshot?.project) {
+    // PreparationOverlay owns startup progress; showing another "preparing"
+    // notice behind its backdrop only turns one loader into three indicators.
+    if (preparation?.status === "running") return null;
     return (
       <div className="space-y-3">
         <h1 className="text-2xl font-semibold">{t("project")}</h1>
-        <p className="text-ink-muted">
-          {busy ? t("preparing") : t("noProject")}
-        </p>
+        <p className="text-ink-muted">{t("noProject")}</p>
       </div>
     );
   }

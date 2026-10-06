@@ -166,12 +166,14 @@ export const useAppStore = create<AppStore>((set) => ({
   saving: false,
   dismissedWelcomeFingerprint: undefined,
   async bootstrap() {
-    set({ busy: true, error: undefined });
+    // PreparationOverlay owns startup progress; the generic busy modal would
+    // duplicate it while waiting for native preparation to finish.
+    set({ error: undefined });
     void ensureWelcomeListener();
     try {
       set(await adoptSnapshot(await prepareApp()));
     } catch (error) {
-      set({ error: message(error), busy: false });
+      set({ error: message(error) });
       reportError(error);
     }
   },

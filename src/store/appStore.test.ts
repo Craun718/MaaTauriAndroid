@@ -317,6 +317,21 @@ describe("appStore WebView Project Interface parsing", () => {
     useNotificationStore.setState({ notifications: [] });
   });
 
+  it("leaves generic busy handling to actions without preparation progress", async () => {
+    const request = deferred<AppStateSnapshot>();
+    mockedPrepareApp.mockReturnValue(request.promise);
+
+    const bootstrap = useAppStore.getState().bootstrap();
+    await Promise.resolve();
+
+    expect(useAppStore.getState().busy).toBe(false);
+
+    request.resolve(snapshot());
+    await bootstrap;
+
+    expect(useAppStore.getState().busy).toBe(false);
+  });
+
   it("parses a bootstrapped project through the scoped reader", async () => {
     const backendSnapshot = snapshot("/project");
     const parsed = project("WebView view");

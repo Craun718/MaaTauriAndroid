@@ -57,45 +57,45 @@ export function AnnouncementModal({
         onClick={onClose}
         className="fixed inset-0 z-40 cursor-default bg-black/40"
       />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("announcement")}
-        tabIndex={-1}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[calc(100dvh-2rem_-_var(--tt-safe-top))] max-w-md flex-col rounded-t-lg border border-b-0 border-line bg-raised shadow-lg outline-none"
-      >
-        <div className="flex items-center justify-between gap-3 p-3">
-          <h2 className="font-medium">{t("announcement")}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("close")}
-            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            <X size="1rem" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3">
-          {announcementItems.map(({ item, key }) => (
-            <RichDescription key={key} text={item} />
-          ))}
-        </div>
-        <div className="space-y-3 p-3 pb-[calc(1rem_+_var(--tt-safe-bottom))]">
-          <Checkbox
-            checked={remember}
-            onCheckedChange={onRememberChange}
-            className="text-sm"
-          >
-            {t("hideAnnouncementOnLaunch")}
-          </Checkbox>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="btn btn-primary h-10 w-full"
-          >
-            {t("confirm")}
-          </button>
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-center p-4 pt-[calc(1rem_+_var(--tt-safe-top))] pb-[calc(1rem_+_var(--tt-safe-bottom))]">
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("announcement")}
+          tabIndex={-1}
+          className="pointer-events-auto flex max-h-full w-full max-w-md flex-col rounded-lg border border-line bg-raised shadow-lg outline-none"
+        >
+          <div className="flex items-center justify-between gap-3 p-3">
+            <h2 className="font-medium">{t("announcement")}</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("close")}
+              className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <X size="1rem" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+            {announcementItems.map(({ item, key }) => (
+              <RichDescription key={key} text={item} />
+            ))}
+            <Checkbox
+              checked={remember}
+              onCheckedChange={onRememberChange}
+              className="text-sm"
+            >
+              {t("hideAnnouncementOnLaunch")}
+            </Checkbox>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="btn btn-primary h-10 w-full"
+            >
+              {t("confirm")}
+            </button>
+          </div>
         </div>
       </div>
     </>

@@ -322,6 +322,7 @@ describe("appStore WebView Project Interface parsing", () => {
     useAppStore.setState({
       snapshot: undefined,
       projectSource: undefined,
+      bootstrapStatus: "loading",
       busy: false,
       saving: false,
       error: undefined,
@@ -338,11 +339,13 @@ describe("appStore WebView Project Interface parsing", () => {
     await Promise.resolve();
 
     expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().bootstrapStatus).toBe("loading");
 
     request.resolve(snapshot());
     await bootstrap;
 
     expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().bootstrapStatus).toBe("ready");
   });
 
   it("parses a bootstrapped project through the scoped reader", async () => {
@@ -372,6 +375,7 @@ describe("appStore WebView Project Interface parsing", () => {
     });
     expect(useAppStore.getState().projectSource).toBe(projectSource);
     expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().bootstrapStatus).toBe("ready");
   });
 
   it("uses the basename when a named interface file is loaded", async () => {
@@ -569,6 +573,7 @@ describe("appStore WebView Project Interface parsing", () => {
     await useAppStore.getState().bootstrap();
 
     expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().bootstrapStatus).toBe("failed");
     expect(useAppStore.getState().error).toBe("Parse failed");
     expect(useNotificationStore.getState().notifications).toMatchObject([
       { tone: "error", message: "Parse failed" },

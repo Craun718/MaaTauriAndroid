@@ -26,6 +26,7 @@ import { useNotificationStore } from "./notificationStore";
 interface AppStore {
   snapshot?: AppStateSnapshot;
   projectSource?: ProjectSource;
+  bootstrapStatus: "loading" | "ready" | "failed";
   busy: boolean;
   saving: boolean;
   error?: string;
@@ -198,6 +199,7 @@ export async function waitForPendingSaves(): Promise<void> {
 }
 
 export const useAppStore = create<AppStore>((set) => ({
+  bootstrapStatus: "loading",
   busy: false,
   saving: false,
   dismissedWelcomeFingerprint: undefined,
@@ -205,12 +207,15 @@ export const useAppStore = create<AppStore>((set) => ({
     // PreparationOverlay owns startup progress; the generic busy modal would
     // duplicate it while waiting for native preparation to finish.
     earlyWelcomeState = undefined;
-    set({ error: undefined });
+    set({ bootstrapStatus: "loading", error: undefined });
     void ensureWelcomeListener();
     try {
-      set(await adoptSnapshot(await prepareApp()));
+      set({
+        ...(await adoptSnapshot(await prepareApp())),
+        bootstrapStatus: "ready",
+      });
     } catch (error) {
-      set({ error: message(error) });
+      set({ bootstrapStatus: "failed", error: message(error) });
       reportError(error);
     }
   },

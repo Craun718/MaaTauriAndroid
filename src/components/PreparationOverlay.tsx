@@ -29,16 +29,24 @@ export function PreparationOverlay() {
   const retry = usePreparationStore((state) => state.retry);
   const reinstallResources = useAppStore((state) => state.reinstallResources);
   const busy = useAppStore((state) => state.busy);
-  const [dismissedRevision, setDismissedRevision] = useState<number>();
+  const bootstrapStatus = useAppStore((state) => state.bootstrapStatus);
+  const bootstrapError = useAppStore((state) => state.error);
+  const [dismissedFailure, setDismissedFailure] = useState<string>();
   const { t } = useTranslation();
   const preparation = reported;
-  if (!preparation) return null;
-  const failed = preparation.status === "failed";
-  const running = preparation.status === "running" && !preparation.engineReady;
-  const showFailure = failed && dismissedRevision !== preparation.revision;
+  const failed =
+    preparation?.status === "failed" || bootstrapStatus === "failed";
+  const nativeRunning =
+    preparation?.status === "running" && !preparation.engineReady;
+  const running = bootstrapStatus === "loading" || nativeRunning;
+  const failureKey =
+    preparation?.status === "failed"
+      ? `native:${preparation.revision}:${preparation.error ?? ""}`
+      : `bootstrap:${bootstrapError ?? ""}`;
+  const showFailure = failed && dismissedFailure !== failureKey;
   if (!running && !showFailure) return null;
 
-  const progress = preparation.progress;
+  const progress = preparation?.progress;
   const extractingProgress =
     progress?.phase === "extracting" && progress.totalEntries > 0
       ? progress
@@ -51,7 +59,7 @@ export function PreparationOverlay() {
           100,
       )
     : undefined;
-  const currentStage = stageMessage(preparation.stage);
+  const currentStage = stageMessage(preparation?.stage ?? "uiReady");
   async function reinstallAndRetry() {
     await reinstallResources();
     await retry();
@@ -79,12 +87,14 @@ export function PreparationOverlay() {
                   size="1rem"
                 />
                 <p className="min-w-0 flex-1 break-all">
-                  {preparation.error ?? t("preparationFailed")}
+                  {preparation?.error ??
+                    bootstrapError ??
+                    t("preparationFailed")}
                 </p>
                 <button
                   type="button"
                   aria-label={t("close")}
-                  onClick={() => setDismissedRevision(preparation.revision)}
+                  onClick={() => setDismissedFailure(failureKey)}
                   className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
                   <X size="0.875rem" />

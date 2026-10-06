@@ -113,6 +113,14 @@ struct WelcomeState {
     welcome_errors: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct ProjectTextRead {
+    path: String,
+    text: Option<String>,
+    error: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NativePreparationUpdate {
@@ -1007,6 +1015,15 @@ fn read_project_text(state: State<'_, AppState>, path: String) -> Result<String,
     read_scoped_project_text(Path::new(&project.root), &path)
 }
 
+#[tauri::command]
+fn read_project_texts(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<Vec<ProjectTextRead>, AppError> {
+    let project = state.project()?;
+    Ok(read_scoped_project_texts(Path::new(&project.root), &paths))
+}
+
 fn read_scoped_project_text(root: &Path, relative: &str) -> Result<String, AppError> {
     let text_path = project_text_path(root, relative)?;
     if std::fs::metadata(&text_path)?.len() > MAX_PROJECT_TEXT_BYTES as u64 {
@@ -1018,6 +1035,24 @@ fn read_scoped_project_text(root: &Path, relative: &str) -> Result<String, AppEr
     let bytes = std::fs::read(&text_path)?;
     String::from_utf8(bytes)
         .map_err(|_| AppError::Message("Project Interface text files must be UTF-8".to_string()))
+}
+
+fn read_scoped_project_texts(root: &Path, paths: &[String]) -> Vec<ProjectTextRead> {
+    paths
+        .iter()
+        .map(|path| match read_scoped_project_text(root, path) {
+            Ok(text) => ProjectTextRead {
+                path: path.clone(),
+                text: Some(text),
+                error: None,
+            },
+            Err(error) => ProjectTextRead {
+                path: path.clone(),
+                text: None,
+                error: Some(error.to_string()),
+            },
+        })
+        .collect()
 }
 
 fn project_text_path(root: &Path, relative: &str) -> Result<PathBuf, AppError> {
@@ -3549,6 +3584,36 @@ mod tests {
     }
 
     #[test]
+    fn batched_project_text_reads_keep_per_path_results() {
+        let root = std::env::temp_dir().join(format!("mta-text-batch-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("interface.json"), "{\"name\":\"x\"}").unwrap();
+
+        let results = read_scoped_project_texts(
+            &root,
+            &[
+                "interface.json".to_string(),
+                "missing.json".to_string(),
+                "../outside.json".to_string(),
+            ],
+        );
+
+        assert_eq!(
+            results[0],
+            ProjectTextRead {
+                path: "interface.json".to_string(),
+                text: Some("{\"name\":\"x\"}".to_string()),
+                error: None,
+            }
+        );
+        assert!(results[0].text.is_some());
+        assert!(results[1].error.is_some());
+        assert!(results[2].error.is_some());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn telemetry_defaults_on_for_first_install_only() {
         let project = project();
         let mut first_install = UserConfiguration::default();
@@ -4035,6 +4100,7 @@ pub fn run() {
             load_project,
             read_project_image,
             read_project_text,
+            read_project_texts,
             save_configuration,
             apply_preset,
             resolve_current,

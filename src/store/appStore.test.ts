@@ -3,11 +3,14 @@ import {
   applyPreset,
   loadProject,
   prepareApp,
-  readProjectText,
   reinstallResources,
   saveConfiguration,
 } from "../lib/api";
-import { buildAndroidProject, loadProjectSource } from "../lib/pi";
+import {
+  buildAndroidProject,
+  createStartupProjectTextReader,
+  loadProjectSource,
+} from "../lib/pi";
 import type {
   AppStateSnapshot,
   Project,
@@ -38,7 +41,6 @@ vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
   prepareApp: vi.fn(),
   loadProject: vi.fn(),
-  readProjectText: vi.fn(),
   reinstallResources: vi.fn(),
   saveConfiguration: vi.fn(),
 }));
@@ -46,16 +48,17 @@ vi.mock("../lib/api", () => ({
 vi.mock("../lib/pi", () => ({
   buildAndroidProject: vi.fn(),
   loadProjectSource: vi.fn(),
+  createStartupProjectTextReader: vi.fn(),
 }));
 
 const mockedSaveConfiguration = vi.mocked(saveConfiguration);
 const mockedApplyPreset = vi.mocked(applyPreset);
 const mockedPrepareApp = vi.mocked(prepareApp);
 const mockedLoadProject = vi.mocked(loadProject);
-const mockedReadProjectText = vi.mocked(readProjectText);
 const mockedReinstallResources = vi.mocked(reinstallResources);
 const mockedBuildAndroidProject = vi.mocked(buildAndroidProject);
 const mockedLoadProjectSource = vi.mocked(loadProjectSource);
+const mockedCreateStartupReader = vi.mocked(createStartupProjectTextReader);
 
 const configuration: UserConfiguration = {
   schemaVersion: 1,
@@ -99,6 +102,16 @@ function source() {
     languages: [],
     translations: {},
   };
+}
+
+function startupReader() {
+  return Object.assign(
+    vi.fn(async () => "interface text"),
+    {
+      preloadInterface: vi.fn(async () => undefined),
+      preloadMetadata: vi.fn(async () => undefined),
+    },
+  );
 }
 
 function deferred<T>() {
@@ -319,6 +332,7 @@ describe("appStore waitForPendingSaves", () => {
 describe("appStore WebView Project Interface parsing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedCreateStartupReader.mockImplementation(() => startupReader());
     useAppStore.setState({
       snapshot: undefined,
       projectSource: undefined,
@@ -353,7 +367,6 @@ describe("appStore WebView Project Interface parsing", () => {
     const parsed = project("WebView view");
     const projectSource = source();
     mockedPrepareApp.mockResolvedValue(backendSnapshot);
-    mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValue(parsed);
 
@@ -382,7 +395,6 @@ describe("appStore WebView Project Interface parsing", () => {
     const backendSnapshot = snapshot("/project/custom.json");
     const projectSource = source();
     mockedLoadProject.mockResolvedValue(backendSnapshot);
-    mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValue(project("WebView view"));
 
@@ -402,7 +414,6 @@ describe("appStore WebView Project Interface parsing", () => {
     };
     const projectSource = { ...source(), root: "/reinstalled-project" };
     mockedReinstallResources.mockResolvedValue(backendSnapshot);
-    mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValue(project("WebView view"));
 
@@ -422,31 +433,28 @@ describe("appStore WebView Project Interface parsing", () => {
 
     await useAppStore.getState().bootstrap();
 
-    expect(mockedReadProjectText).not.toHaveBeenCalled();
+    expect(mockedCreateStartupReader).not.toHaveBeenCalled();
     expect(mockedLoadProjectSource).not.toHaveBeenCalled();
     expect(mockedBuildAndroidProject).not.toHaveBeenCalled();
     expect(useAppStore.getState().snapshot).toBe(backendSnapshot);
     expect(useAppStore.getState().projectSource).toBeUndefined();
   });
 
-  it("rebuilds a cached source without rereading project files", async () => {
+  it("rebuilds a cached source without reparsing the interface", async () => {
     const backendSnapshot = snapshot("/project");
     const projectSource = source();
     const english = project("English view");
     const chinese = project("Chinese view");
     mockedPrepareApp.mockResolvedValue(backendSnapshot);
-    mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValueOnce(english);
 
     await useAppStore.getState().bootstrap();
-    mockedReadProjectText.mockClear();
     mockedLoadProjectSource.mockClear();
     mockedBuildAndroidProject.mockResolvedValueOnce(chinese);
 
     await useAppStore.getState().setProjectLanguage("zh_cn");
 
-    expect(mockedReadProjectText).not.toHaveBeenCalled();
     expect(mockedLoadProjectSource).not.toHaveBeenCalled();
     expect(mockedBuildAndroidProject).toHaveBeenCalledWith(
       projectSource,
@@ -475,7 +483,6 @@ describe("appStore WebView Project Interface parsing", () => {
     } as Project["metadata"];
     const projectSource = source();
     mockedPrepareApp.mockResolvedValue(backendSnapshot);
-    mockedReadProjectText.mockResolvedValue("interface text");
     mockedLoadProjectSource.mockResolvedValue(projectSource);
     mockedBuildAndroidProject.mockResolvedValueOnce(parsed);
 

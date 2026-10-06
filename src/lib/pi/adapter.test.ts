@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAndroidProject } from "./adapter";
+import { buildAndroidProject, metadataTextPaths } from "./adapter";
 import type { ProjectSource, ProjectTextReader } from "./rawTypes";
 
 const files: Record<string, string> = {
@@ -239,5 +239,27 @@ describe("buildAndroidProject", () => {
     await expect(buildAndroidProject(invalid, "en_us", reader)).rejects.toThrow(
       "unknown input type: clock",
     );
+  });
+});
+
+describe("metadataTextPaths", () => {
+  it("collects localized bodies for the selected language", () => {
+    expect(metadataTextPaths(source(), "en_us")).toEqual([
+      "WELCOME.md",
+      "CONTACT",
+      "LICENSE",
+    ]);
+  });
+
+  it("falls back with the selected language's metadata", () => {
+    const chinese = source();
+    chinese.translations.zh_cn.welcome = "./zh_cn/WELCOME.md";
+
+    expect(metadataTextPaths(chinese, "fr_fr")).toEqual([
+      "zh_cn/WELCOME.md",
+      "WELCOME.md",
+      "CONTACT",
+      "LICENSE",
+    ]);
   });
 });

@@ -292,11 +292,10 @@ function parseTemplateTask(
   };
 }
 
-async function parseWelcome(
+function welcomeDeclarations(
   value: unknown,
   translations: Record<string, string>,
-  readFile: ProjectTextReader,
-): Promise<[string[], string[]]> {
+): [string[], string[]] {
   const rawValues: string[] = [];
   const errors: string[] = [];
   if (typeof value === "string") rawValues.push(value);
@@ -309,23 +308,39 @@ async function parseWelcome(
   } else if (value !== undefined) {
     errors.push(`welcome is not a string or array: ${JSON.stringify(value)}`);
   }
-  const declarations = rawValues.filter((item) => item.trim() !== "");
+  const declarations = rawValues
+    .filter((item) => item.trim() !== "")
+    .map(
+      (declaration) =>
+        localize(declaration, translations) ?? declaration.replace(/^\$/, ""),
+    );
+  return [declarations, errors.sort()];
+}
+
+function textFilePath(value: string): string | undefined {
+  return isFilePath(value) ? value.replace(/^\.\//, "") : undefined;
+}
+
+async function parseWelcome(
+  value: unknown,
+  translations: Record<string, string>,
+  readFile: ProjectTextReader,
+): Promise<[string[], string[]]> {
+  const [declarations, errors] = welcomeDeclarations(value, translations);
   const welcome: string[] = [];
   for (const declaration of declarations) {
-    const value =
-      localize(declaration, translations) ?? declaration.replace(/^\$/, "");
-    if (isFilePath(value)) {
-      const relative = value.replace(/^\.\//, "");
+    const relative = textFilePath(declaration);
+    if (relative !== undefined) {
       try {
         welcome.push(await readFile(relative));
       } catch {
-        welcome.push(value);
+        welcome.push(declaration);
       }
     } else {
-      welcome.push(value);
+      welcome.push(declaration);
     }
   }
-  return [welcome, errors.sort()];
+  return [welcome, errors];
 }
 
 function isFilePath(content: string): boolean {
@@ -351,13 +366,38 @@ async function descriptionBody(
   readFile: ProjectTextReader,
 ): Promise<string | undefined> {
   const resolved = localize(value, translations);
-  if (resolved === undefined || !isFilePath(resolved)) return resolved;
-  const relative = resolved.replace(/^\.\//, "");
+  if (resolved === undefined) return resolved;
+  const relative = textFilePath(resolved);
+  if (relative === undefined) return resolved;
   try {
     return await readFile(relative);
   } catch {
     return resolved;
   }
+}
+
+export function metadataTextPaths(
+  source: ProjectSource,
+  preferredLanguage: string,
+): string[] {
+  const language = selectLanguage(source, preferredLanguage);
+  const translations = source.translations[language] ?? {};
+  const [declarations] = welcomeDeclarations(
+    source.document.welcome,
+    translations,
+  );
+  const paths = [
+    ...declarations
+      .map(textFilePath)
+      .filter((path): path is string => path !== undefined),
+    ...[source.document.contact, source.document.license]
+      .map((value) => {
+        const resolved = localize(value, translations);
+        return resolved === undefined ? undefined : textFilePath(resolved);
+      })
+      .filter((path): path is string => path !== undefined),
+  ];
+  return [...new Set(paths)];
 }
 
 function parseTelemetry(value: unknown): TelemetryConfig | undefined {

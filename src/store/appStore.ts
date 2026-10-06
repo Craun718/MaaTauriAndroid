@@ -6,14 +6,17 @@ import {
   reinstallResources as invokeReinstallResources,
   saveConfiguration as invokeSaveConfiguration,
   prepareApp,
-  readProjectText,
 } from "../lib/api";
 import {
   projectLanguage,
   resolveLanguage,
   systemLanguageTags,
 } from "../lib/language";
-import { buildAndroidProject, loadProjectSource } from "../lib/pi";
+import {
+  buildAndroidProject,
+  createStartupProjectTextReader,
+  loadProjectSource,
+} from "../lib/pi";
 import type { ProjectSource } from "../lib/pi/rawTypes";
 import type {
   AppStateSnapshot,
@@ -121,17 +124,17 @@ async function parseSnapshotProject(
   const interfacePathValue = interfacePath(snapshot);
   if (!interfacePathValue || !snapshot.project) return { snapshot };
 
-  const readProjectFile = (path: string) => readProjectText(path);
+  const reader = createStartupProjectTextReader();
+  const readProjectFile = reader;
+  await reader.preloadInterface(interfacePathValue);
   const source = await loadProjectSource(
     snapshot.project.root,
     readProjectFile,
     interfacePathValue,
   );
-  const parsed = await buildAndroidProject(
-    source,
-    preferredProjectLanguage(snapshot.configuration),
-    readProjectFile,
-  );
+  const language = preferredProjectLanguage(snapshot.configuration);
+  await reader.preloadMetadata(source, language);
+  const parsed = await buildAndroidProject(source, language, readProjectFile);
   const project = preserveResolvedWelcome(parsed, snapshot.project);
   return { snapshot: { ...snapshot, project }, source };
 }
@@ -243,9 +246,9 @@ export const useAppStore = create<AppStore>((set) => ({
     if (!current?.project || !source) return;
     set({ busy: true, error: undefined });
     try {
-      const parsed = await buildAndroidProject(source, language, (path) =>
-        readProjectText(path),
-      );
+      const reader = createStartupProjectTextReader();
+      await reader.preloadMetadata(source, language);
+      const parsed = await buildAndroidProject(source, language, reader);
       const project = preserveResolvedWelcome(parsed, current.project);
       set({ snapshot: { ...current, project }, busy: false });
     } catch (error) {

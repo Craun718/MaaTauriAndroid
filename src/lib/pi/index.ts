@@ -9,3 +9,5 @@ export type {
   RawJsonValue,
   RawProjectInterface,
 } from "./rawTypes";
+export type { StartupProjectTextReader } from "./startupReader";
+export { createStartupProjectTextReader } from "./startupReader";

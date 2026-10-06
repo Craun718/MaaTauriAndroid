@@ -52,6 +52,30 @@ export async function readProjectText(path: string) {
   return invoke<string>("read_project_text", { path });
 }
 
+export interface ProjectTextReadResult {
+  path: string;
+  text?: string | null;
+  error?: string | null;
+}
+
+export async function readProjectTextResults(paths: string[]) {
+  return invoke<ProjectTextReadResult[]>("read_project_texts", { paths });
+}
+
+export async function readProjectTexts(paths: string[]) {
+  const results = await readProjectTextResults(paths);
+
+  return results.map((result) => {
+    if (result.error != null) throw new Error(result.error);
+    if (typeof result.text !== "string") {
+      throw new Error(
+        `Project Interface text read had no body: ${result.path}`,
+      );
+    }
+    return result.text;
+  });
+}
+
 export async function saveConfiguration(configuration: UserConfiguration) {
   return invoke<UserConfiguration>("save_configuration", { configuration });
 }

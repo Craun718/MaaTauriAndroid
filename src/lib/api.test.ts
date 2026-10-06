@@ -5,6 +5,7 @@ import {
   loadProject,
   pressVirtualDisplayBack,
   readProjectText,
+  readProjectTexts,
   reinstallResources,
   resolveFocusModal,
   setPrivilegedBackend,
@@ -121,6 +122,20 @@ describe("project text reader", () => {
     await expect(readProjectText("../interface.json")).rejects.toThrow(
       "Project Interface text paths must stay inside the project",
     );
+  });
+
+  it("requests several texts in one IPC call and preserves path errors", async () => {
+    invoke.mockResolvedValue([
+      { path: "interface.json", text: '{"name":"fixture"}' },
+      { path: "missing.json", error: "entity not found" },
+    ]);
+
+    await expect(
+      readProjectTexts(["interface.json", "missing.json"]),
+    ).rejects.toThrow("entity not found");
+    expect(invoke).toHaveBeenCalledWith("read_project_texts", {
+      paths: ["interface.json", "missing.json"],
+    });
   });
 });
 

@@ -28,8 +28,8 @@ args = ["{identifier}"]
 working_dir = "{pi}"
 
 [agent.runtimes.env]
-LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
-MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
+LD_LIBRARY_PATH = "{bundle}/lib/{abi}:{nativeLib}"
+MAAFW_BINARY_PATH = "{nativeLib}"
 
 [[agent.runtimes]]
 bundle = "maaend-cpp-algo-runtime-{abi}.zip"
@@ -39,5 +39,5 @@ args = ["{identifier}"]
 working_dir = "{pi}"
 
 [agent.runtimes.env]
-LD_LIBRARY_PATH = "{bundle}/lib/{abi}"
-MAAFW_BINARY_PATH = "{bundle}/lib/{abi}"
+LD_LIBRARY_PATH = "{bundle}/lib/{abi}:{nativeLib}"
+MAAFW_BINARY_PATH = "{nativeLib}"

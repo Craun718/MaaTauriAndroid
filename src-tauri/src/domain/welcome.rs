@@ -35,7 +35,9 @@ pub(crate) fn defer_remote_announcements(metadata: &mut ProjectMetadata) {
 
 async fn resolve(metadata: &mut ProjectMetadata, fetcher: &dyn WelcomeFetcher) {
     metadata.welcome_pending = false;
-    if metadata.welcome.is_empty() {
+    // Deferring a remote-only announcement leaves `welcome` empty while it is
+    // pending; the original declarations are still needed to fetch its body.
+    if metadata.welcome.is_empty() && metadata.welcome_declarations.is_empty() {
         metadata.welcome_fingerprint = None;
         return;
     }
@@ -333,6 +335,30 @@ mod tests {
             project.welcome,
             vec!["local".to_string(), "# Remote announcement".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn resolves_a_deferred_remote_only_announcement_after_install() {
+        let mut project = metadata(vec!["https://example.test/announcement.md".to_string()]);
+
+        defer_remote_announcements(&mut project);
+
+        assert!(project.welcome.is_empty());
+        assert!(project.welcome_pending);
+
+        let fetcher = StubFetcher::new(vec![(
+            "announcement.md",
+            Ok("# Remote announcement".to_string()),
+        )]);
+        resolve(&mut project, &fetcher).await;
+
+        assert!(!project.welcome_pending);
+        assert_eq!(project.welcome, vec!["# Remote announcement".to_string()]);
+        assert_eq!(
+            project.welcome_fingerprint,
+            Some(welcome_fingerprint(&["# Remote announcement".to_string()]))
+        );
+        assert!(project.welcome_errors.is_empty());
     }
 
     #[test]

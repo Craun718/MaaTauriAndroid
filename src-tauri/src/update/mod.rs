@@ -25,7 +25,6 @@ use tauri::{AppHandle, Manager, State};
 use crate::version::APP_VERSION;
 use downloader::DownloadOutcome;
 use http::{ReqwestUpdateClient, UpdateHttpClient};
-use semver::Version;
 
 /// Where the update flow currently stands. `available` means "an update is
 /// known and ready for the next step" — after a successful check (download
@@ -165,6 +164,7 @@ struct TaskHandle {
     /// Set before aborting, so a task that raced past its last await point
     /// knows not to write a terminal phase over the cancel.
     cancelled: Arc<AtomicBool>,
+    generation: u64,
 }
 
 #[derive(Default)]
@@ -173,6 +173,7 @@ struct Inner {
     prefs: UpdatePrefs,
     pending: Option<PendingUpdate>,
     task: Option<TaskHandle>,
+    generation: u64,
 }
 
 impl Default for UpdateStatus {
@@ -208,6 +209,13 @@ impl UpdateState {
         self.inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn has_current_task(inner: &Inner, generation: u64) -> bool {
+        inner
+            .task
+            .as_ref()
+            .is_some_and(|task| task.generation == generation)
     }
 
     /// Reads the saved preferences once at startup; per-command reads use the
@@ -259,6 +267,8 @@ impl UpdateState {
         inner.task = None;
         inner.pending = None;
         inner.status = UpdateStatus::new(UpdatePhase::Checking);
+        inner.generation += 1;
+        let generation = inner.generation;
 
         let cancelled = Arc::new(AtomicBool::new(false));
         let task_cancelled = cancelled.clone();
@@ -270,17 +280,26 @@ impl UpdateState {
                 CheckSource::MirrorChyan { rid } => check_mirror_chyan(&client, rid, channel).await,
                 CheckSource::Github { repo } => check_github(&client, repo, channel).await,
             };
-            state.finish_check(outcome, task_cancelled.load(Ordering::Relaxed));
+            state.finish_check(generation, outcome, task_cancelled.load(Ordering::Relaxed));
         });
         inner.task = Some(TaskHandle {
             abort: handle.abort_handle(),
             cancelled,
+            generation,
         });
         inner.status.clone()
     }
 
-    fn finish_check(&self, outcome: Result<Option<CheckedUpdate>, UpdateError>, cancelled: bool) {
+    fn finish_check(
+        &self,
+        generation: u64,
+        outcome: Result<Option<CheckedUpdate>, UpdateError>,
+        cancelled: bool,
+    ) {
         let mut inner = self.lock();
+        if !Self::has_current_task(&inner, generation) {
+            return;
+        }
         if cancelled {
             // cancel() already restored a ready phase.
             return;
@@ -318,19 +337,19 @@ impl UpdateState {
     }
 
     fn begin_download(&self, dirs: UpdateDirs) -> UpdateStatus {
-        let pending = {
-            let mut inner = self.lock();
-            if !matches!(inner.status.phase, UpdatePhase::Available) || inner.pending.is_none() {
-                return inner.status.clone();
-            }
-            inner.status.phase = UpdatePhase::Resolving;
-            inner.status.failure = None;
-            inner.status.failure_detail = None;
-            inner.status.downloaded_bytes = None;
-            inner.status.total_bytes = inner.pending.as_ref().and_then(PendingUpdate::size);
-            inner.pending.clone().expect("pending checked above")
-        };
         let prefs = { self.lock().prefs.clone() };
+        let mut inner = self.lock();
+        if !matches!(inner.status.phase, UpdatePhase::Available) || inner.pending.is_none() {
+            return inner.status.clone();
+        }
+        inner.status.phase = UpdatePhase::Resolving;
+        inner.status.failure = None;
+        inner.status.failure_detail = None;
+        inner.status.downloaded_bytes = None;
+        inner.status.total_bytes = inner.pending.as_ref().and_then(PendingUpdate::size);
+        let pending = inner.pending.clone().expect("pending checked above");
+        inner.generation += 1;
+        let generation = inner.generation;
         let cancelled = Arc::new(AtomicBool::new(false));
         let task_cancelled = cancelled.clone();
         let state = self.clone();
@@ -343,21 +362,30 @@ impl UpdateState {
                 &prefs.cdk,
                 prefs.channel,
                 &task_cancelled,
+                generation,
                 &dirs,
             )
             .await;
-            state.finish_download(outcome, task_cancelled.load(Ordering::Relaxed));
+            state.finish_download(generation, outcome, task_cancelled.load(Ordering::Relaxed));
         });
-        let mut inner = self.lock();
         inner.task = Some(TaskHandle {
             abort: handle.abort_handle(),
             cancelled,
+            generation,
         });
         inner.status.clone()
     }
 
-    fn finish_download(&self, outcome: Result<DownloadOutcome, UpdateError>, cancelled: bool) {
+    fn finish_download(
+        &self,
+        generation: u64,
+        outcome: Result<DownloadOutcome, UpdateError>,
+        cancelled: bool,
+    ) {
         let mut inner = self.lock();
+        if !Self::has_current_task(&inner, generation) {
+            return;
+        }
         if cancelled {
             return;
         }
@@ -388,7 +416,12 @@ impl UpdateState {
         let mut inner = self.lock();
         if let Some(task) = &inner.task {
             task.cancelled.store(true, Ordering::Relaxed);
-            task.abort.abort();
+            // Aborting a download would drop its staging guard while the
+            // blocking writer may still be writing. The downloader polls the
+            // flag, closes its channels, and waits for that writer instead.
+            if inner.status.phase != UpdatePhase::Downloading {
+                task.abort.abort();
+            }
         }
         inner.task = None;
         match inner.status.phase {
@@ -435,8 +468,11 @@ impl UpdateState {
         inner.status.clone()
     }
 
-    fn advance_to_downloading(&self) {
+    fn advance_to_downloading(&self, generation: u64) {
         let mut inner = self.lock();
+        if !Self::has_current_task(&inner, generation) {
+            return;
+        }
         // A cancel between resolve and download already restored `available`;
         // do not resurrect a phase for a task that is about to be dropped.
         if inner.status.phase == UpdatePhase::Resolving {
@@ -444,9 +480,11 @@ impl UpdateState {
         }
     }
 
-    fn report_progress(&self, received: u64, total: Option<u64>) {
+    fn report_progress(&self, generation: u64, received: u64, total: Option<u64>) {
         let mut inner = self.lock();
-        if inner.status.phase == UpdatePhase::Downloading {
+        if inner.status.phase == UpdatePhase::Downloading
+            && Self::has_current_task(&inner, generation)
+        {
             inner.status.downloaded_bytes = Some(received);
             inner.status.total_bytes = total;
         }
@@ -515,6 +553,7 @@ async fn run_download(
     cdk: &str,
     channel: UpdateChannel,
     cancelled: &AtomicBool,
+    generation: u64,
     dirs: &UpdateDirs,
 ) -> Result<DownloadOutcome, UpdateError> {
     let version_label = state
@@ -528,14 +567,14 @@ async fn run_download(
             let release =
                 mirror_chyan::resolve(client.as_ref(), rid, channel.as_str(), APP_VERSION, cdk)
                     .await?;
-            state.advance_to_downloading();
+            state.advance_to_downloading(generation);
             (
                 release.url.expect("resolve validates the URL"),
                 release.sha256.expect("resolve validates the digest"),
             )
         }
         PendingUpdate::Github { url, sha256, .. } => {
-            state.advance_to_downloading();
+            state.advance_to_downloading(generation);
             (url.clone(), sha256.clone())
         }
     };
@@ -547,7 +586,7 @@ async fn run_download(
         &dirs.download_dir,
         &version_label,
         cancelled,
-        move |received, total| progress_state.report_progress(received, total),
+        move |received, total| progress_state.report_progress(generation, received, total),
     )
     .await
 }
@@ -1012,6 +1051,63 @@ mod tests {
         let before = state.lock().status.clone();
         let after = state.cancel();
         assert_eq!(after.phase, before.phase);
+    }
+
+    #[tokio::test]
+    async fn stale_task_progress_does_not_replace_current_download_state() {
+        let state = UpdateState::with_client(Arc::new(StubClient::new()));
+        let task = tokio::spawn(std::future::pending::<()>());
+        {
+            let mut inner = state.lock();
+            inner.generation = 7;
+            inner.status.phase = UpdatePhase::Downloading;
+            inner.status.downloaded_bytes = Some(42);
+            inner.status.total_bytes = Some(42);
+            inner.task = Some(TaskHandle {
+                abort: task.abort_handle(),
+                cancelled: Arc::new(AtomicBool::new(false)),
+                generation: 7,
+            });
+        }
+
+        state.report_progress(8, 6, Some(99));
+
+        let status = state.lock().status.clone();
+        assert_eq!(status.downloaded_bytes, Some(42));
+        assert_eq!(status.total_bytes, Some(42));
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn a_late_finish_after_cancel_does_not_resurrect_the_download() {
+        let state = UpdateState::with_client(Arc::new(StubClient::new()));
+        let task = tokio::spawn(std::future::pending::<()>());
+        {
+            let mut inner = state.lock();
+            inner.generation = 4;
+            inner.status.phase = UpdatePhase::Downloading;
+            inner.task = Some(TaskHandle {
+                abort: task.abort_handle(),
+                cancelled: Arc::new(AtomicBool::new(false)),
+                generation: 4,
+            });
+        }
+
+        state.cancel();
+        state.finish_download(
+            4,
+            Ok(DownloadOutcome {
+                path: PathBuf::from("/tmp/late.apk"),
+                bytes: 123,
+            }),
+            false,
+        );
+
+        let status = state.lock().status.clone();
+        assert_eq!(status.phase, UpdatePhase::Available);
+        assert_eq!(status.downloaded_bytes, None);
+        assert_eq!(status.total_bytes, None);
+        assert_eq!(status.apk_path, None);
     }
 
     #[tokio::test]

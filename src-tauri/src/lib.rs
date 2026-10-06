@@ -3941,6 +3941,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|_app, event| {
             if let tauri::RunEvent::Exit = event {
+                telemetry::flush(telemetry::EXIT_FLUSH_TIMEOUT);
                 cleanup_virtual_display_on_exit();
             }
         });

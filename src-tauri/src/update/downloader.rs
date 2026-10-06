@@ -6,8 +6,11 @@
 //! name once the digest verifies, and any early exit removes it.
 
 use sha2::{Digest, Sha256};
+use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use tokio::sync::mpsc;
 
 use super::github::download_headers;
 use super::http::UpdateHttpClient;
@@ -15,11 +18,17 @@ use super::{UpdateError, UpdateFailure};
 
 /// Progress is reported in whole megabytes, matching MaaFwApp's granularity.
 const PROGRESS_GRANULARITY: u64 = 1024 * 1024;
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug)]
 pub struct DownloadOutcome {
     pub path: PathBuf,
     pub bytes: u64,
+}
+
+struct StagingOutcome {
+    received: u64,
+    digest: String,
 }
 
 /// Downloads `url` into `destination_dir`, verifies the sha256 `digest` and
@@ -32,7 +41,7 @@ pub async fn download_apk(
     destination_dir: &Path,
     version_label: &str,
     cancelled: &AtomicBool,
-    mut on_progress: impl FnMut(u64, Option<u64>) + Send,
+    mut on_progress: impl FnMut(u64, Option<u64>) + Send + 'static,
 ) -> Result<DownloadOutcome, UpdateError> {
     let Some(digest) = normalize_digest(digest) else {
         return Err(UpdateError::new(
@@ -81,41 +90,98 @@ pub async fn download_apk(
             format!("the download server returned HTTP {}", response.status),
         ));
     }
+    let total = response.content_length;
 
-    let file = std::fs::File::create(&staging)
-        .map_err(|error| storage_error("create the staging file", error))?;
-    let mut writer = std::io::BufWriter::new(file);
-    let mut hasher = Sha256::new();
-    let mut received: u64 = 0;
-    let mut next_report = PROGRESS_GRANULARITY;
+    let (chunk_tx, mut chunk_rx) = mpsc::channel::<Vec<u8>>(8);
+    let staging_path = staging.clone();
+    let mut writer = tokio::task::spawn_blocking(move || {
+        let file = std::fs::File::create(&staging_path)
+            .map_err(|error| storage_error("create the staging file", error))?;
+        let mut writer = std::io::BufWriter::new(file);
+        let mut hasher = Sha256::new();
+        let mut received: u64 = 0;
+        let mut next_report = PROGRESS_GRANULARITY;
+        while let Some(chunk) = chunk_rx.blocking_recv() {
+            std::io::Write::write_all(&mut writer, &chunk)
+                .map_err(|error| storage_error("write the staging file", error))?;
+            hasher.update(&chunk);
+            received += chunk.len() as u64;
+            if received >= next_report {
+                next_report = received + PROGRESS_GRANULARITY;
+                on_progress(received, total);
+            }
+        }
+        std::io::Write::flush(&mut writer)
+            .map_err(|error| storage_error("finish the staging file", error))?;
+        drop(writer);
+        on_progress(received, total.or(Some(received)));
+        Ok(StagingOutcome {
+            received,
+            digest: hex::encode(hasher.finalize()),
+        })
+    });
     let mut stream = response.body;
     loop {
         if cancelled.load(Ordering::Relaxed) {
+            drop(stream);
+            drop(chunk_tx);
+            let _ = writer.await;
             return Err(UpdateError::new(
                 UpdateFailure::Cancelled,
                 "the download was cancelled",
             ));
         }
-        let Some(chunk) = stream.recv().await else {
+        let chunk = tokio::select! {
+            chunk = stream.recv() => chunk,
+            _ = tokio::time::sleep(CANCEL_POLL_INTERVAL) => continue,
+            writer_result = &mut writer => {
+                drop(chunk_tx);
+                return match writer_result {
+                    Ok(Ok(_)) => Err(UpdateError::new(
+                        UpdateFailure::Internal,
+                        "the staging writer stopped before the download stream ended",
+                    )),
+                    Ok(Err(error)) => Err(error),
+                    Err(error) => Err(join_error("run the staging writer", error)),
+                };
+            }
+        };
+        let Some(chunk) = chunk else {
+            drop(chunk_tx);
             break;
         };
-        let chunk = chunk
-            .map_err(|error| UpdateError::new(UpdateFailure::DownloadFailed, error.to_string()))?;
-        std::io::Write::write_all(&mut writer, &chunk)
-            .map_err(|error| storage_error("write the staging file", error))?;
-        hasher.update(&chunk);
-        received += chunk.len() as u64;
-        if received >= next_report {
-            next_report = received + PROGRESS_GRANULARITY;
-            on_progress(received, response.content_length);
+        let chunk = match chunk {
+            Ok(chunk) => chunk,
+            Err(error) => {
+                drop(stream);
+                drop(chunk_tx);
+                let _ = writer.await;
+                return Err(UpdateError::new(
+                    UpdateFailure::DownloadFailed,
+                    error.to_string(),
+                ));
+            }
+        };
+        if chunk_tx.send(chunk).await.is_err() {
+            drop(chunk_tx);
+            return match writer.await {
+                Ok(Ok(_)) => Err(UpdateError::new(
+                    UpdateFailure::Internal,
+                    "the staging writer stopped before the download stream ended",
+                )),
+                Ok(Err(error)) => Err(error),
+                Err(error) => Err(join_error("run the staging writer", error)),
+            };
         }
     }
-    std::io::Write::flush(&mut writer)
-        .map_err(|error| storage_error("finish the staging file", error))?;
-    drop(writer);
-    on_progress(received, response.content_length.or(Some(received)));
+    let staged = match writer.await {
+        Ok(Ok(staged)) => staged,
+        Ok(Err(error)) => return Err(error),
+        Err(error) => return Err(join_error("run the staging writer", error)),
+    };
+    let received = staged.received;
 
-    if let Some(total) = response.content_length {
+    if let Some(total) = total {
         if received != total {
             return Err(UpdateError::new(
                 UpdateFailure::DownloadFailed,
@@ -123,7 +189,7 @@ pub async fn download_apk(
             ));
         }
     }
-    let actual = hex::encode(hasher.finalize());
+    let actual = staged.digest;
     if actual != digest {
         return Err(UpdateError::new(
             UpdateFailure::InvalidDigest,
@@ -205,10 +271,15 @@ fn storage_error(action: &str, error: std::io::Error) -> UpdateError {
     )
 }
 
+fn join_error(action: &str, error: tokio::task::JoinError) -> UpdateError {
+    storage_error(action, Error::new(ErrorKind::Other, error.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::http::testing::{StreamSpec, StubClient};
     use super::*;
+    use std::sync::{Arc, Mutex};
 
     fn digest_of(content: &[u8]) -> String {
         hex::encode(Sha256::digest(content))
@@ -373,7 +444,8 @@ mod tests {
         // No scripted stream: any network attempt would fail the test.
         let client = StubClient::new();
         let cancelled = AtomicBool::new(false);
-        let mut progress = Vec::new();
+        let progress = Arc::new(Mutex::new(Vec::new()));
+        let progress_sink = Arc::clone(&progress);
 
         let outcome = download_apk(
             &client,
@@ -382,14 +454,16 @@ mod tests {
             temp.path(),
             "1.2.3",
             &cancelled,
-            |received, total| progress.push((received, total)),
+            move |received, total| {
+                progress_sink.lock().unwrap().push((received, total));
+            },
         )
         .await
         .unwrap();
 
         assert_eq!(outcome.path, destination);
         assert_eq!(outcome.bytes, 6);
-        assert_eq!(progress, vec![(6, Some(6))]);
+        assert_eq!(*progress.lock().unwrap(), vec![(6, Some(6))]);
         assert!(client.requested_urls().is_empty());
     }
 

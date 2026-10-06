@@ -10,6 +10,8 @@ const files: Record<string, string> = {
     $label: "Profiled Project",
     "preset.start": "Start every day",
     "input.placeholder": "Enter a value",
+    "input.description": "Input help",
+    "hotkey.label": "Attack",
   }),
 };
 
@@ -28,6 +30,8 @@ function source(): ProjectSource {
         label: "Profiled Project",
         "preset.start": "Start every day",
         "input.placeholder": "Enter a value",
+        "input.description": "Input help",
+        "hotkey.label": "Attack",
         welcome: "Welcome body",
       },
       zh_cn: { label: "配置项目" },
@@ -73,12 +77,18 @@ function source(): ProjectSource {
           inputs: [
             {
               name: "value",
-              label: "Value",
+              label: "$label",
+              description: "$input.description",
               placeholder: "$input.placeholder",
               pipeline_type: "int",
               input_type: "file",
             },
           ],
+        },
+        Hotkey: {
+          type: "hotkey",
+          label: "Hotkeys",
+          hotkeys: [{ name: "attack", label: "$hotkey.label", default: "A" }],
         },
       },
       global_option: ["Mode"],
@@ -142,6 +152,7 @@ describe("buildAndroidProject", () => {
       inputs: [
         {
           name: "value",
+          label: "Profiled Project",
           placeholder: "Enter a value",
           pipelineType: "int",
           inputType: "file",
@@ -184,6 +195,23 @@ describe("buildAndroidProject", () => {
     onlyEnglish.languages = ["en_us"];
     const fallback = await buildAndroidProject(onlyEnglish, "fr_fr", reader);
     expect(fallback.language).toBe("en_us");
+  });
+
+  it("localizes input and hotkey field labels", async () => {
+    const project = await buildAndroidProject(source(), "en_us", reader);
+    const input = project.options.Input;
+    const hotkey = project.options.Hotkey;
+    if (input.kind !== "input" || hotkey.kind !== "hotkey") {
+      throw new Error("input and hotkey options should parse");
+    }
+
+    expect(input.inputs[0]).toMatchObject({
+      label: "Profiled Project",
+      description: "Input help",
+    });
+    expect(hotkey.hotkeys).toMatchObject([
+      { name: "attack", label: "Attack", default: "A" },
+    ]);
   });
 
   it("rejects duplicate task names and unknown option references", async () => {

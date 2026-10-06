@@ -137,8 +137,8 @@ function parseInputField(
 ): InputFieldDefinition {
   const item = object(value);
   const name = optionalString(item?.name);
-  const label = optionalString(item?.label);
-  if (!item || !name || !label) {
+  const rawLabel = optionalString(item?.label);
+  if (!item || !name || !rawLabel) {
     throw new Error(
       "could not parse input definition: name and label are required",
     );
@@ -157,8 +157,8 @@ function parseInputField(
   }
   return {
     name,
-    label,
-    description: optionalString(item.description),
+    label: localize(item.label) ?? rawLabel,
+    description: localize(item.description),
     placeholder: localize(item.placeholder),
     default: optionalString(item.default),
     pipelineType,
@@ -169,16 +169,23 @@ function parseInputField(
   };
 }
 
-function parseHotkeyField(value: RawJsonValue) {
+function parseHotkeyField(
+  value: RawJsonValue,
+  localize: (value: unknown) => string | undefined,
+) {
   const item = object(value);
   const name = optionalString(item?.name);
-  const label = optionalString(item?.label);
-  if (!name || !label) {
+  const rawLabel = optionalString(item?.label);
+  if (!item || !name || !rawLabel) {
     throw new Error(
       "could not parse hotkey definition: name and label are required",
     );
   }
-  return { name, label, default: optionalString(item?.default) };
+  return {
+    name,
+    label: localize(item.label) ?? rawLabel,
+    default: optionalString(item?.default),
+  };
 }
 
 function parseOption(
@@ -241,7 +248,9 @@ function parseOption(
       name,
       label,
       description,
-      hotkeys: array(item.hotkeys).map(parseHotkeyField),
+      hotkeys: array(item.hotkeys).map((field) =>
+        parseHotkeyField(field, localize),
+      ),
       applicability: scope,
     };
   }

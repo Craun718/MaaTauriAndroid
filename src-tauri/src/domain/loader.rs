@@ -574,6 +574,10 @@ fn parse_option(
                 };
                 if let Some(raw_inputs) = fields.and_then(Value::as_array) {
                     for (input, raw_input) in inputs.iter_mut().zip(raw_inputs) {
+                        if let Some(label) = text(raw_input.get("label")) {
+                            input.label = label;
+                        }
+                        input.description = text(raw_input.get("description"));
                         input.placeholder = text(raw_input.get("placeholder"));
                     }
                 }
@@ -590,7 +594,7 @@ fn parse_option(
                     applicability,
                 }
             } else {
-                let hotkeys = fields
+                let mut hotkeys = fields
                     .map(|fields| {
                         serde_json::from_value::<Vec<HotkeyFieldDefinition>>(fields.clone())
                             .map_err(|source| ProjectError::InputDefinition {
@@ -600,6 +604,14 @@ fn parse_option(
                     })
                     .transpose()?
                     .unwrap_or_default();
+                if let Some(raw_hotkeys) = fields.and_then(Value::as_array) {
+                    for (hotkey, raw_hotkey) in hotkeys.iter_mut().zip(raw_hotkeys) {
+                        if let Some(label) = text(raw_hotkey.get("label")) {
+                            hotkey.label = label;
+                        }
+                        hotkey.description = text(raw_hotkey.get("description"));
+                    }
+                }
                 OptionDefinition::Hotkey {
                     name: name.to_string(),
                     label,
@@ -1297,6 +1309,71 @@ mod tests {
         };
         assert_eq!(inputs[0].placeholder.as_deref(), Some("Enter I agree"));
         assert_eq!(inputs[1].placeholder, None);
+    }
+
+    #[test]
+    fn localizes_input_and_hotkey_fields() {
+        let project = ProjectLoader::default()
+            .load_embedded(
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}],
+                    "option": {
+                        "Consent": {
+                            "type": "input",
+                            "inputs": [{
+                                "name": "consent_text",
+                                "label": "$Consent.Label",
+                                "description": "$Consent.Description"
+                            }]
+                        },
+                        "Controls": {
+                            "type": "hotkey",
+                            "label": "$Controls.Label",
+                            "hotkeys": [{
+                                "name": "attack",
+                                "label": "$Controls.Attack.Label",
+                                "description": "$Controls.Attack.Description",
+                                "default": "A"
+                            }]
+                        }
+                    }
+                }),
+                BTreeMap::from([
+                    ("Consent.Label".to_string(), "Consent text".to_string()),
+                    (
+                        "Consent.Description".to_string(),
+                        "Enter I agree".to_string(),
+                    ),
+                    ("Controls.Label".to_string(), "Controls".to_string()),
+                    ("Controls.Attack.Label".to_string(), "Attack".to_string()),
+                    (
+                        "Controls.Attack.Description".to_string(),
+                        "Attack the target".to_string(),
+                    ),
+                ]),
+                "en_us",
+            )
+            .expect("input and hotkey fields should load");
+
+        let OptionDefinition::Input { inputs, .. } =
+            project.options.get("Consent").expect("option should load")
+        else {
+            panic!("Consent should be an input option");
+        };
+        assert_eq!(inputs[0].label, "Consent text");
+        assert_eq!(inputs[0].description.as_deref(), Some("Enter I agree"));
+
+        let OptionDefinition::Hotkey { label, hotkeys, .. } =
+            project.options.get("Controls").expect("option should load")
+        else {
+            panic!("Controls should be a hotkey option");
+        };
+        assert_eq!(label, "Controls");
+        assert_eq!(hotkeys[0].label, "Attack");
+        assert_eq!(hotkeys[0].description.as_deref(), Some("Attack the target"));
     }
 
     #[test]

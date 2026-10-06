@@ -28,7 +28,7 @@ export function Checkbox({
     >
       <input
         type="checkbox"
-        className="checkbox checkbox-sm checkbox-primary"
+        className="checkbox checkbox-sm checkbox-primary before:transition-[opacity] before:duration-100 before:delay-100"
         checked={checked}
         disabled={disabled}
         onChange={(event) => onCheckedChange(event.target.checked)}

@@ -628,6 +628,72 @@ struct StartRunStatus {
     task_count: usize,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum TaskRunSelectionMode {
+    Current,
+    CurrentAndFollowing,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskRunSelection {
+    run_configuration_id: String,
+    instance_id: String,
+    mode: TaskRunSelectionMode,
+}
+
+/// Chooses the tasks for one run without changing the persisted configuration.
+/// A selected anchor must itself be runnable; later tasks still honor their
+/// enabled flags and resource availability.
+fn startup_tasks(
+    tasks: &[crate::domain::types::ResolvedTask],
+    selection: Option<&TaskRunSelection>,
+) -> Result<Vec<crate::domain::types::ResolvedTask>, AppError> {
+    let Some(selection) = selection else {
+        return Ok(tasks
+            .iter()
+            .filter(|task| task.enabled && task.unavailable_reason.is_none())
+            .cloned()
+            .collect());
+    };
+
+    let anchor_index = tasks
+        .iter()
+        .position(|task| {
+            task.configured
+                .as_ref()
+                .is_some_and(|configured| configured.instance_id == selection.instance_id)
+        })
+        .ok_or_else(|| {
+            AppError::Message(
+                "The selected task is no longer in the active run configuration".to_string(),
+            )
+        })?;
+    let anchor = &tasks[anchor_index];
+    if !anchor.enabled || anchor.unavailable_reason.is_some() {
+        return Err(AppError::Message(
+            "The selected task is not available for this run".to_string(),
+        ));
+    }
+
+    let end = match selection.mode {
+        TaskRunSelectionMode::Current => anchor_index + 1,
+        TaskRunSelectionMode::CurrentAndFollowing => tasks.len(),
+    };
+    Ok(tasks
+        .iter()
+        .enumerate()
+        .filter(|(index, task)| {
+            *index >= anchor_index
+                && *index < end
+                && task.enabled
+                && task.unavailable_reason.is_none()
+        })
+        .map(|(_, task)| task.clone())
+        .collect())
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ManualScreenshot {
@@ -2113,6 +2179,7 @@ async fn start_run_core(
     state: &AppState,
     run_configuration_id: Option<String>,
     scheduled_trigger: Option<(String, i64)>,
+    task_selection: Option<TaskRunSelection>,
 ) -> Result<StartRunStatus, AppError> {
     #[cfg(target_os = "android")]
     {
@@ -2140,6 +2207,10 @@ async fn start_run_core(
     }
     let project = state.project()?;
     let mut configuration = state.configuration()?;
+    let run_configuration_id = task_selection
+        .as_ref()
+        .map(|selection| selection.run_configuration_id.clone())
+        .or(run_configuration_id);
     if let Some(requested_id) = run_configuration_id.as_deref() {
         if !configuration
             .run_configurations
@@ -2153,12 +2224,7 @@ async fn start_run_core(
         configuration.active_run_configuration_id = Some(requested_id.to_string());
     }
     let resolved = resolve_run(&project, &configuration)?;
-    let tasks = resolved
-        .tasks
-        .iter()
-        .filter(|task| task.enabled && task.unavailable_reason.is_none())
-        .cloned()
-        .collect::<Vec<_>>();
+    let tasks = startup_tasks(&resolved.tasks, task_selection.as_ref())?;
     let task_count = tasks.len();
     if task_count == 0 {
         if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger {
@@ -2627,8 +2693,12 @@ async fn start_run_core(
 }
 
 #[tauri::command]
-async fn start_run(app: AppHandle, state: State<'_, AppState>) -> Result<StartRunStatus, AppError> {
-    start_run_core(app, state.inner(), None, None).await
+async fn start_run(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    task_selection: Option<TaskRunSelection>,
+) -> Result<StartRunStatus, AppError> {
+    start_run_core(app, state.inner(), None, None, task_selection).await
 }
 
 #[tauri::command]
@@ -3052,6 +3122,53 @@ mod tests {
     use super::*;
     use crate::domain::types::ProjectMetadata;
 
+    fn resolved_task(
+        instance_id: &str,
+        enabled: bool,
+        unavailable_reason: Option<&str>,
+    ) -> crate::domain::types::ResolvedTask {
+        crate::domain::types::ResolvedTask {
+            task: crate::domain::types::TaskDefinition {
+                name: instance_id.to_string(),
+                label: instance_id.to_string(),
+                entry: instance_id.to_string(),
+                description: None,
+                groups: Vec::new(),
+                controllers: Vec::new(),
+                resources: Vec::new(),
+                options: Vec::new(),
+                pipeline_override: serde_json::Value::Null,
+                default_check: true,
+                icon: None,
+            },
+            configured: Some(ConfiguredTask {
+                instance_id: instance_id.to_string(),
+                task_name: instance_id.to_string(),
+                enabled,
+                option_values: BTreeMap::new(),
+                custom_label: None,
+            }),
+            enabled,
+            unavailable_reason: unavailable_reason.map(str::to_string),
+            pipeline_override: serde_json::Value::Null,
+        }
+    }
+
+    fn selection(instance_id: &str, mode: TaskRunSelectionMode) -> TaskRunSelection {
+        TaskRunSelection {
+            run_configuration_id: "default".to_string(),
+            instance_id: instance_id.to_string(),
+            mode,
+        }
+    }
+
+    fn selected_ids(tasks: &[crate::domain::types::ResolvedTask]) -> Vec<&str> {
+        tasks
+            .iter()
+            .map(|task| task.configured.as_ref().unwrap().instance_id.as_str())
+            .collect()
+    }
+
     fn project() -> Project {
         Project {
             root: "/fixtures".to_string(),
@@ -3084,6 +3201,106 @@ mod tests {
         assert!(asset.ends_with("images/example.png"));
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn startup_tasks_without_selection_keeps_only_runnable_tasks() {
+        let tasks = vec![
+            resolved_task("first", true, None),
+            resolved_task("disabled", false, None),
+            resolved_task("unavailable", true, Some("wrong resource")),
+            resolved_task("last", true, None),
+        ];
+
+        let selected = startup_tasks(&tasks, None).unwrap();
+
+        assert_eq!(selected_ids(&selected), ["first", "last"]);
+    }
+
+    #[test]
+    fn startup_tasks_can_run_only_the_selected_instance() {
+        let tasks = vec![
+            resolved_task("first", true, None),
+            resolved_task("selected", true, None),
+            resolved_task("last", true, None),
+        ];
+
+        let selected = startup_tasks(
+            &tasks,
+            Some(&selection("selected", TaskRunSelectionMode::Current)),
+        )
+        .unwrap();
+
+        assert_eq!(selected_ids(&selected), ["selected"]);
+    }
+
+    #[test]
+    fn startup_tasks_can_run_the_selected_instance_and_later_runnable_tasks() {
+        let tasks = vec![
+            resolved_task("first", true, None),
+            resolved_task("selected", true, None),
+            resolved_task("disabled", false, None),
+            resolved_task("unavailable", true, Some("wrong resource")),
+            resolved_task("last", true, None),
+        ];
+
+        let selected = startup_tasks(
+            &tasks,
+            Some(&selection(
+                "selected",
+                TaskRunSelectionMode::CurrentAndFollowing,
+            )),
+        )
+        .unwrap();
+
+        assert_eq!(selected_ids(&selected), ["selected", "last"]);
+    }
+
+    #[test]
+    fn startup_tasks_reject_missing_or_unrunnable_selections() {
+        let tasks = vec![
+            resolved_task("disabled", false, None),
+            resolved_task("unavailable", true, Some("wrong resource")),
+        ];
+
+        let missing = startup_tasks(
+            &tasks,
+            Some(&selection("missing", TaskRunSelectionMode::Current)),
+        );
+        let disabled = startup_tasks(
+            &tasks,
+            Some(&selection("disabled", TaskRunSelectionMode::Current)),
+        );
+        let unavailable = startup_tasks(
+            &tasks,
+            Some(&selection(
+                "unavailable",
+                TaskRunSelectionMode::CurrentAndFollowing,
+            )),
+        );
+
+        assert!(missing.is_err());
+        assert!(disabled.is_err());
+        assert!(unavailable.is_err());
+    }
+
+    #[test]
+    fn task_run_selection_parses_camel_case_ipc_payload() {
+        let selection: TaskRunSelection = serde_json::from_str(
+            r#"{
+                "runConfigurationId": "default",
+                "instanceId": "task-2",
+                "mode": "currentAndFollowing"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(selection.run_configuration_id, "default");
+        assert_eq!(selection.instance_id, "task-2");
+        assert!(matches!(
+            selection.mode,
+            TaskRunSelectionMode::CurrentAndFollowing
+        ));
     }
 
     #[test]
@@ -3968,6 +4185,7 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
             scheduled_state.inner(),
             Some(rule.run_configuration_id),
             Some((rule_id, scheduled_time_ms)),
+            None,
         )
         .await;
         let _ = scheduled_state

@@ -187,6 +187,9 @@ const en = {
   toggleOn: "On",
   requiresOtherController: "Requires a different controller or resource.",
   taskConfigLocked: "Task configuration is locked while a run is in progress.",
+  taskActionsTitle: "Task actions: {task}",
+  runCurrentTask: "Run this task",
+  runCurrentAndFollowingTasks: "Run this and later tasks",
 
   // Run controls
   taskOperations: "Task actions",
@@ -479,6 +482,9 @@ const zh: Record<MessageKey, string> = {
   toggleOn: "启用",
   requiresOtherController: "需要其他控制器或资源。",
   taskConfigLocked: "任务运行中，任务配置已锁定，仅可查看详情。",
+  taskActionsTitle: "任务操作：{task}",
+  runCurrentTask: "执行当前任务",
+  runCurrentAndFollowingTasks: "执行当前及后续任务",
 
   taskOperations: "任务操作",
   startRun: "开始运行",

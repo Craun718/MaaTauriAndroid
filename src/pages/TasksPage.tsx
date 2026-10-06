@@ -14,8 +14,16 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { listen } from "@tauri-apps/api/event";
-import { Eye, GripVertical, Plus, SquarePen, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  Eye,
+  FastForward,
+  GripVertical,
+  Play,
+  Plus,
+  SquarePen,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { EmptyProject } from "../components/EmptyProject";
 import { OptionEditor } from "../components/OptionEditor";
 import { RichDescription } from "../components/RichDescription";
@@ -23,7 +31,9 @@ import {
   type RunActivityTab,
   RunActivityTabs,
 } from "../components/RunActivityTabs";
+import type { RunPanelHandle } from "../components/RunPanel";
 import { RunPanel } from "../components/RunPanel";
+import { BottomDrawer } from "../components/ui/BottomDrawer";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Modal } from "../components/ui/Modal";
 import { Select } from "../components/ui/Select";
@@ -48,7 +58,9 @@ import type {
   ResourceDefinition,
   RunConfiguration,
   TaskDefinition,
+  TaskRunSelectionMode,
 } from "../lib/types";
+import { useLongPress } from "../lib/useLongPress";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { useRunLogStore } from "../store/runLogStore";
@@ -60,6 +72,12 @@ interface FocusNotice {
   message: string;
 }
 
+interface TaskActionTarget {
+  runConfigurationId: string;
+  instanceId: string;
+  label: string;
+}
+
 export function TasksPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
@@ -69,6 +87,8 @@ export function TasksPage() {
   const [selectedPreset, setSelectedPreset] = useState<string>();
   const [activityTab, setActivityTab] = useState<RunActivityTab>("tasks");
   const [runActive, setRunActive] = useState(false);
+  const [taskAction, setTaskAction] = useState<TaskActionTarget>();
+  const runPanelRef = useRef<RunPanelHandle>(null);
   const notify = useNotificationStore((state) => state.notify);
   const resetRunLog = useRunLogStore((state) => state.resetRunLog);
 
@@ -112,6 +132,10 @@ export function TasksPage() {
       });
     };
   }, [notify]);
+
+  useEffect(() => {
+    if (runActive) setTaskAction(undefined);
+  }, [runActive]);
 
   // Must stay above the early return below: React requires every hook to run on
   // every render, otherwise the hook count changes when `project` is missing.
@@ -187,6 +211,7 @@ export function TasksPage() {
 
   function switchConfiguration(id: string) {
     if (runActive) return;
+    setTaskAction(undefined);
     const latest = useAppStore.getState().snapshot;
     if (!latest?.project) return;
     const next = structuredClone(latest.configuration);
@@ -253,6 +278,13 @@ export function TasksPage() {
           }))
         }
         onRemove={() => removeTask(configured.instanceId)}
+        onOpenActions={() =>
+          setTaskAction({
+            runConfigurationId: activeRun?.id ?? "",
+            instanceId: configured.instanceId,
+            label: configured.customLabel ?? task.label,
+          })
+        }
       />
     );
   }
@@ -272,6 +304,7 @@ export function TasksPage() {
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>
       {!configuration.foregroundMode && <VirtualDisplayCard />}
       <RunPanel
+        ref={runPanelRef}
         onRunStarted={() => {
           resetRunLog();
           setActivityTab("logs");
@@ -370,6 +403,20 @@ export function TasksPage() {
           </button>
         </div>
       )}
+      <TaskActionsDrawer
+        target={taskAction}
+        onClose={() => setTaskAction(undefined)}
+        onStart={(mode) => {
+          const target = taskAction;
+          setTaskAction(undefined);
+          if (!target) return;
+          void runPanelRef.current?.start({
+            runConfigurationId: target.runConfigurationId,
+            instanceId: target.instanceId,
+            mode,
+          });
+        }}
+      />
     </div>
   );
 }
@@ -553,6 +600,7 @@ interface TaskItemProps {
   onOptionValueChange: (name: string, value: OptionValue) => void;
   onLabelChange: (label: string | undefined) => void;
   onRemove: () => void;
+  onOpenActions: () => void;
   dragHandleProps?: Record<string, unknown>;
 }
 
@@ -568,6 +616,7 @@ function TaskItem({
   onOptionValueChange,
   onLabelChange,
   onRemove,
+  onOpenActions,
   dragHandleProps,
 }: TaskItemProps) {
   const { t } = useTranslation();
@@ -581,6 +630,11 @@ function TaskItem({
     ? []
     : visibleOptions(project.options, task.options, configured.optionValues);
   const label = configured.customLabel ?? task.label;
+  const actionsDisabled = locked || unavailable || !configured.enabled;
+  const longPress = useLongPress({
+    onLongPress: onOpenActions,
+    disabled: actionsDisabled,
+  });
   const [labelDraft, setLabelDraft] = useState(label);
 
   useEffect(() => {
@@ -605,10 +659,16 @@ function TaskItem({
     onRemove();
   }
 
+  function openActions() {
+    closeDetails();
+    onOpenActions();
+  }
+
   return (
     <>
       <article
-        className={`rounded-lg border p-2 text-xs ${
+        {...longPress}
+        className={`select-none touch-pan-y rounded-lg border p-2 text-xs ${
           unavailable
             ? "border-line bg-surface-muted opacity-60"
             : "border-line bg-raised"
@@ -701,6 +761,16 @@ function TaskItem({
             </>
           ) : (
             <>
+              {!actionsDisabled && (
+                <button
+                  type="button"
+                  onClick={openActions}
+                  className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-accent text-sm font-semibold text-accent transition-colors hover:bg-accent hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <Play size="1rem" />
+                  {t("taskOperations")}
+                </button>
+              )}
               <TextField
                 compact
                 label={t("taskName")}
@@ -762,5 +832,43 @@ function TaskItem({
         </div>
       </Modal>
     </>
+  );
+}
+
+function TaskActionsDrawer({
+  target,
+  onClose,
+  onStart,
+}: {
+  target: TaskActionTarget | undefined;
+  onClose: () => void;
+  onStart: (mode: TaskRunSelectionMode) => void;
+}) {
+  const { t } = useTranslation();
+  if (!target) return null;
+
+  return (
+    <BottomDrawer
+      open
+      onClose={onClose}
+      title={t("taskActionsTitle", { task: target.label })}
+    >
+      <button
+        type="button"
+        onClick={() => onStart("current")}
+        className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+      >
+        <Play size="1rem" />
+        {t("runCurrentTask")}
+      </button>
+      <button
+        type="button"
+        onClick={() => onStart("currentAndFollowing")}
+        className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+      >
+        <FastForward size="1rem" />
+        {t("runCurrentAndFollowingTasks")}
+      </button>
+    </BottomDrawer>
   );
 }

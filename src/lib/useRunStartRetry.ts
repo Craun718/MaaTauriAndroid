@@ -6,7 +6,11 @@ import {
   isPermissionRequiredDiagnostic,
   runStartPermissionNotices,
 } from "./i18n";
-import type { PrivilegedStatus, StartRunStatus } from "./types";
+import type {
+  PrivilegedStatus,
+  StartRunStatus,
+  TaskRunSelection,
+} from "./types";
 
 /** Notices and results of a start attempt; the messages double as run-log keys. */
 interface RunStartRetryCallbacks {
@@ -66,11 +70,12 @@ export function useRunStartRetry({
   readyTimeoutMs = DEFAULT_READY_TIMEOUT_MS,
   readyPollIntervalMs = DEFAULT_READY_POLL_INTERVAL_MS,
 }: RunStartRetryCallbacks): {
-  startRunWithAccess: () => Promise<void>;
+  startRunWithAccess: (selection?: TaskRunSelection) => Promise<void>;
   retryAfterRunFailure: (message: string) => Promise<void>;
   resetRetry: () => void;
 } {
   const retriedRef = useRef(false);
+  const pendingSelection = useRef<TaskRunSelection | undefined>(undefined);
   const latest = useRef<RunStartRetryCallbacks>({
     onAttemptReset,
     onStarted,
@@ -100,14 +105,17 @@ export function useRunStartRetry({
    * recovery, so the first failure below is not alerted again.
    */
   const performStart = useCallback(
-    async (alreadyReported = false) => {
+    async (
+      selection: TaskRunSelection | undefined,
+      alreadyReported = false,
+    ) => {
       // Once this loop has bought its recovery, a rejection after the retry is
       // the outcome and is reported rather than recovered from again.
       let retried = false;
       for (;;) {
         latest.current.onAttemptReset();
         try {
-          const result = await startRun();
+          const result = await startRun(selection);
           retriedRef.current = false;
           latest.current.onStarted(result);
           return;
@@ -158,9 +166,13 @@ export function useRunStartRetry({
     [waitForControlUnit],
   );
 
-  const startRunWithAccess = useCallback(async () => {
-    await performStart();
-  }, [performStart]);
+  const startRunWithAccess = useCallback(
+    async (selection?: TaskRunSelection) => {
+      pendingSelection.current = selection;
+      await performStart(selection);
+    },
+    [performStart],
+  );
 
   const retryAfterRunFailure = useCallback(
     async (message: string) => {
@@ -176,13 +188,14 @@ export function useRunStartRetry({
       ) {
         return;
       }
-      await performStart(true);
+      await performStart(pendingSelection.current, true);
     },
     [performStart],
   );
 
   const resetRetry = useCallback(() => {
     retriedRef.current = false;
+    pendingSelection.current = undefined;
   }, []);
 
   return { startRunWithAccess, retryAfterRunFailure, resetRetry };

@@ -13,7 +13,7 @@ const getPrivilegedStatus = vi.fn();
 const requestPrivilegedAccess = vi.fn();
 
 vi.mock("./api", () => ({
-  startRun: () => startRun(),
+  startRun: (...args: unknown[]) => startRun(...args),
   getPrivilegedStatus: () => getPrivilegedStatus(),
   requestPrivilegedAccess: () => requestPrivilegedAccess(),
 }));
@@ -133,6 +133,27 @@ describe("useRunStartRetry", () => {
       translate("en", "diagnosticPermissionRequestInProgress"),
       translate("en", "diagnosticPermissionRequestSucceeded"),
     ]);
+  });
+
+  it("keeps a partial task selection across an access retry", async () => {
+    const selection = {
+      runConfigurationId: "default",
+      instanceId: "task-2",
+      mode: "currentAndFollowing" as const,
+    };
+    startRun
+      .mockRejectedValueOnce(new Error(permissionMessage))
+      .mockResolvedValueOnce(started);
+    getPrivilegedStatus.mockResolvedValue(permissionRequiredStatus);
+    const { result, onStarted } = renderRetry();
+
+    await act(async () => {
+      await result.current.startRunWithAccess(selection);
+    });
+
+    expect(startRun).toHaveBeenNthCalledWith(1, selection);
+    expect(startRun).toHaveBeenNthCalledWith(2, selection);
+    expect(onStarted).toHaveBeenCalledWith(started);
   });
 
   it("waits for a control unit that is still starting and starts again", async () => {

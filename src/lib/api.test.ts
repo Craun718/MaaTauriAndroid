@@ -9,6 +9,7 @@ import {
   resolveFocusModal,
   setPrivilegedBackend,
   setVirtualDisplayLandscape,
+  startRun,
 } from "./api";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -209,5 +210,38 @@ describe("focus modal acks", () => {
 
     await expect(resolveFocusModal()).resolves.toBeUndefined();
     expect(invoke).toHaveBeenCalledWith("resolve_focus_modal");
+  });
+});
+
+describe("run start selection", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("starts the full queue when no selection is provided", async () => {
+    invoke.mockResolvedValue({
+      executionId: "run-1",
+      message: "The run is starting",
+      taskCount: 2,
+    });
+
+    await expect(startRun()).resolves.toHaveProperty("taskCount", 2);
+    expect(invoke).toHaveBeenCalledWith("start_run");
+  });
+
+  it("passes a one-time task selection in camel case", async () => {
+    invoke.mockResolvedValue({
+      executionId: "run-2",
+      message: "The run is starting",
+      taskCount: 1,
+    });
+    const selection = {
+      runConfigurationId: "default",
+      instanceId: "task-2",
+      mode: "current" as const,
+    };
+
+    await expect(startRun(selection)).resolves.toHaveProperty("taskCount", 1);
+    expect(invoke).toHaveBeenCalledWith("start_run", { selection });
   });
 });

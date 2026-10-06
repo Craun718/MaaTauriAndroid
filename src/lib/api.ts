@@ -17,6 +17,7 @@ import type {
   ScheduleRuleStatus,
   ScheduleSummary,
   StartRunStatus,
+  TaskRunSelection,
   UpdatePrefs,
   UpdateStatus,
   UserConfiguration,
@@ -165,8 +166,9 @@ export async function isNotificationGranted() {
   }
 }
 
-export async function startRun() {
-  return invoke<StartRunStatus>("start_run");
+export async function startRun(selection?: TaskRunSelection) {
+  if (!selection) return invoke<StartRunStatus>("start_run");
+  return invoke<StartRunStatus>("start_run", { selection });
 }
 
 export async function exportLogs() {

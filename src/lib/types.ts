@@ -219,6 +219,14 @@ export interface RunConfiguration {
   tasks: ConfiguredTask[];
 }
 
+export type TaskRunSelectionMode = "current" | "currentAndFollowing";
+
+export interface TaskRunSelection {
+  runConfigurationId: string;
+  instanceId: string;
+  mode: TaskRunSelectionMode;
+}
+
 export type ScheduleTrigger =
   | { kind: "fixedTime"; days: number[]; times: string[] }
   | {

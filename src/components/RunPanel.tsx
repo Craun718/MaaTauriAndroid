@@ -7,7 +7,15 @@ import {
   Square,
   Undo2,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
   captureManualScreenshot,
   getRunStatus,
@@ -22,7 +30,7 @@ import {
   useTranslation,
 } from "../lib/i18n";
 import { canAcceptRunEvent } from "../lib/runEvents";
-import type { ResolvedRun, RunEvent } from "../lib/types";
+import type { ResolvedRun, RunEvent, TaskRunSelection } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useRunStartRetry } from "../lib/useRunStartRetry";
 import { useAppStore, waitForPendingSaves } from "../store/appStore";
@@ -36,318 +44,363 @@ import { BottomDrawer } from "./ui/BottomDrawer";
  * and keeping them apart meant showing the same tasks twice. The individual
  * actions live in a bottom drawer opened by the standalone "task actions" button.
  */
-export function RunPanel({
-  onRunStarted,
-  onRunActiveChange,
-}: {
+export interface RunPanelHandle {
+  start: (selection?: TaskRunSelection) => Promise<void>;
+}
+
+interface RunPanelProps {
   onRunStarted?: () => void;
   /** Reports whether a run is active (`Preparing` / `Running` / `Stopping`). */
   onRunActiveChange?: (active: boolean) => void;
-}) {
-  const snapshot = useAppStore((state) => state.snapshot);
-  const busy = useAppStore((state) => state.busy);
-  const preparation = usePreparationStore((state) => state.state);
-  const { t, language } = useTranslation();
-  const [run, setRun] = useState<ResolvedRun>();
-  const [status, setStatus] = useState<string>();
-  const [executionId, setExecutionId] = useState<string>();
-  const [runState, setRunState] = useState("Idle");
-  const [starting, setStarting] = useState(false);
-  const executionIdRef = useRef<string | undefined>(undefined);
-  const projectRoot = snapshot?.project?.root;
-  const { exportLogs, exporting } = useLogExport();
-  const [capturing, setCapturing] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const notify = useNotificationStore((state) => state.notify);
-  const notifyOnce = useNotificationStore((state) => state.notifyOnce);
-  const reportError = useCallback(
-    (error: unknown) => {
-      notify(
-        localizeDiagnostic(
-          error instanceof Error ? error.message : String(error),
-          language,
-        ),
-        { tone: "error" },
-      );
-    },
-    [notify, language],
-  );
+}
 
-  const pressBack = useCallback(async () => {
-    try {
-      await pressVirtualDisplayBack();
-    } catch (error) {
-      reportError(error);
-    }
-  }, [reportError]);
-
-  // A preparing failure reaches the UI twice: the backend emits the failure
-  // run-event before `startRun` rejects, so the catch below and the listener
-  // would both alert. When the run result already carries this exact failure,
-  // share the listener's execution-scoped key so only one alert shows;
-  // failures recorded nowhere else keep the direct report. Deduplication
-  // compares the raw backend text while the alert shows the localized one.
-  const reportStartFailure = useCallback(
-    async (error: unknown) => {
-      const raw = error instanceof Error ? error.message : String(error);
-      const result = await getRunStatus().catch(() => undefined);
-      if (
-        result?.executionId &&
-        result.severity === "error" &&
-        result.message === raw
-      ) {
-        notifyOnce(
-          `run-failure:${result.executionId}`,
-          localizeDiagnostic(raw, language),
-          {
-            tone: "error",
-            logToActivity: false,
-          },
+export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
+  function RunPanel(
+    { onRunStarted, onRunActiveChange }: RunPanelProps,
+    ref,
+  ): ReactElement | null {
+    const snapshot = useAppStore((state) => state.snapshot);
+    const busy = useAppStore((state) => state.busy);
+    const preparation = usePreparationStore((state) => state.state);
+    const { t, language } = useTranslation();
+    const [run, setRun] = useState<ResolvedRun>();
+    const [status, setStatus] = useState<string>();
+    const [executionId, setExecutionId] = useState<string>();
+    const [runState, setRunState] = useState("Idle");
+    const [starting, setStarting] = useState(false);
+    const executionIdRef = useRef<string | undefined>(undefined);
+    const projectRoot = snapshot?.project?.root;
+    const { exportLogs, exporting } = useLogExport();
+    const [capturing, setCapturing] = useState(false);
+    const [actionsOpen, setActionsOpen] = useState(false);
+    const notify = useNotificationStore((state) => state.notify);
+    const notifyOnce = useNotificationStore((state) => state.notifyOnce);
+    const reportError = useCallback(
+      (error: unknown) => {
+        notify(
+          localizeDiagnostic(
+            error instanceof Error ? error.message : String(error),
+            language,
+          ),
+          { tone: "error" },
         );
-        return;
+      },
+      [notify, language],
+    );
+
+    const pressBack = useCallback(async () => {
+      try {
+        await pressVirtualDisplayBack();
+      } catch (error) {
+        reportError(error);
       }
-      notify(localizeDiagnostic(raw, language), { tone: "error" });
-    },
-    [notify, notifyOnce, language],
-  );
+    }, [reportError]);
 
-  // A start rejected for a missing Shizuku grant asks for it and starts again
-  // once; the notices it reports follow the interface language, and the raw
-  // message is the activity-log key so no sentence is named twice.
-  const { startRunWithAccess, retryAfterRunFailure, resetRetry } =
-    useRunStartRetry({
-      // The accepted execution id is the single "this start counted" marker:
-      // a failed attempt clears it, so a rejection that only arrives as a run
-      // event can still be told apart from a failure of an accepted run.
-      onAttemptReset: () => {
-        executionIdRef.current = undefined;
-      },
-      onStarted: (result) => {
-        executionIdRef.current = result.executionId;
-        setExecutionId(result.executionId);
-        // The first run-event may trail the invoke response, so the task list
-        // locks as soon as the backend has accepted the run.
-        setRunState("Preparing");
-        notify(result.message);
-      },
-      onNotice: (message) => notify(localizeDiagnostic(message, language)),
-      onFailure: reportStartFailure,
-    });
-
-  useEffect(() => {
-    if (!snapshot) return;
-    resolveCurrent().then(setRun).catch(reportError);
-  }, [snapshot, reportError]);
-
-  // Restoring the latest error is a mount-time recovery path. Sharing the
-  // execution-scoped notification key with live failures prevents route
-  // changes from replaying an old result as a second alert.
-  useEffect(() => {
-    if (!projectRoot) return;
-    getRunStatus()
-      .then((result) => {
-        if (!result.executionId) return;
-        executionIdRef.current = result.executionId;
-        setExecutionId(result.executionId);
-        setRunState(result.state);
-        if (result.severity === "error") {
+    // A preparing failure reaches the UI twice: the backend emits the failure
+    // run-event before `startRun` rejects, so the catch below and the listener
+    // would both alert. When the run result already carries this exact failure,
+    // share the listener's execution-scoped key so only one alert shows;
+    // failures recorded nowhere else keep the direct report. Deduplication
+    // compares the raw backend text while the alert shows the localized one.
+    const reportStartFailure = useCallback(
+      async (error: unknown) => {
+        const raw = error instanceof Error ? error.message : String(error);
+        const result = await getRunStatus().catch(() => undefined);
+        if (
+          result?.executionId &&
+          result.severity === "error" &&
+          result.message === raw
+        ) {
           notifyOnce(
             `run-failure:${result.executionId}`,
-            localizeDiagnostic(result.message, language),
+            localizeDiagnostic(raw, language),
             {
               tone: "error",
+              logToActivity: false,
             },
           );
+          return;
+        }
+        notify(localizeDiagnostic(raw, language), { tone: "error" });
+      },
+      [notify, notifyOnce, language],
+    );
+
+    // A start rejected for a missing Shizuku grant asks for it and starts again
+    // once; the notices it reports follow the interface language, and the raw
+    // message is the activity-log key so no sentence is named twice.
+    const { startRunWithAccess, retryAfterRunFailure, resetRetry } =
+      useRunStartRetry({
+        // The accepted execution id is the single "this start counted" marker:
+        // a failed attempt clears it, so a rejection that only arrives as a run
+        // event can still be told apart from a failure of an accepted run.
+        onAttemptReset: () => {
+          executionIdRef.current = undefined;
+        },
+        onStarted: (result) => {
+          executionIdRef.current = result.executionId;
+          setExecutionId(result.executionId);
+          // The first run-event may trail the invoke response, so the task list
+          // locks as soon as the backend has accepted the run.
+          setRunState("Preparing");
+          notify(result.message);
+        },
+        onNotice: (message) => notify(localizeDiagnostic(message, language)),
+        onFailure: reportStartFailure,
+      });
+
+    useEffect(() => {
+      if (!snapshot) return;
+      resolveCurrent().then(setRun).catch(reportError);
+    }, [snapshot, reportError]);
+
+    // Restoring the latest error is a mount-time recovery path. Sharing the
+    // execution-scoped notification key with live failures prevents route
+    // changes from replaying an old result as a second alert.
+    useEffect(() => {
+      if (!projectRoot) return;
+      getRunStatus()
+        .then((result) => {
+          if (!result.executionId) return;
+          executionIdRef.current = result.executionId;
+          setExecutionId(result.executionId);
+          setRunState(result.state);
+          if (result.severity === "error") {
+            notifyOnce(
+              `run-failure:${result.executionId}`,
+              localizeDiagnostic(result.message, language),
+              {
+                tone: "error",
+              },
+            );
+            setStatus(undefined);
+            return;
+          }
+          setStatus(result.message);
+        })
+        .catch(() => undefined);
+    }, [projectRoot, notifyOnce, language]);
+
+    useEffect(() => {
+      let disposed = false;
+      let unsubscribe: (() => void) | undefined;
+
+      listen<RunEvent>("run-event", (event) => {
+        const payload = event.payload;
+        if (
+          !canAcceptRunEvent(executionIdRef.current, event.payload.executionId)
+        )
+          return;
+        executionIdRef.current = payload.executionId;
+        if (payload.state) setRunState(payload.state);
+        setExecutionId(payload.executionId);
+        if (payload.kind === "screenshot") return;
+        if (payload.kind === "failure" || payload.kind === "warning") {
+          const diagnostic = localizeRunEvent(payload, language);
+          const message = payload.taskName
+            ? `${payload.taskName}: ${diagnostic}`
+            : diagnostic;
+          if (payload.kind === "failure") {
+            notifyOnce(`run-failure:${payload.executionId}`, message, {
+              tone: "error",
+              logToActivity: false,
+            });
+            // A rejection that only arrives as a run event still gets the one
+            // permission retry; an accepted run already consumed it.
+            if (!executionIdRef.current) {
+              void retryAfterRunFailure(payload.message);
+            }
+          } else {
+            notify(message, {
+              tone: "warning",
+              logToActivity: false,
+            });
+          }
           setStatus(undefined);
           return;
         }
-        setStatus(result.message);
-      })
-      .catch(() => undefined);
-  }, [projectRoot, notifyOnce, language]);
-
-  useEffect(() => {
-    let disposed = false;
-    let unsubscribe: (() => void) | undefined;
-
-    listen<RunEvent>("run-event", (event) => {
-      const payload = event.payload;
-      if (!canAcceptRunEvent(executionIdRef.current, event.payload.executionId))
-        return;
-      executionIdRef.current = payload.executionId;
-      if (payload.state) setRunState(payload.state);
-      setExecutionId(payload.executionId);
-      if (payload.kind === "screenshot") return;
-      if (payload.kind === "failure" || payload.kind === "warning") {
-        const diagnostic = localizeRunEvent(payload, language);
-        const message = payload.taskName
-          ? `${payload.taskName}: ${diagnostic}`
-          : diagnostic;
-        if (payload.kind === "failure") {
-          notifyOnce(`run-failure:${payload.executionId}`, message, {
-            tone: "error",
-            logToActivity: false,
-          });
-          // A rejection that only arrives as a run event still gets the one
-          // permission retry; an accepted run already consumed it.
-          if (!executionIdRef.current) {
-            void retryAfterRunFailure(payload.message);
-          }
-        } else {
-          notify(message, {
-            tone: "warning",
-            logToActivity: false,
-          });
-        }
         setStatus(undefined);
-        return;
-      }
-      setStatus(undefined);
-    })
-      .then((stop) => {
-        if (disposed) stop();
-        else unsubscribe = stop;
       })
-      .catch(reportError);
+        .then((stop) => {
+          if (disposed) stop();
+          else unsubscribe = stop;
+        })
+        .catch(reportError);
 
-    return () => {
-      disposed = true;
-      unsubscribe?.();
-    };
-  }, [notify, notifyOnce, reportError, language, retryAfterRunFailure]);
+      return () => {
+        disposed = true;
+        unsubscribe?.();
+      };
+    }, [notify, notifyOnce, reportError, language, retryAfterRunFailure]);
 
-  const running = Boolean(executionId) && runState !== "Idle";
-  const enginePreparing = Boolean(preparation && !preparation.engineReady);
+    const running = Boolean(executionId) && runState !== "Idle";
+    const enginePreparing = Boolean(preparation && !preparation.engineReady);
 
-  useEffect(() => {
-    onRunActiveChange?.(running);
-  }, [running, onRunActiveChange]);
+    useEffect(() => {
+      onRunActiveChange?.(running);
+    }, [running, onRunActiveChange]);
 
-  if (!snapshot?.project) return null;
-  const enabled =
-    run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ?? [];
-  const startUnavailable =
-    !running && (enginePreparing || enabled.length === 0 || busy || starting);
+    const enabled =
+      run?.tasks.filter((task) => task.enabled && !task.unavailableReason) ??
+      [];
+    const startUnavailable =
+      !running && (enginePreparing || enabled.length === 0 || busy || starting);
 
-  async function start() {
-    onRunStarted?.();
-    setStarting(true);
-    resetRetry();
-    try {
-      // Once-per-install OS prompt (no-op once granted): backend focus
-      // `display: "notification"` messages only reach the OS notification
-      // center with POST_NOTIFICATIONS granted.
-      void requestNotificationPermission();
-      // Task-list edits are optimistic and persist in the background, so a
-      // start issued right after a toggle would otherwise be resolved against
-      // the stale backend configuration. Draining the queue here is what lets
-      // the button stay evenly enabled: dimming it on `saving` made it blink on
-      // every task-list edit.
-      await waitForPendingSaves();
-      await startRunWithAccess();
-    } finally {
-      setStarting(false);
+    const start = useCallback(
+      async (selection?: TaskRunSelection) => {
+        if (enginePreparing) {
+          notify(t("enginePreparingNotice"));
+          return;
+        }
+        if (busy || starting) {
+          notify(t("startUnavailableNotice"));
+          return;
+        }
+        if (!selection && enabled.length === 0) {
+          notify(t("noRunnableTasksNotice"));
+          return;
+        }
+
+        onRunStarted?.();
+        setStarting(true);
+        resetRetry();
+        try {
+          // Once-per-install OS prompt (no-op once granted): backend focus
+          // `display: "notification"` messages only reach the OS notification
+          // center with POST_NOTIFICATIONS granted.
+          void requestNotificationPermission();
+          // Task-list edits are optimistic and persist in the background, so a
+          // start issued right after a toggle would otherwise be resolved against
+          // the stale backend configuration. Draining the queue here is what lets
+          // the button stay evenly enabled: dimming it on `saving` made it blink on
+          // every task-list edit.
+          await waitForPendingSaves();
+          await startRunWithAccess(selection);
+        } finally {
+          setStarting(false);
+        }
+      },
+      [
+        busy,
+        enabled.length,
+        enginePreparing,
+        notify,
+        onRunStarted,
+        resetRetry,
+        startRunWithAccess,
+        starting,
+        t,
+      ],
+    );
+
+    useImperativeHandle(ref, () => ({ start }), [start]);
+
+    if (!snapshot?.project) return null;
+
+    async function stop() {
+      try {
+        notify(await stopRun(executionIdRef.current ?? executionId));
+      } catch (error) {
+        reportError(error);
+      }
     }
-  }
 
-  async function stop() {
-    try {
-      notify(await stopRun(executionIdRef.current ?? executionId));
-    } catch (error) {
-      reportError(error);
+    async function captureScreenshot() {
+      setCapturing(true);
+      try {
+        await captureManualScreenshot(executionIdRef.current ?? executionId);
+        notify(t("screenshotSavedNotice"));
+      } catch (error) {
+        reportError(error);
+      } finally {
+        setCapturing(false);
+      }
     }
-  }
 
-  async function captureScreenshot() {
-    setCapturing(true);
-    try {
-      await captureManualScreenshot(executionIdRef.current ?? executionId);
-      notify(t("screenshotSavedNotice"));
-    } catch (error) {
-      reportError(error);
-    } finally {
-      setCapturing(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            aria-disabled={startUnavailable}
-            onClick={() => {
-              if (running) void stop();
-              else if (enginePreparing) notify(t("enginePreparingNotice"));
-              else if (busy || starting) notify(t("startUnavailableNotice"));
-              else if (enabled.length === 0) notify(t("noRunnableTasksNotice"));
-              else void start();
-            }}
-            className={`flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${
-              running
-                ? "border-error bg-error text-white focus-visible:outline-error"
-                : "border-accent bg-accent text-white focus-visible:outline-accent"
-            }`}
-          >
-            {running ? <Square size="1rem" /> : <Play size="1rem" />}
-            {t(running ? "stopRun" : "startRun")}
-          </button>
-          <button
-            type="button"
-            aria-label={t("taskOperations")}
-            className="flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-md border border-line text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={() => setActionsOpen(true)}
-          >
-            <MoreVertical size="1rem" />
-          </button>
+    return (
+      <>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              aria-disabled={startUnavailable}
+              onClick={() => {
+                if (running) void stop();
+                else if (enginePreparing) notify(t("enginePreparingNotice"));
+                else if (busy || starting) notify(t("startUnavailableNotice"));
+                else if (enabled.length === 0)
+                  notify(t("noRunnableTasksNotice"));
+                else void start();
+              }}
+              className={`flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${
+                running
+                  ? "border-error bg-error text-white focus-visible:outline-error"
+                  : "border-accent bg-accent text-white focus-visible:outline-accent"
+              }`}
+            >
+              {running ? <Square size="1rem" /> : <Play size="1rem" />}
+              {t(running ? "stopRun" : "startRun")}
+            </button>
+            <button
+              type="button"
+              aria-label={t("taskOperations")}
+              className="flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-md border border-line text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={() => setActionsOpen(true)}
+            >
+              <MoreVertical size="1rem" />
+            </button>
+          </div>
+          {enginePreparing && (
+            <p className="text-sm text-ink-muted">
+              {t("enginePreparingNotice")}
+            </p>
+          )}
+          {status && (
+            <p className="break-all text-sm text-ink-muted">{status}</p>
+          )}
         </div>
-        {enginePreparing && (
-          <p className="text-sm text-ink-muted">{t("enginePreparingNotice")}</p>
-        )}
-        {status && <p className="break-all text-sm text-ink-muted">{status}</p>}
-      </div>
-      <BottomDrawer
-        open={actionsOpen}
-        onClose={() => setActionsOpen(false)}
-        title={t("taskOperations")}
-      >
-        <button
-          type="button"
-          disabled={exporting}
-          onClick={() => {
-            setActionsOpen(false);
-            void exportLogs();
-          }}
-          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+        <BottomDrawer
+          open={actionsOpen}
+          onClose={() => setActionsOpen(false)}
+          title={t("taskOperations")}
         >
-          <Download size="1rem" />
-          {exporting ? t("exportingLogs") : t("exportLogs")}
-        </button>
-        <button
-          type="button"
-          disabled={!executionId || capturing}
-          onClick={() => {
-            setActionsOpen(false);
-            void captureScreenshot();
-          }}
-          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-        >
-          <Camera size="1rem" />
-          {t("captureScreenshot")}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActionsOpen(false);
-            void pressBack();
-          }}
-          className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-        >
-          <Undo2 size="1rem" />
-          {t("back")}
-        </button>
-      </BottomDrawer>
-    </>
-  );
-}
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={() => {
+              setActionsOpen(false);
+              void exportLogs();
+            }}
+            className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+          >
+            <Download size="1rem" />
+            {exporting ? t("exportingLogs") : t("exportLogs")}
+          </button>
+          <button
+            type="button"
+            disabled={!executionId || capturing}
+            onClick={() => {
+              setActionsOpen(false);
+              void captureScreenshot();
+            }}
+            className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+          >
+            <Camera size="1rem" />
+            {t("captureScreenshot")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActionsOpen(false);
+              void pressBack();
+            }}
+            className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm font-semibold transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+          >
+            <Undo2 size="1rem" />
+            {t("back")}
+          </button>
+        </BottomDrawer>
+      </>
+    );
+  },
+);

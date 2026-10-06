@@ -155,7 +155,7 @@ export function TasksPage() {
   function addTask(taskDef: TaskDefinition) {
     mutateActiveRun((run) => {
       run.tasks.push({
-        instanceId: `${taskDef.name}:${Date.now()}`,
+        instanceId: crypto.randomUUID(),
         taskName: taskDef.name,
         enabled: taskDef.defaultCheck,
         optionValues: {},
@@ -257,9 +257,6 @@ export function TasksPage() {
     );
   }
 
-  const availableTasks = project.tasks.filter(
-    (task) => !activeRun?.tasks.some((item) => item.taskName === task.name),
-  );
   const configTabItems = configuration.runConfigurations.map((run) => ({
     value: run.id,
     label: run.name,
@@ -344,10 +341,9 @@ export function TasksPage() {
                 </SortableContext>
               </DndContext>
               <AddTaskPicker
-                available={availableTasks}
+                available={project.tasks}
                 onAdd={addTask}
                 addLabel={t("addTask")}
-                emptyLabel={t("noTasksToAdd")}
                 disabled={runActive}
               />
             </section>
@@ -466,18 +462,16 @@ function PresetPicker({
   );
 }
 
-/** 内联「添加任务」面板：点开后列出尚未添加的任务定义，点击即追加到运行列表末尾。 */
+/** 内联「添加任务」面板：点开后列出项目全部任务定义，点击即追加到运行列表末尾。 */
 function AddTaskPicker({
   available,
   onAdd,
   addLabel,
-  emptyLabel,
   disabled = false,
 }: {
   available: TaskDefinition[];
   onAdd: (task: TaskDefinition) => void;
   addLabel: string;
-  emptyLabel: string;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -502,20 +496,16 @@ function AddTaskPicker({
       </button>
       {!disabled && open && (
         <div className="space-y-1 rounded-lg border border-line bg-surface-muted p-2">
-          {available.length === 0 ? (
-            <p className="px-2 py-1 text-sm text-ink-muted">{emptyLabel}</p>
-          ) : (
-            available.map((task) => (
-              <button
-                key={task.name}
-                type="button"
-                onClick={() => onAdd(task)}
-                className="flex h-9 w-full cursor-pointer items-center rounded-md px-2.5 text-left text-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                {task.label}
-              </button>
-            ))
-          )}
+          {available.map((task) => (
+            <button
+              key={task.name}
+              type="button"
+              onClick={() => onAdd(task)}
+              className="flex h-9 w-full cursor-pointer items-center rounded-md px-2.5 text-left text-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {task.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

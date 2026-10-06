@@ -175,7 +175,6 @@ const en = {
   removeTaskConfirmWarning:
     "This removes {task} from the current configuration.",
   removeTaskConfirmHint: "The task options are discarded as well.",
-  noTasksToAdd: "All tasks are already in this configuration.",
   noRunLogs: "No run activity yet.",
   runLogStatus: "Status",
   runLogTask: "Task",
@@ -468,7 +467,6 @@ const zh: Record<MessageKey, string> = {
   removeTaskConfirmTitle: "移除任务",
   removeTaskConfirmWarning: "将从当前配置中移除「{task}」。",
   removeTaskConfirmHint: "该任务的选项配置也会一并丢弃。",
-  noTasksToAdd: "所有任务都已添加。",
   noRunLogs: "暂无运行日志。",
   runLogStatus: "状态",
   runLogTask: "任务",

@@ -1840,6 +1840,34 @@ mod tests {
 
     #[test]
     fn log_archive_includes_recent_run_history_files() {
+        struct LogOnlySource;
+
+        impl DiagnosticSource for LogOnlySource {
+            fn capture_png(&self, _display_id: u32) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no capture"))
+            }
+
+            fn device_info(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no device info"))
+            }
+
+            fn display_state(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no display state"))
+            }
+
+            fn logcat(&self) -> io::Result<Vec<u8>> {
+                Ok(b"MaaTauriAndroid ran\n".to_vec())
+            }
+
+            fn dumpsys(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no dumpsys"))
+            }
+
+            fn bugreport(&self, _destination: &Path) -> io::Result<Vec<String>> {
+                Ok(Vec::new())
+            }
+        }
+
         let source = LogOnlySource;
         let runs_dir = std::env::temp_dir().join(format!(
             "maa_tauri_android-archive-runs-{}",

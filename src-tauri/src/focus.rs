@@ -109,10 +109,11 @@ impl FocusSink {
                 .map(|raw| localize(&substitute(raw, &detail), &self.translations));
 
             if let Some(content) = &content {
+                let notification_content = crate::run_progress::strip_inline_rich_text(content);
                 // The live notification borrows the focus content's first line
                 // as its status sentence; a no-op on non-Android builds.
                 crate::run_progress::push_focus_status(&crate::run_progress::first_status_line(
-                    content,
+                    &notification_content,
                 ));
                 for channel in &template.display {
                     match channel {
@@ -124,7 +125,7 @@ impl FocusSink {
                             // Deliver through the OS notification center; the
                             // event only backs the in-app card shown when the
                             // runtime permission is missing.
-                            self.notify_system(name.as_deref(), content);
+                            self.notify_system(name.as_deref(), &notification_content);
                             self.emit(
                                 "focus-notify",
                                 &message,

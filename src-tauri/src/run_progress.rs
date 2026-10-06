@@ -6,6 +6,8 @@
 //! logged and never affect the run itself.
 
 use crate::domain::types::ResolvedTask;
+use regex::Regex;
+use std::sync::OnceLock;
 
 /// One progress frame. Keys are camelCase and parsed leniently by
 /// `RunForegroundService.parseSnapshot` (org.json `opt*` accessors), so an
@@ -19,6 +21,70 @@ pub fn progress_payload(done: u32, total: u32, label: &str, status: Option<&str>
         "indeterminate": false,
     })
     .to_string()
+}
+
+struct RichTextPatterns {
+    image: Regex,
+    link: Regex,
+    line_break: Regex,
+    html_tag: Regex,
+    code: Regex,
+    strong: Regex,
+    whitespace: Regex,
+}
+
+static RICH_TEXT_PATTERNS: OnceLock<RichTextPatterns> = OnceLock::new();
+
+impl RichTextPatterns {
+    fn get() -> &'static Self {
+        RICH_TEXT_PATTERNS.get_or_init(|| Self {
+            image: Regex::new(r"!\[([^\]]*)\]\([^)]*\)").expect("valid image pattern"),
+            link: Regex::new(r"\[([^\]]*)\]\([^)]*\)").expect("valid link pattern"),
+            line_break: Regex::new(r"(?i)</?br\b[^>]*>").expect("valid line break pattern"),
+            html_tag: Regex::new(r"<[^>]*>").expect("valid HTML tag pattern"),
+            code: Regex::new(r"`[^`]+`").expect("valid inline code pattern"),
+            strong: Regex::new(r"\*\*[^*]+\*\*").expect("valid strong pattern"),
+            whitespace: Regex::new(r"\s+").expect("valid whitespace pattern"),
+        })
+    }
+}
+
+/// Notification surfaces show a single plain-text line, while logs and the
+/// WebView keep the resource author's inline Markdown and HTML.
+pub fn strip_inline_rich_text(content: &str) -> String {
+    let patterns = RichTextPatterns::get();
+    let image_alt = patterns
+        .image
+        .replace_all(content, |captures: &regex::Captures| {
+            captures[1].to_string()
+        })
+        .to_string();
+    let link_text = patterns
+        .link
+        .replace_all(&image_alt, |captures: &regex::Captures| {
+            captures[1].to_string()
+        })
+        .to_string();
+    let code_content = patterns
+        .code
+        .replace_all(&link_text, |captures: &regex::Captures| {
+            captures[0].trim_matches('`').to_string()
+        })
+        .to_string();
+    let strong_content = patterns
+        .strong
+        .replace_all(&code_content, |captures: &regex::Captures| {
+            captures[0].trim_matches('*').to_string()
+        })
+        .to_string();
+    let without_line_breaks = patterns.line_break.replace_all(&strong_content, " ");
+    let without_tags = patterns.html_tag.replace_all(&without_line_breaks, "");
+    let without_entities = without_tags.replace("&nbsp;", " ");
+    patterns
+        .whitespace
+        .replace_all(&without_entities.trim(), " ")
+        .trim()
+        .to_string()
 }
 
 /// The notification status sentence is a single line: focus content can be a
@@ -111,6 +177,28 @@ mod tests {
         );
         assert_eq!(first_status_line(""), "");
         assert_eq!(first_status_line("   \n\t "), "");
+    }
+
+    #[test]
+    fn notification_text_strips_inline_rich_text() {
+        assert_eq!(
+            strip_inline_rich_text(
+                "![icon](resource/icon.png) [site](https://example.com) `daily` **ready**"
+            ),
+            "icon site daily ready"
+        );
+        assert_eq!(
+            strip_inline_rich_text("<span style=\"color: red\">step</span><br>next"),
+            "step next"
+        );
+        assert_eq!(
+            strip_inline_rich_text("Emulator <MuMu> startup"),
+            "Emulator MuMu startup"
+        );
+        assert_eq!(
+            strip_inline_rich_text("\n  第二步：登录  \n"),
+            "第二步：登录"
+        );
     }
 
     #[test]

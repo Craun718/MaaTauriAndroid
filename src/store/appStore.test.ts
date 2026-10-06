@@ -21,8 +21,17 @@ import {
 } from "./appStore";
 import { useNotificationStore } from "./notificationStore";
 
+const welcomeEvents = vi.hoisted(() => ({
+  handler: undefined as ((event: { payload: unknown }) => void) | undefined,
+}));
+
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(() => undefined),
+  listen: vi.fn(
+    async (_event: unknown, handler: (event: { payload: unknown }) => void) => {
+      welcomeEvents.handler = handler;
+      return () => undefined;
+    },
+  ),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -109,6 +118,10 @@ function welcomeState(revision: number): WelcomeState {
     welcomePending: false,
     welcomeErrors: [],
   };
+}
+
+function emitWelcomeState(payload: WelcomeState) {
+  welcomeEvents.handler?.({ payload });
 }
 
 describe("canApplyWelcomeState", () => {
@@ -474,6 +487,76 @@ describe("appStore WebView Project Interface parsing", () => {
     expect(useAppStore.getState().snapshot?.project?.metadata).toMatchObject({
       welcome: ["Remote announcement"],
       welcomeFingerprint: "resolved-fingerprint",
+      welcomePending: true,
+      welcomeErrors: [],
+    });
+  });
+
+  it("applies a welcome event that lands before the bootstrap snapshot", async () => {
+    const backendSnapshot = snapshot("/project");
+    backendSnapshot.welcomeRevision = 1;
+    const backendProject = backendSnapshot.project;
+    if (!backendProject)
+      throw new Error("test snapshot must include a project");
+    backendProject.metadata = {
+      welcome: [],
+      welcomePending: true,
+      welcomeErrors: [],
+    } as Project["metadata"];
+    const parsed = project("WebView view");
+    parsed.metadata = {
+      welcome: [],
+      welcomePending: true,
+      welcomeErrors: [],
+    } as Project["metadata"];
+    mockedPrepareApp.mockResolvedValue(backendSnapshot);
+    mockedLoadProjectSource.mockResolvedValue(source());
+    const parsing = deferred<Project>();
+    mockedBuildAndroidProject.mockReturnValueOnce(parsing.promise);
+
+    const bootstrapping = useAppStore.getState().bootstrap();
+    emitWelcomeState(welcomeState(1));
+    parsing.resolve(parsed);
+    await bootstrapping;
+
+    const metadata = useAppStore.getState().snapshot?.project?.metadata;
+    expect(metadata).toMatchObject({
+      welcome: ["Welcome"],
+      welcomePending: false,
+      welcomeErrors: [],
+    });
+    expect(metadata?.welcomeFingerprint).toBeUndefined();
+  });
+
+  it("drops an early welcome event whose revision no longer matches", async () => {
+    const backendSnapshot = snapshot("/project");
+    backendSnapshot.welcomeRevision = 2;
+    const backendProject = backendSnapshot.project;
+    if (!backendProject)
+      throw new Error("test snapshot must include a project");
+    backendProject.metadata = {
+      welcome: [],
+      welcomePending: true,
+      welcomeErrors: [],
+    } as Project["metadata"];
+    const parsed = project("WebView view");
+    parsed.metadata = {
+      welcome: [],
+      welcomePending: true,
+      welcomeErrors: [],
+    } as Project["metadata"];
+    mockedPrepareApp.mockResolvedValue(backendSnapshot);
+    mockedLoadProjectSource.mockResolvedValue(source());
+    const parsing = deferred<Project>();
+    mockedBuildAndroidProject.mockReturnValueOnce(parsing.promise);
+
+    const bootstrapping = useAppStore.getState().bootstrap();
+    emitWelcomeState(welcomeState(1));
+    parsing.resolve(parsed);
+    await bootstrapping;
+
+    expect(useAppStore.getState().snapshot?.project?.metadata).toMatchObject({
+      welcome: [],
       welcomePending: true,
       welcomeErrors: [],
     });

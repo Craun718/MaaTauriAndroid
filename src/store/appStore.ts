@@ -54,6 +54,11 @@ let saveQueue: Promise<void> = Promise.resolve();
 let pendingSaves = 0;
 let configurationRevision = 0;
 let welcomeListener: Promise<UnlistenFn> | undefined;
+/**
+ * 后端在安装项目时就发起公告解析，`welcome-state` 事件可能比 `bootstrap`
+ * 的项目重建更早到达；此时快照还未落地，必须暂存，否则加载状态永远停住。
+ */
+let earlyWelcomeState: WelcomeState | undefined;
 
 function ensureWelcomeListener() {
   if (!welcomeListener) {
@@ -135,7 +140,7 @@ async function adoptSnapshot(
 ): Promise<Partial<AppStore>> {
   const parsed = await parseSnapshotProject(snapshot);
   return {
-    ...revisedSnapshot(parsed.snapshot),
+    ...revisedSnapshot(consumeEarlyWelcomeState(parsed.snapshot)),
     projectSource: parsed.source,
   };
 }
@@ -148,6 +153,37 @@ export function canApplyWelcomeState(
     snapshot?.welcomeRevision === undefined ||
     state.revision === snapshot.welcomeRevision
   );
+}
+
+function withWelcomeState(
+  snapshot: AppStateSnapshot,
+  state: WelcomeState,
+): AppStateSnapshot {
+  if (!snapshot.project) return snapshot;
+  return {
+    ...snapshot,
+    project: {
+      ...snapshot.project,
+      metadata: {
+        ...snapshot.project.metadata,
+        welcome: state.welcome,
+        welcomeFingerprint: state.welcomeFingerprint,
+        welcomePending: state.welcomePending,
+        welcomeErrors: state.welcomeErrors,
+      },
+    },
+  };
+}
+
+function consumeEarlyWelcomeState(
+  snapshot: AppStateSnapshot,
+): AppStateSnapshot {
+  const state = earlyWelcomeState;
+  earlyWelcomeState = undefined;
+  if (!state || !snapshot.project || !canApplyWelcomeState(snapshot, state)) {
+    return snapshot;
+  }
+  return withWelcomeState(snapshot, state);
 }
 
 /**
@@ -168,6 +204,7 @@ export const useAppStore = create<AppStore>((set) => ({
   async bootstrap() {
     // PreparationOverlay owns startup progress; the generic busy modal would
     // duplicate it while waiting for native preparation to finish.
+    earlyWelcomeState = undefined;
     set({ error: undefined });
     void ensureWelcomeListener();
     try {
@@ -276,28 +313,12 @@ export const useAppStore = create<AppStore>((set) => ({
     set({ dismissedWelcomeFingerprint: fingerprint });
   },
   applyWelcomeState(state) {
-    set((current) => {
-      if (
-        !current.snapshot?.project ||
-        !canApplyWelcomeState(current.snapshot, state)
-      ) {
-        return {};
-      }
-      return {
-        snapshot: {
-          ...current.snapshot,
-          project: {
-            ...current.snapshot.project,
-            metadata: {
-              ...current.snapshot.project.metadata,
-              welcome: state.welcome,
-              welcomeFingerprint: state.welcomeFingerprint,
-              welcomePending: state.welcomePending,
-              welcomeErrors: state.welcomeErrors,
-            },
-          },
-        },
-      };
-    });
+    const { snapshot } = useAppStore.getState();
+    if (!snapshot) {
+      earlyWelcomeState = state;
+      return;
+    }
+    if (!canApplyWelcomeState(snapshot, state)) return;
+    set({ snapshot: withWelcomeState(snapshot, state) });
   },
 }));

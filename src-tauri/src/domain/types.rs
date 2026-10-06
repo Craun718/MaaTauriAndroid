@@ -335,7 +335,7 @@ pub enum UiLanguage {
 /// There is no controller field: Android can only drive its own native control
 /// unit, so the controller is a property of the platform (see
 /// `loader::android_controller`), not something to remember per user.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserConfiguration {
     pub schema_version: u32,
@@ -636,7 +636,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunConfiguration {
     pub id: String,
@@ -645,7 +645,7 @@ pub struct RunConfiguration {
     pub tasks: Vec<ConfiguredTask>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfiguredTask {
     pub instance_id: String,

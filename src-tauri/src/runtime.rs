@@ -59,6 +59,7 @@ static MAA_LIBRARY: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLoc
 
 const TASKER_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(5);
 const TASKER_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const STOP_REPOST_INTERVAL: Duration = Duration::from_millis(800);
 
 enum SessionLease {
     Idle,
@@ -193,13 +194,34 @@ impl MaaSessions {
             {
                 return Ok(false);
             }
-            *self
+            let mut pending = self
                 .pending_stop
                 .lock()
-                .expect("pending stop lock poisoned") = Some(target.to_string());
+                .expect("pending stop lock poisoned");
+            *pending = Some(target.to_string());
             if let SessionLease::Active(run) = &*lease {
                 self.stop_requested.store(true, Ordering::SeqCst);
-                run.tasker.post_stop()?;
+                if let Err(error) = run.tasker.post_stop() {
+                    if run.tasker.is_running() || run.tasker.stopping() {
+                        // Keep the accepted stop so the drain loop can repost
+                        // it instead of exposing a stale submission error.
+                        log::warn!(
+                            "the first stop post for run {target} failed; the tasker is still active ({error})"
+                        );
+                    } else {
+                        log::warn!(
+                            "stop post for run {target} failed after the tasker went idle ({error})"
+                        );
+                        self.stop_requested.store(false, Ordering::SeqCst);
+                        *pending = None;
+                        drop(pending);
+                        *self
+                            .finished_run
+                            .lock()
+                            .expect("finished run lock poisoned") = Some(target.to_string());
+                        return Ok(false);
+                    }
+                }
             }
             on_stopping();
         }
@@ -318,7 +340,13 @@ impl MaaSessions {
     }
 
     fn finish_active_run(&self, run: ActiveRun) {
-        if !wait_for_tasker_idle(&run.tasker, TASKER_IDLE_TIMEOUT) {
+        let repost_stop = self.stop_requested.load(Ordering::SeqCst);
+        if !wait_for_tasker_idle_with_stop(
+            &run.tasker,
+            TASKER_IDLE_TIMEOUT,
+            repost_stop,
+            &run.execution_id,
+        ) {
             log::error!(
                 "Maa tasker for run {} did not become idle within {:?}; keeping the native handle alive to avoid destroying a running task",
                 run.execution_id,
@@ -438,10 +466,26 @@ fn take_active(lease: &mut SessionLease) -> Option<ActiveRun> {
 /// true for that window, and `MaaTaskerDestroy` destroys `RuntimeCache` before
 /// joining the thread, so destroying the handle there is a use-after-free.
 fn wait_for_tasker_idle(tasker: &Tasker, timeout: Duration) -> bool {
+    wait_for_tasker_idle_with_stop(tasker, timeout, false, "")
+}
+
+fn wait_for_tasker_idle_with_stop(
+    tasker: &Tasker,
+    timeout: Duration,
+    repost_stop: bool,
+    execution_id: &str,
+) -> bool {
     let deadline = Instant::now() + timeout;
+    let mut next_repost = Instant::now() + STOP_REPOST_INTERVAL;
     while tasker.is_running() || tasker.stopping() {
         if Instant::now() >= deadline {
             return false;
+        }
+        if repost_stop && Instant::now() >= next_repost {
+            if let Err(error) = tasker.post_stop() {
+                log::warn!("reposting stop for run {execution_id} failed: {error}");
+            }
+            next_repost = Instant::now() + STOP_REPOST_INTERVAL;
         }
         std::thread::sleep(TASKER_IDLE_POLL_INTERVAL);
     }

@@ -298,7 +298,9 @@ export function TasksPage() {
   return (
     <div
       className={`flex flex-col gap-3${
-        activityTab === "logs" ? " min-h-0 flex-1 overflow-hidden" : ""
+        // 日志激活时根容器正好撑满 <main> 的 content box，其下边框会直接压在底部
+        // nav 的 border-t 上。这里留出一档 padding，让日志面板与导航脱开。
+        activityTab === "logs" ? " min-h-0 flex-1 overflow-hidden pb-2" : ""
       }`}
     >
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>

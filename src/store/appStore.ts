@@ -18,6 +18,7 @@ import {
   loadProjectSource,
 } from "../lib/pi";
 import type { ProjectSource } from "../lib/pi/rawTypes";
+import { startupTrace } from "../lib/startupTiming";
 import type {
   AppStateSnapshot,
   Project,
@@ -213,8 +214,13 @@ export const useAppStore = create<AppStore>((set) => ({
     set({ bootstrapStatus: "loading", error: undefined });
     void ensureWelcomeListener();
     try {
+      startupTrace.record("frontend_bootstrap");
+      const backendSnapshot = await prepareApp();
+      startupTrace.record("frontend_prepare_app_return");
+      const adopted = await adoptSnapshot(backendSnapshot);
+      startupTrace.record("frontend_parse");
       set({
-        ...(await adoptSnapshot(await prepareApp())),
+        ...adopted,
         bootstrapStatus: "ready",
       });
     } catch (error) {

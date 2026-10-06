@@ -7,6 +7,7 @@ import java.io.File
 class MaaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        StartupTrace.start()
         RuntimeBridge.attachContext(this)
         invalidateWebViewCacheAfterUpdate()
         AppPreparationManager.start(this)

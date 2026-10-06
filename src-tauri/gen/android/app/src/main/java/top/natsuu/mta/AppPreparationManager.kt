@@ -78,6 +78,7 @@ object AppPreparationManager {
         var currentStage = "checkingInstallation"
         var projectReady = false
         try {
+            StartupTrace.mark("app_preparation_start")
             report(stage = currentStage)
             var lastReportedCopiedBytes = 0L
             var lastReportedExtractedEntries = -1
@@ -114,11 +115,13 @@ object AppPreparationManager {
                 }
             } ?: throw IllegalStateException("The packaged Project Interface is unavailable")
 
+            StartupTrace.mark("pi_install_ready")
             currentStage = "initializingSecrets"
             report(stage = currentStage)
             if (!RuntimeBridge.initializeSecretBridge()) {
                 throw IllegalStateException("Could not initialize the Android secret bridge")
             }
+            StartupTrace.mark("secrets_ready")
             currentStage = "loadingProject"
             projectReady = true
             report(
@@ -134,6 +137,7 @@ object AppPreparationManager {
             val height = context.resources.displayMetrics.heightPixels
             RuntimeBridge.configureScreen(width, height)
             ControlHost.configure(0, width, height)
+            StartupTrace.mark("runtime_libraries_ready")
 
             currentStage = "connectingControl"
             report(stage = currentStage)
@@ -142,12 +146,17 @@ object AppPreparationManager {
             RuntimeBridge.attachControlClient(client)
             RuntimeBridge.setPrivilegedBackend(client.getSelectedPrivilegedBackend())
             val connected = CountDownLatch(1)
+            var controlReady = false
             mainHandler.post {
-                client.connect { connected.countDown() }
+                client.connect {
+                    controlReady = it
+                    connected.countDown()
+                }
             }
             // Shizuku being absent is an authorization state, not a preparation
             // failure. Its status card and run retry flow own the follow-up.
             connected.await(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            StartupTrace.mark(if (controlReady) "control_ready" else "control_unavailable")
             report(
                 stage = "engineReady",
                 projectReady = projectReady,

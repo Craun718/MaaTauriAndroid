@@ -799,9 +799,12 @@ async fn prepare_app(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppStateSnapshot, AppError> {
+    let prepare_started = std::time::Instant::now();
+    log_startup_stage("prepare_app_start", prepare_started);
     let _preparation_guard = state.preparation_task.lock().await;
     let current = preparation_state();
     if current.ui_ready && state.project().is_ok() {
+        log_startup_stage("prepare_app_cached", prepare_started);
         return Ok(current_snapshot(&state));
     }
 
@@ -812,11 +815,13 @@ async fn prepare_app(
             return Err(error);
         }
         set_preparation_stage("waitingForNativePreparation");
+        let native_wait_started = std::time::Instant::now();
         let root = tauri::async_runtime::spawn_blocking(|| {
             wait_for_native_project(std::time::Duration::from_secs(120))
         })
         .await
         .map_err(|error| AppError::Message(error.to_string()))??;
+        log_startup_stage("native_project_wait", native_wait_started);
         set_preparation_stage("loadingProject");
         Some(PathBuf::from(root))
     };
@@ -829,17 +834,28 @@ async fn prepare_app(
 
     let project_root = bundled_root.as_deref().and_then(std::path::Path::to_str);
 
+    let backend_parse_started = std::time::Instant::now();
     let result = bootstrap_snapshot(&app, &state, project_root).await;
+    log_startup_stage("backend_parse", backend_parse_started);
     match result {
         Ok(snapshot) => {
             mark_preparation_ui_ready().map_err(AppError::Message)?;
+            log_startup_stage("prepare_app_return", prepare_started);
             Ok(snapshot)
         }
         Err(error) => {
             mark_preparation_failed(error.to_string());
+            log_startup_stage("prepare_app_return", prepare_started);
             Err(error)
         }
     }
+}
+
+fn log_startup_stage(stage: &str, started_at: std::time::Instant) {
+    log::info!(
+        "startup stage={stage} elapsed_ms={}",
+        started_at.elapsed().as_millis()
+    );
 }
 
 #[tauri::command]

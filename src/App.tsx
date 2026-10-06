@@ -5,6 +5,8 @@ import { AppShell } from "./components/AppShell";
 import { BusyModal } from "./components/BusyModal";
 import { FocusModalHost } from "./components/FocusModalHost";
 import { PreparationOverlay } from "./components/PreparationOverlay";
+import { reportFrontendDebug } from "./lib/frontendLogging";
+import { startupTrace } from "./lib/startupTiming";
 import { HomePage } from "./pages/HomePage";
 import { useAppStore } from "./store/appStore";
 import { usePreparationStore } from "./store/preparationStore";
@@ -41,6 +43,12 @@ function App() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    if (bootstrapStatus !== "ready") return;
+    startupTrace.record("frontend_ui_ready");
+    startupTrace.flush((line) => reportFrontendDebug(line));
+  }, [bootstrapStatus]);
 
   return (
     <HashRouter>

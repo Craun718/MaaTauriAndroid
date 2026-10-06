@@ -6,6 +6,7 @@
 //! name once the digest verifies, and any early exit removes it.
 
 use sha2::{Digest, Sha256};
+use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -91,9 +92,10 @@ pub async fn download_apk(
     }
     let total = response.content_length;
 
-    let (chunk_tx, chunk_rx) = mpsc::channel::<Vec<u8>>(8);
-    let writer = tokio::task::spawn_blocking(move || {
-        let file = std::fs::File::create(&staging)
+    let (chunk_tx, mut chunk_rx) = mpsc::channel::<Vec<u8>>(8);
+    let staging_path = staging.clone();
+    let mut writer = tokio::task::spawn_blocking(move || {
+        let file = std::fs::File::create(&staging_path)
             .map_err(|error| storage_error("create the staging file", error))?;
         let mut writer = std::io::BufWriter::new(file);
         let mut hasher = Sha256::new();
@@ -140,7 +142,7 @@ pub async fn download_apk(
                         "the staging writer stopped before the download stream ended",
                     )),
                     Ok(Err(error)) => Err(error),
-                    Err(error) => Err(storage_error("run the staging writer", error)),
+                    Err(error) => Err(join_error("run the staging writer", error)),
                 };
             }
         };
@@ -168,14 +170,14 @@ pub async fn download_apk(
                     "the staging writer stopped before the download stream ended",
                 )),
                 Ok(Err(error)) => Err(error),
-                Err(error) => Err(storage_error("run the staging writer", error)),
+                Err(error) => Err(join_error("run the staging writer", error)),
             };
         }
     }
     let staged = match writer.await {
         Ok(Ok(staged)) => staged,
         Ok(Err(error)) => return Err(error),
-        Err(error) => return Err(storage_error("run the staging writer", error)),
+        Err(error) => return Err(join_error("run the staging writer", error)),
     };
     let received = staged.received;
 
@@ -269,10 +271,15 @@ fn storage_error(action: &str, error: std::io::Error) -> UpdateError {
     )
 }
 
+fn join_error(action: &str, error: tokio::task::JoinError) -> UpdateError {
+    storage_error(action, Error::new(ErrorKind::Other, error.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::http::testing::{StreamSpec, StubClient};
     use super::*;
+    use std::sync::{Arc, Mutex};
 
     fn digest_of(content: &[u8]) -> String {
         hex::encode(Sha256::digest(content))
@@ -437,7 +444,8 @@ mod tests {
         // No scripted stream: any network attempt would fail the test.
         let client = StubClient::new();
         let cancelled = AtomicBool::new(false);
-        let mut progress = Vec::new();
+        let progress = Arc::new(Mutex::new(Vec::new()));
+        let progress_sink = Arc::clone(&progress);
 
         let outcome = download_apk(
             &client,
@@ -446,14 +454,16 @@ mod tests {
             temp.path(),
             "1.2.3",
             &cancelled,
-            |received, total| progress.push((received, total)),
+            move |received, total| {
+                progress_sink.lock().unwrap().push((received, total));
+            },
         )
         .await
         .unwrap();
 
         assert_eq!(outcome.path, destination);
         assert_eq!(outcome.bytes, 6);
-        assert_eq!(progress, vec![(6, Some(6))]);
+        assert_eq!(*progress.lock().unwrap(), vec![(6, Some(6))]);
         assert!(client.requested_urls().is_empty());
     }
 

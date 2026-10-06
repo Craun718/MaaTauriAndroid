@@ -25,7 +25,6 @@ use tauri::{AppHandle, Manager, State};
 use crate::version::APP_VERSION;
 use downloader::DownloadOutcome;
 use http::{ReqwestUpdateClient, UpdateHttpClient};
-use semver::Version;
 
 /// Where the update flow currently stands. `available` means "an update is
 /// known and ready for the next step" — after a successful check (download

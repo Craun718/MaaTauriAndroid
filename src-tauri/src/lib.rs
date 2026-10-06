@@ -303,6 +303,7 @@ fn wait_for_native_project(timeout: std::time::Duration) -> Result<String, AppEr
 struct AppState {
     project: RwLock<Option<Project>>,
     configuration: RwLock<UserConfiguration>,
+    persistence: Mutex<()>,
     project_path: RwLock<Option<PathBuf>>,
     store: RwLock<Option<UserConfigurationStore>>,
     maa: Arc<runtime::MaaSessions>,
@@ -319,6 +320,7 @@ impl Default for AppState {
         Self {
             project: RwLock::new(None),
             configuration: RwLock::new(UserConfiguration::default()),
+            persistence: Mutex::new(()),
             project_path: RwLock::new(None),
             store: RwLock::new(None),
             maa: Arc::new(runtime::MaaSessions::default()),
@@ -440,31 +442,39 @@ impl AppState {
     }
 
     fn set_configuration(&self, configuration: UserConfiguration) -> Result<(), PersistenceError> {
+        // Keep the guard across publication so two overlapping saves cannot
+        // finish in one order and publish their snapshots in the other order.
+        let _persistence = self.persistence.lock().expect("persistence lock poisoned");
+        self.persist_configuration_locked(&configuration)?;
         *self
             .configuration
             .write()
             .expect("configuration lock poisoned") = configuration;
-        self.persist_configuration()
+        Ok(())
     }
 
-    fn persist_configuration(&self) -> Result<(), PersistenceError> {
-        let store = self.store.read().expect("store lock poisoned");
-        match store.as_ref() {
-            Some(store) => {
-                let project = self.project.read().expect("project lock poisoned");
-                let project = project.as_ref().ok_or_else(|| {
-                    PersistenceError::Secret(crate::secrets::SecretError::BridgeUnavailable)
-                })?;
-                store.save(
-                    project,
-                    &self
-                        .configuration
-                        .read()
-                        .expect("configuration lock poisoned"),
-                )
-            }
-            None => Ok(()),
-        }
+    fn persist_configuration_locked(
+        &self,
+        configuration: &UserConfiguration,
+    ) -> Result<(), PersistenceError> {
+        let store_path = self
+            .store
+            .read()
+            .expect("store lock poisoned")
+            .as_ref()
+            .map(|store| store.path().to_path_buf());
+        let Some(store_path) = store_path else {
+            return Ok(());
+        };
+        let project = self
+            .project
+            .read()
+            .expect("project lock poisoned")
+            .clone()
+            .ok_or_else(|| {
+                PersistenceError::Secret(crate::secrets::SecretError::BridgeUnavailable)
+            })?;
+        UserConfigurationStore::new(store_path).save(&project, configuration)
     }
 
     fn install(
@@ -476,14 +486,15 @@ impl AppState {
     ) -> Result<UserConfiguration, AppError> {
         let _welcome_revision = self.welcome_revision.fetch_add(1, Ordering::SeqCst);
         normalize_configuration(&project, &mut configuration);
+        let _persistence = self.persistence.lock().expect("persistence lock poisoned");
         *self.store.write().expect("store lock poisoned") =
             Some(UserConfigurationStore::new(config_path));
         self.set_project(project_path, project);
+        self.persist_configuration_locked(&configuration)?;
         *self
             .configuration
             .write()
             .expect("configuration lock poisoned") = configuration.clone();
-        self.persist_configuration()?;
         let project = self.project().expect("the project was just installed");
         configure_telemetry(&project, &configuration);
         log_loaded_project(&project, &configuration);
@@ -3209,6 +3220,51 @@ mod tests {
             agents: Vec::new(),
             metadata: ProjectMetadata::default(),
         }
+    }
+
+    #[test]
+    fn set_configuration_publishes_after_a_successful_save() {
+        let root = std::env::temp_dir().join(format!("mta-config-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = AppState::default();
+        state.set_project(None, project());
+        let path = root.join("configuration.json");
+        *state.store.write().expect("store lock poisoned") =
+            Some(UserConfigurationStore::new(path.clone()));
+
+        let configuration = UserConfiguration::default();
+        state.set_configuration(configuration.clone()).unwrap();
+
+        assert_eq!(state.configuration().unwrap(), configuration);
+        assert!(path.is_file());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn set_configuration_failure_keeps_the_previous_configuration() {
+        let root = std::env::temp_dir().join(format!("mta-config-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = AppState::default();
+        state.set_project(None, project());
+        let path = root.join("configuration.json");
+        *state.store.write().expect("store lock poisoned") =
+            Some(UserConfigurationStore::new(path.clone()));
+        let configuration = UserConfiguration::default();
+        state.set_configuration(configuration.clone()).unwrap();
+
+        let blocker = root.join("not-a-directory");
+        std::fs::write(&blocker, b"blocked").unwrap();
+        *state.store.write().expect("store lock poisoned") = Some(UserConfigurationStore::new(
+            blocker.join("configuration.json"),
+        ));
+
+        let error = state
+            .set_configuration(UserConfiguration::default())
+            .unwrap_err();
+        assert!(matches!(error, PersistenceError::CreateDirectory { .. }));
+        assert_eq!(state.configuration().unwrap(), configuration);
+        assert!(path.is_file());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

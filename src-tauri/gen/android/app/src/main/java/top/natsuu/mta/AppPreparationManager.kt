@@ -76,6 +76,7 @@ object AppPreparationManager {
 
     private fun prepare(context: Context) {
         var currentStage = "checkingInstallation"
+        var projectReady = false
         try {
             report(stage = currentStage)
             var lastReportedCopiedBytes = 0L
@@ -119,9 +120,10 @@ object AppPreparationManager {
                 throw IllegalStateException("Could not initialize the Android secret bridge")
             }
             currentStage = "loadingProject"
+            projectReady = true
             report(
                 stage = currentStage,
-                projectReady = true,
+                projectReady = projectReady,
                 projectRoot = projectRoot.absolutePath,
             )
 
@@ -148,7 +150,7 @@ object AppPreparationManager {
             connected.await(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             report(
                 stage = "engineReady",
-                projectReady = true,
+                projectReady = projectReady,
                 engineReady = true,
                 projectRoot = projectRoot.absolutePath,
             )
@@ -165,7 +167,7 @@ object AppPreparationManager {
             controlClient = null
             report(
                 stage = currentStage,
-                projectReady = false,
+                projectReady = projectReady,
                 engineReady = false,
                 error = error.message ?: error.javaClass.simpleName,
             )

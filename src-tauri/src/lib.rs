@@ -184,27 +184,43 @@ fn mark_preparation_ui_ready() -> Result<(), String> {
             .state
             .lock()
             .expect("preparation state lock poisoned");
-        if let Some(error) = guard.error.clone() {
-            return Err(error);
-        }
-        guard.revision += 1;
-        guard.status = "running".to_string();
-        guard.stage = "uiReady".to_string();
-        guard.ui_ready = true;
-        #[cfg(not(target_os = "android"))]
-        {
-            guard.engine_ready = true;
-        }
-        if guard.engine_ready {
-            guard.status = "ready".to_string();
-            guard.stage = "engineReady".to_string();
-        }
-        guard.error = None;
+        apply_preparation_ui_ready(&mut guard)?;
         guard.clone()
     };
     if let Some(app) = app {
         let _ = app.emit("preparation-state", state);
     }
+    Ok(())
+}
+
+fn apply_preparation_ui_ready(current: &mut PreparationState) -> Result<(), String> {
+    if let Some(error) = current.error.clone() {
+        if !current.project_ready {
+            return Err(error);
+        }
+    }
+
+    current.revision += 1;
+    current.ui_ready = true;
+    if current.error.is_some() {
+        // A native failure after the project root became available must not
+        // invalidate the project UI. Keep the engine failure for the run panel.
+        current.status = "failed".to_string();
+        current.engine_ready = false;
+        return Ok(());
+    }
+
+    current.status = "running".to_string();
+    current.stage = "uiReady".to_string();
+    #[cfg(not(target_os = "android"))]
+    {
+        current.engine_ready = true;
+    }
+    if current.engine_ready {
+        current.status = "ready".to_string();
+        current.stage = "engineReady".to_string();
+    }
+    current.error = None;
     Ok(())
 }
 
@@ -3679,6 +3695,62 @@ mod tests {
         assert!(current.ui_ready);
         assert!(current.project_ready);
         assert_eq!(current.project_root.as_deref(), Some("/data/pi"));
+    }
+
+    #[test]
+    fn ui_ready_survives_post_project_engine_failure() {
+        let mut current = PreparationState::default();
+        current.project_ready = true;
+        current.stage = "loadingRuntimeLibraries".to_string();
+        current.error = Some("library failed".to_string());
+
+        apply_preparation_ui_ready(&mut current).unwrap();
+
+        assert_eq!(current.status, "failed");
+        assert_eq!(current.stage, "loadingRuntimeLibraries");
+        assert!(current.project_ready);
+        assert!(current.ui_ready);
+        assert!(!current.engine_ready);
+        assert_eq!(current.error.as_deref(), Some("library failed"));
+    }
+
+    #[test]
+    fn pre_project_failure_still_blocks_ui_readiness() {
+        let mut current = PreparationState::default();
+        current.error = Some("extract failed".to_string());
+
+        let error = apply_preparation_ui_ready(&mut current).unwrap_err();
+
+        assert_eq!(error, "extract failed");
+        assert!(!current.project_ready);
+        assert!(!current.ui_ready);
+        assert_eq!(current.status, "idle");
+    }
+
+    #[test]
+    fn failed_native_engine_update_preserves_project_ui() {
+        let mut current = PreparationState::default();
+        current.project_ready = true;
+        current.ui_ready = true;
+        current.project_root = Some("/data/pi".to_string());
+        let update = NativePreparationUpdate {
+            status: "failed".to_string(),
+            stage: "loadingRuntimeLibraries".to_string(),
+            project_ready: true,
+            engine_ready: false,
+            project_root: None,
+            progress: None,
+            error: Some("library failed".to_string()),
+        };
+
+        apply_native_preparation(&mut current, update);
+
+        assert_eq!(current.status, "failed");
+        assert!(current.project_ready);
+        assert!(current.ui_ready);
+        assert!(!current.engine_ready);
+        assert_eq!(current.project_root.as_deref(), Some("/data/pi"));
+        assert_eq!(current.error.as_deref(), Some("library failed"));
     }
 
     #[test]

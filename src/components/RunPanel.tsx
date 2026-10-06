@@ -1,9 +1,11 @@
 import { listen } from "@tauri-apps/api/event";
 import {
   Camera,
+  CircleAlert,
   Download,
   MoreVertical,
   Play,
+  RotateCw,
   Square,
   Undo2,
 } from "lucide-react";
@@ -62,6 +64,8 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
     const snapshot = useAppStore((state) => state.snapshot);
     const busy = useAppStore((state) => state.busy);
     const preparation = usePreparationStore((state) => state.state);
+    const retrying = usePreparationStore((state) => state.retrying);
+    const retryPreparation = usePreparationStore((state) => state.retry);
     const { t, language } = useTranslation();
     const [run, setRun] = useState<ResolvedRun>();
     const [status, setStatus] = useState<string>();
@@ -234,7 +238,10 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
     }, [notify, notifyOnce, reportError, language, retryAfterRunFailure]);
 
     const running = Boolean(executionId) && runState !== "Idle";
-    const enginePreparing = Boolean(preparation && !preparation.engineReady);
+    const enginePreparing =
+      preparation?.status === "running" && !preparation.engineReady;
+    const engineFailed =
+      preparation?.status === "failed" && !preparation.engineReady;
 
     useEffect(() => {
       onRunActiveChange?.(running);
@@ -354,6 +361,28 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
             <p className="text-sm text-ink-muted">
               {t("enginePreparingNotice")}
             </p>
+          )}
+          {engineFailed && (
+            <div className="flex items-start gap-2 rounded-md border border-error/40 bg-error/10 p-2 text-sm text-ink">
+              <CircleAlert className="mt-0.5 shrink-0 text-error" size="1rem" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="break-all">
+                  {preparation.error ?? t("enginePreparationFailed")}
+                </p>
+                <button
+                  type="button"
+                  disabled={retrying || busy}
+                  onClick={() => void retryPreparation()}
+                  className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-line bg-raised px-2.5 font-medium disabled:cursor-default disabled:opacity-50"
+                >
+                  <RotateCw
+                    size="0.875rem"
+                    className={retrying ? "animate-spin" : undefined}
+                  />
+                  {t("preparationRetry")}
+                </button>
+              </div>
+            </div>
           )}
           {status && (
             <p className="break-all text-sm text-ink-muted">{status}</p>

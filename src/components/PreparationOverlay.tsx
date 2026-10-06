@@ -8,6 +8,7 @@ import {
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { type MessageKey, useTranslation } from "../lib/i18n";
+import { preparationOverlayState } from "../lib/startupPreparation";
 import { useAppStore } from "../store/appStore";
 import { usePreparationStore } from "../store/preparationStore";
 
@@ -34,11 +35,10 @@ export function PreparationOverlay() {
   const [dismissedFailure, setDismissedFailure] = useState<string>();
   const { t } = useTranslation();
   const preparation = reported;
-  const failed =
-    preparation?.status === "failed" || bootstrapStatus === "failed";
-  const nativeRunning =
-    preparation?.status === "running" && !preparation.engineReady;
-  const running = bootstrapStatus === "loading" || nativeRunning;
+  const { running, failed } = preparationOverlayState(
+    bootstrapStatus,
+    preparation,
+  );
   const failureKey =
     preparation?.status === "failed"
       ? `native:${preparation.revision}:${preparation.error ?? ""}`

@@ -3,17 +3,30 @@ use sentry::ClientInitGuard;
 use sentry::Transaction;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static TRACING: AtomicBool = AtomicBool::new(false);
 static CLIENT: Mutex<Option<ClientInitGuard>> = Mutex::new(None);
 static RUN_TRANSACTION: Mutex<Option<Transaction>> = Mutex::new(None);
 
+/// Keeps application shutdown bounded even when the telemetry endpoint is slow.
+pub const EXIT_FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Whether telemetry is currently allowed to send anything. Kept off until the
 /// resource project declares a DSN, the user consents, and the build is release.
 pub fn enabled() -> bool {
     ENABLED.load(Ordering::SeqCst)
+}
+
+/// Drains queued reports without shutting the client down. With telemetry
+/// disabled there is nothing to wait for, so flushing is considered complete.
+pub fn flush(timeout: Duration) -> bool {
+    let client = CLIENT.lock().expect("telemetry client lock poisoned");
+    match client.as_ref() {
+        Some(client) => client.flush(Some(timeout)),
+        None => true,
+    }
 }
 
 /// Applies the project's telemetry declaration and the user's consent.

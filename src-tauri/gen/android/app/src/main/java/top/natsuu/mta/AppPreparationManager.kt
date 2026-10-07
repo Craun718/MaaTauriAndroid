@@ -40,6 +40,9 @@ object AppPreparationManager {
     @Volatile
     private var running = false
 
+    @Volatile
+    private var projectReady = false
+
     fun start(context: Context) {
         val appContext = context.applicationContext
         synchronized(this) {
@@ -47,6 +50,7 @@ object AppPreparationManager {
             started = true
             applicationContext = appContext
             running = true
+            projectReady = false
         }
         executor.execute { prepare(appContext) }
     }
@@ -58,6 +62,7 @@ object AppPreparationManager {
             if (running) return "running"
             started = true
             running = true
+            projectReady = false
         }
         report(
             stage = "retrying",
@@ -74,9 +79,11 @@ object AppPreparationManager {
         }
     }
 
+    fun isProjectReady(): Boolean = projectReady
+
     private fun prepare(context: Context) {
         var currentStage = "checkingInstallation"
-        var projectReady = false
+        projectReady = false
         try {
             StartupTrace.mark("app_preparation_start")
             report(stage = currentStage)

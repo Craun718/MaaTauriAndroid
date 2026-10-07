@@ -3103,6 +3103,18 @@ fn restart_app(app: AppHandle) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+fn release_startup_splash() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        runtime::release_startup_splash()?;
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {}
+    Ok(())
+}
+
+#[tauri::command]
 async fn clear_diagnostic_data(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -4216,6 +4228,7 @@ pub fn run() {
             clear_diagnostic_data,
             reinstall_resources,
             restart_app,
+            release_startup_splash,
             list_run_history,
             read_run_history,
             delete_run_history,

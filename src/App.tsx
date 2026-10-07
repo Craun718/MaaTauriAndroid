@@ -5,7 +5,12 @@ import { AppShell } from "./components/AppShell";
 import { BusyModal } from "./components/BusyModal";
 import { FocusModalHost } from "./components/FocusModalHost";
 import { PreparationOverlay } from "./components/PreparationOverlay";
-import { reportFrontendDebug } from "./lib/frontendLogging";
+import { releaseStartupSplash } from "./lib/api";
+import {
+  reportFrontendDebug,
+  reportFrontendError,
+} from "./lib/frontendLogging";
+import { releaseStartupSplashAfterBootstrap } from "./lib/startupSplash";
 import { startupTrace } from "./lib/startupTiming";
 import { HomePage } from "./pages/HomePage";
 import { useAppStore } from "./store/appStore";
@@ -48,6 +53,13 @@ function App() {
     if (bootstrapStatus !== "ready") return;
     startupTrace.record("frontend_ui_ready");
     startupTrace.flush((line) => reportFrontendDebug(line));
+  }, [bootstrapStatus]);
+
+  useEffect(() => {
+    if (bootstrapStatus === "loading") return;
+    void releaseStartupSplashAfterBootstrap(releaseStartupSplash, (error) =>
+      reportFrontendError("Could not release the startup splash", error),
+    );
   }, [bootstrapStatus]);
 
   return (

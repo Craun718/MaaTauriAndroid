@@ -73,6 +73,11 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun releaseStartupSplash() {
+        StartupSplashGate.release()
+    }
+
+    @JvmStatic
     fun attachContext(context: Context) {
         agentContext = context.applicationContext
         physicalScreenWidth = context.resources.displayMetrics.widthPixels

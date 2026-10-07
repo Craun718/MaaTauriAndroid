@@ -32,6 +32,10 @@ export async function prepareApp() {
   return invoke<AppStateSnapshot>("prepare_app");
 }
 
+export async function releaseStartupSplash() {
+  return invoke<void>("release_startup_splash");
+}
+
 export async function getPreparationStatus() {
   return invoke<PreparationState>("get_preparation_status");
 }

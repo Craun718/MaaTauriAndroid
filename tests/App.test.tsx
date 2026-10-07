@@ -11,6 +11,7 @@ const getVirtualDisplayStatus = vi.fn();
 const getScheduleStatus = vi.fn();
 const updateVirtualDisplayBounds = vi.fn();
 const hideVirtualDisplayPreview = vi.fn();
+const releaseStartupSplash = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
   bootstrapApp: () => bootstrap(),
@@ -24,6 +25,7 @@ vi.mock("../src/lib/api", () => ({
   getVirtualDisplayStatus: () => getVirtualDisplayStatus(),
   updateVirtualDisplayBounds: () => updateVirtualDisplayBounds(),
   hideVirtualDisplayPreview: () => hideVirtualDisplayPreview(),
+  releaseStartupSplash: () => releaseStartupSplash(),
   loadProject: vi.fn(),
   saveConfiguration: vi.fn(),
   applyPreset: vi.fn(),
@@ -120,6 +122,7 @@ describe("App", () => {
     });
     updateVirtualDisplayBounds.mockResolvedValue(undefined);
     hideVirtualDisplayPreview.mockResolvedValue(undefined);
+    releaseStartupSplash.mockResolvedValue(undefined);
   });
 
   it("bootstraps the project", async () => {

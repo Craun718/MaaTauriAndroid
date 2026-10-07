@@ -15,7 +15,9 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
  */
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    installSplashScreen()
+    val splashScreen = installSplashScreen()
+    StartupSplashGate.beginActivity()
+    splashScreen.setKeepOnScreenCondition { StartupSplashGate.shouldKeep() }
     enableEdgeToEdge()
     RuntimeBridge.attachActivity(this)
     RuntimeBridge.configureScreen(

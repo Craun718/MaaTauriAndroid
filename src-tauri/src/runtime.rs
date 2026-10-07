@@ -899,6 +899,20 @@ pub fn restart_app() -> Result<(), RuntimeError> {
     }
 }
 
+/// Releases the Android splash after the frontend has mounted its first real
+/// page. The web layer also calls this on bootstrap failure so an error dialog
+/// cannot remain hidden behind the native splash.
+#[cfg(target_os = "android")]
+pub fn release_startup_splash() -> Result<(), RuntimeError> {
+    let vm = java_vm().ok_or_else(|| RuntimeError::JniBridge("not initialized".to_string()))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| RuntimeError::JniBridge(error.to_string()))?;
+    env.call_static_method(runtime_bridge_class()?, "releaseStartupSplash", "()V", &[])
+        .map_err(|error| RuntimeError::JniBridge(error.to_string()))?;
+    Ok(())
+}
+
 #[cfg(target_os = "android")]
 struct AndroidJni {
     vm: jni::JavaVM,

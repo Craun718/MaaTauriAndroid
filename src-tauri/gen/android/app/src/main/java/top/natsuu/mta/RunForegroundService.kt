@@ -284,6 +284,8 @@ class RunForegroundService : Service() {
         /** 36 以下没有实时动态开关；36+ 尊重系统里 promoted notifications 的用户开关 */
         private fun canRequestPromotedOngoing(context: Context): Boolean {
             if (Build.VERSION.SDK_INT < 36) return true
+            // One UI does not expose this switch, but promoted requests still work.
+            if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return true
             val manager = context.getSystemService(NotificationManager::class.java) ?: return false
             return manager.canPostPromotedNotifications()
         }

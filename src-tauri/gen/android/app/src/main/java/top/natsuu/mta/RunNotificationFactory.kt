@@ -99,10 +99,18 @@ object RunNotificationFactory {
         channelsReady = true
     }
 
-    fun backend(context: Context, islandReady: Boolean): RunNotificationBackend {
+    fun backend(
+        context: Context,
+        islandReady: Boolean,
+        vendor: RunNotificationVendor = detectRunNotificationVendor(),
+    ): RunNotificationBackend {
         if (islandReady && HyperIslandCapability.isAvailable(context)) {
             return RunNotificationBackend.HYPER_ISLAND
         }
+        // HarmonyOS Live View is not reachable from an Android notification. Keep
+        // Huawei on the plain foreground notification rather than pretending that
+        // the AOSP promoted-ongoing path is that vendor surface.
+        if (vendor == RunNotificationVendor.HUAWEI) return RunNotificationBackend.PLAIN
         return if (canRequestPromotedOngoing(context)) {
             RunNotificationBackend.LIVE_UPDATE
         } else {

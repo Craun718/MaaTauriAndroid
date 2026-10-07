@@ -206,7 +206,7 @@ const en = {
 
   // Startup preparation
   preparing: "Preparing",
-  preparationTitle: "Preparing MaaEnd",
+  preparationTitle: "Preparing app",
   preparationFailed: "Preparation failed.",
   preparationRetry: "Retry",
   preparationCopying: "Copying packaged resources",
@@ -501,7 +501,7 @@ const zh: Record<MessageKey, string> = {
 
   // 启动准备
   preparing: "准备中",
-  preparationTitle: "正在准备 MaaEnd",
+  preparationTitle: "正在准备应用",
   preparationFailed: "准备失败。",
   preparationRetry: "重试",
   preparationCopying: "正在复制打包资源",

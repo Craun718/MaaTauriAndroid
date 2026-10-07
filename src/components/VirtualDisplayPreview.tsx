@@ -96,6 +96,7 @@ export function VirtualDisplayPreview({
   const lastPoints = useRef(new Map<number, { x: number; y: number }>());
   const touchMarkers = useRef(new VirtualDisplayTouchMarkerTimeline());
   const [streamState, setStreamState] = useState<StreamState>("connecting");
+  const [streamRestart, setStreamRestart] = useState(0);
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
 
@@ -159,8 +160,34 @@ export function VirtualDisplayPreview({
     }),
   );
 
+  // Android WebView can suspend or close the socket without changing display
+  // status. Force a clean decoder on foreground so the canvas cannot keep its
+  // last pre-background frame.
+  const restartStream = useCallback(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
+    setStreamRestart((count) => count + 1);
+  }, []);
+
+  useEffect(() => {
+    function reconnectWhenVisible() {
+      if (document.visibilityState === "visible") restartStream();
+    }
+
+    document.addEventListener("visibilitychange", reconnectWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", reconnectWhenVisible);
+    };
+  }, [restartStream]);
+
   useEffect(() => {
     if (status.active !== true) return;
+    if (streamRestart > 0) {
+      reportFrontendDebug("Virtual display stream reconnected", {
+        restart: streamRestart,
+      });
+    }
 
     let socket: WebSocket | undefined;
     let decoder: StreamDecoder | undefined;
@@ -359,7 +386,7 @@ export function VirtualDisplayPreview({
       }
       if (decoder && decoder.state !== "closed") decoder.close();
     };
-  }, [status.active]);
+  }, [status.active, streamRestart]);
 
   useEffect(() => {
     if (status.active === false) {

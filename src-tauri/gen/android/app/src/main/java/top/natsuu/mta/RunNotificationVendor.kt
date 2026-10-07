@@ -34,3 +34,8 @@ fun detectRunNotificationVendor(
 
 val RunNotificationVendor.isVivoFamily: Boolean
     get() = this == RunNotificationVendor.VIVO || this == RunNotificationVendor.IQOO
+
+fun flymeMajorVersion(display: String?): Int {
+    val match = Regex("(?i)flyme\\s*([0-9]+)").find(display ?: return -1) ?: return -1
+    return match.groupValues.getOrNull(1)?.toIntOrNull() ?: -1
+}

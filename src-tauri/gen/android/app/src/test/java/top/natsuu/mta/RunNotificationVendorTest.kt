@@ -28,6 +28,15 @@ class RunNotificationVendorTest {
     }
 
     @Test
+    fun parsesFlymeMajorVersionsFromBuildDisplay() {
+        assertEquals(11, flymeMajorVersion("Flyme 11.2.0"))
+        assertEquals(12, flymeMajorVersion("FlymeOS 12"))
+        assertEquals(10, flymeMajorVersion("flyme 10"))
+        assertEquals(-1, flymeMajorVersion("Android 15"))
+        assertEquals(-1, flymeMajorVersion(null))
+    }
+
+    @Test
     fun unknownManufacturersUseTheGenericNotificationPath() {
         assertEquals(RunNotificationVendor.OTHER, detectRunNotificationVendor("Google"))
         assertEquals(RunNotificationVendor.OTHER, detectRunNotificationVendor(" Google "))

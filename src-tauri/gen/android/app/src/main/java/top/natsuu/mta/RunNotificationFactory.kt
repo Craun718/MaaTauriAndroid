@@ -7,9 +7,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -19,7 +22,7 @@ import com.xzakota.hyper.notification.focus.FocusNotification
 import com.xzakota.hyper.notification.focus.util.FocusUtils
 import com.xzakota.hyper.notification.island.model.TextInfo
 
-enum class RunNotificationBackend { HYPER_ISLAND, VIVO_ATOMIC, LIVE_UPDATE, PLAIN }
+enum class RunNotificationBackend { HYPER_ISLAND, VIVO_ATOMIC, FLYME_LIVE, LIVE_UPDATE, PLAIN }
 
 object VivoAtomicNotificationCapability {
     private const val SUPERX_FEATURE = "vivo.opt.notification.superx"
@@ -38,6 +41,31 @@ object VivoAtomicNotificationCapability {
             .getMethod("getSceneStatus", String::class.java, String::class.java)
         val manager = context.getSystemService(NotificationManager::class.java)
         method.invoke(manager, context.packageName, scene) as? Boolean ?: false
+    }.getOrDefault(false)
+}
+
+object FlymeLiveNotificationCapability {
+    private const val LIVE_STATE_PERMISSION = "flyme.permission.READ_NOTIFICATION_LIVE_STATE"
+    private const val PROVIDER_URI = "content://com.android.systemui.notification.provider"
+    private const val ENABLED_METHOD = "isNotificationLiveEnabled"
+
+    fun isAvailable(context: Context): Boolean {
+        val appContext = context.applicationContext
+        if (detectRunNotificationVendor() != RunNotificationVendor.MEIZU) return false
+        if (flymeMajorVersion(Build.DISPLAY) < 11) return false
+        if (appContext.checkSelfPermission(LIVE_STATE_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        return liveEnabled(appContext)
+    }
+
+    private fun liveEnabled(context: Context): Boolean = runCatching {
+        context.contentResolver.call(
+            Uri.parse(PROVIDER_URI),
+            ENABLED_METHOD,
+            null,
+            null,
+        )?.getBoolean("result", false) ?: false
     }.getOrDefault(false)
 }
 
@@ -87,6 +115,8 @@ object RunNotificationFactory {
     private const val PROGRESS_COLOR = "#3482FF"
     private const val PROGRESS_UNREACH = "#33FFFFFF"
     private const val VIVO_SCENE = "FOCUSMODE"
+    private const val FLYME_LIVE_TYPE = 2
+    private const val FLYME_CAPSULE_TYPE = 5
 
     private val appIcon = object : ThreadLocal<Icon>() {
         override fun initialValue(): Icon? = null
@@ -127,6 +157,7 @@ object RunNotificationFactory {
         context: Context,
         islandReady: Boolean,
         vivoReady: Boolean = false,
+        flymeReady: Boolean = false,
         vendor: RunNotificationVendor = detectRunNotificationVendor(),
     ): RunNotificationBackend {
         if (islandReady && HyperIslandCapability.isAvailable(context)) {
@@ -134,6 +165,9 @@ object RunNotificationFactory {
         }
         if (vivoReady && vendor.isVivoFamily) {
             return RunNotificationBackend.VIVO_ATOMIC
+        }
+        if (flymeReady && vendor == RunNotificationVendor.MEIZU) {
+            return RunNotificationBackend.FLYME_LIVE
         }
         // HarmonyOS Live View is not reachable from an Android notification. Keep
         // Huawei on the plain foreground notification rather than pretending that
@@ -154,6 +188,7 @@ object RunNotificationFactory {
         vivoChangedRecord: Int = 0,
         firstVivo: Boolean = false,
         finishVivo: Boolean = false,
+        firstFlyme: Boolean = false,
     ): Notification {
         ensureChannels(context)
         if (backend == RunNotificationBackend.HYPER_ISLAND) {
@@ -205,6 +240,9 @@ object RunNotificationFactory {
                 ),
             )
         }
+        if (effectiveBackend == RunNotificationBackend.FLYME_LIVE && state != null) {
+            builder.addExtras(flymeExtras(context, state, firstFlyme))
+        }
         return builder.build()
     }
 
@@ -217,7 +255,8 @@ object RunNotificationFactory {
             context,
             if (
                 backend == RunNotificationBackend.HYPER_ISLAND ||
-                    backend == RunNotificationBackend.VIVO_ATOMIC
+                    backend == RunNotificationBackend.VIVO_ATOMIC ||
+                    backend == RunNotificationBackend.FLYME_LIVE
             ) {
                 ISLAND_CHANNEL_ID
             } else {
@@ -460,6 +499,45 @@ object RunNotificationFactory {
                             putParcelable("island.superx.rightInfo.clickResp", contentIntent)
                         },
                     )
+                },
+            )
+        }
+    }
+
+    private fun flymeExtras(
+        context: Context,
+        state: RunProgressSnapshot,
+        first: Boolean,
+    ): Bundle {
+        val appContext = context.applicationContext
+        val icon = appIcon.get() ?: loadAppIcon(appContext).also(appIcon::set)
+        val percent = if (state.indeterminate || state.total <= 0) {
+            0
+        } else {
+            (state.progress * 100 / PROGRESS_MAX).coerceIn(0, 100)
+        }
+        val title = (state.label ?: appContext.getString(R.string.run_notification_title))
+            .take(20)
+        val background = accentColor(appContext) or 0xFF000000.toInt()
+        val foreground = if (Color.luminance(background) > 0.7f) {
+            Color.BLACK
+        } else {
+            Color.WHITE
+        }
+
+        return Bundle().apply {
+            putBoolean("is_live", true)
+            putInt("notification.live.operation", if (first) 0 else 1)
+            putInt("notification.live.type", FLYME_LIVE_TYPE)
+            putBundle(
+                "notification.live.capsule",
+                Bundle().apply {
+                    putInt("notification.live.capsuleStatus", 1)
+                    putInt("notification.live.capsuleType", FLYME_CAPSULE_TYPE)
+                    putString("notification.live.capsuleContent", "$title $percent%")
+                    putParcelable("notification.live.capsuleIcon", icon)
+                    putInt("notification.live.capsuleBgColor", background)
+                    putInt("notification.live.capsuleContentColor", foreground)
                 },
             )
         }

@@ -89,6 +89,8 @@ class RunForegroundService : Service() {
         islandFloated = false
         vivoReady = false
         vivoStarted = false
+        flymeReady = false
+        flymeStarted = false
         islandExecutor.execute {
             val context = applicationContext
             if (HyperIslandCapability.isAvailable(context)) {
@@ -100,6 +102,11 @@ class RunForegroundService : Service() {
             if (VivoAtomicNotificationCapability.isAvailable(context)) {
                 vivoReady = true
                 mainHandler.post { if (running.get()) publish() }
+                return@execute
+            }
+            if (FlymeLiveNotificationCapability.isAvailable(context)) {
+                flymeReady = true
+                mainHandler.post { if (running.get()) publish() }
             }
         }
     }
@@ -109,6 +116,8 @@ class RunForegroundService : Service() {
         islandFloated = false
         vivoReady = false
         vivoStarted = false
+        flymeReady = false
+        flymeStarted = false
         islandExecutor.execute { XmsfNetworkGate.release(applicationContext) }
     }
 
@@ -150,6 +159,12 @@ class RunForegroundService : Service() {
 
         @Volatile
         private var vivoStarted = false
+
+        @Volatile
+        private var flymeReady = false
+
+        @Volatile
+        private var flymeStarted = false
 
         private val notifyRunnable = Runnable {
             notifyScheduled = false
@@ -227,7 +242,7 @@ class RunForegroundService : Service() {
         private fun notifyThrottled(context: Context): Boolean {
             val now = SystemClock.elapsedRealtime()
             val interval = if (
-                RunNotificationFactory.backend(context, islandReady, vivoReady) ==
+                RunNotificationFactory.backend(context, islandReady, vivoReady, flymeReady) ==
                     RunNotificationBackend.VIVO_ATOMIC
             ) {
                 VIVO_MIN_UPDATE_INTERVAL_MS
@@ -265,15 +280,30 @@ class RunForegroundService : Service() {
         }
 
         private fun buildNotification(context: Context, state: RunProgressSnapshot?): Notification {
-            val backend = RunNotificationFactory.backend(context, islandReady, vivoReady)
+            val backend = RunNotificationFactory.backend(
+                context,
+                islandReady,
+                vivoReady,
+                flymeReady,
+            )
             val firstFloat = backend == RunNotificationBackend.HYPER_ISLAND && !islandFloated
             if (firstFloat) islandFloated = true
-            if (backend != RunNotificationBackend.VIVO_ATOMIC || state == null) {
+            if (
+                state == null || (
+                    backend != RunNotificationBackend.VIVO_ATOMIC &&
+                        backend != RunNotificationBackend.FLYME_LIVE
+                    )
+            ) {
                 return RunNotificationFactory.build(context, state, backend, firstFloat)
             }
 
             val firstVivo = !vivoStarted
-            val changedRecord = RunNotificationFactory.nextVivoChangedRecord(context)
+            val firstFlyme = !flymeStarted
+            val changedRecord = if (backend == RunNotificationBackend.VIVO_ATOMIC) {
+                RunNotificationFactory.nextVivoChangedRecord(context)
+            } else {
+                0
+            }
             val notification = RunNotificationFactory.build(
                 context = context,
                 state = state,
@@ -281,8 +311,10 @@ class RunForegroundService : Service() {
                 firstFloat = firstFloat,
                 vivoChangedRecord = changedRecord,
                 firstVivo = firstVivo,
+                firstFlyme = firstFlyme,
             )
-            vivoStarted = true
+            vivoStarted = vivoStarted || backend == RunNotificationBackend.VIVO_ATOMIC
+            flymeStarted = flymeStarted || backend == RunNotificationBackend.FLYME_LIVE
             return notification
         }
 

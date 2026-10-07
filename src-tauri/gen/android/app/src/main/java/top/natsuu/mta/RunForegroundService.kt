@@ -49,7 +49,7 @@ class RunForegroundService : Service() {
         appContext = applicationContext
         running.set(true)
         RunNotificationFactory.ensureChannels(this)
-        prepareIsland()
+        prepareVendorSurfaces()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -60,7 +60,7 @@ class RunForegroundService : Service() {
     override fun onDestroy() {
         running.set(false)
         clearProgress()
-        releaseIslandGate()
+        releaseVendorGate()
         stopForeground(STOP_FOREGROUND_REMOVE)
         RuntimeBridge.stopVirtualDisplay()
         super.onDestroy()
@@ -84,20 +84,31 @@ class RunForegroundService : Service() {
         }
     }
 
-    private fun prepareIsland() {
+    private fun prepareVendorSurfaces() {
         islandReady = false
         islandFloated = false
+        vivoReady = false
+        vivoStarted = false
         islandExecutor.execute {
-            if (!HyperIslandCapability.isAvailable(applicationContext)) return@execute
-            XmsfNetworkGate.acquire(applicationContext)
-            islandReady = true
-            mainHandler.post { if (running.get()) publish() }
+            val context = applicationContext
+            if (HyperIslandCapability.isAvailable(context)) {
+                XmsfNetworkGate.acquire(context)
+                islandReady = true
+                mainHandler.post { if (running.get()) publish() }
+                return@execute
+            }
+            if (VivoAtomicNotificationCapability.isAvailable(context)) {
+                vivoReady = true
+                mainHandler.post { if (running.get()) publish() }
+            }
         }
     }
 
-    private fun releaseIslandGate() {
+    private fun releaseVendorGate() {
         islandReady = false
         islandFloated = false
+        vivoReady = false
+        vivoStarted = false
         islandExecutor.execute { XmsfNetworkGate.release(applicationContext) }
     }
 
@@ -107,6 +118,7 @@ class RunForegroundService : Service() {
 
         /** MaaFW 的进度帧一秒能来好几条，通知原地刷新按 1s 节流（对齐 MaaFwApp） */
         private const val MIN_UPDATE_INTERVAL_MS = 1_000L
+        private const val VIVO_MIN_UPDATE_INTERVAL_MS = 10_000L
 
         private val running = AtomicBoolean(false)
         private val mainHandler = Handler(Looper.getMainLooper())
@@ -132,6 +144,12 @@ class RunForegroundService : Service() {
 
         @Volatile
         private var islandFloated = false
+
+        @Volatile
+        private var vivoReady = false
+
+        @Volatile
+        private var vivoStarted = false
 
         private val notifyRunnable = Runnable {
             notifyScheduled = false
@@ -159,6 +177,7 @@ class RunForegroundService : Service() {
         }
 
         fun stop(context: Context) {
+            finishVivoNotification(context)
             clearProgress()
             context.stopService(Intent(context, RunForegroundService::class.java))
         }
@@ -207,7 +226,15 @@ class RunForegroundService : Service() {
         /** 1s 节流：窗口内只保留最新快照，尾随补发保证最后一个状态一定上屏 */
         private fun notifyThrottled(context: Context): Boolean {
             val now = SystemClock.elapsedRealtime()
-            val wait = MIN_UPDATE_INTERVAL_MS - (now - lastNotifyAt)
+            val interval = if (
+                RunNotificationFactory.backend(context, islandReady, vivoReady) ==
+                    RunNotificationBackend.VIVO_ATOMIC
+            ) {
+                VIVO_MIN_UPDATE_INTERVAL_MS
+            } else {
+                MIN_UPDATE_INTERVAL_MS
+            }
+            val wait = interval - (now - lastNotifyAt)
             if (wait > 0) {
                 if (!notifyScheduled) {
                     notifyScheduled = true
@@ -238,10 +265,45 @@ class RunForegroundService : Service() {
         }
 
         private fun buildNotification(context: Context, state: RunProgressSnapshot?): Notification {
-            val backend = RunNotificationFactory.backend(context, islandReady)
+            val backend = RunNotificationFactory.backend(context, islandReady, vivoReady)
             val firstFloat = backend == RunNotificationBackend.HYPER_ISLAND && !islandFloated
             if (firstFloat) islandFloated = true
-            return RunNotificationFactory.build(context, state, backend, firstFloat)
+            if (backend != RunNotificationBackend.VIVO_ATOMIC || state == null) {
+                return RunNotificationFactory.build(context, state, backend, firstFloat)
+            }
+
+            val firstVivo = !vivoStarted
+            val changedRecord = RunNotificationFactory.nextVivoChangedRecord(context)
+            val notification = RunNotificationFactory.build(
+                context = context,
+                state = state,
+                backend = backend,
+                firstFloat = firstFloat,
+                vivoChangedRecord = changedRecord,
+                firstVivo = firstVivo,
+            )
+            vivoStarted = true
+            return notification
+        }
+
+        private fun finishVivoNotification(context: Context) {
+            val state = snapshot ?: return
+            if (!vivoReady || !vivoStarted) return
+            val notification = RunNotificationFactory.build(
+                context = context,
+                state = state,
+                backend = RunNotificationBackend.VIVO_ATOMIC,
+                vivoChangedRecord = RunNotificationFactory.nextVivoChangedRecord(context),
+                firstVivo = false,
+                finishVivo = true,
+            )
+            runCatching {
+                context.getSystemService(NotificationManager::class.java)
+                    ?.notify(NOTIFICATION_ID, notification)
+            }.onFailure { error ->
+                android.util.Log.w(TAG, "Could not finish the vivo atomic notification", error)
+            }
+            vivoStarted = false
         }
     }
 }

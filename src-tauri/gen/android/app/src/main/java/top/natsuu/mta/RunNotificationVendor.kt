@@ -31,3 +31,6 @@ fun detectRunNotificationVendor(
     "huawei" -> RunNotificationVendor.HUAWEI
     else -> RunNotificationVendor.OTHER
 }
+
+val RunNotificationVendor.isVivoFamily: Boolean
+    get() = this == RunNotificationVendor.VIVO || this == RunNotificationVendor.IQOO

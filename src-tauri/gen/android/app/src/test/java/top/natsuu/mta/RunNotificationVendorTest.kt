@@ -1,6 +1,8 @@
 package top.natsuu.mta
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RunNotificationVendorTest {
@@ -16,6 +18,13 @@ class RunNotificationVendorTest {
         assertEquals(RunNotificationVendor.HONOR, detectRunNotificationVendor("HONOR"))
         assertEquals(RunNotificationVendor.SAMSUNG, detectRunNotificationVendor("samsung"))
         assertEquals(RunNotificationVendor.HUAWEI, detectRunNotificationVendor("HUAWEI"))
+    }
+
+    @Test
+    fun groupsVivoAndIqooIntoTheAtomicNotificationFamily() {
+        assertTrue(RunNotificationVendor.VIVO.isVivoFamily)
+        assertTrue(RunNotificationVendor.IQOO.isVivoFamily)
+        assertFalse(RunNotificationVendor.XIAOMI.isVivoFamily)
     }
 
     @Test

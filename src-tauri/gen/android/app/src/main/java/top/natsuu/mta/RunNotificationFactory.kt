@@ -1,5 +1,6 @@
 package top.natsuu.mta
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,7 +19,27 @@ import com.xzakota.hyper.notification.focus.FocusNotification
 import com.xzakota.hyper.notification.focus.util.FocusUtils
 import com.xzakota.hyper.notification.island.model.TextInfo
 
-enum class RunNotificationBackend { HYPER_ISLAND, LIVE_UPDATE, PLAIN }
+enum class RunNotificationBackend { HYPER_ISLAND, VIVO_ATOMIC, LIVE_UPDATE, PLAIN }
+
+object VivoAtomicNotificationCapability {
+    private const val SUPERX_FEATURE = "vivo.opt.notification.superx"
+    private const val SCENE = "FOCUSMODE"
+
+    fun isAvailable(context: Context): Boolean {
+        val appContext = context.applicationContext
+        if (!detectRunNotificationVendor().isVivoFamily) return false
+        if (!appContext.packageManager.hasSystemFeature(SUPERX_FEATURE)) return false
+        return sceneEnabled(appContext, SCENE)
+    }
+
+    @SuppressLint("BlockedPrivateApi")
+    private fun sceneEnabled(context: Context, scene: String): Boolean = runCatching {
+        val method = Class.forName("android.app.NotificationManager")
+            .getMethod("getSceneStatus", String::class.java, String::class.java)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        method.invoke(manager, context.packageName, scene) as? Boolean ?: false
+    }.getOrDefault(false)
+}
 
 object HyperIslandCapability {
     @Volatile
@@ -65,6 +86,7 @@ object RunNotificationFactory {
     private const val BUSINESS_PROGRESS = "download_progress"
     private const val PROGRESS_COLOR = "#3482FF"
     private const val PROGRESS_UNREACH = "#33FFFFFF"
+    private const val VIVO_SCENE = "FOCUSMODE"
 
     private val appIcon = object : ThreadLocal<Icon>() {
         override fun initialValue(): Icon? = null
@@ -72,6 +94,8 @@ object RunNotificationFactory {
 
     @Volatile
     private var channelsReady = false
+
+    fun nextVivoChangedRecord(context: Context): Int = VivoSequenceStore.next(context)
 
     fun ensureChannels(context: Context) {
         if (channelsReady) return
@@ -102,10 +126,14 @@ object RunNotificationFactory {
     fun backend(
         context: Context,
         islandReady: Boolean,
+        vivoReady: Boolean = false,
         vendor: RunNotificationVendor = detectRunNotificationVendor(),
     ): RunNotificationBackend {
         if (islandReady && HyperIslandCapability.isAvailable(context)) {
             return RunNotificationBackend.HYPER_ISLAND
+        }
+        if (vivoReady && vendor.isVivoFamily) {
+            return RunNotificationBackend.VIVO_ATOMIC
         }
         // HarmonyOS Live View is not reachable from an Android notification. Keep
         // Huawei on the plain foreground notification rather than pretending that
@@ -123,6 +151,9 @@ object RunNotificationFactory {
         state: RunProgressSnapshot?,
         backend: RunNotificationBackend,
         firstFloat: Boolean = false,
+        vivoChangedRecord: Int = 0,
+        firstVivo: Boolean = false,
+        finishVivo: Boolean = false,
     ): Notification {
         ensureChannels(context)
         if (backend == RunNotificationBackend.HYPER_ISLAND) {
@@ -142,10 +173,10 @@ object RunNotificationFactory {
             }
         }
 
-        val effectiveBackend = if (backend == RunNotificationBackend.HYPER_ISLAND) {
-            RunNotificationBackend.PLAIN
-        } else {
-            backend
+        val effectiveBackend = when {
+            backend == RunNotificationBackend.HYPER_ISLAND -> RunNotificationBackend.PLAIN
+            backend == RunNotificationBackend.VIVO_ATOMIC && state == null -> RunNotificationBackend.PLAIN
+            else -> backend
         }
         val builder = builder(context, state, effectiveBackend)
             .setSilent(true)
@@ -163,6 +194,17 @@ object RunNotificationFactory {
                 builder.setRequestPromotedOngoing(true)
             }
         }
+        if (effectiveBackend == RunNotificationBackend.VIVO_ATOMIC && state != null) {
+            builder.addExtras(
+                vivoExtras(
+                    context = context,
+                    state = state,
+                    changedRecord = vivoChangedRecord,
+                    first = firstVivo,
+                    finish = finishVivo,
+                ),
+            )
+        }
         return builder.build()
     }
 
@@ -173,7 +215,14 @@ object RunNotificationFactory {
     ): NotificationCompat.Builder {
         val builder = NotificationCompat.Builder(
             context,
-            if (backend == RunNotificationBackend.HYPER_ISLAND) ISLAND_CHANNEL_ID else RUN_CHANNEL_ID,
+            if (
+                backend == RunNotificationBackend.HYPER_ISLAND ||
+                    backend == RunNotificationBackend.VIVO_ATOMIC
+            ) {
+                ISLAND_CHANNEL_ID
+            } else {
+                RUN_CHANNEL_ID
+            },
         )
             .setSmallIcon(R.mipmap.ic_launcher)
             .setColor(accentColor(context))
@@ -297,6 +346,125 @@ object RunNotificationFactory {
         }
     }
 
+    private fun vivoExtras(
+        context: Context,
+        state: RunProgressSnapshot,
+        changedRecord: Int,
+        first: Boolean,
+        finish: Boolean,
+    ): Bundle {
+        if (finish) {
+            return Bundle().apply {
+                putInt("notification.superx.operation", 2)
+                putBoolean("notification.superx.showNotify", true)
+                putBoolean("notification.superx.sound", false)
+            }
+        }
+
+        val appContext = context.applicationContext
+        val icon = appIcon.get() ?: loadAppIcon(appContext).also(appIcon::set)
+        val percent = if (state.indeterminate || state.total <= 0) {
+            0
+        } else {
+            (state.progress * 100 / PROGRESS_MAX).coerceIn(0, 100)
+        }
+        val title = (state.label ?: appContext.getString(R.string.run_notification_title))
+            .take(20)
+        val body = contentText(appContext, state).take(40)
+        val detail = if (state.total > 0) {
+            appContext.getString(
+                R.string.run_notification_progress_fraction,
+                state.done,
+                state.total,
+            )
+        } else {
+            appContext.getString(R.string.run_notification_text)
+        }
+        val contentIntent = contentIntent(appContext)
+
+        return Bundle().apply {
+            putInt("notification.superx.operation", if (first) 0 else 1)
+            putBoolean("notification.superx.showNotify", true)
+            putBoolean("notification.superx.sound", false)
+            putInt("notification.superx.template", 2)
+            putString("notification.superx.scene", VIVO_SCENE)
+            putInt("notification.superx.changedRecord", changedRecord)
+            putInt(
+                "notification.superx.displays",
+                0x1 or 0x10 or 0x100 or 0x10000,
+            )
+            putBoolean("notification.superx.islandNotify", true)
+            putParcelable("notification.superx.clickResp", contentIntent)
+
+            putBundle(
+                "notification.superx.baseInfos",
+                Bundle().apply {
+                    putParcelable("notification.superx.baseInfos.icon", icon)
+                    putCharSequence("notification.superx.baseInfos.title", title)
+                    putCharSequence("notification.superx.baseInfos.content", body)
+                    putInt("notification.superx.baseInfos.progressState", 0)
+                },
+            )
+            putBundle(
+                "notification.superx.infos",
+                Bundle().apply {
+                    putInt("notification.superx.infos.progress", percent)
+                    putParcelableArrayList(
+                        "notification.superx.infos.nodeIcon",
+                        arrayListOf(icon, icon),
+                    )
+                },
+            )
+            putBundle(
+                "notification.superx.shortInfos",
+                Bundle().apply {
+                    putString("notification.superx.shortInfos.describeShort", title)
+                    putString("notification.superx.shortInfos.coreInfoShort", detail)
+                    putParcelable("notification.superx.shortInfos.image", icon)
+                    putParcelable("notification.superx.shortInfos.imageClickResp", contentIntent)
+                },
+            )
+            putBundle(
+                "notification.superx.capsule",
+                Bundle().apply {
+                    putInt("notification.superx.capsule.state", 1)
+                    putParcelable("notification.superx.capsule.icon", icon)
+                    putCharSequence("notification.superx.capsule.content", "$title $percent%")
+                    putInt("notification.superx.capsule.bgColor", accentColor(appContext))
+                    putInt("notification.superx.capsule.contentColor", 0xFFFFFFFF.toInt())
+                },
+            )
+            putBundle(
+                "notification.superx.island",
+                Bundle().apply {
+                    putInt("island.superx.leftTemplate", 1)
+                    putInt("island.superx.rightTemplate", 2)
+                    putBoolean("island.superx.forceShow", true)
+                    putBoolean("island.superx.showBarWhenCard", false)
+                    putInt("island.superx.click", 0)
+                    putParcelable("island.superx.clickResp", contentIntent)
+                    putBundle(
+                        "island.superx.leftInfo",
+                        Bundle().apply {
+                            putParcelable("island.superx.leftInfo.icon", icon)
+                            putCharSequence("island.superx.leftInfo.content", detail)
+                        },
+                    )
+                    putBundle(
+                        "island.superx.rightInfo",
+                        Bundle().apply {
+                            putInt("island.superx.rightInfo.progressValue", percent)
+                            putInt("island.superx.rightInfo.progressState", 0)
+                            putInt("island.superx.rightInfo.progressColor", accentColor(appContext))
+                            putCharSequence("island.superx.rightInfo.progressContent", body)
+                            putParcelable("island.superx.rightInfo.clickResp", contentIntent)
+                        },
+                    )
+                },
+            )
+        }
+    }
+
     private fun loadAppIcon(context: Context): Icon {
         val drawable = context.applicationInfo.loadIcon(context.packageManager)
         val bitmap = if (drawable is BitmapDrawable) {
@@ -377,5 +545,20 @@ private object FocusSequences {
             prefs.edit().putLong(KEY, sequence).apply()
         }
         return sequence
+    }
+}
+
+private object VivoSequenceStore {
+    private const val PREFS_NAME = "vivo_superx_seq"
+    private const val KEY = "run_${RunForegroundService.NOTIFICATION_ID}"
+
+    @Synchronized
+    fun next(context: Context): Int {
+        val preferences = context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val current = preferences.getInt(KEY, 0)
+        val next = if (current >= Int.MAX_VALUE) 1 else current + 1
+        preferences.edit().putInt(KEY, next).apply()
+        return next
     }
 }

@@ -74,6 +74,13 @@ interface IMaaTauriAndroidControlService {
     String targetAppState(int displayId) = 22;
 
     /**
+     * Temporarily disables networking for Xiaomi's XMSF service while a
+     * HyperOS focus notification is active. The package is fixed on the
+     * privileged side so this cannot be reused to block arbitrary packages.
+     */
+    boolean setXmsfNetworkingEnabled(boolean enabled) = 23;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

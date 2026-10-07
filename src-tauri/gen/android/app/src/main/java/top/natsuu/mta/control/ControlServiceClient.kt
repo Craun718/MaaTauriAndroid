@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import rikka.shizuku.Shizuku
 import top.natsuu.mta.IMaaTauriAndroidControlService
 import top.natsuu.mta.RuntimeBridge
+import top.natsuu.mta.XmsfNetworkGate
 import top.natsuu.mta.control.root.RootServiceBootstrapRegistry
 import top.natsuu.mta.control.root.RootServiceStarter
 
@@ -367,6 +368,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             return
         }
         ControlHost.attach(service)
+        XmsfNetworkGate.onPrivilegedServiceConnected(context)
         RuntimeBridge.setControlState(STATE_CONNECTED)
         completeConnectionRequest(true)
         completePermissionRequest(true)
@@ -561,7 +563,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     companion object {
         private const val TAG = "MaaTauriAndroidControl"
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 14
+        private const val SERVICE_VERSION = 15
         private const val ROOT_CONNECT_TIMEOUT_MS = 15_000L
         private const val SWITCH_TIMEOUT_MS = 18_000L
         private const val PREFERENCES_NAME = "privileged_backend"

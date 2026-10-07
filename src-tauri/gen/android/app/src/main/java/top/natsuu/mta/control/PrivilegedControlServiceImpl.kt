@@ -46,6 +46,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         android.util.Log.w("MaaTauriAndroidControl", message)
     }
     private val targetPackages = TargetPackages(targetPackageStore)
+    private val xmsfFirewall = XmsfFirewall(context)
 
     /**
      * Exit sequence latch: owner binder death and the Shizuku destroy() hook
@@ -97,6 +98,12 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         }
 
     init {
+        // Netd firewall rules outlive this process; clear a cut left by an
+        // earlier privileged instance before any new gate call can arrive.
+        runCatching { xmsfFirewall.ensureRestored() }.onFailure { error ->
+            android.util.Log.w("MaaTauriAndroidControl", "Could not repair the XMSF gate", error)
+        }
+
         // Runs once per service process, before the first client call: the
         // previous process may have died while games were still recorded as
         // running. A throwing constructor would break the Shizuku handshake,
@@ -257,6 +264,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return state.toString()
     }
 
+    override fun setXmsfNetworkingEnabled(enabled: Boolean): Boolean {
+        return xmsfFirewall.setNetworkingEnabled(enabled)
+    }
+
     override fun attachOwner(owner: IBinder?): Int {
         return ownerLease.attach(owner)
     }
@@ -298,6 +309,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         step("target packages") { stopTargetPackages() }
         step("virtual display") { releaseVirtualDisplay() }
         step("agents") { stopAllAgents() }
+        step("xmsf gate") { xmsfFirewall.restoreIfNeeded() }
     }
 
     private inline fun step(name: String, action: () -> Unit) {

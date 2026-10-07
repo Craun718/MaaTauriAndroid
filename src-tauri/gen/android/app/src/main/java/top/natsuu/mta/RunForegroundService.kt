@@ -1,20 +1,17 @@
 package top.natsuu.mta
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.content.res.Configuration
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
-import androidx.core.app.NotificationCompat
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
@@ -51,7 +48,8 @@ class RunForegroundService : Service() {
         super.onCreate()
         appContext = applicationContext
         running.set(true)
-        ensureChannel()
+        RunNotificationFactory.ensureChannels(this)
+        prepareIsland()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,6 +60,7 @@ class RunForegroundService : Service() {
     override fun onDestroy() {
         running.set(false)
         clearProgress()
+        releaseIslandGate()
         stopForeground(STOP_FOREGROUND_REMOVE)
         RuntimeBridge.stopVirtualDisplay()
         super.onDestroy()
@@ -85,29 +84,29 @@ class RunForegroundService : Service() {
         }
     }
 
-    private fun ensureChannel() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.run_notification_channel),
-                // LOW：常驻不该出声；MIN 进不了状态栏，Live Update 也只禁 MIN
-                NotificationManager.IMPORTANCE_LOW,
-            ),
-        )
+    private fun prepareIsland() {
+        islandReady = false
+        islandFloated = false
+        islandExecutor.execute {
+            if (!HyperIslandCapability.isAvailable(applicationContext)) return@execute
+            XmsfNetworkGate.acquire(applicationContext)
+            islandReady = true
+            mainHandler.post { if (running.get()) publish() }
+        }
+    }
+
+    private fun releaseIslandGate() {
+        islandReady = false
+        islandFloated = false
+        islandExecutor.execute { XmsfNetworkGate.release(applicationContext) }
     }
 
     companion object {
         private const val TAG = "MTARun"
-        private const val CHANNEL_ID = "maa-run"
-        private const val NOTIFICATION_ID = 1
+        const val NOTIFICATION_ID = 1
 
         /** MaaFW 的进度帧一秒能来好几条，通知原地刷新按 1s 节流（对齐 MaaFwApp） */
         private const val MIN_UPDATE_INTERVAL_MS = 1_000L
-
-        /** 与前端 `--tt-accent` 同源：亮色 teal-700，暗色 emerald-400 */
-        private const val ACCENT_LIGHT = 0xFF0F766E.toInt()
-        private const val ACCENT_DARK = 0xFF34D399.toInt()
 
         private val running = AtomicBoolean(false)
         private val mainHandler = Handler(Looper.getMainLooper())
@@ -123,6 +122,16 @@ class RunForegroundService : Service() {
 
         @Volatile
         private var notifyScheduled = false
+
+        private val islandExecutor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "mta-run-island").apply { isDaemon = true }
+        }
+
+        @Volatile
+        private var islandReady = false
+
+        @Volatile
+        private var islandFloated = false
 
         private val notifyRunnable = Runnable {
             notifyScheduled = false
@@ -229,85 +238,10 @@ class RunForegroundService : Service() {
         }
 
         private fun buildNotification(context: Context, state: RunProgressSnapshot?): Notification {
-            val contentIntent = PendingIntent.getActivity(
-                context,
-                0,
-                Intent(context, MainActivity::class.java),
-                PendingIntent.FLAG_IMMUTABLE,
-            )
-            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(context.getString(R.string.run_notification_title))
-                .setContentText(contentText(context, state))
-                .setContentIntent(contentIntent)
-                .setOngoing(true)
-                .setSilent(true)
-                .setOnlyAlertOnce(true)
-                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            if (state != null && state.total > 0) {
-                builder
-                    // 经典模板仍靠 setProgress，否则 Android 9–15 没有条子
-                    .setProgress(PROGRESS_MAX, state.progress, state.indeterminate)
-                    // ProgressStyle 只在 36+ 生效；经 compat 设置在旧平台被忽略
-                    .setStyle(progressStyle(context, state))
-                    // 状态栏 chip / 锁屏卡片上的短文案
-                    .setShortCriticalText(
-                        context.getString(
-                            R.string.run_notification_progress_fraction,
-                            state.done,
-                            state.total,
-                        ),
-                    )
-                    .setRequestPromotedOngoing(canRequestPromotedOngoing(context))
-            }
-            return builder.build()
-        }
-
-        /** `setStyledByProgress(true)` + 单段 accent：系统按 progress 分色，done/剩余两色 */
-        private fun progressStyle(
-            context: Context,
-            state: RunProgressSnapshot,
-        ): NotificationCompat.ProgressStyle {
-            val style = NotificationCompat.ProgressStyle()
-                .setStyledByProgress(true)
-                .setProgressIndeterminate(state.indeterminate)
-                .addProgressSegment(
-                    NotificationCompat.ProgressStyle.Segment(PROGRESS_MAX)
-                        .setColor(accentColor(context)),
-                )
-            if (!state.indeterminate) {
-                style.setProgress(state.progress)
-            }
-            return style
-        }
-
-        /** 36 以下没有实时动态开关；36+ 尊重系统里 promoted notifications 的用户开关 */
-        private fun canRequestPromotedOngoing(context: Context): Boolean {
-            if (Build.VERSION.SDK_INT < 36) return true
-            // One UI does not expose this switch, but promoted requests still work.
-            if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return true
-            val manager = context.getSystemService(NotificationManager::class.java) ?: return false
-            return manager.canPostPromotedNotifications()
-        }
-
-        private fun contentText(context: Context, state: RunProgressSnapshot?): String {
-            if (state == null) return context.getString(R.string.run_notification_text)
-            if (!state.status.isNullOrBlank()) return state.status
-            if (!state.label.isNullOrBlank()) {
-                return context.getString(
-                    R.string.run_notification_task_progress,
-                    state.label,
-                    state.done,
-                    state.total,
-                )
-            }
-            return context.getString(R.string.run_notification_text)
-        }
-
-        private fun accentColor(context: Context): Int {
-            val night = (context.resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            return if (night) ACCENT_DARK else ACCENT_LIGHT
+            val backend = RunNotificationFactory.backend(context, islandReady)
+            val firstFloat = backend == RunNotificationBackend.HYPER_ISLAND && !islandFloated
+            if (firstFloat) islandFloated = true
+            return RunNotificationFactory.build(context, state, backend, firstFloat)
         }
     }
 }

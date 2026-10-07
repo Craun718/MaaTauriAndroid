@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="run_notification_channel">Maa run</string>
+    <string name="run_notification_island_channel">Maa run island</string>
     <string name="run_notification_title">Maa run in progress</string>
     <string name="run_notification_text">The automation task is still running</string>
     <string name="run_notification_task_progress">%1$s (%2$d/%3$d)</string>

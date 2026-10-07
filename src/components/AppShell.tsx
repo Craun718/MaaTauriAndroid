@@ -19,8 +19,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           so the overlay nav below can never be dragged around with the page.
           The top safe-area inset lives on the shell above, NOT on <main>:
           overflow clips at the scroll container's padding box, so a padding-top
-          on <main> would let scrolled content slide under the status bar text. */}
-      <main className="flex min-h-0 flex-1 flex-col overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-[calc(4rem_+_1px_+_var(--tt-safe-bottom))]">
+          on <main> would let scrolled content slide under the status bar text.
+          The bottom padding clears the fixed nav below (h-16 + safe-area) and
+          adds a 1rem gap on top of it: without that gap the last element of
+          every scrolling page rests exactly on the nav's border-t, which reads
+          as "glued to the menu bar". */}
+      <main className="flex min-h-0 flex-1 flex-col overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-[calc(4rem_+_1rem_+_1px_+_var(--tt-safe-bottom))]">
         {children}
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/92 pb-[var(--tt-safe-bottom)] backdrop-blur">

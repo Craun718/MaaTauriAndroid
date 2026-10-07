@@ -156,11 +156,11 @@ pub fn collect_artifacts(
 
     let full_log_path = run_dir.join("logs/logcat-full.txt");
     if full_log_path.is_file() {
-        let full_log =
-            fs::read_to_string(&full_log_path).map_err(|source| DiagnosticError::Read {
-                path: full_log_path.clone(),
-                source,
-            })?;
+        let full_log = fs::read(&full_log_path).map_err(|source| DiagnosticError::Read {
+            path: full_log_path.clone(),
+            source,
+        })?;
+        let full_log = String::from_utf8_lossy(&full_log).into_owned();
         let filtered = filtered_maa_tauri_android_log(&full_log);
         if filtered.trim().is_empty() {
             gaps.push(
@@ -290,7 +290,7 @@ pub fn export_log_archive(
         )));
     }
     write_file(&logs_dir.join("logcat-full.txt"), &logcat)?;
-    let full_log = fs::read_to_string(logs_dir.join("logcat-full.txt")).map_err(failure)?;
+    let full_log = String::from_utf8_lossy(&logcat).into_owned();
     let filtered = filtered_maa_tauri_android_log(&full_log);
     if !filtered.trim().is_empty() {
         write_file(
@@ -1472,6 +1472,52 @@ mod tests {
         assert!(zip.windows(12).any(|window| window == b"app log line"));
         fs::remove_file(output).unwrap();
         fs::remove_dir_all(log_root).unwrap();
+    }
+
+    #[test]
+    fn log_archive_preserves_non_utf8_logcat_and_filters_lossily() {
+        struct NonUtf8Source;
+
+        impl DiagnosticSource for NonUtf8Source {
+            fn capture_png(&self, _display_id: u32) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no capture"))
+            }
+
+            fn device_info(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no device info"))
+            }
+
+            fn display_state(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no display state"))
+            }
+
+            fn logcat(&self) -> io::Result<Vec<u8>> {
+                Ok(b"ignored \xff\nMaaTauriAndroid started \xff\n".to_vec())
+            }
+
+            fn dumpsys(&self) -> io::Result<Vec<u8>> {
+                Err(io::Error::other("no dumpsys"))
+            }
+
+            fn bugreport(&self, _destination: &Path) -> io::Result<Vec<String>> {
+                Ok(Vec::new())
+            }
+        }
+
+        let output = std::env::temp_dir().join(format!("logs-{}.zip", uuid::Uuid::new_v4()));
+
+        export_log_archive(&NonUtf8Source, &[], None, None, output.clone()).unwrap();
+
+        let zip = fs::read(&output).unwrap();
+        assert!(zip.windows(15).any(|window| window == b"logcat-full.txt"));
+        assert!(zip
+            .windows(30)
+            .any(|window| window == b"maa_tauri_android-filtered.log"));
+        assert!(zip
+            .windows(23)
+            .any(|window| window == b"MaaTauriAndroid started"));
+        assert!(!zip.windows(8).any(|window| window == b"ignored \n"));
+        fs::remove_file(output).unwrap();
     }
 
     #[test]

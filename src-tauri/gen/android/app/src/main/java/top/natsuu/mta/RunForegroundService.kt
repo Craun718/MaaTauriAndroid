@@ -247,7 +247,7 @@ class RunForegroundService : Service() {
             if (state != null && state.total > 0) {
                 builder
                     // 经典模板仍靠 setProgress，否则 Android 9–15 没有条子
-                    .setProgress(state.total, state.progress, state.indeterminate)
+                    .setProgress(PROGRESS_MAX, state.progress, state.indeterminate)
                     // ProgressStyle 只在 36+ 生效；经 compat 设置在旧平台被忽略
                     .setStyle(progressStyle(context, state))
                     // 状态栏 chip / 锁屏卡片上的短文案

@@ -109,6 +109,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
+      - name: Cache the Ruff wheel
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: ruff-0.16.2-python-3.13-${{ runner.os }}
       # Pinned so a new Ruff release cannot turn the gate red on its own. The
       # rule set and the excluded third-party trees live in ruff.toml;
       # `scripts/build_agent_bundle.py` is a vendored AGPL-3.0 copy, which is
@@ -198,6 +203,7 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
+      RESOURCE_REF: 4fbfb4ac85697f2f75910016ee7ba6128d3d9494
     steps:
       - uses: actions/checkout@v7
 
@@ -218,6 +224,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
       - uses: android-actions/setup-android@v4
       # API 37 ships as the minor-numbered package android-37.0, while AGP
       # looks the platform up by the bare android-37 hash: symlink it into
@@ -231,10 +238,16 @@ jobs:
         with:
           workspaces: src-tauri
           key: android-${{ env.ANDROID_RUST_TARGET }}-apk
-      - uses: actions/cache@v6
+      - name: Cache the Python agent runtime downloads
+        uses: actions/cache@v6
         with:
-          path: .cache
-          key: m9a-agent-core-3.13.15-maafw5.14.2
+          path: .cache/maafw
+          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+      - name: Cache the M9A Python dependencies
+        uses: actions/cache@v6
+        with:
+          path: .cache/pip
+          key: m9a-agent-wheels-${{ env.ANDROID_ABI }}-${{ env.RESOURCE_REF }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
       # Pin the debug keystore. Without this every run generates a fresh one, so
       # each APK is signed with a different key: `adb install -r` then fails with
       # INSTALL_FAILED_UPDATE_INCOMPATIBLE and verifying a build on a device
@@ -278,7 +291,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/MAA1999/M9A.git \
             --id m9a \
-            --ref 4fbfb4ac85697f2f75910016ee7ba6128d3d9494 \
+            --ref "$RESOURCE_REF" \
             --submodules \
             --exclude pillow \
             --require pillow==11.0.0 \
@@ -350,6 +363,7 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
+      RESOURCE_REF: a5ad50e68986dc012f1020cebb91946d82ea4538
     steps:
       - uses: actions/checkout@v7
 
@@ -370,6 +384,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
       - uses: android-actions/setup-android@v4
       # API 37 ships as the minor-numbered package android-37.0, while AGP
       # looks the platform up by the bare android-37 hash: symlink it into
@@ -383,10 +398,16 @@ jobs:
         with:
           workspaces: src-tauri
           key: android-${{ env.ANDROID_RUST_TARGET }}-narutomobile-apk
-      - uses: actions/cache@v6
+      - name: Cache the Python agent runtime downloads
+        uses: actions/cache@v6
         with:
-          path: .cache
-          key: narutomobile-agent-core-3.13.15-maafw5.14.2
+          path: .cache/maafw
+          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+      - name: Cache the NarutoMobile Python dependencies
+        uses: actions/cache@v6
+        with:
+          path: .cache/pip
+          key: narutomobile-agent-wheels-${{ env.ANDROID_ABI }}-${{ env.RESOURCE_REF }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6
@@ -418,7 +439,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/duorua/narutomobile.git \
             --id narutomobile \
-            --ref a5ad50e68986dc012f1020cebb91946d82ea4538 \
+            --ref "$RESOURCE_REF" \
             --submodules \
             --exclude pillow \
             --exclude win32-setctime \
@@ -475,6 +496,7 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
+      RESOURCE_REF: 989ba881d675690deea734f363f6e2c6d6e1da48
     steps:
       - uses: actions/checkout@v7
 
@@ -495,6 +517,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
       - uses: android-actions/setup-android@v4
       # API 37 ships as the minor-numbered package android-37.0, while AGP
       # looks the platform up by the bare android-37 hash: symlink it into
@@ -508,10 +531,16 @@ jobs:
         with:
           workspaces: src-tauri
           key: android-${{ env.ANDROID_RUST_TARGET }}-maapvz-apk
-      - uses: actions/cache@v6
+      - name: Cache the Python agent runtime downloads
+        uses: actions/cache@v6
         with:
-          path: .cache
-          key: maapvz-agent-core-3.13.15-maafw5.14.2
+          path: .cache/maafw
+          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+      - name: Cache the MAAPVZ Python dependencies
+        uses: actions/cache@v6
+        with:
+          path: .cache/pip
+          key: maapvz-agent-wheels-${{ env.ANDROID_ABI }}-${{ env.RESOURCE_REF }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6
@@ -543,7 +572,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/Maa-Assistant-PVZ-The-best/MAAPVZ.git \
             --id maapvz \
-            --ref 989ba881d675690deea734f363f6e2c6d6e1da48 \
+            --ref "$RESOURCE_REF" \
             --submodules \
             --exclude pillow \
             --exclude win32-setctime \
@@ -623,9 +652,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
       - uses: android-actions/setup-android@v4
       - name: Install the Android build toolchains
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y ccache ninja-build
       # API 37 ships as the minor-numbered package android-37.0, while AGP
       # looks the platform up by the bare android-37 hash: symlink it into
       # place after installing (see flutter/flutter#192478).
@@ -695,14 +725,45 @@ jobs:
           cache-dependency-path: |
             resource/maaend/agent/go-service/go.mod
             resource/maaend/agent/go-service/go.sum
+      - name: Resolve the MaaEnd agent source revisions
+        id: maaend_agents
+        run: |
+          echo "go=$(git -C resource/maaend rev-parse HEAD:agent/go-service)" >> "$GITHUB_OUTPUT"
+          echo "cpp=$(git -C resource/maaend rev-parse HEAD:agent/cpp-algo)" >> "$GITHUB_OUTPUT"
+          echo "maautils=$(git -C resource/maaend rev-parse HEAD:agent/cpp-algo/MaaUtils)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
           path: resource/maaend/agent/cpp-algo/MaaUtils/MaaDeps
           key: maaend-v2.31.0-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
+      - name: Cache the MaaFramework agent SDK
+        uses: actions/cache@v6
+        with:
+          path: |
+            resource/maaend/.cache/android-agents
+            resource/maaend/deps-android/${{ env.ANDROID_ABI }}
+          key: maaend-agent-sdk-${{ env.ANDROID_ABI }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('resource/maaend/tools/build_android_agents.py') }}
+      - name: Cache the Go agent build
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/go-build
+          key: maaend-go-build-${{ env.ANDROID_ABI }}-${{ env.AGENT_NDK_VERSION }}-${{ steps.maaend_agents.outputs.go }}
+          restore-keys: |
+            maaend-go-build-${{ env.ANDROID_ABI }}-${{ env.AGENT_NDK_VERSION }}-
+      - name: Cache the C++ agent compiler
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: maaend-ccache-${{ env.ANDROID_ABI }}-${{ env.AGENT_NDK_VERSION }}-${{ env.MAAFW_VERSION }}-${{ steps.maaend_agents.outputs.cpp }}-${{ steps.maaend_agents.outputs.maautils }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
+          restore-keys: |
+            maaend-ccache-${{ env.ANDROID_ABI }}-${{ env.AGENT_NDK_VERSION }}-${{ env.MAAFW_VERSION }}-
 
       - name: Build the MaaEnd Android agents
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 1G
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           agent_ndk="$ANDROID_HOME/ndk/$AGENT_NDK_VERSION"
           export ANDROID_NDK_HOME="$agent_ndk"

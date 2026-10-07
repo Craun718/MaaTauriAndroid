@@ -134,6 +134,7 @@ python3 "${REPO_ROOT}/scripts/build_agent_bundle.py" \
   --work "${WORK}"
 
 VENDOR_DIR="${REPO_ROOT}/vendor/maa/android/${ABI}"
+AGENT_LIBS=""
 case "${ABI}" in
   arm64-v8a) MAAFW_ARCH="aarch64" ;;
   x86_64) MAAFW_ARCH="x86_64" ;;
@@ -142,23 +143,28 @@ case "${ABI}" in
     exit 2
     ;;
 esac
-if [ -f "${VENDOR_DIR}/libMaaAgentClient.so" ]; then
+if [ -f "${VENDOR_DIR}/libMaaAgentClient.so" ] && [ -f "${VENDOR_DIR}/libMaaAgentServer.so" ]; then
   echo "  2/3  reusing agent libraries from vendor/maa/android/${ABI}/…"
-  mkdir -p "${TMP}/agent-libs"
-  cp "${VENDOR_DIR}/libMaaAgentClient.so" "${VENDOR_DIR}/libMaaAgentServer.so" "${TMP}/agent-libs/"
 else
-  echo "  2/3  downloading MaaFW agent libraries…"
-  curl -fsSL -o "${TMP}/maafw-android.zip" \
-    "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAAFW_VERSION}/MAA-android-${MAAFW_ARCH}-${MAAFW_VERSION}.zip"
-  unzip -j -q "${TMP}/maafw-android.zip" \
-    "bin/libMaaAgentClient.so" "bin/libMaaAgentServer.so" \
-    -d "${TMP}/agent-libs"
+  AGENT_LIBS="${WORK}/agent-libs/${MAAFW_VERSION}/${ABI}"
+  if [ -f "${AGENT_LIBS}/libMaaAgentClient.so" ] && [ -f "${AGENT_LIBS}/libMaaAgentServer.so" ]; then
+    echo "  2/3  reusing cached MaaFW agent libraries…"
+  else
+    echo "  2/3  downloading MaaFW agent libraries…"
+    curl -fsSL -o "${TMP}/maafw-android.zip" \
+      "https://github.com/MaaXYZ/MaaFramework/releases/download/${MAAFW_VERSION}/MAA-android-${MAAFW_ARCH}-${MAAFW_VERSION}.zip"
+    rm -rf "${AGENT_LIBS}"
+    mkdir -p "${AGENT_LIBS}"
+    unzip -j -q "${TMP}/maafw-android.zip" \
+      "bin/libMaaAgentClient.so" "bin/libMaaAgentServer.so" \
+      -d "${AGENT_LIBS}"
+  fi
 fi
 
 echo "  3/3  packing the archive…"
 python3 "${REPO_ROOT}/src-tauri/profiles/pack_agent_bundle.py" \
   "${DIST}/${ABI}/bundle" \
-  "${TMP}/agent-libs" \
+  "${AGENT_LIBS:-${VENDOR_DIR}}" \
   "${OUT_ZIP}" \
   --abi "${ABI}"
 

@@ -133,6 +133,8 @@ const en = {
   diagnosticVirtualDisplayRejected:
     "The privileged control service rejected the virtual display",
   diagnosticVirtualDisplayInactive: "The virtual display is not active",
+  diagnosticVirtualDisplayScreenEmpty:
+    "No app is running on the virtual display. Start the game or select a start task.",
   diagnosticPermissionRequestInProgress:
     "The run needs permission; requesting it now.",
   diagnosticPermissionRequestSucceeded:
@@ -646,6 +648,8 @@ const zh: Record<MessageKey, string> = {
     "无法打开 Shizuku；请确认它已安装，且未被系统拦截",
   diagnosticVirtualDisplayRejected: "特权控制服务拒绝了虚拟屏请求",
   diagnosticVirtualDisplayInactive: "虚拟屏未启动",
+  diagnosticVirtualDisplayScreenEmpty:
+    "虚拟屏上没有 App 在运行，请启动游戏或选择启动任务",
   diagnosticPermissionRequestInProgress: "本次运行需要权限，正在申请。",
   diagnosticPermissionRequestSucceeded: "已获得权限，正在重新开始运行。",
   diagnosticPermissionRequestFailed:
@@ -874,6 +878,9 @@ export function localizeRunEvent(
   language: AppLanguage,
 ): string {
   const data = event.data;
+  if (data?.diagnostic === "screenEmpty") {
+    return translate(language, "diagnosticVirtualDisplayScreenEmpty");
+  }
   if (data?.diagnostic === "gameFps") {
     const level =
       data.level === "low"

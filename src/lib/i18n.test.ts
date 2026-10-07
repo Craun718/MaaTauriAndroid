@@ -180,6 +180,25 @@ describe("localizeRunEvent", () => {
     );
   });
 
+  it("localizes an empty virtual display from structured task diagnostics", () => {
+    const screenEmptyEvent: RunEvent = {
+      ...event,
+      message: "Maa task StartUp failed: Failed",
+      data: {
+        diagnosis:
+          "Diagnosis: no app was running on the controlled display; the game was never started — start the game or select a start task.",
+        diagnostic: "screenEmpty",
+      },
+    };
+
+    expect(localizeRunEvent(screenEmptyEvent, "zh")).toBe(
+      "虚拟屏上没有 App 在运行，请启动游戏或选择启动任务",
+    );
+    expect(localizeRunEvent(screenEmptyEvent, "en")).toBe(
+      "No app is running on the virtual display. Start the game or select a start task.",
+    );
+  });
+
   it("falls back to diagnostic localization or the backend text", () => {
     expect(
       localizeRunEvent(

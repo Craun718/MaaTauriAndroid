@@ -1204,6 +1204,7 @@ pub enum RunOutcome {
         /// `crate::run_diagnosis`), or `None` when the controlled display
         /// could not be interrogated.
         diagnosis: Option<String>,
+        diagnostic_code: Option<&'static str>,
         /// Failure screenshot taken at the moment of the failure, or why it
         /// could not be captured. Captured there rather than at the end of the
         /// run because later tasks keep changing the picture.
@@ -1239,9 +1240,16 @@ pub fn task_failed_event(
     entry: &str,
     status: &MaaStatus,
     diagnosis: Option<&str>,
+    diagnostic_code: Option<&'static str>,
 ) -> (String, Option<Value>) {
     let message = format!("Maa task {entry} failed: {status}");
-    let data = diagnosis.map(|diagnosis| serde_json::json!({ "diagnosis": diagnosis }));
+    let data = match diagnostic_code {
+        Some(diagnostic_code) => Some(serde_json::json!({
+            "diagnosis": diagnosis,
+            "diagnostic": diagnostic_code,
+        })),
+        None => diagnosis.map(|diagnosis| serde_json::json!({ "diagnosis": diagnosis })),
+    };
     (message, data)
 }
 
@@ -1259,9 +1267,10 @@ fn wait_for_modal_acks(tasker: &Arc<Tasker>) {
 }
 
 /// Collects task failures while the queue keeps advancing. MaaFwApp (and MXU)
-/// semantics: one failing task never aborts the rest of the run, and the run
-/// reports the *first* failure — it is the causal one, later ones are usually
-/// cascades of the same root cause (an empty display, a lost virtual display).
+/// semantics: one failing task normally does not abort the rest of the run,
+/// and the run reports the *first* failure — it is the causal one, later ones
+/// are usually cascades of the same root cause. An empty controlled display is
+/// the exception: every later task would only repeat the same failure.
 #[derive(Default)]
 struct FailureLog {
     first: Option<TaskFailure>,
@@ -1272,6 +1281,7 @@ struct TaskFailure {
     task_name: String,
     status: MaaStatus,
     diagnosis: Option<String>,
+    diagnostic_code: Option<&'static str>,
     screenshot: Result<PathBuf, String>,
 }
 
@@ -1283,6 +1293,7 @@ impl FailureLog {
         task_name: String,
         status: MaaStatus,
         diagnosis: Option<String>,
+        diagnostic_code: Option<&'static str>,
         screenshot: Result<PathBuf, String>,
     ) {
         if self.first.is_none() {
@@ -1291,6 +1302,7 @@ impl FailureLog {
                 task_name,
                 status,
                 diagnosis,
+                diagnostic_code,
                 screenshot,
             });
         }
@@ -1314,6 +1326,7 @@ impl FailureLog {
             task_name: failure.task_name,
             status: failure.status,
             diagnosis: failure.diagnosis,
+            diagnostic_code: failure.diagnostic_code,
             screenshot: failure.screenshot,
             stopped,
         })
@@ -1326,10 +1339,11 @@ impl FailureLog {
 /// consumed before the first task (an empty-display hint) and on a task
 /// failure (the concrete cause).
 ///
-/// A failing task never aborts the queue: it is logged, remembered as the run's
-/// failure, and the next task still runs. Only a user stop ends the run early —
-/// tasks are posted one at a time rather than pre-queued because the modal focus
-/// gate holds back the *next* post until the user confirms a dialog.
+/// A failing task is logged and remembered as the run's first failure. Unless
+/// the controlled display is empty, the next task still runs; only a user stop
+/// or an empty-display failure ends the run early. Tasks are posted one at a
+/// time rather than pre-queued because the modal focus gate holds back the
+/// *next* post until the user confirms a dialog.
 ///
 /// A stop reports a failure that already happened (MXU does the same) rather than
 /// swallowing it, but keeps this repo's distinct `Stopped` outcome when nothing
@@ -1409,16 +1423,38 @@ pub fn run_tasks(
                 &crate::run_diagnosis::missed_nodes(),
             );
             let diagnosis = crate::run_diagnosis::render(&cause);
+            let diagnostic_code = failure_diagnostic_code(&cause);
             let screenshot =
                 crate::diagnostics::capture_failure_screenshot(logger.run_dir(), &entry)
                     .map_err(|error| error.to_string());
-            failures.record(entry, task_name, status, diagnosis, screenshot);
+            failures.record(
+                entry,
+                task_name,
+                status,
+                diagnosis,
+                diagnostic_code,
+                screenshot,
+            );
+            if failure_stops_queue(&cause) {
+                break;
+            }
         }
     }
     match failures.into_outcome() {
         Some(outcome) => Ok(outcome),
         None => Ok(RunOutcome::Completed),
     }
+}
+
+fn failure_diagnostic_code(cause: &crate::run_diagnosis::FailureCause) -> Option<&'static str> {
+    match cause {
+        crate::run_diagnosis::FailureCause::ScreenEmpty => Some("screenEmpty"),
+        _ => None,
+    }
+}
+
+fn failure_stops_queue(cause: &crate::run_diagnosis::FailureCause) -> bool {
+    matches!(cause, crate::run_diagnosis::FailureCause::ScreenEmpty)
 }
 
 #[cfg(test)]
@@ -1439,6 +1475,7 @@ mod tests {
             task_name: "Login".to_string(),
             status: MaaStatus::FAILED,
             diagnosis: None,
+            diagnostic_code: None,
             screenshot: Err("not captured in this test".to_string()),
             stopped: false,
         }
@@ -1451,6 +1488,7 @@ mod tests {
             task_name: "Login".to_string(),
             status: MaaStatus::FAILED,
             diagnosis: None,
+            diagnostic_code: None,
             screenshot: Err("not captured in this test".to_string()),
             stopped: true,
         }
@@ -1471,6 +1509,27 @@ mod tests {
     }
 
     #[test]
+    fn only_an_empty_screen_stops_the_remaining_task_queue() {
+        assert!(failure_stops_queue(
+            &crate::run_diagnosis::FailureCause::ScreenEmpty
+        ));
+        assert!(!failure_stops_queue(
+            &crate::run_diagnosis::FailureCause::DisplayGone
+        ));
+        assert!(!failure_stops_queue(
+            &crate::run_diagnosis::FailureCause::RecognitionMissed { missed: Vec::new() }
+        ));
+        assert_eq!(
+            failure_diagnostic_code(&crate::run_diagnosis::FailureCause::ScreenEmpty),
+            Some("screenEmpty")
+        );
+        assert_eq!(
+            failure_diagnostic_code(&crate::run_diagnosis::FailureCause::DisplayGone),
+            None
+        );
+    }
+
+    #[test]
     fn stopping_after_a_failure_still_reports_that_failure() {
         let mut failures = FailureLog::default();
         failures.record(
@@ -1478,6 +1537,7 @@ mod tests {
             "OutpostTrading".to_string(),
             MaaStatus::FAILED,
             Some("no app was running on the controlled display".to_string()),
+            Some("screenEmpty"),
             Err("not captured in this test".to_string()),
         );
 
@@ -1485,6 +1545,7 @@ mod tests {
             RunOutcome::Failed {
                 entry,
                 diagnosis,
+                diagnostic_code,
                 stopped,
                 ..
             } => {
@@ -1495,6 +1556,7 @@ mod tests {
                     diagnosis.as_deref(),
                     Some("no app was running on the controlled display")
                 );
+                assert_eq!(diagnostic_code, Some("screenEmpty"));
                 assert!(stopped);
             }
             _ => panic!("a failure that already happened must still be reported"),
@@ -1509,6 +1571,7 @@ mod tests {
             "OutpostTrading".to_string(),
             MaaStatus::FAILED,
             Some("the virtual display was lost".to_string()),
+            None,
             Ok(PathBuf::from("screens/failure.png")),
         );
         // The queue kept going: a later task succeeded, then another failed.
@@ -1517,6 +1580,7 @@ mod tests {
             "DailyRewards".to_string(),
             MaaStatus::FAILED,
             Some("this diagnosis must be dropped".to_string()),
+            None,
             Ok(PathBuf::from("screens/failure.png")),
         );
 
@@ -1529,6 +1593,7 @@ mod tests {
                 task_name,
                 status,
                 diagnosis,
+                diagnostic_code,
                 screenshot,
                 stopped,
             } => {
@@ -1536,6 +1601,7 @@ mod tests {
                 assert_eq!(task_name, "OutpostTrading");
                 assert_eq!(status, MaaStatus::FAILED);
                 assert_eq!(diagnosis.as_deref(), Some("the virtual display was lost"));
+                assert_eq!(diagnostic_code, None);
                 assert_eq!(screenshot.unwrap(), PathBuf::from("screens/failure.png"));
                 assert!(!stopped);
             }
@@ -1549,6 +1615,7 @@ mod tests {
             "StartUp",
             &MaaStatus::FAILED,
             Some("recognition matched nothing; last unmatched nodes: CandyCancel"),
+            None,
         );
         assert_eq!(message, "Maa task StartUp failed: Failed");
         assert_eq!(
@@ -1558,8 +1625,18 @@ mod tests {
             }))
         );
 
-        let (message, data) = task_failed_event("StartUp", &MaaStatus::FAILED, None);
+        let (message, data) =
+            task_failed_event("StartUp", &MaaStatus::FAILED, None, Some("screenEmpty"));
         assert_eq!(message, "Maa task StartUp failed: Failed");
+        assert_eq!(
+            data,
+            Some(serde_json::json!({
+                "diagnosis": null,
+                "diagnostic": "screenEmpty"
+            }))
+        );
+
+        let (_, data) = task_failed_event("StartUp", &MaaStatus::FAILED, None, None);
         assert_eq!(data, None);
     }
 

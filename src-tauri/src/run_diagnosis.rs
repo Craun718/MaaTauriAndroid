@@ -150,7 +150,7 @@ pub fn render(cause: &FailureCause) -> Option<String> {
             "the virtual display was lost; restart the run to recreate it".to_string()
         }
         FailureCause::ScreenEmpty => "no app was running on the controlled display; the game \
-            was never started — run a task that starts the game (e.g. StartUp) first"
+            was never started — start the game or select a start task"
             .to_string(),
         FailureCause::ScreenOccupiedBy(package) => {
             format!("the controlled display was showing {package} instead of the game")
@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(classify(Some(&snapshot), &[]), FailureCause::ScreenEmpty);
         assert!(render(&FailureCause::ScreenEmpty)
             .unwrap()
-            .contains("never started"));
+            .contains("start the game or select a start task"));
     }
 
     #[test]

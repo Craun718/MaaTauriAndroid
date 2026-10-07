@@ -1511,6 +1511,24 @@ fn virtual_display_dimensions(portrait: bool) -> (i32, i32) {
     }
 }
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn virtual_display_matches_geometry(
+    status: &VirtualDisplayStatus,
+    width: i32,
+    height: i32,
+) -> bool {
+    status.active && status.width == width && status.height == height
+}
+
+#[cfg(target_os = "android")]
+fn ensure_virtual_display_for_run(width: i32, height: i32) -> Result<(), AppError> {
+    let status = virtual_display_status()?;
+    if virtual_display_matches_geometry(&status, width, height) {
+        return Ok(());
+    }
+    call_runtime_bridge_start_virtual_display(width, height, 160)
+}
+
 #[tauri::command]
 fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
     #[cfg(target_os = "android")]
@@ -2443,7 +2461,7 @@ async fn start_run_core(
                 Err(error) => return Err(fail_preparing(error.to_string())),
             };
             let (width, height) = virtual_display_dimensions(portrait);
-            if let Err(error) = call_runtime_bridge_start_virtual_display(width, height, 160) {
+            if let Err(error) = ensure_virtual_display_for_run(width, height) {
                 return Err(fail_preparing(error.to_string()));
             }
         }
@@ -2724,6 +2742,7 @@ async fn start_run_core(
                             task_name: _,
                             status,
                             diagnosis,
+                            diagnostic_code,
                             screenshot,
                             // Already consumed by `is_natural_end()` above: a
                             // failure the user cut short is reported exactly like
@@ -2752,8 +2771,12 @@ async fn start_run_core(
                                     }
                                 }
                             }
-                            let (message, data) =
-                                runtime::task_failed_event(&entry, &status, diagnosis.as_deref());
+                            let (message, data) = runtime::task_failed_event(
+                                &entry,
+                                &status,
+                                diagnosis.as_deref(),
+                                diagnostic_code,
+                            );
                             let telemetry_message = match &diagnosis {
                                 Some(diagnosis) => format!("{message} {diagnosis}"),
                                 None => message.clone(),
@@ -3962,6 +3985,31 @@ mod tests {
     fn virtual_display_dimensions_follow_the_configured_orientation() {
         assert_eq!(virtual_display_dimensions(false), (1280, 720));
         assert_eq!(virtual_display_dimensions(true), (720, 1280));
+    }
+
+    #[test]
+    fn virtual_display_geometry_decides_whether_a_run_can_reuse_it() {
+        let status = VirtualDisplayStatus {
+            active: true,
+            display_id: 12,
+            width: 1280,
+            height: 720,
+            frame_count: 8,
+        };
+        assert!(virtual_display_matches_geometry(&status, 1280, 720));
+
+        let inactive = VirtualDisplayStatus {
+            active: false,
+            ..status
+        };
+        assert!(!virtual_display_matches_geometry(&inactive, 1280, 720));
+
+        let rotated = VirtualDisplayStatus {
+            width: 720,
+            height: 1280,
+            ..inactive
+        };
+        assert!(!virtual_display_matches_geometry(&rotated, 1280, 720));
     }
 
     #[test]

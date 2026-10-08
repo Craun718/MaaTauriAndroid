@@ -2579,6 +2579,7 @@ async fn start_run_core(
     );
     let force_stop_target_app = configuration.force_stop_target_app;
     let close_target_app_after_run = configuration.close_target_app_after_run;
+    let max_run_duration = run_supervisor::configured_limit(configuration.max_run_duration_seconds);
     let pi_env = if agent_count > 0 {
         Some(agent::pi_environment(
             &resolved,
@@ -2601,6 +2602,7 @@ async fn start_run_core(
             sessions.clone(),
             &run_execution_id,
             controller_display_id,
+            max_run_duration,
         );
         let fail = abort_preparing_run;
         let creation = tokio::task::spawn_blocking(move || {

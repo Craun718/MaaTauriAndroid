@@ -8,6 +8,7 @@
 //! - Polls the target app state once per second and fails fast on:
 //!   - Target app exit (crashed or stopped)
 //!   - Virtual display loss
+//! - Stops a run that reaches the user-configured maximum duration
 //!
 //! The supervisor does not correct display migration (the game's own
 //! decision); it records the offscreen state so a later failure diagnosis
@@ -17,9 +18,7 @@
 #[cfg(any(target_os = "android", test))]
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-#[cfg(target_os = "android")]
 use std::time::Duration;
-#[cfg(target_os = "android")]
 use tauri::Emitter;
 
 /// Sampling window: one sample per second for 15 seconds.
@@ -167,6 +166,47 @@ impl HealthCell {
     }
 }
 
+/// Upper bound for a configured run duration (7 days): a hand-edited or
+/// corrupt configuration must not overflow the deadline arithmetic.
+const MAX_RUN_DURATION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+/// The configured per-run duration limit, or `None` when it is disabled.
+/// `0` means "no limit"; longer values are clamped to [`MAX_RUN_DURATION`].
+pub(crate) fn configured_limit(seconds: u64) -> Option<Duration> {
+    (seconds > 0).then(|| Duration::from_secs(seconds).min(MAX_RUN_DURATION))
+}
+
+/// Human-readable limit for the failure message; whole hours and minutes keep
+/// their unit so `1800` is not reported as `1800 s`.
+fn describe_duration(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    if seconds >= 3600 && seconds % 3600 == 0 {
+        format!("{} h", seconds / 3600)
+    } else if seconds >= 60 && seconds % 60 == 0 {
+        format!("{} min", seconds / 60)
+    } else {
+        format!("{seconds} s")
+    }
+}
+
+/// Failure message recorded when a run reaches its configured limit.
+fn timeout_message(duration: Duration) -> String {
+    format!(
+        "the run exceeded the configured maximum duration of {}; stopping the run",
+        describe_duration(duration)
+    )
+}
+
+/// Resolves once the run's deadline passes, or never when it is unlimited.
+/// The deadline is absolute, so re-creating this future on every loop
+/// iteration does not postpone it.
+async fn wait_for_deadline(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
+    }
+}
+
 /// RAII guard that owns the supervisor watch task. Dropping it signals the
 /// watch loop to stop on every run exit path, including panics.
 pub(crate) struct SupervisorGuard {
@@ -181,6 +221,7 @@ impl SupervisorGuard {
         sessions: Arc<crate::runtime::MaaSessions>,
         execution_id: &str,
         display_id: u32,
+        max_run_duration: Option<Duration>,
     ) -> Self {
         let last_health = Arc::new(HealthCell(Mutex::new(None)));
         let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
@@ -190,6 +231,7 @@ impl SupervisorGuard {
             sessions,
             execution_id.to_string(),
             display_id,
+            max_run_duration,
             Arc::clone(&last_health),
             stop_rx,
         ));
@@ -255,6 +297,7 @@ async fn watch_loop(
     sessions: Arc<crate::runtime::MaaSessions>,
     execution_id: String,
     display_id: u32,
+    max_run_duration: Option<Duration>,
     health_cell: Arc<HealthCell>,
     mut stop_rx: tokio::sync::watch::Receiver<bool>,
 ) {
@@ -262,11 +305,18 @@ async fn watch_loop(
     let mut last_frame_count: Option<i64> = None;
     let mut ticker = tokio::time::interval(Duration::from_secs(1));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let deadline = max_run_duration.map(|duration| tokio::time::Instant::now() + duration);
 
     loop {
         tokio::select! {
             _ = ticker.tick() => {}
             _ = stop_rx.changed() => break,
+            _ = wait_for_deadline(deadline) => {
+                if let Some(duration) = max_run_duration {
+                    fatal(&app, &logger, &sessions, &execution_id, timeout_message(duration));
+                }
+                break;
+            }
         }
 
         // FPS sample → advisor → event + warn.
@@ -322,15 +372,24 @@ async fn watch_loop(
 
 #[cfg(not(target_os = "android"))]
 async fn watch_loop(
-    _app: tauri::AppHandle,
-    _logger: Arc<crate::run_log::RunLogger>,
-    _sessions: Arc<crate::runtime::MaaSessions>,
-    _execution_id: String,
+    app: tauri::AppHandle,
+    logger: Arc<crate::run_log::RunLogger>,
+    sessions: Arc<crate::runtime::MaaSessions>,
+    execution_id: String,
     _display_id: u32,
+    max_run_duration: Option<Duration>,
     _health_cell: Arc<HealthCell>,
     mut stop_rx: tokio::sync::watch::Receiver<bool>,
 ) {
-    let _ = stop_rx.changed().await;
+    let deadline = max_run_duration.map(|duration| tokio::time::Instant::now() + duration);
+    tokio::select! {
+        _ = stop_rx.changed() => {}
+        _ = wait_for_deadline(deadline) => {
+            if let Some(duration) = max_run_duration {
+                fatal(&app, &logger, &sessions, &execution_id, timeout_message(duration));
+            }
+        }
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -411,7 +470,6 @@ fn warn_health(app: &tauri::AppHandle, logger: &Arc<crate::run_log::RunLogger>, 
     }
 }
 
-#[cfg(target_os = "android")]
 fn fatal(
     app: &tauri::AppHandle,
     logger: &Arc<crate::run_log::RunLogger>,
@@ -616,5 +674,48 @@ mod tests {
             }"#,
         );
         assert_eq!(assess_health(&state), HealthFinding::Healthy);
+    }
+
+    #[test]
+    fn zero_seconds_disables_the_run_duration_limit() {
+        assert_eq!(configured_limit(0), None);
+    }
+
+    #[test]
+    fn configured_limits_are_clamped_to_the_upper_bound() {
+        assert_eq!(configured_limit(90), Some(Duration::from_secs(90)));
+        assert_eq!(configured_limit(u64::MAX), Some(MAX_RUN_DURATION));
+    }
+
+    #[test]
+    fn the_timeout_message_keeps_the_configured_unit() {
+        assert_eq!(describe_duration(Duration::from_secs(45)), "45 s");
+        assert_eq!(describe_duration(Duration::from_secs(1_800)), "30 min");
+        assert_eq!(describe_duration(Duration::from_secs(5_400)), "90 min");
+        assert_eq!(describe_duration(Duration::from_secs(7_200)), "2 h");
+        assert_eq!(
+            timeout_message(Duration::from_secs(1_800)),
+            "the run exceeded the configured maximum duration of 30 min; stopping the run"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unlimited_run_never_reaches_the_deadline() {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), wait_for_deadline(None))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_limited_run_resolves_at_its_deadline() {
+        let deadline = Some(tokio::time::Instant::now() + Duration::from_millis(10));
+
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), wait_for_deadline(deadline))
+                .await
+                .is_ok()
+        );
     }
 }

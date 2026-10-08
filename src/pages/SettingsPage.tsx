@@ -14,6 +14,7 @@ import { RichDescription } from "../components/RichDescription";
 import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
+import { TextField } from "../components/ui/TextField";
 import { VersionCard } from "../components/VersionCard";
 import {
   clearDiagnosticData,
@@ -33,6 +34,11 @@ import {
   defaultOptionValue,
   groupedVisibleOptions,
 } from "../lib/options";
+import {
+  formatRunLimitMinutes,
+  parseRunLimitInput,
+  runLimitSeconds,
+} from "../lib/runLimits";
 import type {
   OptionDefinition,
   OptionValue,
@@ -295,6 +301,16 @@ export function SettingsPage() {
         <p className="text-sm text-ink-muted">
           {t("closeTargetAppAfterRunDescription")}
         </p>
+        <RunDurationField
+          seconds={snapshot?.configuration.maxRunDurationSeconds}
+          disabled={restartPending || !snapshot}
+          onSave={(seconds) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.maxRunDurationSeconds = seconds;
+            void saveConfiguration(nextConfiguration);
+          }}
+        />
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.showVirtualDisplayTouches ?? true}
@@ -442,6 +458,48 @@ export function SettingsPage() {
         />
       )}
     </div>
+  );
+}
+
+/** 单轮运行时长上限：以分钟输入，留空表示不限制，失焦时校验并落盘。 */
+function RunDurationField({
+  seconds,
+  disabled,
+  onSave,
+}: {
+  seconds?: number;
+  disabled: boolean;
+  onSave: (seconds: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<string>();
+  const [invalid, setInvalid] = useState(false);
+  const text = draft ?? formatRunLimitMinutes(seconds);
+
+  return (
+    <TextField
+      label={t("maxRunDuration")}
+      description={t("maxRunDurationDescription")}
+      error={invalid ? t("maxRunDurationInvalid") : undefined}
+      inputMode="numeric"
+      disabled={disabled}
+      value={text}
+      onValueChange={(value) => {
+        setDraft(value);
+        setInvalid(false);
+      }}
+      onBlur={() => {
+        const parsed = parseRunLimitInput(text);
+        if (parsed.kind === "invalid") {
+          setInvalid(true);
+          return;
+        }
+        setInvalid(false);
+        setDraft(undefined);
+        const next = runLimitSeconds(parsed);
+        if (next !== (seconds ?? 0)) onSave(next);
+      }}
+    />
   );
 }
 

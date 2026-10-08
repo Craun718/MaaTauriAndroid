@@ -345,6 +345,10 @@ pub struct UserConfiguration {
     pub force_stop_target_app: bool,
     #[serde(default = "default_true")]
     pub close_target_app_after_run: bool,
+    /// Stops a run once it has been going for this many seconds. `0` disables
+    /// the limit.
+    #[serde(default)]
+    pub max_run_duration_seconds: u64,
     /// Run against the physical primary display instead of a private virtual
     /// display. This only takes effect on the next run.
     #[serde(default)]
@@ -386,6 +390,7 @@ impl Default for UserConfiguration {
             initialized: false,
             force_stop_target_app: false,
             close_target_app_after_run: true,
+            max_run_duration_seconds: 0,
             foreground_mode: false,
             telemetry_enabled: false,
             show_virtual_display_touches: true,
@@ -443,6 +448,33 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(!parsed.foreground_mode);
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_the_run_duration_limit_to_zero() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("maxRunDurationSeconds");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert_eq!(parsed.max_run_duration_seconds, 0);
+    }
+
+    #[test]
+    fn the_run_duration_limit_round_trips() {
+        let configuration = UserConfiguration {
+            max_run_duration_seconds: 1_800,
+            ..UserConfiguration::default()
+        };
+
+        let parsed: UserConfiguration =
+            serde_json::from_value(serde_json::to_value(&configuration).unwrap()).unwrap();
+
+        assert_eq!(parsed.max_run_duration_seconds, 1_800);
     }
 
     #[test]

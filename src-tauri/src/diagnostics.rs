@@ -3,7 +3,7 @@ use crate::domain::types::{
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 #[cfg(target_os = "android")]
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::{Path, PathBuf};
@@ -361,50 +361,9 @@ fn write_json_snapshot<T: Serialize>(path: &Path, value: &T) -> Result<(), Diagn
     write_file(path, &bytes)
 }
 
-fn remove_password_values(
-    project: &Project,
-    mut configuration: UserConfiguration,
-) -> UserConfiguration {
-    let password_fields = declared_password_fields(project);
-    remove_password_option_values(&mut configuration.global_option_values, &password_fields);
-    for values in configuration.controller_option_values.values_mut() {
-        remove_password_option_values(values, &password_fields);
-    }
-    for values in configuration.resource_option_values.values_mut() {
-        remove_password_option_values(values, &password_fields);
-    }
-    for run in &mut configuration.run_configurations {
-        for task in &mut run.tasks {
-            remove_password_option_values(&mut task.option_values, &password_fields);
-        }
-    }
-    configuration
-}
-
-fn declared_password_fields(project: &Project) -> BTreeSet<(String, String)> {
-    let mut fields = BTreeSet::new();
-    for option in project.options.values() {
-        if let crate::domain::types::OptionDefinition::Input { name, inputs, .. } = option {
-            for field in inputs.iter().filter(|field| field.password) {
-                fields.insert((name.clone(), field.name.clone()));
-            }
-        }
-    }
-    fields
-}
-
-fn remove_password_option_values(
-    values: &mut BTreeMap<String, OptionValue>,
-    password_fields: &BTreeSet<(String, String)>,
-) {
-    for (option_name, value) in values.iter_mut() {
-        if let OptionValue::Inputs { values } = value {
-            values.retain(|field_name, _| {
-                !password_fields.contains(&(option_name.clone(), field_name.clone()))
-            });
-        }
-    }
-}
+pub(crate) use crate::configuration_backup::{
+    declared_password_fields, remove_password_option_values, remove_password_values,
+};
 
 /// Device snapshots are best-effort: a missing collector must not fail the
 /// whole export, mirroring the MaaFwApp log export behaviour.

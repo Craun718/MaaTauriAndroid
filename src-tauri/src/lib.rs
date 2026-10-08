@@ -1,5 +1,6 @@
 mod agent;
 mod atomic_io;
+mod configuration_backup;
 mod diagnostics;
 mod domain;
 mod focus;
@@ -525,6 +526,42 @@ impl AppState {
         configure_telemetry(&project, &configuration);
         log_loaded_project(&project, &configuration);
         Ok(configuration)
+    }
+
+    /// Replaces the whole user data set with backup validation already done.
+    /// The persistence lock covers both stores so an ordinary save cannot
+    /// interleave between writing the imported configuration and schedules.
+    fn replace_configuration_and_schedules(
+        &self,
+        configuration: UserConfiguration,
+        schedule_rules: Vec<crate::schedule::ScheduleRule>,
+    ) -> Result<(), AppError> {
+        let _persistence = self.persistence.lock().expect("persistence lock poisoned");
+        let original = self.configuration()?;
+        self.persist_configuration_locked(&configuration)?;
+
+        let replacement = match self.schedule_store() {
+            Ok(store) => store.replace_rules(schedule_rules),
+            Err(error) => Err(error),
+        };
+        if let Err(error) = replacement {
+            self.persist_configuration_locked(&original).map_err(|rollback| {
+                AppError::Message(format!(
+                    "the schedule import failed ({error}); restoring the previous configuration also failed: {rollback}"
+                ))
+            })?;
+            *self
+                .configuration
+                .write()
+                .expect("configuration lock poisoned") = original;
+            return Err(AppError::from(error));
+        }
+
+        *self
+            .configuration
+            .write()
+            .expect("configuration lock poisoned") = configuration;
+        Ok(())
     }
 }
 
@@ -2969,6 +3006,232 @@ struct LogExport {
     file_name: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigurationExport {
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigurationImportResult {
+    imported: bool,
+    snapshot: Option<AppStateSnapshot>,
+}
+
+#[tauri::command]
+async fn export_configuration(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ConfigurationExport, AppError> {
+    let (project, configuration) = state.project_and_configuration()?;
+    let schedules = state.schedule_store()?.list()?;
+    let rules = schedules
+        .into_iter()
+        .map(|status| status.rule)
+        .collect::<Vec<_>>();
+    let cache_dir = app
+        .path()
+        .cache_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    let exports_dir = cache_dir.join("configuration-exports");
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ");
+    let file_name = format!("maa_tauri_android-configuration-{stamp}.json");
+    let output = exports_dir.join(&file_name);
+    let output_path = output.to_string_lossy().into_owned();
+    let export = tokio::task::spawn_blocking(move || {
+        std::fs::create_dir_all(&exports_dir)?;
+        let backup = configuration_backup::export_configuration(&project, &configuration, &rules);
+        let bytes = configuration_backup::serialize_configuration(&backup)?;
+        crate::atomic_io::write_atomic(&output, &bytes)?;
+        Ok(ConfigurationExport {
+            path: output_path,
+            file_name: None,
+        })
+    })
+    .await
+    .map_err(|error| AppError::Message(error.to_string()))??;
+
+    #[cfg(target_os = "android")]
+    let saved_file_name = {
+        let bridge_path = export.path;
+        tokio::task::spawn_blocking(move || {
+            export_configuration_via_bridge(&bridge_path, "application/json")
+        })
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))??
+    };
+    #[cfg(target_os = "android")]
+    let mut export = export;
+    export.file_name = saved_file_name;
+    #[cfg(not(target_os = "android"))]
+    let mut export = export;
+    export.file_name = None;
+    Ok(export)
+}
+
+#[tauri::command]
+async fn import_configuration(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ConfigurationImportResult, AppError> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, state);
+        return Err(AppError::Message(
+            "configuration import is only available on Android".to_string(),
+        ));
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        if state.maa.status() != runtime::RunState::Idle {
+            return Err(AppError::Message(
+                "a run is active; stop it before importing a configuration".to_string(),
+            ));
+        }
+        let _storage_guard = state.run_storage.lock().await;
+        if state.maa.status() != runtime::RunState::Idle {
+            return Err(AppError::Message(
+                "a run is active; stop it before importing a configuration".to_string(),
+            ));
+        }
+        let selected = tokio::task::spawn_blocking(pick_configuration_file_via_bridge)
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))?;
+        let Some(selected) = selected else {
+            return Ok(ConfigurationImportResult {
+                imported: false,
+                snapshot: None,
+            });
+        };
+
+        let (project, _) = state.project_and_configuration()?;
+        let parse = tokio::task::spawn_blocking(move || {
+            let result = (|| {
+                let metadata = std::fs::metadata(&selected)?;
+                if metadata.len() > configuration_backup::MAX_IMPORT_BYTES as u64 {
+                    return Err(configuration_backup::ConfigurationBackupError::TooLarge.into());
+                }
+                let bytes = std::fs::read(&selected)?;
+                let mut backup = configuration_backup::parse_configuration(&bytes, &project.name)?;
+                normalize_configuration(&project, &mut backup.configuration);
+                configuration_backup::validate_import(
+                    &project,
+                    &backup.configuration,
+                    &backup.schedule_rules,
+                )?;
+                Ok::<_, AppError>((backup.configuration, backup.schedule_rules))
+            })();
+            let _ = std::fs::remove_file(&selected);
+            result
+        })
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))?;
+        let (configuration, schedule_rules) = parse?;
+
+        state.replace_configuration_and_schedules(configuration, schedule_rules)?;
+        let project = state.project()?;
+        let configuration = state.configuration()?;
+        sync_schedule_alarms()?;
+        configure_telemetry(&project, &configuration);
+        runtime::apply_debug_mode(configuration.debug_mode);
+        set_virtual_display_touch_markers(configuration.show_virtual_display_touches)?;
+        Ok(ConfigurationImportResult {
+            imported: true,
+            snapshot: Some(current_snapshot(&state)),
+        })
+    }
+}
+
+#[cfg(target_os = "android")]
+async fn export_configuration_via_bridge(path: &str, mime: &str) -> Result<String, AppError> {
+    let path = path.to_string();
+    let mime = mime.to_string();
+    export_file_via_bridge(&path, &mime)
+}
+
+#[cfg(target_os = "android")]
+fn export_file_via_bridge(path: &str, mime: &str) -> Result<String, AppError> {
+    let bridge_class =
+        runtime::runtime_bridge_class().map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = runtime::java_vm()
+        .ok_or_else(|| AppError::Message("Java runtime is not initialized".to_string()))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let java_path = env
+        .new_string(path)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let java_mime = env
+        .new_string(mime)
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let name = env
+        .call_static_method(
+            bridge_class,
+            "exportFile",
+            "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+            &[
+                jni::objects::JValue::Object(&java_path),
+                jni::objects::JValue::Object(&java_mime),
+            ],
+        )
+        .map_err(|error| {
+            let _ = env.exception_clear();
+            AppError::Message(error.to_string())
+        })?
+        .l()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    if name.is_null() {
+        return Err(AppError::Message(
+            "could not export the configuration on this device".to_string(),
+        ));
+    }
+    let name = jni::objects::JString::from(name);
+    let name = env
+        .get_string(&name)
+        .map_err(|error| AppError::Message(error.to_string()))?
+        .to_string_lossy()
+        .into_owned();
+    Ok(name)
+}
+
+#[cfg(target_os = "android")]
+fn pick_configuration_file_via_bridge() -> Result<Option<String>, AppError> {
+    let bridge_class =
+        runtime::runtime_bridge_class().map_err(|error| AppError::Message(error.to_string()))?;
+    let vm = runtime::java_vm()
+        .ok_or_else(|| AppError::Message("Java runtime is not initialized".to_string()))?;
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    let object = env
+        .call_static_method(
+            bridge_class,
+            "pickConfigurationFile",
+            "()Ljava/lang/String;",
+            &[],
+        )
+        .map_err(|error| {
+            let _ = env.exception_clear();
+            AppError::Message(error.to_string())
+        })?
+        .l()
+        .map_err(|error| AppError::Message(error.to_string()))?;
+    if object.is_null() {
+        return Ok(None);
+    }
+    let value = jni::objects::JString::from(object);
+    let value = env
+        .get_string(&value)
+        .map_err(|error| AppError::Message(error.to_string()))?
+        .to_string_lossy()
+        .into_owned();
+    Ok(Some(value))
+}
+
 /// The Android shell copies the archive into the system Downloads collection
 /// (no storage permission needed on API 29+) and opens the system share sheet,
 /// mirroring the MaaFwApp log export: save locally or share, one tap each.
@@ -3268,6 +3531,8 @@ enum AppError {
     #[error("{0}")]
     Schedule(#[from] schedule::ScheduleError),
     #[error("{0}")]
+    Backup(#[from] configuration_backup::ConfigurationBackupError),
+    #[error("{0}")]
     Io(#[from] std::io::Error),
 }
 
@@ -3462,6 +3727,86 @@ mod tests {
         assert!(matches!(error, PersistenceError::CreateDirectory { .. }));
         assert_eq!(state.configuration().unwrap(), configuration);
         assert!(path.is_file());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn failed_schedule_replacement_rolls_configuration_back() {
+        let root = std::env::temp_dir().join(format!("mta-config-backup-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = AppState::default();
+        let project = project();
+        state.set_project(None, project.clone());
+        let path = root.join("configuration.json");
+        *state.store.write().expect("store lock poisoned") =
+            Some(UserConfigurationStore::new(path.clone()));
+        state.set_schedule_data_dir(root.clone());
+
+        let original_rule = crate::schedule::ScheduleRule {
+            id: "original".to_string(),
+            name: "Original".to_string(),
+            enabled: true,
+            auto_start: false,
+            run_configuration_id: "original-run".to_string(),
+            force_start: false,
+            trigger: crate::schedule::ScheduleTrigger::FixedTime {
+                days: vec![1, 2],
+                times: vec!["09:00".to_string()],
+            },
+        };
+        state
+            .schedule_store()
+            .unwrap()
+            .save(original_rule.clone())
+            .unwrap();
+        let original = UserConfiguration {
+            initialized: true,
+            close_target_app_after_run: false,
+            ..UserConfiguration::default()
+        };
+        state.set_configuration(original.clone()).unwrap();
+
+        let imported = UserConfiguration {
+            initialized: true,
+            close_target_app_after_run: true,
+            ..UserConfiguration::default()
+        };
+        let imported_rule = crate::schedule::ScheduleRule {
+            id: "imported".to_string(),
+            name: "Imported".to_string(),
+            enabled: false,
+            auto_start: false,
+            run_configuration_id: "imported-run".to_string(),
+            force_start: false,
+            trigger: crate::schedule::ScheduleTrigger::FixedTime {
+                days: vec![3],
+                times: vec!["10:30".to_string()],
+            },
+        };
+
+        let blocker = root.join("blocked-schedules");
+        std::fs::write(&blocker, b"blocked").unwrap();
+        state.set_schedule_data_dir(blocker.join("data"));
+
+        let error = state
+            .replace_configuration_and_schedules(imported, vec![imported_rule])
+            .unwrap_err();
+        assert!(matches!(error, AppError::Schedule(_)));
+
+        assert_eq!(state.configuration().unwrap(), original);
+        let restored = UserConfigurationStore::new(path).load(&project).unwrap();
+        assert_eq!(restored, original);
+        state.set_schedule_data_dir(root.clone());
+        let rules: Vec<_> = state
+            .schedule_store()
+            .unwrap()
+            .list()
+            .unwrap()
+            .into_iter()
+            .map(|status| status.rule)
+            .collect();
+        assert_eq!(rules, vec![original_rule]);
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -4286,6 +4631,8 @@ pub fn run() {
             delete_schedule_rule,
             set_schedule_rule_enabled,
             get_schedule_status,
+            export_configuration,
+            import_configuration,
             update::update_get_status,
             update::update_check,
             update::update_resolve,

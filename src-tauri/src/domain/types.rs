@@ -338,6 +338,7 @@ pub enum UiLanguage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserConfiguration {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u32,
     pub initialized: bool,
     #[serde(default)]
@@ -372,6 +373,10 @@ pub struct UserConfiguration {
     pub welcome_acknowledged_app_version: Option<String>,
     #[serde(default)]
     pub skip_welcome_announcement: bool,
+}
+
+fn default_schema_version() -> u32 {
+    1
 }
 
 impl Default for UserConfiguration {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyPreset,
+  importConfiguration,
   loadProject,
   prepareApp,
   reinstallResources,
@@ -39,6 +40,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
+  importConfiguration: vi.fn(),
   prepareApp: vi.fn(),
   loadProject: vi.fn(),
   reinstallResources: vi.fn(),
@@ -56,6 +58,7 @@ const mockedApplyPreset = vi.mocked(applyPreset);
 const mockedPrepareApp = vi.mocked(prepareApp);
 const mockedLoadProject = vi.mocked(loadProject);
 const mockedReinstallResources = vi.mocked(reinstallResources);
+const mockedImportConfiguration = vi.mocked(importConfiguration);
 const mockedBuildAndroidProject = vi.mocked(buildAndroidProject);
 const mockedLoadProjectSource = vi.mocked(loadProjectSource);
 const mockedCreateStartupReader = vi.mocked(createStartupProjectTextReader);
@@ -136,6 +139,64 @@ function welcomeState(revision: number): WelcomeState {
 function emitWelcomeState(payload: WelcomeState) {
   welcomeEvents.handler?.({ payload });
 }
+
+describe("appStore importConfiguration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppStore.setState({
+      snapshot: { configuration },
+      projectSource: undefined,
+      busy: false,
+      saving: false,
+      error: undefined,
+      dismissedWelcomeFingerprint: undefined,
+    });
+    useNotificationStore.setState({ notifications: [] });
+  });
+
+  it("clears the busy state when the file picker is canceled", async () => {
+    const result = { imported: false, snapshot: undefined };
+    mockedImportConfiguration.mockResolvedValue(result);
+
+    await expect(useAppStore.getState().importConfiguration()).resolves.toBe(
+      result,
+    );
+
+    expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().snapshot?.configuration).toBe(configuration);
+  });
+
+  it("adopts the backend snapshot after a successful import", async () => {
+    const imported = configurationWith({
+      forceStopTargetApp: true,
+      telemetryEnabled: true,
+    });
+    const result = {
+      imported: true,
+      snapshot: { configuration: imported } satisfies AppStateSnapshot,
+    };
+    mockedImportConfiguration.mockResolvedValue(result);
+
+    await expect(useAppStore.getState().importConfiguration()).resolves.toBe(
+      result,
+    );
+
+    expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().error).toBeUndefined();
+    expect(useAppStore.getState().snapshot?.configuration).toBe(imported);
+  });
+
+  it("exposes an error and rethrows a failed import", async () => {
+    mockedImportConfiguration.mockRejectedValue(new Error("Import failed"));
+
+    await expect(useAppStore.getState().importConfiguration()).rejects.toThrow(
+      "Import failed",
+    );
+
+    expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().error).toBe("Import failed");
+  });
+});
 
 describe("canApplyWelcomeState", () => {
   it("applies only the event revision represented by the snapshot", () => {

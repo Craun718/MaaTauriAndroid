@@ -5,6 +5,8 @@ import {
 } from "@tauri-apps/plugin-notification";
 import type {
   AppStateSnapshot,
+  ConfigurationExport,
+  ConfigurationImportResult,
   LogExport,
   PreparationState,
   PrivilegedBackend,
@@ -201,6 +203,14 @@ export async function startRun(selection?: TaskRunSelection) {
 
 export async function exportLogs() {
   return invoke<LogExport>("export_logs");
+}
+
+export async function exportConfiguration() {
+  return invoke<ConfigurationExport>("export_configuration");
+}
+
+export async function importConfiguration() {
+  return invoke<ConfigurationImportResult>("import_configuration");
 }
 
 export async function captureManualScreenshot(executionId?: string) {

@@ -2,6 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import {
   applyPreset as invokeApplyPreset,
+  importConfiguration as invokeImportConfiguration,
   loadProject as invokeLoadProject,
   reinstallResources as invokeReinstallResources,
   saveConfiguration as invokeSaveConfiguration,
@@ -21,6 +22,7 @@ import type { ProjectSource } from "../lib/pi/rawTypes";
 import { startupTrace } from "../lib/startupTiming";
 import type {
   AppStateSnapshot,
+  ConfigurationImportResult,
   Project,
   UserConfiguration,
   WelcomeState,
@@ -37,6 +39,7 @@ interface AppStore {
   dismissedWelcomeFingerprint?: string;
   bootstrap: () => Promise<void>;
   reinstallResources: () => Promise<void>;
+  importConfiguration: () => Promise<ConfigurationImportResult>;
   loadProject: (path: string, language?: string) => Promise<void>;
   setProjectLanguage: (language: string) => Promise<void>;
   applyPreset: (presetName: string) => Promise<void>;
@@ -235,6 +238,22 @@ export const useAppStore = create<AppStore>((set) => ({
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
+    }
+  },
+  async importConfiguration() {
+    set({ busy: true, error: undefined });
+    try {
+      const result = await invokeImportConfiguration();
+      if (!result.imported || !result.snapshot) {
+        set({ busy: false });
+        return result;
+      }
+      const adopted = await adoptSnapshot(result.snapshot);
+      set(adopted);
+      return result;
+    } catch (error) {
+      set({ error: message(error), busy: false });
+      throw error;
     }
   },
   async loadProject(path, language) {

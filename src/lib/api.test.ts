@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bootstrapApp,
+  exportConfiguration,
   getPrivilegedBackend,
+  importConfiguration,
   loadProject,
   pressVirtualDisplayBack,
   readProjectText,
@@ -225,6 +227,28 @@ describe("focus modal acks", () => {
 
     await expect(resolveFocusModal()).resolves.toBeUndefined();
     expect(invoke).toHaveBeenCalledWith("resolve_focus_modal");
+  });
+});
+
+describe("configuration backup", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("exports a configuration backup", async () => {
+    const exportResult = { path: "/cache/backup.json" };
+    invoke.mockResolvedValue(exportResult);
+
+    await expect(exportConfiguration()).resolves.toBe(exportResult);
+    expect(invoke).toHaveBeenCalledWith("export_configuration");
+  });
+
+  it("imports a configuration backup", async () => {
+    const importResult = { imported: true, snapshot: undefined };
+    invoke.mockResolvedValue(importResult);
+
+    await expect(importConfiguration()).resolves.toBe(importResult);
+    expect(invoke).toHaveBeenCalledWith("import_configuration");
   });
 });
 

@@ -4,6 +4,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { useState } from "react";
 import { AboutLinks } from "../components/AboutLinks";
@@ -14,7 +15,11 @@ import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
 import { VersionCard } from "../components/VersionCard";
-import { clearDiagnosticData, restartApp } from "../lib/api";
+import {
+  clearDiagnosticData,
+  exportConfiguration,
+  restartApp,
+} from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import {
@@ -48,12 +53,15 @@ export function SettingsPage() {
   const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const setProjectLanguage = useAppStore((state) => state.setProjectLanguage);
   const reinstallResources = useAppStore((state) => state.reinstallResources);
+  const importConfiguration = useAppStore((state) => state.importConfiguration);
   const busy = useAppStore((state) => state.busy);
   const saving = useAppStore((state) => state.saving);
   const notify = useNotificationStore((state) => state.notify);
   const { t } = useTranslation();
   const [cleaning, setCleaning] = useState(false);
   const [reinstalling, setReinstalling] = useState(false);
+  const [exportingBackup, setExportingBackup] = useState(false);
+  const [importingBackup, setImportingBackup] = useState(false);
   const [restartPending, setRestartPending] = useState(false);
   const { exportLogs, exporting } = useLogExport();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
@@ -169,6 +177,77 @@ export function SettingsPage() {
           />
         </>
       )}
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+        <h2 className="font-medium">{t("backupRestore")}</h2>
+        <p className="text-sm text-ink-muted">
+          {t("backupRestoreDescription")}
+        </p>
+        <button
+          type="button"
+          disabled={
+            busy ||
+            saving ||
+            restartPending ||
+            exportingBackup ||
+            importingBackup ||
+            !snapshot
+          }
+          onClick={async () => {
+            setExportingBackup(true);
+            try {
+              const result = await exportConfiguration();
+              if (result.fileName) {
+                notify(t("configurationExported", { name: result.fileName }));
+              } else {
+                notify(t("configurationExportedPath", { path: result.path }));
+              }
+            } catch (error) {
+              notify(error instanceof Error ? error.message : String(error), {
+                tone: "error",
+              });
+            } finally {
+              setExportingBackup(false);
+            }
+          }}
+          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+        >
+          <Download size="1rem" />
+          {exportingBackup
+            ? t("exportingConfiguration")
+            : t("exportConfiguration")}
+        </button>
+        <button
+          type="button"
+          disabled={
+            busy ||
+            saving ||
+            restartPending ||
+            exportingBackup ||
+            importingBackup ||
+            !snapshot
+          }
+          onClick={async () => {
+            if (!window.confirm(t("configurationImportConfirm"))) return;
+            setImportingBackup(true);
+            try {
+              const result = await importConfiguration();
+              if (result.imported) notify(t("configurationImported"));
+            } catch (error) {
+              notify(error instanceof Error ? error.message : String(error), {
+                tone: "error",
+              });
+            } finally {
+              setImportingBackup(false);
+            }
+          }}
+          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+        >
+          <Upload size="1rem" />
+          {importingBackup
+            ? t("importingConfiguration")
+            : t("importConfiguration")}
+        </button>
+      </section>
       <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <h2 className="font-medium">{t("runBehavior")}</h2>
         <Checkbox

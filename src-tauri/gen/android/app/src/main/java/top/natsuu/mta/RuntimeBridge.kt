@@ -28,6 +28,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicBoolean
 import java.lang.ref.WeakReference
 import kotlin.concurrent.thread
@@ -44,6 +45,8 @@ object RuntimeBridge {
 
     private const val RESTART_REQUEST_CODE = 0x4D54524C
     private const val RESTART_DELAY_MS = 250L
+    private const val CONFIGURATION_PICK_TIMEOUT_MS = 120_000L
+    private const val MAX_IMPORT_BYTES = 4L * 1024L * 1024L
 
     @Volatile
     private var agentContext: Context? = null
@@ -59,6 +62,16 @@ object RuntimeBridge {
     private var physicalScreenWidth = 0
     @Volatile
     private var physicalScreenHeight = 0
+
+    private class ConfigurationPickRequest {
+        val path = AtomicReference<String?>(null)
+        val latch = CountDownLatch(1)
+    }
+
+    private val configurationPickRequest = AtomicReference<ConfigurationPickRequest?>(null)
+
+    @Volatile
+    private var configurationFilePickerLauncher: ((Array<String>) -> Unit)? = null
 
     private const val LOG_TAG = "MaaTauriAndroidControl"
 
@@ -96,6 +109,87 @@ object RuntimeBridge {
     fun detachActivity(activity: Activity) {
         if (hostActivity?.get() !== activity) return
         hostActivity = null
+    }
+
+    @JvmStatic
+    fun registerConfigurationFilePicker(launcher: (Array<String>) -> Unit) {
+        configurationFilePickerLauncher = launcher
+    }
+
+    @JvmStatic
+    fun pickConfigurationFile(): String? {
+        if (agentContext == null) return null
+        val request = ConfigurationPickRequest()
+        if (configurationPickRequest.getAndSet(request) != null) {
+            // Only one Rust picker can be waiting, and a stale system dialog is
+            // resolved by its own callback or timeout before the next import.
+            return null
+        }
+        mainHandler.post {
+            val launcher = configurationFilePickerLauncher
+            if (launcher == null) {
+                completeConfigurationFilePick(null)
+            } else {
+                runCatching {
+                    launcher(arrayOf("application/json"))
+                }.onFailure { error ->
+                    Log.w(LOG_TAG, "Could not open the configuration picker", error)
+                    completeConfigurationFilePick(null)
+                }
+            }
+        }
+        val completed = request.latch.await(
+            CONFIGURATION_PICK_TIMEOUT_MS,
+            TimeUnit.MILLISECONDS,
+        )
+        if (!completed) {
+            configurationPickRequest.compareAndSet(request, null)
+        }
+        return request.path.get()
+    }
+
+    @JvmStatic
+    fun completeConfigurationFilePick(uri: Uri?) {
+        val request = configurationPickRequest.getAndSet(null)
+        if (request == null || uri == null) {
+            request?.latch?.countDown()
+            return
+        }
+        thread(name = "mta-copy-configuration-import") {
+            val path = runCatching {
+                val context = requireNotNull(agentContext) {
+                    "the app context is unavailable"
+                }
+                val importDir = File(context.cacheDir, "configuration-imports")
+                importDir.mkdirs()
+                val target = File.createTempFile("configuration-", ".json", importDir)
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            var total = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > MAX_IMPORT_BYTES) {
+                                    throw IOException("configuration backup is too large")
+                                }
+                                output.write(buffer, 0, count)
+                            }
+                        }
+                    } ?: throw IOException("could not open the selected configuration")
+                    target.absolutePath
+                } catch (error: Throwable) {
+                    target.delete()
+                    throw error
+                }
+            }.onFailure { error ->
+                Log.w(LOG_TAG, "Could not copy the selected configuration", error)
+            }.getOrNull()
+            request.path.set(path)
+            request.latch.countDown()
+        }
     }
 
     /**
@@ -556,13 +650,26 @@ object RuntimeBridge {
      */
     @JvmStatic
     fun exportLogs(archivePath: String): String? {
+        return exportFile(archivePath, "application/zip")
+    }
+
+    /**
+     * Copies a private app file into the system Downloads collection and opens
+     * the share sheet. Returns the display name of the saved copy, or null
+     * when the export could not be completed. On API < 29 MediaStore.Downloads
+     * does not exist, so the file is copied into the app external files dir
+     * instead; no share sheet is opened there.
+     */
+    @JvmStatic
+    fun exportFile(path: String, mime: String): String? {
         val context = agentContext ?: return null
-        val source = File(archivePath)
+        if (mime.isBlank()) return null
+        val source = File(path)
         if (!source.isFile) return null
         return runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val uri = copyToDownloads(context, source)
-                startShare(context, uri, source.name)
+                val uri = copyToDownloads(context, source, mime)
+                startShare(context, uri, source.name, mime)
                 source.name
             } else {
                 val fallback = File(
@@ -577,11 +684,11 @@ object RuntimeBridge {
         }.getOrNull()
     }
 
-    private fun copyToDownloads(context: Context, source: File): Uri {
+    private fun copyToDownloads(context: Context, source: File, mime: String): Uri {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, source.name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
             put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
@@ -597,9 +704,9 @@ object RuntimeBridge {
         return uri
     }
 
-    private fun startShare(context: Context, uri: Uri, title: String) {
+    private fun startShare(context: Context, uri: Uri, title: String, mime: String) {
         val share = Intent(Intent.ACTION_SEND).apply {
-            type = "application/zip"
+            type = mime
             putExtra(Intent.EXTRA_STREAM, uri)
             // Chooser targets read the stream through ClipData on some versions,
             // so grant read access on both surfaces.

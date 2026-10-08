@@ -182,6 +182,17 @@ impl ScheduleStore {
         Ok(self.rules()?.into_iter().find(|rule| rule.id == id))
     }
 
+    /// Replaces the complete rules document in one write. Validation happens
+    /// before the file is touched so an invalid backup cannot leave a partial
+    /// set of schedules behind.
+    pub fn replace_rules(&self, input: Vec<ScheduleRule>) -> Result<(), ScheduleError> {
+        validate_rules(&input)?;
+        self.write_rules(&ScheduleDocument {
+            schema_version: default_schema_version(),
+            rules: input,
+        })
+    }
+
     pub fn summary(&self) -> Result<ScheduleSummary, ScheduleError> {
         let statuses = self.list()?;
         let enabled: Vec<_> = statuses
@@ -309,7 +320,7 @@ fn parse_time(value: &str) -> Result<NaiveTime, ScheduleError> {
         .ok_or_else(|| ScheduleError::Validation("invalid clock time".to_string()))
 }
 
-fn validate(rule: &ScheduleRule) -> Result<(), ScheduleError> {
+pub(crate) fn validate(rule: &ScheduleRule) -> Result<(), ScheduleError> {
     if rule.name.trim().is_empty() {
         return Err(ScheduleError::Validation("name is required".to_string()));
     }
@@ -361,6 +372,25 @@ fn validate(rule: &ScheduleRule) -> Result<(), ScheduleError> {
                     ScheduleError::Validation("the interval must be greater than zero".to_string())
                 })?;
         }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_rules(rules: &[ScheduleRule]) -> Result<(), ScheduleError> {
+    let mut ids = std::collections::HashSet::new();
+    for rule in rules {
+        if rule.id.trim().is_empty() {
+            return Err(ScheduleError::Validation(
+                "a schedule rule id is required".to_string(),
+            ));
+        }
+        if !ids.insert(rule.id.as_str()) {
+            return Err(ScheduleError::Validation(format!(
+                "duplicate schedule rule id: {}",
+                rule.id
+            )));
+        }
+        validate(rule)?;
     }
     Ok(())
 }

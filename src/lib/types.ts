@@ -316,6 +316,17 @@ export interface AppStateSnapshot {
   versions?: VersionInfo;
 }
 
+export interface ConfigurationExport {
+  path: string;
+  /** Downloads copy saved by Android; absent when only a temp path is available. */
+  fileName?: string;
+}
+
+export interface ConfigurationImportResult {
+  imported: boolean;
+  snapshot?: AppStateSnapshot;
+}
+
 /** Versions the About and version cards show. */
 export interface VersionInfo {
   appVersion: string;

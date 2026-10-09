@@ -373,6 +373,11 @@ pub struct UserConfiguration {
     pub resource_option_values: BTreeMap<String, BTreeMap<String, OptionValue>>,
     pub run_configurations: Vec<RunConfiguration>,
     pub active_run_configuration_id: Option<String>,
+    /// Groups from the most recently loaded interface, keyed by task name. The
+    /// snapshot lets a resource update distinguish brand-new tasks from tasks
+    /// the user deliberately left unconfigured.
+    #[serde(default)]
+    pub task_groups: BTreeMap<String, Vec<String>>,
     pub welcome_fingerprint: Option<String>,
     pub welcome_acknowledged_app_version: Option<String>,
     #[serde(default)]
@@ -403,6 +408,7 @@ impl Default for UserConfiguration {
             resource_option_values: BTreeMap::new(),
             run_configurations: Vec::new(),
             active_run_configuration_id: None,
+            task_groups: BTreeMap::new(),
             welcome_fingerprint: None,
             welcome_acknowledged_app_version: None,
             skip_welcome_announcement: false,
@@ -500,6 +506,17 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(!parsed.debug_mode);
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_task_groups_to_an_empty_snapshot() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy.as_object_mut().unwrap().remove("taskGroups");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert!(parsed.task_groups.is_empty());
     }
 
     #[test]

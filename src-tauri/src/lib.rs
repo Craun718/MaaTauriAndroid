@@ -18,7 +18,7 @@ mod update;
 mod version;
 
 use domain::loader::ProjectLoader;
-use domain::resolver::{resolve_run, ResolverError};
+use domain::resolver::{resolve_run, task_unavailable_reason, ResolverError};
 use domain::types::{
     ConfigurationTemplate, ConfiguredTask, Project, RunConfiguration, UserConfiguration,
 };
@@ -609,6 +609,15 @@ fn normalize_configuration(project: &Project, configuration: &mut UserConfigurat
         configuration.active_run_configuration_id = Some(default_run.id.clone());
         configuration.run_configurations.insert(0, default_run);
     }
+
+    if !first_install {
+        add_new_tasks_in_configured_groups(project, configuration);
+    }
+    configuration.task_groups = project
+        .tasks
+        .iter()
+        .map(|task| (task.name.clone(), task.groups.clone()))
+        .collect();
     configuration.initialized = true;
     // Telemetry ships opted-in for the first install (Project Interface v2.9
     // recommends default-on, revocable); persisted choices always win afterwards.
@@ -633,6 +642,104 @@ fn default_run_configuration(project: &Project, name: &str) -> RunConfiguration 
             })
             .collect(),
     }
+}
+
+/// Adds tasks introduced by a resource update when they share an interface
+/// group with a task the user already configured in that run. Grouping is a
+/// display hint, so this is intentionally narrower than adopting every new
+/// task: the user's per-run queue still decides which groups participate.
+fn add_new_tasks_in_configured_groups(project: &Project, configuration: &mut UserConfiguration) {
+    let previous_groups = configuration.task_groups.clone();
+    let had_snapshot = !previous_groups.is_empty();
+    let current_groups: BTreeMap<&str, &[String]> = project
+        .tasks
+        .iter()
+        .map(|task| (task.name.as_str(), task.groups.as_slice()))
+        .collect();
+    let Some(controller) = project.controllers.first().map(|item| item.name.as_str()) else {
+        return;
+    };
+    let Some(resource) = project
+        .resources
+        .iter()
+        .find(|item| Some(&item.name) == configuration.active_resource.as_ref())
+        .or_else(|| project.resources.first())
+        .map(|item| item.name.as_str())
+    else {
+        return;
+    };
+
+    for run in &mut configuration.run_configurations {
+        let configured_groups: Vec<&[String]> = run
+            .tasks
+            .iter()
+            .map(|configured| {
+                current_groups
+                    .get(configured.task_name.as_str())
+                    .copied()
+                    .unwrap_or_else(|| {
+                        previous_groups
+                            .get(&configured.task_name)
+                            .map(Vec::as_slice)
+                            .unwrap_or_default()
+                    })
+            })
+            .collect();
+        let configured_names: BTreeSet<&str> = run
+            .tasks
+            .iter()
+            .map(|configured| configured.task_name.as_str())
+            .collect();
+
+        let mut inserts: BTreeMap<usize, Vec<ConfiguredTask>> = BTreeMap::new();
+        for task in &project.tasks {
+            // Before the first snapshot exists, any same-group task absent from
+            // this run is a candidate. This gives existing users the same
+            // upgrade behavior without waiting for the next resource update.
+            let is_new = if had_snapshot {
+                !configuration.task_groups.contains_key(task.name.as_str())
+            } else {
+                !configured_names.contains(task.name.as_str())
+            };
+            let Some(anchor) = configured_groups
+                .iter()
+                .position(|groups| intersects(groups, &task.groups))
+            else {
+                continue;
+            };
+            if !is_new || task_unavailable_reason(task, controller, resource).is_some() {
+                continue;
+            }
+
+            let group_was_enabled = run
+                .tasks
+                .iter()
+                .zip(&configured_groups)
+                .any(|(configured, groups)| configured.enabled && intersects(groups, &task.groups));
+            inserts.entry(anchor).or_default().push(ConfiguredTask {
+                instance_id: format!("{}:{}", task.name, Uuid::new_v4()),
+                task_name: task.name.clone(),
+                enabled: task.default_check && group_was_enabled,
+                option_values: BTreeMap::new(),
+                custom_label: None,
+            });
+        }
+
+        if inserts.is_empty() {
+            continue;
+        }
+        let mut next_tasks = Vec::with_capacity(run.tasks.len() + inserts.len());
+        for (index, configured) in run.tasks.drain(..).enumerate() {
+            next_tasks.extend(inserts.remove(&index).unwrap_or_default());
+            next_tasks.push(configured);
+        }
+        next_tasks.extend(inserts.into_values().flatten());
+        run.tasks = next_tasks;
+    }
+}
+
+fn intersects(left: &[String], right: &[String]) -> bool {
+    left.iter().any(|item| right.contains(item))
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -3621,6 +3728,74 @@ mod tests {
         }
     }
 
+    fn task(name: &str, groups: &[&str], default_check: bool) -> TaskDefinition {
+        TaskDefinition {
+            name: name.to_string(),
+            label: name.to_string(),
+            entry: name.to_string(),
+            description: None,
+            groups: groups.iter().map(|group| group.to_string()).collect(),
+            controllers: Vec::new(),
+            resources: Vec::new(),
+            options: Vec::new(),
+            pipeline_override: serde_json::Value::Null,
+            default_check,
+            icon: None,
+        }
+    }
+
+    fn configured(task_name: &str, enabled: bool) -> ConfiguredTask {
+        ConfiguredTask {
+            instance_id: format!("{task_name}:configured"),
+            task_name: task_name.to_string(),
+            enabled,
+            option_values: BTreeMap::new(),
+            custom_label: None,
+        }
+    }
+
+    fn update_project() -> Project {
+        let mut project = project();
+        project.controllers = vec![ControllerDefinition {
+            name: "Android".to_string(),
+            label: "Android".to_string(),
+            controller_type: "adb".to_string(),
+            raw: serde_json::Value::Null,
+        }];
+        project.resources = vec![ResourceDefinition {
+            name: "Global".to_string(),
+            label: "Global".to_string(),
+            description: None,
+            paths: Vec::new(),
+            controllers: Vec::new(),
+            options: Vec::new(),
+            hash: None,
+            raw: serde_json::Value::Null,
+        }];
+        project
+    }
+
+    fn initialized_configuration(tasks: Vec<ConfiguredTask>) -> UserConfiguration {
+        let mut configuration = UserConfiguration::default();
+        configuration.initialized = true;
+        configuration.active_resource = Some("Global".to_string());
+        configuration.active_run_configuration_id = Some("run".to_string());
+        configuration.run_configurations = vec![RunConfiguration {
+            id: "run".to_string(),
+            name: "Default".to_string(),
+            tasks,
+        }];
+        configuration
+    }
+
+    fn configured_task_names(configuration: &UserConfiguration) -> Vec<&str> {
+        configuration.run_configurations[0]
+            .tasks
+            .iter()
+            .map(|task| task.task_name.as_str())
+            .collect()
+    }
+
     #[test]
     fn applying_a_preset_keeps_the_preset_order_instead_of_the_import_order() {
         let mut project = project();
@@ -3685,6 +3860,108 @@ mod tests {
         assert_eq!(game.custom_label.as_deref(), Some("Start the game"));
         // Tasks left out of the preset fall back to their own default check.
         assert!(!tasks[2].enabled);
+    }
+
+    #[test]
+    fn resource_update_adds_new_tasks_that_share_a_configured_group() {
+        let mut project = update_project();
+        project.tasks = vec![
+            task("Daily", &["Daily"], true),
+            task("Other", &["Other"], true),
+        ];
+        let mut configuration = initialized_configuration(vec![configured("Daily", true)]);
+
+        normalize_configuration(&project, &mut configuration);
+
+        let mut updated_project = project;
+        updated_project
+            .tasks
+            .insert(1, task("NewDaily", &["Daily"], true));
+        normalize_configuration(&updated_project, &mut configuration);
+        assert_eq!(
+            configured_task_names(&configuration),
+            ["Daily", "NewDaily", "Other"]
+        );
+        assert!(configuration.run_configurations[0].tasks[1].enabled);
+
+        normalize_configuration(&updated_project, &mut configuration);
+        assert_eq!(
+            configured_task_names(&configuration),
+            ["Daily", "NewDaily", "Other"]
+        );
+    }
+
+    #[test]
+    fn renamed_tasks_inherit_the_missing_task_group_position() {
+        let mut project = update_project();
+        project.tasks = vec![
+            task("LegacyDaily", &["Daily"], true),
+            task("Other", &["Other"], true),
+        ];
+        let mut configuration = initialized_configuration(vec![configured("LegacyDaily", true)]);
+        normalize_configuration(&project, &mut configuration);
+
+        project.tasks = vec![task("CurrentDaily", &["Daily"], true)];
+        normalize_configuration(&project, &mut configuration);
+
+        assert_eq!(
+            configured_task_names(&configuration),
+            ["CurrentDaily", "LegacyDaily"]
+        );
+        assert!(configuration.run_configurations[0].tasks[0].enabled);
+    }
+
+    #[test]
+    fn group_adoption_respects_interface_defaults_and_availability() {
+        let mut project = update_project();
+        project.tasks = vec![
+            task("Daily", &["Daily"], false),
+            task("Limited", &["Limited"], false),
+        ];
+        let mut configuration = initialized_configuration(vec![
+            configured("Daily", false),
+            configured("Limited", true),
+        ]);
+        normalize_configuration(&project, &mut configuration);
+
+        let mut unavailable = task("UnavailableDaily", &["Limited"], true);
+        unavailable.resources = vec!["Desktop".to_string()];
+        project.tasks = vec![
+            project.tasks[0].clone(),
+            task("ExtraDaily", &["Daily"], true),
+            project.tasks[1].clone(),
+            unavailable,
+        ];
+        normalize_configuration(&project, &mut configuration);
+
+        let tasks = &configuration.run_configurations[0].tasks;
+        assert_eq!(
+            configured_task_names(&configuration),
+            ["Daily", "ExtraDaily", "Limited"]
+        );
+        assert!(!tasks[1].enabled);
+        assert!(!tasks
+            .iter()
+            .any(|task| task.task_name == "UnavailableDaily"));
+        assert!(configuration.task_groups.contains_key("UnavailableDaily"));
+    }
+
+    #[test]
+    fn existing_configurations_get_a_one_time_same_group_upgrade() {
+        let mut project = update_project();
+        project.tasks = vec![
+            task("Daily", &["Daily"], true),
+            task("NewDaily", &["Daily"], true),
+            task("Other", &["Other"], true),
+        ];
+        let mut configuration = initialized_configuration(vec![configured("Daily", true)]);
+
+        normalize_configuration(&project, &mut configuration);
+
+        assert_eq!(
+            configured_task_names(&configuration),
+            ["Daily", "NewDaily", "Other"]
+        );
     }
 
     #[test]

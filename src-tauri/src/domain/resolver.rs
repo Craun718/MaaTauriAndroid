@@ -176,7 +176,7 @@ fn merge_pipeline_maps(target: &mut Map<String, Value>, source: &Map<String, Val
     }
 }
 
-fn task_unavailable_reason(
+pub(crate) fn task_unavailable_reason(
     task: &TaskDefinition,
     controller: &str,
     resource: &str,

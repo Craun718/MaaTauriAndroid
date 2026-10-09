@@ -303,6 +303,8 @@ export interface UserConfiguration {
   resourceOptionValues: Record<string, Record<string, OptionValue>>;
   runConfigurations: RunConfiguration[];
   activeRunConfigurationId?: string;
+  /** Interface task groups from the most recently loaded resource. */
+  taskGroups?: Record<string, string[]>;
   welcomeFingerprint?: string;
   welcomeAcknowledgedAppVersion?: string;
   skipWelcomeAnnouncement?: boolean;

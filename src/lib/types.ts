@@ -361,6 +361,15 @@ export interface VirtualDisplayStatus {
   frameCount: number;
 }
 
+/**
+ * Advisory display settings detected before a run. `eyeProtectionSource` is
+ * the matched vendor settings key and is null when eye-comfort mode is off.
+ */
+export interface DisplayHazards {
+  smartResolution: boolean;
+  eyeProtectionSource?: string | null;
+}
+
 export type PrivilegedBackend = "shizuku" | "root";
 
 export type PrivilegedStatus =

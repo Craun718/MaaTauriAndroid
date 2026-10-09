@@ -20,6 +20,7 @@ import { TasksPage } from "./TasksPage";
 const saveConfiguration = vi.fn();
 const resolveCurrent = vi.fn();
 const getRunStatus = vi.fn();
+const getDisplayHazards = vi.fn();
 const getVirtualDisplayStatus = vi.fn();
 const captureManualScreenshot = vi.fn();
 const startRun = vi.fn();
@@ -35,6 +36,7 @@ vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
   captureManualScreenshot: () => captureManualScreenshot(),
   exportLogs: () => exportLogs(),
+  getDisplayHazards: () => getDisplayHazards(),
   getPrivilegedStatus: () => getPrivilegedStatus(),
   getRunStatus: () => getRunStatus(),
   isNotificationGranted: () => isNotificationGranted(),
@@ -241,6 +243,10 @@ beforeEach(() => {
     state: "Idle",
     message: "Idle",
   });
+  getDisplayHazards.mockResolvedValue({
+    smartResolution: false,
+    eyeProtectionSource: null,
+  });
   setVirtualDisplayTouchMarkers.mockResolvedValue([]);
   startRun.mockResolvedValue({
     executionId: "run-1",
@@ -420,9 +426,11 @@ describe("run configuration tabs and flat task list", () => {
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
 
-    expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Task logs" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
     );
     await waitFor(() => expect(startRun).toHaveBeenCalledTimes(1));
     eventHandlers.handlers["run-event"].forEach((handler) => {

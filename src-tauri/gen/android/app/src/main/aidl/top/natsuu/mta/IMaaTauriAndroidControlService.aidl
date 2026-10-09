@@ -81,6 +81,13 @@ interface IMaaTauriAndroidControlService {
     boolean setXmsfNetworkingEnabled(boolean enabled) = 23;
 
     /**
+     * Reports whether Honor's smart-resolution setting is enabled. It is read
+     * with the privileged service's shell identity because background virtual
+     * displays use the reduced render resolution and can break recognition.
+     */
+    boolean isSmartResolutionEnabled() = 24;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

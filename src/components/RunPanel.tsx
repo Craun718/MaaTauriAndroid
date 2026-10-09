@@ -20,12 +20,17 @@ import {
 } from "react";
 import {
   captureManualScreenshot,
+  getDisplayHazards,
   getRunStatus,
   pressVirtualDisplayBack,
   requestNotificationPermission,
   resolveCurrent,
   stopRun,
 } from "../lib/api";
+import {
+  type DisplayHazard,
+  pendingDisplayHazards,
+} from "../lib/displayHazards";
 import {
   localizeDiagnostic,
   localizeRunEvent,
@@ -39,6 +44,7 @@ import { useAppStore, waitForPendingSaves } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { usePreparationStore } from "../store/preparationStore";
 import { BottomDrawer } from "./ui/BottomDrawer";
+import { Modal } from "./ui/Modal";
 
 /**
  * Run controls for the active run configuration. Rendered inside the Tasks panel
@@ -72,6 +78,10 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
     const [executionId, setExecutionId] = useState<string>();
     const [runState, setRunState] = useState("Idle");
     const [starting, setStarting] = useState(false);
+    const [hazardPrompt, setHazardPrompt] = useState<DisplayHazard>();
+    const hazardPromptResolver = useRef<
+      ((confirmed: boolean) => void) | undefined
+    >(undefined);
     const executionIdRef = useRef<string | undefined>(undefined);
     const projectRoot = snapshot?.project?.root;
     const { exportLogs, exporting } = useLogExport();
@@ -90,6 +100,33 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
         );
       },
       [notify, language],
+    );
+
+    const requestHazardConfirmation = useCallback(
+      (hazard: DisplayHazard): Promise<boolean> => {
+        hazardPromptResolver.current?.(false);
+        return new Promise((resolve) => {
+          hazardPromptResolver.current = resolve;
+          setHazardPrompt(hazard);
+        });
+      },
+      [],
+    );
+
+    const resolveHazardConfirmation = useCallback((confirmed: boolean) => {
+      const resolve = hazardPromptResolver.current;
+      hazardPromptResolver.current = undefined;
+      setHazardPrompt(undefined);
+      resolve?.(confirmed);
+    }, []);
+
+    useEffect(
+      () => () => {
+        const resolve = hazardPromptResolver.current;
+        hazardPromptResolver.current = undefined;
+        resolve?.(false);
+      },
+      [],
     );
 
     const pressBack = useCallback(async () => {
@@ -268,20 +305,34 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
           return;
         }
 
-        onRunStarted?.();
         setStarting(true);
         resetRetry();
         try {
-          // Once-per-install OS prompt (no-op once granted): backend focus
-          // `display: "notification"` messages only reach the OS notification
-          // center with POST_NOTIFICATIONS granted.
-          void requestNotificationPermission();
           // Task-list edits are optimistic and persist in the background, so a
           // start issued right after a toggle would otherwise be resolved against
           // the stale backend configuration. Draining the queue here is what lets
           // the button stay evenly enabled: dimming it on `saving` made it blink on
-          // every task-list edit.
+          // every task-list edit. It also has to happen before the display probe:
+          // smart resolution is only a hazard for a background virtual display,
+          // so the mode the run will use must be settled first.
           await waitForPendingSaves();
+          const hazards = await getDisplayHazards().catch(() => undefined);
+          if (hazards) {
+            const foregroundMode =
+              useAppStore.getState().snapshot?.configuration.foregroundMode ??
+              false;
+            for (const hazard of pendingDisplayHazards(
+              hazards,
+              foregroundMode,
+            )) {
+              if (!(await requestHazardConfirmation(hazard))) return;
+            }
+          }
+          onRunStarted?.();
+          // Once-per-install OS prompt (no-op once granted): backend focus
+          // `display: "notification"` messages only reach the OS notification
+          // center with POST_NOTIFICATIONS granted.
+          void requestNotificationPermission();
           await startRunWithAccess(selection);
         } finally {
           setStarting(false);
@@ -293,6 +344,7 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
         enginePreparing,
         notify,
         onRunStarted,
+        requestHazardConfirmation,
         resetRetry,
         startRunWithAccess,
         starting,
@@ -429,6 +481,33 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
             {t("back")}
           </button>
         </BottomDrawer>
+        <Modal
+          open={hazardPrompt !== undefined}
+          onClose={() => resolveHazardConfirmation(false)}
+          title={t("displayHazardTitle")}
+        >
+          <p className="text-sm">
+            {hazardPrompt === "smartResolution"
+              ? t("displayHazardSmartResolution")
+              : t("displayHazardEyeProtection")}
+          </p>
+          <div className="flex justify-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => resolveHazardConfirmation(true)}
+              className="h-10 min-w-20 cursor-pointer rounded-md border border-accent bg-accent px-3 font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {t("displayHazardStartAnyway")}
+            </button>
+            <button
+              type="button"
+              onClick={() => resolveHazardConfirmation(false)}
+              className="h-10 min-w-20 cursor-pointer rounded-md border border-line px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </Modal>
       </>
     );
   },

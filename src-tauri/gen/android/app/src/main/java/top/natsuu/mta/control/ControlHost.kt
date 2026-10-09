@@ -41,6 +41,17 @@ object ControlHost {
         currentService?.stopAllAgents()
     }
 
+    /**
+     * Advisory display check: a missing service is not a hazard. The start
+     * path reports connection failures on its own.
+     */
+    @JvmStatic
+    fun isSmartResolutionEnabled(): Boolean {
+        return runCatching {
+            currentService?.isSmartResolutionEnabled() == true
+        }.getOrDefault(false)
+    }
+
     @JvmStatic
     external fun startVirtualDisplay(width: Int, height: Int, dpi: Int): Int
 

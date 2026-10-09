@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bootstrapApp,
   exportConfiguration,
+  getDisplayHazards,
   getPrivilegedBackend,
   importConfiguration,
   loadProject,
@@ -282,5 +283,22 @@ describe("run start selection", () => {
 
     await expect(startRun(selection)).resolves.toHaveProperty("taskCount", 1);
     expect(invoke).toHaveBeenCalledWith("start_run", { selection });
+  });
+});
+
+describe("display hazards", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("reads the advisory display state before a run", async () => {
+    const hazards = {
+      smartResolution: true,
+      eyeProtectionSource: "xiaomi:screen_paper_mode_enabled",
+    };
+    invoke.mockResolvedValue(hazards);
+
+    await expect(getDisplayHazards()).resolves.toBe(hazards);
+    expect(invoke).toHaveBeenCalledWith("display_hazards");
   });
 });

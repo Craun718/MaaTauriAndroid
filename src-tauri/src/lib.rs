@@ -824,6 +824,11 @@ fn window_insets() -> Option<runtime::WindowInsets> {
 }
 
 #[tauri::command]
+fn display_hazards() -> runtime::DisplayHazards {
+    runtime::display_hazards().unwrap_or_default()
+}
+
+#[tauri::command]
 async fn bootstrap(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -4592,6 +4597,7 @@ pub fn run() {
             get_preparation_status,
             retry_preparation,
             window_insets,
+            display_hazards,
             load_project,
             read_project_image,
             read_project_text,

@@ -2,7 +2,7 @@ package top.natsuu.mta
 
 import android.content.res.Configuration
 import android.os.Bundle
-import androidx.activity.result.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 

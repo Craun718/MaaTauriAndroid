@@ -718,17 +718,44 @@ pub struct WindowInsets {
     pub bottom: i32,
 }
 
+/// System display settings that can break recognition. Both values are
+/// advisory: a failed probe is treated as "not detected" rather than blocking
+/// a run.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayHazards {
+    pub smart_resolution: bool,
+    pub eye_protection_source: Option<String>,
+}
+
 /// Reads the insets from the Android shell. `None` on desktop, before the JNI
 /// bridge is attached, or when no activity is alive to report insets.
 #[cfg(target_os = "android")]
 pub fn window_insets() -> Option<WindowInsets> {
     let json = crate::diagnostics::bridge_string("windowInsets").ok()?;
-    serde_json::from_str(&json).ok()
+    parse_json(&json)
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn window_insets() -> Option<WindowInsets> {
     None
+}
+
+/// Reads the current display-hazard snapshot from the Android shell. `None`
+/// means the bridge is unavailable; the caller treats that as no hazard.
+#[cfg(target_os = "android")]
+pub fn display_hazards() -> Option<DisplayHazards> {
+    let json = crate::diagnostics::bridge_string("displayHazards").ok()?;
+    parse_json(&json)
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn display_hazards() -> Option<DisplayHazards> {
+    None
+}
+
+fn parse_json<T: serde::de::DeserializeOwned>(json: &str) -> Option<T> {
+    serde_json::from_str(json).ok()
 }
 
 #[cfg(any(target_os = "android", test))]
@@ -1466,6 +1493,47 @@ mod tests {
     };
     use std::collections::BTreeMap;
     use std::sync::atomic::AtomicUsize;
+
+    #[test]
+    fn display_hazards_parse_the_bridge_payload() {
+        let hazards = parse_json::<DisplayHazards>(
+            r#"{"smartResolution":true,"eyeProtectionSource":"xiaomi:screen_paper_mode_enabled"}"#,
+        )
+        .expect("valid display hazards");
+
+        assert!(hazards.smart_resolution);
+        assert_eq!(
+            hazards.eye_protection_source.as_deref(),
+            Some("xiaomi:screen_paper_mode_enabled")
+        );
+        assert_eq!(
+            serde_json::to_value(&hazards).unwrap(),
+            serde_json::json!({
+                "smartResolution": true,
+                "eyeProtectionSource": "xiaomi:screen_paper_mode_enabled"
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_display_hazards_payload_is_ignored() {
+        assert_eq!(parse_json::<DisplayHazards>("not json"), None);
+    }
+
+    #[test]
+    fn unavailable_display_hazards_report_no_hazard() {
+        let hazards = DisplayHazards::default();
+
+        assert!(!hazards.smart_resolution);
+        assert_eq!(hazards.eye_protection_source, None);
+        assert_eq!(
+            serde_json::to_value(&hazards).unwrap(),
+            serde_json::json!({
+                "smartResolution": false,
+                "eyeProtectionSource": null
+            })
+        );
+    }
 
     #[test]
     fn only_natural_run_endings_qualify_for_closing_the_target_app() {

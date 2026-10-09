@@ -534,6 +534,26 @@ object RuntimeBridge {
     }
 
     /**
+     * Display settings that can break image recognition, as JSON. Smart
+     * resolution is checked by the privileged service; eye-comfort mode is read
+     * directly here because its keys differ by OEM. Probe failures are
+     * advisory and never block a run.
+     */
+    @JvmStatic
+    fun displayHazards(): String? {
+        val context = agentContext ?: return null
+        return runCatching {
+            JSONObject().apply {
+                put("smartResolution", ControlHost.isSmartResolutionEnabled())
+                put(
+                    "eyeProtectionSource",
+                    EyeProtectionDetector.detect(context) ?: JSONObject.NULL,
+                )
+            }.toString()
+        }.getOrNull()
+    }
+
+    /**
      * Physical-pixel top/bottom insets the web layer must keep clear of (system
      * bars and display cutouts), as JSON. Layout insets stay owned by the web
      * layer: CSS `env(safe-area-inset-*)` reads zero on older WebViews, so the

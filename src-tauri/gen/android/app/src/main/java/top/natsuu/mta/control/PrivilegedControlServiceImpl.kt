@@ -9,6 +9,7 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.provider.Settings
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -266,6 +267,18 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun setXmsfNetworkingEnabled(enabled: Boolean): Boolean {
         return xmsfFirewall.setNetworkingEnabled(enabled)
+    }
+
+    override fun isSmartResolutionEnabled(): Boolean {
+        val baseContext = context ?: return false
+        return runCatching {
+            val settingsContext = ShellIdentityContext.forCurrentUid(baseContext)
+            Settings.Global.getInt(
+                settingsContext.contentResolver,
+                "low_resolution_switch",
+                0,
+            ) == 1
+        }.getOrDefault(false)
     }
 
     override fun attachOwner(owner: IBinder?): Int {

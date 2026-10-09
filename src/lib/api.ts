@@ -7,6 +7,7 @@ import type {
   AppStateSnapshot,
   ConfigurationExport,
   ConfigurationImportResult,
+  DisplayHazards,
   LogExport,
   PreparationState,
   PrivilegedBackend,
@@ -303,4 +304,8 @@ export async function setUpdatePrefs(prefs: UpdatePrefs) {
 /** Physical-pixel insets to keep clear of; null on desktop or without an activity. */
 export async function windowInsets() {
   return invoke<{ top: number; bottom: number } | null>("window_insets");
+}
+
+export async function getDisplayHazards() {
+  return invoke<DisplayHazards>("display_hazards");
 }

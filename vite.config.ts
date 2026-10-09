@@ -17,6 +17,7 @@ export default defineConfig(() => ({
     // (against outdated sources) and fails the suite.
     exclude: [
       "**/node_modules/**",
+      "**/.kilo/**",
       "**/.worktrees/**",
       "**/.pnpm-store/**",
       "**/dist/**",

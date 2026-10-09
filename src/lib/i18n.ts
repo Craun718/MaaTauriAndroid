@@ -196,6 +196,12 @@ const en = {
   // Run controls
   taskOperations: "Task actions",
   startRun: "Start run",
+  displayHazardTitle: "Before you start",
+  displayHazardSmartResolution:
+    'System "Smart resolution" is enabled. It can break recognition in background mode. Turn it off in the system display settings first. Start anyway?',
+  displayHazardEyeProtection:
+    "Eye comfort / night mode is enabled. It may affect color recognition accuracy. Start anyway?",
+  displayHazardStartAnyway: "Start anyway",
   noRunnableTasksNotice: "No runnable task is available.",
   startUnavailableNotice: "Starting is unavailable right now.",
   enginePreparingNotice: "The engine is still preparing.",
@@ -508,6 +514,12 @@ const zh: Record<MessageKey, string> = {
 
   taskOperations: "任务操作",
   startRun: "开始运行",
+  displayHazardTitle: "启动前提醒",
+  displayHazardSmartResolution:
+    "检测到系统已开启「智能分辨率」，后台模式下会导致识别出错，请先在系统显示设置中关闭。是否仍然启动？",
+  displayHazardEyeProtection:
+    "检测到设备已开启护眼/夜光模式，可能会影响图像色彩识别准确度。是否仍然启动？",
+  displayHazardStartAnyway: "仍然启动",
   noRunnableTasksNotice: "当前没有可运行的任务。",
   startUnavailableNotice: "暂时无法开始运行。",
   enginePreparingNotice: "引擎仍在准备中。",

@@ -9,15 +9,16 @@ use sha2::{Digest, Sha256};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use super::github::download_headers;
 use super::http::UpdateHttpClient;
 use super::{UpdateError, UpdateFailure};
 
-/// Progress is reported in whole megabytes, matching MaaFwApp's granularity.
-const PROGRESS_GRANULARITY: u64 = 1024 * 1024;
+/// Progress is time-throttled: on a slow network a byte threshold can leave
+/// the UI unchanged for many seconds and makes transfer-rate sampling sparse.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug)]
@@ -33,7 +34,7 @@ struct StagingOutcome {
 
 /// Downloads `url` into `destination_dir`, verifies the sha256 `digest` and
 /// returns the final path. `cancelled` short-circuits the stream between
-/// chunks; `on_progress` receives `(received, total)` at megabyte granularity.
+/// chunks; `on_progress` receives `(received, total)` on a time interval.
 pub async fn download_apk(
     client: &dyn UpdateHttpClient,
     url: &str,
@@ -100,14 +101,15 @@ pub async fn download_apk(
         let mut writer = std::io::BufWriter::new(file);
         let mut hasher = Sha256::new();
         let mut received: u64 = 0;
-        let mut next_report = PROGRESS_GRANULARITY;
+        let mut last_report_at = Instant::now();
         while let Some(chunk) = chunk_rx.blocking_recv() {
             std::io::Write::write_all(&mut writer, &chunk)
                 .map_err(|error| storage_error("write the staging file", error))?;
             hasher.update(&chunk);
             received += chunk.len() as u64;
-            if received >= next_report {
-                next_report = received + PROGRESS_GRANULARITY;
+            let now = Instant::now();
+            if now.duration_since(last_report_at) >= PROGRESS_INTERVAL || Some(received) == total {
+                last_report_at = now;
                 on_progress(received, total);
             }
         }
@@ -278,7 +280,10 @@ fn join_error(action: &str, error: tokio::task::JoinError) -> UpdateError {
 #[cfg(test)]
 mod tests {
     use super::super::http::testing::{StreamSpec, StubClient};
+    use super::super::http::{HttpResponse, StreamResponse};
     use super::*;
+    use std::future::Future;
+    use std::pin::Pin;
     use std::sync::{Arc, Mutex};
 
     fn digest_of(content: &[u8]) -> String {
@@ -290,6 +295,46 @@ mod tests {
             status: 200,
             content_length: Some(chunks.iter().map(|chunk| chunk.len() as u64).sum()),
             chunks: chunks.into_iter().map(Ok).collect(),
+        }
+    }
+
+    struct DelayedStreamClient {
+        chunks: Vec<Vec<u8>>,
+        delay: Duration,
+    }
+
+    impl UpdateHttpClient for DelayedStreamClient {
+        fn get<'a>(
+            &'a self,
+            _url: &'a str,
+            _headers: &'a [(String, String)],
+        ) -> Pin<Box<dyn Future<Output = Result<HttpResponse, String>> + Send + 'a>> {
+            Box::pin(async { Err("the progress test does not issue buffered GETs".to_string()) })
+        }
+
+        fn get_stream<'a>(
+            &'a self,
+            _url: &'a str,
+            _headers: &'a [(String, String)],
+        ) -> Pin<Box<dyn Future<Output = Result<StreamResponse, String>> + Send + 'a>> {
+            Box::pin(async move {
+                let (chunk_tx, body) = mpsc::channel(8);
+                let chunks = self.chunks.clone();
+                let delay = self.delay;
+                tokio::spawn(async move {
+                    for chunk in chunks {
+                        tokio::time::sleep(delay).await;
+                        if chunk_tx.send(Ok(chunk)).await.is_err() {
+                            break;
+                        }
+                    }
+                });
+                Ok(StreamResponse {
+                    status: 200,
+                    content_length: Some(self.chunks.iter().map(|chunk| chunk.len() as u64).sum()),
+                    body,
+                })
+            })
         }
     }
 
@@ -465,6 +510,39 @@ mod tests {
         assert_eq!(outcome.bytes, 6);
         assert_eq!(*progress.lock().unwrap(), vec![(6, Some(6))]);
         assert!(client.requested_urls().is_empty());
+    }
+
+    #[tokio::test]
+    async fn slow_small_chunks_report_time_throttled_progress() {
+        let temp = tempfile::tempdir().unwrap();
+        let chunks: Vec<_> = (0..10).map(|_| vec![b'x'; 1024]).collect();
+        let content: Vec<_> = chunks.concat();
+        let client = DelayedStreamClient {
+            chunks,
+            delay: Duration::from_millis(100),
+        };
+        let cancelled = AtomicBool::new(false);
+        let progress = Arc::new(Mutex::new(Vec::new()));
+        let progress_sink = Arc::clone(&progress);
+
+        download_apk(
+            &client,
+            "https://cdn.test/app.apk",
+            &digest_of(&content),
+            temp.path(),
+            "1.2.3",
+            &cancelled,
+            move |received, total| progress_sink.lock().unwrap().push((received, total)),
+        )
+        .await
+        .unwrap();
+
+        let progress = progress.lock().unwrap().clone();
+        assert!(
+            progress.len() >= 3,
+            "time throttling should report sub-megabyte progress: {progress:?}"
+        );
+        assert_eq!(*progress.last().unwrap(), (10 * 1024, Some(10 * 1024)));
     }
 
     #[tokio::test]

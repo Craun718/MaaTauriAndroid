@@ -8,6 +8,7 @@ import type {
 } from "../lib/types";
 import {
   formatUpdateBytes,
+  formatUpdateSpeed,
   updateFailureKey,
   updateProgressPercent,
 } from "../lib/updateMessages";
@@ -201,6 +202,11 @@ function UpdateStatusView({ status }: { status?: UpdateStatus }) {
           {t("updateDownloading", {
             size: formatUpdateBytes(status.downloadedBytes),
           })}
+          {status.bytesPerSecond !== null && (
+            <span className="ml-2 text-xs text-ink-muted">
+              {formatUpdateSpeed(status.bytesPerSecond)}
+            </span>
+          )}
         </p>
       </div>,
     );

@@ -34,6 +34,7 @@ function status(
     failureDetail: null,
     downloadedBytes: null,
     totalBytes: null,
+    bytesPerSecond: null,
     apkPath: null,
     ...overrides,
   };

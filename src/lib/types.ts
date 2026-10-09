@@ -523,6 +523,8 @@ export interface UpdateStatus {
   failureDetail: string | null;
   downloadedBytes: number | null;
   totalBytes: number | null;
+  /** Backend-sampled transfer rate; null until enough data is available. */
+  bytesPerSecond: number | null;
   /** Present once a verified APK is ready to hand to the installer. */
   apkPath: string | null;
 }

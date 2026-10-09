@@ -12,6 +12,7 @@ mod github;
 mod http;
 mod mirror_chyan;
 mod prefs;
+mod rate;
 mod semver;
 
 pub use prefs::{UpdateChannel, UpdatePrefs, UpdateSource};
@@ -20,11 +21,13 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, State};
 
 use crate::version::APP_VERSION;
 use downloader::DownloadOutcome;
 use http::{ReqwestUpdateClient, UpdateHttpClient};
+use rate::TransferRateMeter;
 
 /// Where the update flow currently stands. `available` means "an update is
 /// known and ready for the next step" — after a successful check (download
@@ -109,6 +112,7 @@ pub struct UpdateStatus {
     pub failure_detail: Option<String>,
     pub downloaded_bytes: Option<u64>,
     pub total_bytes: Option<u64>,
+    pub bytes_per_second: Option<u64>,
     pub apk_path: Option<String>,
 }
 
@@ -123,6 +127,7 @@ impl UpdateStatus {
             failure_detail: None,
             downloaded_bytes: None,
             total_bytes: None,
+            bytes_per_second: None,
             apk_path: None,
         }
     }
@@ -173,6 +178,7 @@ struct Inner {
     pending: Option<PendingUpdate>,
     task: Option<TaskHandle>,
     generation: u64,
+    rate_meter: TransferRateMeter,
 }
 
 impl Default for UpdateStatus {
@@ -188,6 +194,7 @@ impl Default for UpdateStatus {
 pub struct UpdateState {
     inner: Arc<Mutex<Inner>>,
     client: Arc<dyn UpdateHttpClient>,
+    clock: Arc<dyn Fn() -> u64 + Send + Sync>,
 }
 
 impl Default for UpdateState {
@@ -201,6 +208,7 @@ impl UpdateState {
         Self {
             inner: Arc::new(Mutex::new(Inner::default())),
             client,
+            clock: Arc::new(now_millis),
         }
     }
 
@@ -264,11 +272,13 @@ impl UpdateState {
                 latest_version: Some(APP_VERSION.to_string()),
                 ..UpdateStatus::new(UpdatePhase::UpToDate)
             };
+            inner.rate_meter.reset();
             return inner.status.clone();
         };
         inner.task = None;
         inner.pending = None;
         inner.status = UpdateStatus::new(UpdatePhase::Checking);
+        inner.rate_meter.reset();
         inner.generation += 1;
         let generation = inner.generation;
 
@@ -311,7 +321,9 @@ impl UpdateState {
         inner.task = None;
         inner.status.downloaded_bytes = None;
         inner.status.total_bytes = None;
+        inner.status.bytes_per_second = None;
         inner.status.apk_path = None;
+        inner.rate_meter.reset();
         match outcome {
             Ok(Some(checked)) => {
                 inner.pending = Some(checked.pending);
@@ -350,7 +362,9 @@ impl UpdateState {
         inner.status.failure = None;
         inner.status.failure_detail = None;
         inner.status.downloaded_bytes = None;
+        inner.status.bytes_per_second = None;
         inner.status.total_bytes = inner.pending.as_ref().and_then(PendingUpdate::size);
+        inner.rate_meter.reset();
         let pending = inner.pending.clone().expect("pending checked above");
         inner.generation += 1;
         let generation = inner.generation;
@@ -394,6 +408,8 @@ impl UpdateState {
             return;
         }
         inner.task = None;
+        inner.status.bytes_per_second = None;
+        inner.rate_meter.reset();
         let status = &mut inner.status;
         match outcome {
             Ok(outcome) => {
@@ -434,8 +450,10 @@ impl UpdateState {
                 inner.status.phase = UpdatePhase::Available;
                 inner.status.downloaded_bytes = None;
                 inner.status.total_bytes = None;
+                inner.status.bytes_per_second = None;
                 inner.status.failure = None;
                 inner.status.failure_detail = None;
+                inner.rate_meter.reset();
             }
             _ => {}
         }
@@ -491,6 +509,17 @@ impl UpdateState {
         {
             inner.status.downloaded_bytes = Some(received);
             inner.status.total_bytes = total;
+            inner.status.bytes_per_second = inner.rate_meter.sample((self.clock)(), received);
+        }
+    }
+
+    fn sample_rate(&self, generation: u64) {
+        let mut inner = self.lock();
+        if inner.status.phase == UpdatePhase::Downloading
+            && Self::has_current_task(&inner, generation)
+        {
+            let received = inner.status.downloaded_bytes.unwrap_or(0);
+            inner.status.bytes_per_second = inner.rate_meter.sample((self.clock)(), received);
         }
     }
 }
@@ -634,7 +663,16 @@ async fn run_download(
         }
     };
     let progress_state = state.clone();
-    downloader::download_apk(
+    let sampler_state = state.clone();
+    let sampler = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_millis(500));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            sampler_state.sample_rate(generation);
+        }
+    });
+    let outcome = downloader::download_apk(
         client.as_ref(),
         &url,
         &digest,
@@ -643,7 +681,18 @@ async fn run_download(
         cancelled,
         move |received, total| progress_state.report_progress(generation, received, total),
     )
-    .await
+    .await;
+    sampler.abort();
+    outcome
+}
+
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 /// The project metadata facts the update sources need. Normalization of the
@@ -878,6 +927,17 @@ mod tests {
             source: UpdateSource::Github,
             channel: UpdateChannel::Stable,
             cdk: String::new(),
+        }
+    }
+
+    fn state_with_clock(
+        client: Arc<StubClient>,
+        now_millis: Arc<std::sync::atomic::AtomicU64>,
+    ) -> UpdateState {
+        UpdateState {
+            inner: Arc::new(Mutex::new(Inner::default())),
+            client,
+            clock: Arc::new(move || now_millis.load(Ordering::Relaxed)),
         }
     }
 
@@ -1311,6 +1371,137 @@ mod tests {
         let status = state.lock().status.clone();
         assert_eq!(status.downloaded_bytes, Some(42));
         assert_eq!(status.total_bytes, Some(42));
+        assert_eq!(status.bytes_per_second, None);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn download_progress_samples_rate_and_a_stall_drops_it_to_zero() {
+        let now = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let state = state_with_clock(Arc::new(StubClient::new()), Arc::clone(&now));
+        let task = tokio::spawn(std::future::pending::<()>());
+        {
+            let mut inner = state.lock();
+            inner.generation = 9;
+            inner.status.phase = UpdatePhase::Downloading;
+            inner.task = Some(TaskHandle {
+                abort: task.abort_handle(),
+                cancelled: Arc::new(AtomicBool::new(false)),
+                generation: 9,
+            });
+        }
+
+        state.report_progress(9, 0, Some(2048));
+        assert_eq!(state.lock().status.bytes_per_second, None);
+
+        now.store(1_000, Ordering::Relaxed);
+        state.report_progress(9, 1024, Some(2048));
+        assert_eq!(state.lock().status.bytes_per_second, Some(1024));
+
+        now.store(6_000, Ordering::Relaxed);
+        state.sample_rate(9);
+        assert_eq!(state.lock().status.bytes_per_second, Some(0));
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn finished_downloads_clear_the_rate() {
+        let now = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let state = state_with_clock(Arc::new(StubClient::new()), Arc::clone(&now));
+        let task = tokio::spawn(std::future::pending::<()>());
+        {
+            let mut inner = state.lock();
+            inner.generation = 3;
+            inner.status.phase = UpdatePhase::Downloading;
+            inner.status.downloaded_bytes = Some(2048);
+            inner.status.total_bytes = Some(2048);
+            inner.task = Some(TaskHandle {
+                abort: task.abort_handle(),
+                cancelled: Arc::new(AtomicBool::new(false)),
+                generation: 3,
+            });
+        }
+
+        state.sample_rate(3);
+        now.store(1_000, Ordering::Relaxed);
+        state.sample_rate(3);
+        assert_eq!(state.lock().status.bytes_per_second, Some(0));
+
+        state.finish_download(
+            3,
+            Ok(DownloadOutcome {
+                path: PathBuf::from("/tmp/update.apk"),
+                bytes: 2048,
+            }),
+            false,
+        );
+
+        let status = state.lock().status.clone();
+        assert_eq!(status.bytes_per_second, None);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn failed_downloads_clear_the_rate() {
+        let now = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let state = state_with_clock(Arc::new(StubClient::new()), Arc::clone(&now));
+        let task = tokio::spawn(std::future::pending::<()>());
+        {
+            let mut inner = state.lock();
+            inner.generation = 5;
+            inner.status.phase = UpdatePhase::Downloading;
+            inner.status.downloaded_bytes = Some(1024);
+            inner.status.total_bytes = Some(4096);
+            inner.status.bytes_per_second = Some(1024);
+            inner.task = Some(TaskHandle {
+                abort: task.abort_handle(),
+                cancelled: Arc::new(AtomicBool::new(false)),
+                generation: 5,
+            });
+        }
+
+        state.finish_download(
+            5,
+            Err(UpdateError::new(
+                UpdateFailure::DownloadFailed,
+                "the stream stopped",
+            )),
+            false,
+        );
+
+        let status = state.lock().status.clone();
+        assert_eq!(status.bytes_per_second, None);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_download_clears_the_rate() {
+        let now = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let state = state_with_clock(Arc::new(StubClient::new()), Arc::clone(&now));
+        let task = tokio::spawn(std::future::pending::<()>());
+        {
+            let mut inner = state.lock();
+            inner.generation = 11;
+            inner.status.phase = UpdatePhase::Downloading;
+            inner.status.downloaded_bytes = Some(1024);
+            inner.status.total_bytes = Some(4096);
+            inner.task = Some(TaskHandle {
+                abort: task.abort_handle(),
+                cancelled: Arc::new(AtomicBool::new(false)),
+                generation: 11,
+            });
+        }
+
+        state.sample_rate(11);
+        now.store(1_000, Ordering::Relaxed);
+        state.sample_rate(11);
+        assert_eq!(state.lock().status.bytes_per_second, Some(0));
+
+        state.cancel();
+
+        let status = state.lock().status.clone();
+        assert_eq!(status.phase, UpdatePhase::Available);
+        assert_eq!(status.bytes_per_second, None);
         task.abort();
     }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { UpdateFailureCode } from "./types";
 import {
   formatUpdateBytes,
+  formatUpdateSpeed,
   updateFailureKey,
   updateProgressPercent,
 } from "./updateMessages";
@@ -68,6 +69,25 @@ describe("formatUpdateBytes", () => {
   it("renders megabytes above one megabyte", () => {
     expect(formatUpdateBytes(1536 * 1024)).toBe("1.5 MB");
     expect(formatUpdateBytes(80 * 1024 * 1024)).toBe("80.0 MB");
+  });
+});
+
+describe("formatUpdateSpeed", () => {
+  it("renders byte rates below one kibibyte", () => {
+    expect(formatUpdateSpeed(0)).toBe("0 B/s");
+    expect(formatUpdateSpeed(512)).toBe("512 B/s");
+    expect(formatUpdateSpeed(1023)).toBe("1023 B/s");
+  });
+
+  it("renders kibibyte rates below one mebibyte", () => {
+    expect(formatUpdateSpeed(1024)).toBe("1.0 KB/s");
+    expect(formatUpdateSpeed(1536)).toBe("1.5 KB/s");
+    expect(formatUpdateSpeed(1024 * 1024 - 1)).toBe("1024.0 KB/s");
+  });
+
+  it("renders mebibyte rates", () => {
+    expect(formatUpdateSpeed(1024 * 1024)).toBe("1.0 MB/s");
+    expect(formatUpdateSpeed(2.5 * 1024 * 1024)).toBe("2.5 MB/s");
   });
 });
 

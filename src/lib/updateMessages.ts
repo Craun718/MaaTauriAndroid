@@ -38,6 +38,17 @@ export function formatUpdateBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Human-readable download rate; units stay locale-independent. */
+export function formatUpdateSpeed(bytesPerSecond: number): string {
+  if (bytesPerSecond >= 1024 * 1024) {
+    return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+  }
+  if (bytesPerSecond >= 1024) {
+    return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  }
+  return `${bytesPerSecond} B/s`;
+}
+
 /**
  * Download progress as a 0-100 integer; without a total the progress is
  * indeterminate and the card shows the transferred size instead.

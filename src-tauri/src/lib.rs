@@ -716,13 +716,19 @@ fn add_new_tasks_in_configured_groups(project: &Project, configuration: &mut Use
                 .iter()
                 .zip(&configured_groups)
                 .any(|(configured, groups)| configured.enabled && intersects(groups, &task.groups));
-            inserts.entry(anchor).or_default().push(ConfiguredTask {
-                instance_id: format!("{}:{}", task.name, Uuid::new_v4()),
-                task_name: task.name.clone(),
-                enabled: task.default_check && group_was_enabled,
-                option_values: BTreeMap::new(),
-                custom_label: None,
-            });
+            // Keep an existing task ahead of newcomers, but let a replacement
+            // inherit the queue position of the missing task it replaces.
+            let anchor_exists = current_groups.contains_key(run.tasks[anchor].task_name.as_str());
+            inserts
+                .entry(if anchor_exists { anchor + 1 } else { anchor })
+                .or_default()
+                .push(ConfiguredTask {
+                    instance_id: format!("{}:{}", task.name, Uuid::new_v4()),
+                    task_name: task.name.clone(),
+                    enabled: task.default_check && group_was_enabled,
+                    option_values: BTreeMap::new(),
+                    custom_label: None,
+                });
         }
 
         if inserts.is_empty() {
@@ -3880,11 +3886,11 @@ mod tests {
             .tasks
             .insert(1, task("NewDaily", &["Daily"], true));
         normalize_configuration(&updated_project, &mut configuration);
-        assert_eq!(configured_task_names(&configuration), ["NewDaily", "Daily"]);
+        assert_eq!(configured_task_names(&configuration), ["Daily", "NewDaily"]);
         assert!(configuration.run_configurations[0].tasks[1].enabled);
 
         normalize_configuration(&updated_project, &mut configuration);
-        assert_eq!(configured_task_names(&configuration), ["NewDaily", "Daily"]);
+        assert_eq!(configured_task_names(&configuration), ["Daily", "NewDaily"]);
     }
 
     #[test]
@@ -3954,7 +3960,7 @@ mod tests {
 
         normalize_configuration(&project, &mut configuration);
 
-        assert_eq!(configured_task_names(&configuration), ["NewDaily", "Daily"]);
+        assert_eq!(configured_task_names(&configuration), ["Daily", "NewDaily"]);
     }
 
     #[test]

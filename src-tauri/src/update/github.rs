@@ -115,6 +115,36 @@ pub async fn latest_release(
     let Some((_, release)) = best else {
         return Ok(None);
     };
+    release_from(release).map(Some)
+}
+
+/// The first release whose tag has the requested version, independent of the
+/// channel. MirrorChyan can use this to pin the version while GitHub supplies
+/// the downloadable asset.
+pub async fn release_for_version(
+    client: &dyn UpdateHttpClient,
+    repo: &str,
+    version: &str,
+) -> Result<Option<GithubRelease>, UpdateError> {
+    let releases = fetch_releases(client, repo).await?;
+    let Some(target) = super::semver::parse(version).ok() else {
+        return Ok(None);
+    };
+    for release in &releases {
+        if release.draft.unwrap_or(false) {
+            continue;
+        }
+        let Ok(tag) = super::semver::parse(release.tag_name.as_deref().unwrap_or_default()) else {
+            continue;
+        };
+        if tag == target {
+            return release_from(release).map(Some);
+        }
+    }
+    Ok(None)
+}
+
+fn release_from(release: &Release) -> Result<GithubRelease, UpdateError> {
     let asset = pick_asset(&release.assets)?;
     let display = release.tag_name.as_deref().unwrap_or_default();
     let display = display
@@ -328,7 +358,7 @@ mod tests {
             ),
         );
         let client = StubClient::new()
-            .with_body("page=1", 200, releases)
+            .with_body("page=1", 200, releases.clone())
             .with_body("page=2", 200, "[]");
 
         let release = latest_release(&client, "owner/repo", "stable", "1.0.0")
@@ -372,6 +402,64 @@ mod tests {
             .await
             .unwrap();
         assert!(stable.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_pinned_version_ignores_the_channel_and_tag_prefix() {
+        let beta_digest = format!("sha256:{}", digest_of(b"beta"));
+        let releases = format!(
+            "[{}, {}]",
+            release_json(
+                "v1.3.0-beta.1",
+                r#""prerelease": true, "body": "beta note""#,
+                &runtime_abi_apk_asset(Some(&beta_digest)),
+            ),
+            release_json(
+                "1.2.0",
+                r#""prerelease": false"#,
+                &runtime_abi_apk_asset(Some(&beta_digest)),
+            ),
+        );
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases.clone())
+            .with_body("page=2", 200, "[]");
+
+        let beta = release_for_version(&client, "owner/repo", "1.3.0-beta.1")
+            .await
+            .unwrap()
+            .expect("the exact pre-release tag applies");
+        assert_eq!(beta.version, "1.3.0-beta.1");
+        assert_eq!(beta.note.as_deref(), Some("beta note"));
+
+        let unprefixed_client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
+        let unprefixed = release_for_version(&unprefixed_client, "owner/repo", "v1.2.0")
+            .await
+            .unwrap()
+            .expect("the unprefixed tag matches a prefixed target");
+        assert_eq!(unprefixed.version, "1.2.0");
+    }
+
+    #[tokio::test]
+    async fn a_missing_pinned_version_has_no_matching_asset() {
+        let digest = format!("sha256:{}", digest_of(b"apk"));
+        let releases = format!(
+            "[{}]",
+            release_json(
+                "v1.6.0",
+                r#""prerelease": false"#,
+                &runtime_abi_apk_asset(Some(&digest)),
+            ),
+        );
+        let client = StubClient::new()
+            .with_body("page=1", 200, releases)
+            .with_body("page=2", 200, "[]");
+
+        let release = release_for_version(&client, "owner/repo", "1.7.0")
+            .await
+            .unwrap();
+        assert!(release.is_none());
     }
 
     #[tokio::test]

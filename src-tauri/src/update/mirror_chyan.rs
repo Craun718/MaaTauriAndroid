@@ -38,6 +38,18 @@ pub async fn check(
     latest(client, rid, channel, current_version, None).await
 }
 
+/// A best-effort anonymous lookup for another source. Unlike [`check`], every
+/// failure (including an unknown resource) means "no pinned version".
+pub async fn precheck(
+    client: &dyn UpdateHttpClient,
+    rid: &str,
+    channel: &str,
+    current_version: &str,
+) -> Option<MirrorRelease> {
+    let rid = normalize_rid(rid)?;
+    check(client, &rid, channel, current_version).await.ok()
+}
+
 /// The resolve step: sends the CDK and demands a download URL plus digest.
 pub async fn resolve(
     client: &dyn UpdateHttpClient,
@@ -329,6 +341,34 @@ mod tests {
         );
         let error = check(&client, "m9a", "stable", "1.0.0").await.unwrap_err();
         assert_eq!(error.failure, UpdateFailure::InvalidResponse);
+    }
+
+    #[tokio::test]
+    async fn precheck_is_anonymous_and_fails_quietly() {
+        let client = StubClient::new().with_body(
+            "latest",
+            200,
+            envelope_json(0, "success", r#"{"version_name": "1.2.3"}"#),
+        );
+        let release = precheck(&client, "m9a", "stable", "1.0.0")
+            .await
+            .expect("a successful check pins the version");
+        assert_eq!(release.version, "1.2.3");
+        assert!(!client.requested_urls()[0].contains("cdk="));
+
+        let missing = StubClient::new().with_body(
+            "latest",
+            404,
+            envelope_json(8001, "resource not found", "null"),
+        );
+        assert!(precheck(&missing, "m9a", "stable", "1.0.0").await.is_none());
+
+        let failed = StubClient::new();
+        assert!(precheck(&failed, "m9a", "stable", "1.0.0").await.is_none());
+
+        let blank = StubClient::new();
+        assert!(precheck(&blank, "   ", "stable", "1.0.0").await.is_none());
+        assert!(blank.requested_urls().is_empty());
     }
 
     #[test]

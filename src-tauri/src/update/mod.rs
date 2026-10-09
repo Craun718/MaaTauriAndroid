@@ -131,14 +131,13 @@ impl UpdateStatus {
 /// What a successful check learned; the resolve stage needs the rest.
 #[derive(Debug, Clone)]
 enum PendingUpdate {
-    MirrorChyan {
-        rid: String,
-    },
-    Github {
-        repo: String,
-        url: String,
-        sha256: String,
-    },
+    MirrorChyan { rid: String },
+    Github { repo: String, pick: GithubPick },
+}
+
+enum GithubPick {
+    Resolved { url: String, sha256: String },
+    Pinned { version: String },
 }
 
 impl PendingUpdate {
@@ -249,9 +248,12 @@ impl UpdateState {
         let source = match prefs.source {
             UpdateSource::Auto => rid
                 .map(|rid| CheckSource::MirrorChyan { rid })
-                .or_else(|| repo.map(|repo| CheckSource::Github { repo })),
+                .or_else(|| repo.map(|repo| CheckSource::Github { repo, rid: None })),
             UpdateSource::Mirrorchyan => rid.map(|rid| CheckSource::MirrorChyan { rid }),
-            UpdateSource::Github => repo.map(|repo| CheckSource::Github { repo }),
+            UpdateSource::Github => repo.map(|repo| CheckSource::Github {
+                repo,
+                rid: rid.clone(),
+            }),
         };
         let Some(source) = source else {
             // No usable update source in the project metadata: nothing to ask,
@@ -278,7 +280,9 @@ impl UpdateState {
         let handle = tokio::spawn(async move {
             let outcome = match &source {
                 CheckSource::MirrorChyan { rid } => check_mirror_chyan(&client, rid, channel).await,
-                CheckSource::Github { repo } => check_github(&client, repo, channel).await,
+                CheckSource::Github { repo, rid } => {
+                    check_github(&client, repo, rid.as_deref(), channel).await
+                }
             };
             state.finish_check(generation, outcome, task_cancelled.load(Ordering::Relaxed));
         });
@@ -493,7 +497,7 @@ impl UpdateState {
 
 enum CheckSource {
     MirrorChyan { rid: String },
-    Github { repo: String },
+    Github { repo: String, rid: Option<String> },
 }
 
 async fn check_mirror_chyan(
@@ -528,8 +532,26 @@ async fn check_mirror_chyan(
 async fn check_github(
     client: &Arc<dyn UpdateHttpClient>,
     repo: &str,
+    rid: Option<&str>,
     channel: UpdateChannel,
 ) -> Result<Option<CheckedUpdate>, UpdateError> {
+    if let Some((release, version)) = mirror_pinned(client, rid, channel).await {
+        let current = semver::parse(APP_VERSION).ok();
+        let newer = current.as_ref().is_none_or(|current| version > *current);
+        if !newer {
+            return Ok(None);
+        }
+        return Ok(Some(CheckedUpdate {
+            pending: PendingUpdate::Github {
+                repo: repo.to_string(),
+                pick: GithubPick::Pinned {
+                    version: release.version.clone(),
+                },
+            },
+            version: release.version,
+            note: release.note,
+        }));
+    }
     let release =
         github::latest_release(client.as_ref(), repo, channel.as_str(), APP_VERSION).await?;
     let Some(release) = release else {
@@ -538,12 +560,27 @@ async fn check_github(
     Ok(Some(CheckedUpdate {
         pending: PendingUpdate::Github {
             repo: repo.to_string(),
-            url: release.url,
-            sha256: release.sha256,
+            pick: GithubPick::Resolved {
+                url: release.url,
+                sha256: release.sha256,
+            },
         },
         version: release.version,
         note: release.note,
     }))
+}
+
+/// MirrorChyan's anonymous answer, but only when it carries a parseable
+/// version. Any other outcome lets GitHub choose its own latest release.
+async fn mirror_pinned(
+    client: &Arc<dyn UpdateHttpClient>,
+    rid: Option<&str>,
+    channel: UpdateChannel,
+) -> Option<(mirror_chyan::MirrorRelease, semver::Version)> {
+    let release =
+        mirror_chyan::precheck(client.as_ref(), rid?, channel.as_str(), APP_VERSION).await?;
+    let version = semver::parse(&release.version).ok()?;
+    Some((release, version))
 }
 
 async fn run_download(
@@ -573,9 +610,27 @@ async fn run_download(
                 release.sha256.expect("resolve validates the digest"),
             )
         }
-        PendingUpdate::Github { url, sha256, .. } => {
+        PendingUpdate::Github {
+            pick: GithubPick::Resolved { url, sha256 },
+            ..
+        } => {
             state.advance_to_downloading(generation);
             (url.clone(), sha256.clone())
+        }
+        PendingUpdate::Github {
+            repo,
+            pick: GithubPick::Pinned { version },
+        } => {
+            let release = github::release_for_version(client.as_ref(), repo, version)
+                .await?
+                .ok_or_else(|| {
+                    UpdateError::new(
+                        UpdateFailure::NoMatchingAsset,
+                        format!("GitHub has no release tagged {version}"),
+                    )
+                })?;
+            state.advance_to_downloading(generation);
+            (release.url, release.sha256)
         }
     };
     let progress_state = state.clone();
@@ -818,13 +873,23 @@ mod tests {
         )
     }
 
+    fn github_prefs() -> UpdatePrefs {
+        UpdatePrefs {
+            source: UpdateSource::Github,
+            channel: UpdateChannel::Stable,
+            cdk: String::new(),
+        }
+    }
+
     #[test]
     fn pending_size_is_unknown_until_the_download_reports_it() {
         let mirror = PendingUpdate::MirrorChyan { rid: "m9a".into() };
         let github_repo = PendingUpdate::Github {
             repo: "owner/repo".into(),
-            url: "https://example.test/a.apk".into(),
-            sha256: digest_of(b"a").into(),
+            pick: GithubPick::Resolved {
+                url: "https://example.test/a.apk".into(),
+                sha256: digest_of(b"a").into(),
+            },
         };
         assert_eq!(mirror.size(), None);
         assert_eq!(github_repo.size(), None);
@@ -1000,6 +1065,177 @@ mod tests {
             std::fs::read(status.apk_path.as_ref().unwrap()).unwrap(),
             b"github apk"
         );
+    }
+
+    #[tokio::test]
+    async fn the_github_source_takes_its_version_from_mirrorchyan() {
+        let client = Arc::new(StubClient::new().with_body("latest", 200, mirror_body("1.5.0")));
+        let state = UpdateState::with_client(client.clone());
+        let env = test_env();
+        state.set_prefs(&env.dirs, github_prefs());
+
+        state.begin_check(RepoInfo {
+            mirrorchyan_rid: Some("m9a".to_string()),
+            github: Some("https://github.com/owner/repo".to_string()),
+        });
+        wait_for_phase(&state, UpdatePhase::Available).await;
+
+        let status = state.lock().status.clone();
+        assert_eq!(status.latest_version.as_deref(), Some("1.5.0"));
+        assert_eq!(status.release_note.as_deref(), Some("note for 1.5.0"));
+        assert_eq!(client.requested_urls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_equal_mirror_pin_on_the_github_source_is_up_to_date() {
+        let client = Arc::new(StubClient::new().with_body("latest", 200, mirror_body(APP_VERSION)));
+        let state = UpdateState::with_client(client.clone());
+        let env = test_env();
+        state.set_prefs(&env.dirs, github_prefs());
+
+        state.begin_check(RepoInfo {
+            mirrorchyan_rid: Some("m9a".to_string()),
+            github: Some("https://github.com/owner/repo".to_string()),
+        });
+        wait_for_phase(&state, UpdatePhase::UpToDate).await;
+
+        assert_eq!(client.requested_urls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_unusable_mirror_pin_falls_back_to_github() {
+        let digest = digest_of(b"github apk");
+        let abi = github::abi_tags()[0];
+        let asset_name = format!("app-{abi}.apk");
+        let releases = format!(
+            r#"[{{"tag_name": "v2.0.0", "prerelease": false, "assets": [{{"name": "{asset_name}", "browser_download_url": "https://github.com/owner/repo/releases/download/v2.0.0/{asset_name}", "digest": "sha256:{digest}"}}]}}]"#
+        );
+        let client = Arc::new(
+            StubClient::new()
+                .with_body("latest", 200, mirror_body("nightly"))
+                .with_body("page=1", 200, releases)
+                .with_body("page=2", 200, "[]"),
+        );
+        let state = UpdateState::with_client(client.clone());
+        let env = test_env();
+        state.set_prefs(&env.dirs, github_prefs());
+
+        state.begin_check(RepoInfo {
+            mirrorchyan_rid: Some("m9a".to_string()),
+            github: Some("https://github.com/owner/repo".to_string()),
+        });
+        wait_for_phase(&state, UpdatePhase::Available).await;
+
+        assert_eq!(state.lock().status.latest_version.as_deref(), Some("2.0.0"));
+        assert_eq!(client.requested_urls().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn an_unknown_mirror_resource_falls_back_to_github() {
+        let digest = digest_of(b"github apk");
+        let abi = github::abi_tags()[0];
+        let asset_name = format!("app-{abi}.apk");
+        let releases = format!(
+            r#"[{{"tag_name": "v2.0.0", "prerelease": false, "assets": [{{"name": "{asset_name}", "browser_download_url": "https://github.com/owner/repo/releases/download/v2.0.0/{asset_name}", "digest": "sha256:{digest}"}}]}}]"#
+        );
+        let client = Arc::new(
+            StubClient::new()
+                .with_body(
+                    "latest",
+                    404,
+                    br#"{"code":8001,"message":"resource not found","data":null}"#.to_vec(),
+                )
+                .with_body("page=1", 200, releases)
+                .with_body("page=2", 200, "[]"),
+        );
+        let state = UpdateState::with_client(client.clone());
+        let env = test_env();
+        state.set_prefs(&env.dirs, github_prefs());
+
+        state.begin_check(RepoInfo {
+            mirrorchyan_rid: Some("m9a".to_string()),
+            github: Some("https://github.com/owner/repo".to_string()),
+        });
+        wait_for_phase(&state, UpdatePhase::Available).await;
+
+        assert_eq!(state.lock().status.latest_version.as_deref(), Some("2.0.0"));
+        assert_eq!(client.requested_urls().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn a_mirror_pinned_github_download_uses_the_pinned_tag() {
+        let digest = digest_of(b"pinned apk");
+        let abi = github::abi_tags()[0];
+        let newer_asset = format!("app-1.6.0-{abi}.apk");
+        let pinned_asset = format!("app-1.5.0-{abi}.apk");
+        let releases = format!(
+            r#"[
+                {{"tag_name": "v1.6.0", "prerelease": false, "assets": [{{"name": "{newer_asset}", "browser_download_url": "https://github.com/owner/repo/releases/download/v1.6.0/{newer_asset}", "digest": "sha256:{digest}"}}]}},
+                {{"tag_name": "v1.5.0", "prerelease": false, "assets": [{{"name": "{pinned_asset}", "browser_download_url": "https://github.com/owner/repo/releases/download/v1.5.0/{pinned_asset}", "digest": "sha256:{digest}"}}]}}
+            ]"#
+        );
+        let stream = http::testing::StreamSpec {
+            status: 200,
+            content_length: Some(10),
+            chunks: vec![Ok(b"pinned apk".to_vec())],
+        };
+        let client = Arc::new(
+            StubClient::new()
+                .with_body("latest", 200, mirror_body("1.5.0"))
+                .with_body("page=1", 200, releases)
+                .with_body("page=2", 200, "[]")
+                .with_stream(&pinned_asset, stream),
+        );
+        let state = UpdateState::with_client(client);
+        let env = test_env();
+        state.set_prefs(&env.dirs, github_prefs());
+
+        state.begin_check(RepoInfo {
+            mirrorchyan_rid: Some("m9a".to_string()),
+            github: Some("https://github.com/owner/repo".to_string()),
+        });
+        wait_for_phase(&state, UpdatePhase::Available).await;
+        state.begin_download(env.dirs.clone());
+        wait_for_phase(&state, UpdatePhase::Available).await;
+
+        let status = state.lock().status.clone();
+        assert!(status.failure.is_none(), "{:?}", status.failure_detail);
+        assert_eq!(status.latest_version.as_deref(), Some("1.5.0"));
+        assert_eq!(
+            std::fs::read(status.apk_path.as_ref().unwrap()).unwrap(),
+            b"pinned apk"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_missing_mirror_pinned_tag_reports_no_matching_asset() {
+        let digest = digest_of(b"github apk");
+        let abi = github::abi_tags()[0];
+        let asset_name = format!("app-{abi}.apk");
+        let releases = format!(
+            r#"[{{"tag_name": "v1.6.0", "prerelease": false, "assets": [{{"name": "{asset_name}", "browser_download_url": "https://github.com/owner/repo/releases/download/v1.6.0/{asset_name}", "digest": "sha256:{digest}"}}]}}]"#
+        );
+        let client = Arc::new(
+            StubClient::new()
+                .with_body("latest", 200, mirror_body("1.7.0"))
+                .with_body("page=1", 200, releases)
+                .with_body("page=2", 200, "[]"),
+        );
+        let state = UpdateState::with_client(client);
+        let env = test_env();
+        state.set_prefs(&env.dirs, github_prefs());
+
+        state.begin_check(RepoInfo {
+            mirrorchyan_rid: Some("m9a".to_string()),
+            github: Some("https://github.com/owner/repo".to_string()),
+        });
+        wait_for_phase(&state, UpdatePhase::Available).await;
+        state.begin_download(env.dirs.clone());
+        wait_for_phase(&state, UpdatePhase::Available).await;
+
+        let status = state.lock().status.clone();
+        assert_eq!(status.failure, Some(UpdateFailure::NoMatchingAsset));
+        assert!(status.apk_path.is_none());
     }
 
     #[tokio::test]

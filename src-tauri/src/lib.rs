@@ -3657,7 +3657,9 @@ impl serde::Serialize for AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::types::ProjectMetadata;
+    use crate::domain::types::{
+        ControllerDefinition, ProjectMetadata, ResourceDefinition, TaskDefinition,
+    };
 
     fn resolved_task(
         instance_id: &str,

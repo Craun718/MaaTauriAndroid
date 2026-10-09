@@ -352,6 +352,7 @@ mod tests {
                 }],
             }],
             active_run_configuration_id: Some("run".to_string()),
+            task_groups: BTreeMap::new(),
             show_virtual_display_touches: true,
             debug_mode: false,
             welcome_fingerprint: None,

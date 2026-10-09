@@ -51,7 +51,7 @@ fn android_app_handle() -> Option<&'static AppHandle> {
     None
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AppStateSnapshot {
     project: Option<Project>,
@@ -540,10 +540,9 @@ impl AppState {
         let original = self.configuration()?;
         self.persist_configuration_locked(&configuration)?;
 
-        let replacement = match self.schedule_store() {
-            Ok(store) => store.replace_rules(schedule_rules),
-            Err(error) => Err(error),
-        };
+        let replacement = self
+            .schedule_store()
+            .and_then(|store| store.replace_rules(schedule_rules).map_err(AppError::from));
         if let Err(error) = replacement {
             self.persist_configuration_locked(&original).map_err(|rollback| {
                 AppError::Message(format!(
@@ -554,7 +553,7 @@ impl AppState {
                 .configuration
                 .write()
                 .expect("configuration lock poisoned") = original;
-            return Err(AppError::from(error));
+            return Err(error);
         }
 
         *self
@@ -3048,7 +3047,7 @@ async fn export_configuration(
     let file_name = format!("maa_tauri_android-configuration-{stamp}.json");
     let output = exports_dir.join(&file_name);
     let output_path = output.to_string_lossy().into_owned();
-    let export = tokio::task::spawn_blocking(move || {
+    let export = tokio::task::spawn_blocking(move || -> Result<ConfigurationExport, AppError> {
         std::fs::create_dir_all(&exports_dir)?;
         let backup = configuration_backup::export_configuration(&project, &configuration, &rules);
         let bytes = configuration_backup::serialize_configuration(&backup)?;
@@ -3062,20 +3061,18 @@ async fn export_configuration(
     .map_err(|error| AppError::Message(error.to_string()))??;
 
     #[cfg(target_os = "android")]
-    let saved_file_name = {
-        let bridge_path = export.path;
-        tokio::task::spawn_blocking(move || {
-            export_configuration_via_bridge(&bridge_path, "application/json")
-        })
-        .await
-        .map_err(|error| AppError::Message(error.to_string()))??
+    let export = {
+        let mut export = export;
+        let bridge_path = export.path.clone();
+        export.file_name = Some(
+            tokio::task::spawn_blocking(move || {
+                export_configuration_via_bridge(&bridge_path, "application/json")
+            })
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))??,
+        );
+        export
     };
-    #[cfg(target_os = "android")]
-    let mut export = export;
-    export.file_name = saved_file_name;
-    #[cfg(not(target_os = "android"))]
-    let mut export = export;
-    export.file_name = None;
     Ok(export)
 }
 
@@ -3108,7 +3105,7 @@ async fn import_configuration(
         let selected = tokio::task::spawn_blocking(pick_configuration_file_via_bridge)
             .await
             .map_err(|error| AppError::Message(error.to_string()))?;
-        let Some(selected) = selected else {
+        let Some(selected) = selected? else {
             return Ok(ConfigurationImportResult {
                 imported: false,
                 snapshot: None,
@@ -3154,10 +3151,8 @@ async fn import_configuration(
 }
 
 #[cfg(target_os = "android")]
-async fn export_configuration_via_bridge(path: &str, mime: &str) -> Result<String, AppError> {
-    let path = path.to_string();
-    let mime = mime.to_string();
-    export_file_via_bridge(&path, &mime)
+fn export_configuration_via_bridge(path: &str, mime: &str) -> Result<String, AppError> {
+    export_file_via_bridge(path, mime)
 }
 
 #[cfg(target_os = "android")]

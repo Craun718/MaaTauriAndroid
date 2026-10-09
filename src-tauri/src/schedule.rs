@@ -25,7 +25,7 @@ pub enum ScheduleError {
     NotFound,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScheduleRule {
     #[serde(default = "default_rule_id")]
@@ -44,7 +44,7 @@ pub struct ScheduleRule {
     pub trigger: ScheduleTrigger,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",

@@ -1,7 +1,7 @@
 use crate::domain::types::{
-    InputFieldDefinition, OptionDefinition, OptionValue, Project, ScheduleRule, UserConfiguration,
+    InputFieldDefinition, OptionDefinition, OptionValue, Project, UserConfiguration,
 };
-use crate::schedule;
+use crate::schedule::{self, ScheduleRule};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -55,22 +55,22 @@ pub struct ConfigurationBackup {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigurationBackupExport<'a> {
+pub struct ConfigurationBackupExport {
     pub kind: &'static str,
     pub version: u32,
     pub exported_at: DateTime<Utc>,
     pub app_version: String,
     pub project: ConfigurationBackupProject,
     pub passwords_excluded: bool,
-    pub configuration: &'a UserConfiguration,
-    pub schedule_rules: &'a [ScheduleRule],
+    pub configuration: UserConfiguration,
+    pub schedule_rules: Vec<ScheduleRule>,
 }
 
 pub fn export_configuration(
     project: &Project,
     configuration: &UserConfiguration,
     schedule_rules: &[ScheduleRule],
-) -> ConfigurationBackupExport<'_> {
+) -> ConfigurationBackupExport {
     let sanitized = remove_password_values(project, configuration.clone());
     ConfigurationBackupExport {
         kind: BACKUP_KIND,
@@ -82,13 +82,13 @@ pub fn export_configuration(
             interface_version: project.interface_version,
         },
         passwords_excluded: true,
-        configuration: &sanitized,
-        schedule_rules,
+        configuration: sanitized,
+        schedule_rules: schedule_rules.to_vec(),
     }
 }
 
 pub fn serialize_configuration(
-    backup: &ConfigurationBackupExport<'_>,
+    backup: &ConfigurationBackupExport,
 ) -> Result<Vec<u8>, serde_json::Error> {
     serde_json::to_vec_pretty(backup)
 }
@@ -138,7 +138,8 @@ pub fn validate_import(
     schedule_rules: &[ScheduleRule],
 ) -> Result<(), ConfigurationBackupError> {
     validate_configuration(project, configuration)?;
-    schedule::validate_rules(schedule_rules).map_err(ConfigurationBackupError::Validation)?;
+    schedule::validate_rules(schedule_rules)
+        .map_err(|error| ConfigurationBackupError::Validation(error.to_string()))?;
     for rule in schedule_rules {
         if !configuration
             .run_configurations
@@ -175,7 +176,7 @@ fn validate_configuration(
         .active_run_configuration_id
         .as_ref()
         .ok_or_else(|| validation_error("the active run configuration is required".to_string()))?;
-    if !run_ids.contains(active_run_id) {
+    if !run_ids.contains(active_run_id.as_str()) {
         return Err(validation_error(format!(
             "the active run configuration does not exist: {active_run_id}"
         )));
@@ -314,11 +315,11 @@ fn validate_option_value(project: &Project, name: &str, value: &OptionValue) -> 
             }
         }
         (
-            OptionDefinition::Input { inputs, .. } | OptionDefinition::Hotkey { .. },
+            OptionDefinition::Input { .. } | OptionDefinition::Hotkey { .. },
             OptionValue::Inputs { values },
         ) => {
-            let fields: Vec<&InputFieldDefinition> = match definition {
-                OptionDefinition::Input { inputs, .. } => inputs.iter().collect(),
+            let fields: Vec<InputFieldDefinition> = match definition {
+                OptionDefinition::Input { inputs, .. } => inputs.clone(),
                 OptionDefinition::Hotkey { hotkeys, .. } => hotkeys
                     .iter()
                     .map(|field| InputFieldDefinition {
@@ -358,7 +359,7 @@ fn validate_option_value(project: &Project, name: &str, value: &OptionValue) -> 
 
 fn validate_input_values(
     option: &str,
-    fields: &[&InputFieldDefinition],
+    fields: &[InputFieldDefinition],
     values: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     for field in fields {
@@ -680,7 +681,7 @@ mod tests {
         encoded
             .as_object_mut()
             .unwrap()
-            .remove("configuration")
+            .get_mut("configuration")
             .unwrap()
             .as_object_mut()
             .unwrap()

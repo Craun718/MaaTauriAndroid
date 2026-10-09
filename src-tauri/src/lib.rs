@@ -3880,17 +3880,11 @@ mod tests {
             .tasks
             .insert(1, task("NewDaily", &["Daily"], true));
         normalize_configuration(&updated_project, &mut configuration);
-        assert_eq!(
-            configured_task_names(&configuration),
-            ["Daily", "NewDaily", "Other"]
-        );
+        assert_eq!(configured_task_names(&configuration), ["NewDaily", "Daily"]);
         assert!(configuration.run_configurations[0].tasks[1].enabled);
 
         normalize_configuration(&updated_project, &mut configuration);
-        assert_eq!(
-            configured_task_names(&configuration),
-            ["Daily", "NewDaily", "Other"]
-        );
+        assert_eq!(configured_task_names(&configuration), ["NewDaily", "Daily"]);
     }
 
     #[test]
@@ -3960,10 +3954,7 @@ mod tests {
 
         normalize_configuration(&project, &mut configuration);
 
-        assert_eq!(
-            configured_task_names(&configuration),
-            ["Daily", "NewDaily", "Other"]
-        );
+        assert_eq!(configured_task_names(&configuration), ["NewDaily", "Daily"]);
     }
 
     #[test]

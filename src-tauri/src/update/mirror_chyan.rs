@@ -89,10 +89,8 @@ async fn latest(
         query.append_pair("current_version", current_version);
         query.append_pair("os", "android");
         query.append_pair("arch", "arm64");
-        query.append_pair(
-            "user_agent",
-            &format!("MaaTauriAndroid/{} Android", crate::version::APP_VERSION),
-        );
+        // MirrorChyan identifies integrations by the plain application name.
+        query.append_pair("user_agent", crate::version::APP_NAME);
         if let Some(cdk) = cdk {
             query.append_pair("cdk", cdk);
         }
@@ -229,11 +227,8 @@ mod tests {
         assert!(url.contains("current_version=1.0.0"));
         assert!(url.contains("os=android"));
         assert!(url.contains("arch=arm64"));
-        assert!(url.contains(&format!(
-            "user_agent=MaaTauriAndroid%2F{}",
-            crate::version::APP_VERSION
-        )));
-        assert!(url.contains("Android"));
+        assert!(url.contains("user_agent=MaaTauriAndroid"));
+        assert!(!url.contains("user_agent=MaaTauriAndroid%2F"));
         assert!(!url.contains("cdk"));
     }
 

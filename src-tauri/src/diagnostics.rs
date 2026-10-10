@@ -430,9 +430,8 @@ fn copy_run_histories(runs_dir: Option<&Path>, staging_dir: &Path) {
         }
         copy_run_screenshots(
             &runs_dir.join(crate::run_log::sanitize(&entry.execution_id)),
-            &staging_dir
-                .join("logs/runs/screens")
-                .join(crate::run_log::sanitize(&entry.execution_id)),
+            &staging_dir.join("logs/runs/screens"),
+            export_file_name.trim_end_matches(".jsonl"),
         );
         let started_at_unix_ms = i64::try_from(entry.started_at_unix_ms).unwrap_or_default();
         let started_at = DateTime::<Utc>::from_timestamp_millis(started_at_unix_ms)
@@ -461,15 +460,20 @@ fn copy_run_histories(runs_dir: Option<&Path>, staging_dir: &Path) {
     }
 }
 
-fn copy_run_screenshots(run_dir: &Path, screenshots_dir: &Path) {
+fn copy_run_screenshots(run_dir: &Path, screenshots_dir: &Path, prefix: &str) {
     for (source_path, relative) in collect_root_files(&run_dir.join("screens")) {
-        let destination = screenshots_dir.join(&relative);
-        let Some(parent) = destination.parent() else {
-            continue;
-        };
-        if fs::create_dir_all(parent).is_err() {
+        let flat_name = format!(
+            "{prefix}-{}",
+            relative
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("-")
+        );
+        if fs::create_dir_all(screenshots_dir).is_err() {
             continue;
         }
+        let destination = screenshots_dir.join(flat_name);
         let _ = fs::copy(&source_path, &destination);
     }
 }
@@ -1903,11 +1907,11 @@ mod tests {
         assert!(!exported_runs.join("run-02").exists());
         let exported_screens = staging_dir.join("logs/runs/screens");
         assert_eq!(
-            fs::read(exported_screens.join("run-21/main.png")).unwrap(),
+            fs::read(exported_screens.join("run_20240101_210000_2_run-21-main.png")).unwrap(),
             [1, 2, 3]
         );
         assert_eq!(
-            fs::read(exported_screens.join("run-02/manual-123.png")).unwrap(),
+            fs::read(exported_screens.join("run_20240101_020000_2_run-02-manual-123.png")).unwrap(),
             [4, 5, 6]
         );
         assert!(!exported_screens.join("run-01").exists());
@@ -1992,7 +1996,10 @@ mod tests {
         let history = zip_entry(&zip, "logs/runs/run_20240101_120000_2_run-1.jsonl");
         assert_eq!(history, b"started with snapshot\n");
         assert_eq!(
-            zip_entry(&zip, "logs/runs/screens/run-1/main.png"),
+            zip_entry(
+                &zip,
+                "logs/runs/screens/run_20240101_120000_2_run-1-main.png"
+            ),
             [1, 2, 3].as_slice()
         );
         let index = zip_entry(&zip, "logs/runs/index.json");

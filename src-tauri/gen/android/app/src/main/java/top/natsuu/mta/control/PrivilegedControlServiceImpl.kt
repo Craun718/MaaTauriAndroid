@@ -89,6 +89,11 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                 flags,
             ) ?: return DISPLAY_NONE
         virtualDisplay.set(display)
+        // Without this, a focused input field on the virtual display opens the
+        // user's IME on the primary display and can leave it stuck open.
+        if (Build.VERSION.SDK_INT >= 31) {
+            hideDisplayIme(display.display.displayId)
+        }
         stabilizeDisplay(display.display.displayId, width, height)
         return display.display.displayId
     }
@@ -844,6 +849,31 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         }
     }
 
+    private fun hideDisplayIme(displayId: Int) {
+        val windowManager = windowManager() ?: return
+        val method = windowManager.javaClass.methods.firstOrNull { candidate ->
+            candidate.name == "setDisplayImePolicy" &&
+                candidate.parameterTypes.contentEquals(
+                    arrayOf(
+                        java.lang.Integer.TYPE,
+                        java.lang.Integer.TYPE,
+                    ),
+                )
+        }
+        if (method == null) {
+            android.util.Log.w("MaaTauriAndroidControl", "Could not find setDisplayImePolicy")
+            return
+        }
+        runCatching { method.invoke(windowManager, displayId, DISPLAY_IME_POLICY_HIDE) }
+            .onFailure { error ->
+                android.util.Log.w(
+                    "MaaTauriAndroidControl",
+                    "Could not hide the IME on the virtual display",
+                    error,
+                )
+            }
+    }
+
     private fun windowManager(): Any? {
         val binder = runCatching {
             Class.forName("android.os.ServiceManager")
@@ -918,5 +948,6 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         const val RESULT_UNSUPPORTED_METHOD = -5
         const val RESULT_COMMAND_FAILED = -6
         private const val DISPLAY_NONE = -1
+        private const val DISPLAY_IME_POLICY_HIDE = 2
     }
 }

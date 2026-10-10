@@ -10,10 +10,12 @@ import {
   reportFrontendDebug,
   reportFrontendError,
 } from "./lib/frontendLogging";
+import { configurationRecoveryMessageKey, useTranslation } from "./lib/i18n";
 import { releaseStartupSplashAfterBootstrap } from "./lib/startupSplash";
 import { startupTrace } from "./lib/startupTiming";
 import { HomePage } from "./pages/HomePage";
 import { useAppStore } from "./store/appStore";
+import { useNotificationStore } from "./store/notificationStore";
 import { usePreparationStore } from "./store/preparationStore";
 
 const RunHistoryPage = lazy(async () => {
@@ -40,6 +42,10 @@ function App() {
   const initializePreparation = usePreparationStore(
     (state) => state.initialize,
   );
+  const configurationRecovery = useAppStore(
+    (state) => state.snapshot?.configurationRecovery,
+  );
+  const { t } = useTranslation();
 
   useEffect(() => {
     void initializePreparation();
@@ -61,6 +67,17 @@ function App() {
       reportFrontendError("Could not release the startup splash", error),
     );
   }, [bootstrapStatus]);
+
+  useEffect(() => {
+    if (!configurationRecovery) return;
+    useNotificationStore
+      .getState()
+      .notifyOnce(
+        `configuration-recovery-${configurationRecovery.kind}-${configurationRecovery.reason}`,
+        t(configurationRecoveryMessageKey(configurationRecovery)),
+        { tone: "warning" },
+      );
+  }, [configurationRecovery, t]);
 
   return (
     <HashRouter>

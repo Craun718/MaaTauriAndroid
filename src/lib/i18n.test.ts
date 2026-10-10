@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canRequestPrivilegedAccess,
+  configurationRecoveryMessageKey,
   isChineseLocale,
   localizeDiagnostic,
   localizeRunEvent,
@@ -8,7 +9,11 @@ import {
   resolveLanguage,
   translate,
 } from "./i18n";
-import type { PrivilegedStatus, RunEvent } from "./types";
+import type {
+  ConfigurationRecovery,
+  PrivilegedStatus,
+  RunEvent,
+} from "./types";
 
 describe("isChineseLocale", () => {
   it("matches every Chinese tag Android and the desktop webviews report", () => {
@@ -131,6 +136,28 @@ describe("localizeDiagnostic", () => {
     expect(localizeDiagnostic("Pipeline exploded", "zh")).toBe(
       "Pipeline exploded",
     );
+  });
+});
+
+describe("configurationRecoveryMessageKey", () => {
+  it("maps every recovery outcome to a localized catalog key", () => {
+    const recovery = (
+      kind: ConfigurationRecovery["kind"],
+      reason: ConfigurationRecovery["reason"],
+    ): ConfigurationRecovery => ({ kind, reason });
+
+    expect(
+      configurationRecoveryMessageKey(recovery("backupRestored", "parse")),
+    ).toBe("configurationRecoveryBackupRestored");
+    expect(
+      configurationRecoveryMessageKey(recovery("backupRestored", "secret")),
+    ).toBe("configurationRecoveryBackupRestored");
+    expect(
+      configurationRecoveryMessageKey(recovery("resetToDefault", "parse")),
+    ).toBe("configurationRecoveryResetForParse");
+    expect(
+      configurationRecoveryMessageKey(recovery("resetToDefault", "secret")),
+    ).toBe("configurationRecoveryResetForSecret");
   });
 });
 

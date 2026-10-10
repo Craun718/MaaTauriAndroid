@@ -310,10 +310,19 @@ export interface UserConfiguration {
   skipWelcomeAnnouncement?: boolean;
 }
 
+export type ConfigurationRecoveryKind = "backupRestored" | "resetToDefault";
+export type ConfigurationRecoveryReason = "parse" | "secret";
+
+export interface ConfigurationRecovery {
+  kind: ConfigurationRecoveryKind;
+  reason: ConfigurationRecoveryReason;
+}
+
 export interface AppStateSnapshot {
   project?: Project;
   configuration: UserConfiguration;
   projectPath?: string;
+  configurationRecovery?: ConfigurationRecovery;
   /** Welcome event revision represented by this snapshot; absent in legacy snapshots. */
   welcomeRevision?: number;
   /** Versions for the About card, filled by the shell on bootstrap and project load. */

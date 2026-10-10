@@ -4,11 +4,48 @@ use crate::secrets::{
     decrypt_configuration_with_manifest, encrypt_configuration_with_manifest, SecretError,
     SecretManifest,
 };
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const BACKUP_PREFIX: &str = "configuration.json.backup-";
 const MAX_BACKUPS: usize = 10;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConfigurationRecoveryKind {
+    BackupRestored,
+    ResetToDefault,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConfigurationRecoveryReason {
+    Parse,
+    Secret,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigurationRecovery {
+    pub kind: ConfigurationRecoveryKind,
+    pub reason: ConfigurationRecoveryReason,
+}
+
+impl fmt::Display for ConfigurationRecoveryReason {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse => formatter.write_str("parse"),
+            Self::Secret => formatter.write_str("secret"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LoadedConfiguration {
+    pub configuration: UserConfiguration,
+    pub recovery: Option<ConfigurationRecovery>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistenceError {
@@ -59,31 +96,148 @@ impl UserConfigurationStore {
         &self.path
     }
 
-    pub fn load(&self, project: &Project) -> Result<UserConfiguration, PersistenceError> {
+    pub fn load(&self, project: &Project) -> Result<LoadedConfiguration, PersistenceError> {
         match fs::read(&self.path) {
             Ok(bytes) => match self.load_bytes(project, &bytes) {
-                Ok(configuration) => Ok(configuration),
+                Ok(configuration) => Ok(LoadedConfiguration {
+                    configuration,
+                    recovery: None,
+                }),
                 Err(PersistenceError::Parse { source, .. }) => {
+                    let no_json_data = if is_corrupt_bytes(&bytes) {
+                        " (the file contains no JSON data)"
+                    } else {
+                        ""
+                    };
                     log::warn!(
-                        "the configuration is unreadable{}; trying a backup",
-                        if is_corrupt_bytes(&bytes) {
-                            " (the file contains no JSON data)"
-                        } else {
-                            ""
-                        }
+                        "could not parse the configuration{} {}: {source}; trying a backup",
+                        no_json_data,
+                        self.path.display()
                     );
-                    self.restore_latest_backup(project, source)
+                    Ok(self.recover_failed_configuration(
+                        project,
+                        &bytes,
+                        ConfigurationRecoveryReason::Parse,
+                    ))
+                }
+                Err(PersistenceError::Secret(source)) => {
+                    log::warn!(
+                        "could not decrypt the configuration {}: {source}; trying a backup",
+                        self.path.display()
+                    );
+                    Ok(self.recover_failed_configuration(
+                        project,
+                        &bytes,
+                        ConfigurationRecoveryReason::Secret,
+                    ))
                 }
                 Err(error) => Err(error),
             },
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Ok(UserConfiguration::default())
-            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(LoadedConfiguration {
+                configuration: UserConfiguration::default(),
+                recovery: None,
+            }),
             Err(source) => Err(PersistenceError::Read {
                 path: self.path.clone(),
                 source,
             }),
         }
+    }
+
+    fn recover_failed_configuration(
+        &self,
+        project: &Project,
+        damaged_bytes: &[u8],
+        reason: ConfigurationRecoveryReason,
+    ) -> LoadedConfiguration {
+        let quarantined = self.quarantine_current(damaged_bytes);
+        let backups = backup_paths(&self.path);
+
+        for backup in backups.iter().rev() {
+            let bytes = match fs::read(backup) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    log::warn!(
+                        "could not read the configuration backup {}: {error}",
+                        backup.display()
+                    );
+                    continue;
+                }
+            };
+            let configuration = match self.load_bytes(project, &bytes) {
+                Ok(configuration) => configuration,
+                Err(error) => {
+                    log::warn!(
+                        "skipping the damaged configuration backup {}: {error}",
+                        backup.display()
+                    );
+                    continue;
+                }
+            };
+            if let Err(error) = write_atomic(&self.path, &bytes) {
+                log::warn!(
+                    "restored {} in memory but could not replace the damaged configuration: {error}",
+                    backup.display()
+                );
+            }
+            log::warn!(
+                "configuration {} was restored from {}",
+                self.path.display(),
+                backup.display()
+            );
+            return LoadedConfiguration {
+                configuration,
+                recovery: Some(ConfigurationRecovery {
+                    kind: ConfigurationRecoveryKind::BackupRestored,
+                    reason,
+                }),
+            };
+        }
+
+        if let Some(quarantined) = quarantined {
+            log::warn!(
+                "configuration {} was reset to defaults after a {reason} failure; the damaged file is {}",
+                self.path.display(),
+                quarantined.display()
+            );
+        } else {
+            log::warn!(
+                "configuration {} was reset to defaults after a {reason} failure; the damaged file could not be quarantined",
+                self.path.display()
+            );
+        }
+        LoadedConfiguration {
+            configuration: UserConfiguration::default(),
+            recovery: Some(ConfigurationRecovery {
+                kind: ConfigurationRecoveryKind::ResetToDefault,
+                reason,
+            }),
+        }
+    }
+
+    fn quarantine_current(&self, bytes: &[u8]) -> Option<PathBuf> {
+        let quarantined = corrupt_path(&self.path);
+        if let Err(error) = fs::rename(&self.path, &quarantined) {
+            log::warn!(
+                "could not rename the damaged configuration {}: {error}",
+                self.path.display()
+            );
+        } else {
+            return Some(quarantined);
+        }
+
+        // A rename can fail on bind mounts or transient filesystem errors.
+        // Keeping these bytes still prevents the default write from losing the
+        // last evidence of what went wrong.
+        if let Err(error) = write_atomic(&quarantined, bytes) {
+            log::warn!(
+                "could not quarantine the damaged configuration {}: {error}",
+                self.path.display()
+            );
+        } else {
+            return Some(quarantined);
+        }
+        None
     }
 
     pub fn save(
@@ -168,62 +322,6 @@ impl UserConfigurationStore {
             return false;
         }
         true
-    }
-
-    fn restore_latest_backup(
-        &self,
-        project: &Project,
-        source: serde_json::Error,
-    ) -> Result<UserConfiguration, PersistenceError> {
-        let backups = backup_paths(&self.path);
-        if backups.is_empty() {
-            return Err(PersistenceError::Parse {
-                path: self.path.clone(),
-                source,
-            });
-        }
-
-        let quarantined = corrupt_path(&self.path);
-        if let Err(error) = fs::rename(&self.path, &quarantined) {
-            log::warn!(
-                "could not quarantine the damaged configuration {}: {error}",
-                self.path.display()
-            );
-            return Err(PersistenceError::Parse {
-                path: self.path.clone(),
-                source,
-            });
-        }
-
-        for backup in backups.iter().rev() {
-            let Ok(bytes) = fs::read(backup) else {
-                continue;
-            };
-            let Ok(configuration) = self.load_bytes(project, &bytes) else {
-                log::warn!(
-                    "skipping the damaged configuration backup {}",
-                    backup.display()
-                );
-                continue;
-            };
-            if let Err(error) = write_atomic(&self.path, &bytes) {
-                log::warn!(
-                    "restored {} in memory but could not replace the damaged configuration: {error}",
-                    backup.display()
-                );
-            }
-            log::warn!(
-                "configuration {} was restored from {}",
-                self.path.display(),
-                backup.display()
-            );
-            return Ok(configuration);
-        }
-
-        Err(PersistenceError::Parse {
-            path: quarantined,
-            source,
-        })
     }
 
     fn rotate_backups(&self) {
@@ -369,10 +467,17 @@ mod tests {
         let backup = backup_paths(&path).remove(0);
         fs::write(&path, [0, 0, 0]).unwrap();
 
-        let restored = store.load(&project()).unwrap();
+        let loaded = store.load(&project()).unwrap();
         assert_eq!(
-            serde_json::to_value(restored).unwrap(),
+            serde_json::to_value(loaded.configuration).unwrap(),
             serde_json::to_value(first).unwrap()
+        );
+        assert_eq!(
+            loaded.recovery,
+            Some(ConfigurationRecovery {
+                kind: ConfigurationRecoveryKind::BackupRestored,
+                reason: ConfigurationRecoveryReason::Parse,
+            })
         );
         assert_eq!(fs::read(&path).unwrap(), fs::read(&backup).unwrap());
         assert_eq!(
@@ -383,6 +488,105 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn a_damaged_configuration_without_a_backup_falls_back_to_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("configuration.json");
+        let store = UserConfigurationStore::new(path.clone());
+        fs::write(&path, b"{not json").unwrap();
+
+        let loaded = store.load(&project()).unwrap();
+        assert_eq!(
+            serde_json::to_value(loaded.configuration).unwrap(),
+            serde_json::to_value(UserConfiguration::default()).unwrap()
+        );
+        assert_eq!(
+            loaded.recovery,
+            Some(ConfigurationRecovery {
+                kind: ConfigurationRecoveryKind::ResetToDefault,
+                reason: ConfigurationRecoveryReason::Parse,
+            })
+        );
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read_dir(temp.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().contains(".corrupt-"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn unusable_backups_fall_back_to_defaults_after_quarantine() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("configuration.json");
+        let store = UserConfigurationStore::new(path.clone());
+        fs::write(&path, [0, 0, 0]).unwrap();
+        fs::write(
+            temp.path().join(format!("{BACKUP_PREFIX}old")),
+            b"{also bad",
+        )
+        .unwrap();
+
+        let loaded = store.load(&project()).unwrap();
+        assert_eq!(
+            serde_json::to_value(loaded.configuration).unwrap(),
+            serde_json::to_value(UserConfiguration::default()).unwrap()
+        );
+        assert_eq!(
+            loaded.recovery,
+            Some(ConfigurationRecovery {
+                kind: ConfigurationRecoveryKind::ResetToDefault,
+                reason: ConfigurationRecoveryReason::Parse,
+            })
+        );
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read_dir(temp.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().contains(".corrupt-"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_secret_failure_uses_the_common_backup_and_reset_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("configuration.json");
+        let store = UserConfigurationStore::new(path.clone());
+        let backup = UserConfiguration {
+            initialized: true,
+            ..UserConfiguration::default()
+        };
+        store.save(&project(), &backup).unwrap();
+        let backup_path = backup_paths(&path).remove(0);
+        fs::write(&path, b"{not json").unwrap();
+
+        // The desktop secret implementation cannot fail, so exercise the exact
+        // recovery branch selected for PersistenceError::Secret on Android.
+        let loaded = store.recover_failed_configuration(
+            &project(),
+            &fs::read(&path).unwrap(),
+            ConfigurationRecoveryReason::Secret,
+        );
+        assert_eq!(
+            serde_json::to_value(loaded.configuration).unwrap(),
+            serde_json::to_value(backup).unwrap()
+        );
+        assert_eq!(
+            loaded.recovery,
+            Some(ConfigurationRecovery {
+                kind: ConfigurationRecoveryKind::BackupRestored,
+                reason: ConfigurationRecoveryReason::Secret,
+            })
+        );
+        assert_eq!(fs::read(&path).unwrap(), fs::read(&backup_path).unwrap());
     }
 
     #[test]

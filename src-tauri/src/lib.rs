@@ -23,7 +23,9 @@ use domain::types::{
     ConfigurationTemplate, ConfiguredTask, Project, RunConfiguration, UserConfiguration,
 };
 use domain::welcome;
-use persistence::{PersistenceError, UserConfigurationStore};
+use persistence::{
+    ConfigurationRecovery, LoadedConfiguration, PersistenceError, UserConfigurationStore,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -61,6 +63,8 @@ struct AppStateSnapshot {
     /// Rides along with the snapshot so the About card reflects the project that
     /// was just loaded, without a second IPC round trip.
     versions: version::VersionInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    configuration_recovery: Option<ConfigurationRecovery>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -1081,7 +1085,11 @@ async fn bootstrap_snapshot(
     welcome::defer_remote_announcements(&mut project.metadata);
     #[cfg(target_os = "android")]
     runtime::validate_ocr_models(&project.root, &project.resources)?;
-    let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
+    let loaded = UserConfigurationStore::new(config_path.clone()).load(&project)?;
+    let LoadedConfiguration {
+        configuration: stored,
+        recovery,
+    } = loaded;
     let configuration = state.install(config_path, None, project, stored)?;
     let welcome_revision = state.current_welcome_revision();
     spawn_welcome_resolution(app.clone(), welcome_revision);
@@ -1093,6 +1101,7 @@ async fn bootstrap_snapshot(
         configuration,
         project_path: bundled_root.map(str::to_string),
         welcome_revision,
+        configuration_recovery: recovery,
     })
 }
 
@@ -1132,6 +1141,7 @@ fn current_snapshot(state: &AppState) -> AppStateSnapshot {
             .as_deref()
             .map(|path| path.to_string_lossy().into_owned()),
         welcome_revision: state.current_welcome_revision(),
+        configuration_recovery: None,
     }
 }
 
@@ -1319,6 +1329,7 @@ async fn load_project(
         configuration,
         project_path: Some(path),
         welcome_revision,
+        configuration_recovery: None,
     })
 }
 
@@ -2344,7 +2355,11 @@ async fn reload_project(
         ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), language)?;
     welcome::defer_remote_announcements(&mut project.metadata);
     runtime::validate_ocr_models(&project.root, &project.resources)?;
-    let stored = UserConfigurationStore::new(config_path.clone()).load(&project)?;
+    let loaded = UserConfigurationStore::new(config_path.clone()).load(&project)?;
+    let LoadedConfiguration {
+        configuration: stored,
+        recovery,
+    } = loaded;
     let configuration = state.install(config_path, None, project, stored)?;
     let welcome_revision = state.current_welcome_revision();
     spawn_welcome_resolution(app.clone(), welcome_revision);
@@ -2355,6 +2370,7 @@ async fn reload_project(
         configuration,
         project_path: Some(root.to_string()),
         welcome_revision,
+        configuration_recovery: recovery,
     })
 }
 
@@ -3677,6 +3693,30 @@ mod tests {
         ControllerDefinition, ProjectMetadata, ResourceDefinition, TaskDefinition,
     };
 
+    #[test]
+    fn snapshot_serializes_configuration_recovery_for_the_frontend() {
+        let snapshot = AppStateSnapshot {
+            project: None,
+            configuration: UserConfiguration::default(),
+            project_path: None,
+            welcome_revision: 0,
+            versions: version::VersionInfo::new(version::environment()),
+            configuration_recovery: Some(ConfigurationRecovery {
+                kind: persistence::ConfigurationRecoveryKind::ResetToDefault,
+                reason: persistence::ConfigurationRecoveryReason::Secret,
+            }),
+        };
+
+        let value = serde_json::to_value(snapshot).expect("snapshot should serialize");
+        assert_eq!(
+            value.get("configurationRecovery"),
+            Some(&serde_json::json!({
+                "kind": "resetToDefault",
+                "reason": "secret",
+            }))
+        );
+    }
+
     fn resolved_task(
         instance_id: &str,
         enabled: bool,
@@ -4092,7 +4132,10 @@ mod tests {
         assert!(matches!(error, AppError::Schedule(_)));
 
         assert_eq!(state.configuration().unwrap(), original);
-        let restored = UserConfigurationStore::new(path).load(&project).unwrap();
+        let restored = UserConfigurationStore::new(path)
+            .load(&project)
+            .unwrap()
+            .configuration;
         assert_eq!(restored, original);
         state.set_schedule_data_dir(root.clone());
         let rules: Vec<_> = state

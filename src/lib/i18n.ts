@@ -7,7 +7,11 @@ import {
   resolveLanguage,
   systemLanguageTags,
 } from "./language";
-import type { PrivilegedStatus, RunEvent } from "./types";
+import type {
+  ConfigurationRecovery,
+  PrivilegedStatus,
+  RunEvent,
+} from "./types";
 
 export type { AppLanguage } from "./language";
 export {
@@ -271,6 +275,12 @@ const en = {
   configurationImportConfirm:
     "Import this backup? All current settings, run configurations and schedules will be replaced. Password inputs will be empty and must be entered again.",
   configurationImported: "Backup imported",
+  configurationRecoveryBackupRestored:
+    "Settings could not be read; the latest usable backup was restored.",
+  configurationRecoveryResetForParse:
+    "Settings could not be read and were reset to defaults. The damaged file was kept for troubleshooting.",
+  configurationRecoveryResetForSecret:
+    "Settings could not be decrypted and were reset to defaults. The unreadable file was kept for troubleshooting.",
   reinstallResources: "Re-extract resources",
   reinstallingResources: "Re-extracting",
   debugMode: "Debug mode",
@@ -429,6 +439,17 @@ const en = {
 
 export type MessageKey = keyof typeof en;
 
+export function configurationRecoveryMessageKey(
+  recovery: ConfigurationRecovery,
+): MessageKey {
+  if (recovery.kind === "backupRestored") {
+    return "configurationRecoveryBackupRestored";
+  }
+  return recovery.reason === "parse"
+    ? "configurationRecoveryResetForParse"
+    : "configurationRecoveryResetForSecret";
+}
+
 const zh: Record<MessageKey, string> = {
   navHome: "首页",
   navTasks: "任务",
@@ -586,6 +607,12 @@ const zh: Record<MessageKey, string> = {
   configurationImportConfirm:
     "要导入这份备份吗？当前设置、运行配置和定时任务都会被整体替换。密码输入将为空，需要重新填写。",
   configurationImported: "备份已导入",
+  configurationRecoveryBackupRestored:
+    "设置文件无法读取，已恢复最近一个可用备份。",
+  configurationRecoveryResetForParse:
+    "设置文件无法读取，已重置为默认设置。损坏文件已保留用于排查。",
+  configurationRecoveryResetForSecret:
+    "设置无法解密，已重置为默认设置。原文件已保留用于排查。",
   reinstallResources: "重新解压资源",
   reinstallingResources: "解压中",
   debugMode: "调试模式",

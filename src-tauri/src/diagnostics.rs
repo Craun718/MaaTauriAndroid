@@ -1,6 +1,7 @@
 use crate::domain::types::{
     OptionValue, Project, ResolvedTask, RunTaskSnapshot, RunTaskSnapshotEntry, UserConfiguration,
 };
+use chrono::{DateTime, Local, Utc};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -256,7 +257,8 @@ pub fn capture_manual_screenshot(
 
 /// Collects the device logs (full logcat plus the app-filtered log) into a ZIP
 /// archive. This is a standalone export: unlike the diagnostic bundle it does
-/// not require a run and skips screenshots, bugreport and manifest bookkeeping.
+/// not require a run and skips live capture, bugreport and manifest
+/// bookkeeping. Screenshots already saved into run records are included.
 pub fn export_log_archive(
     source: &dyn DiagnosticSource,
     roots: &[LogExportRoot],
@@ -396,28 +398,98 @@ fn copy_log_root(root: &LogExportRoot, staging_dir: &Path) {
     }
 }
 
-/// Copies only the top-level JSONL run records so exported logs can include
-/// the Started task snapshot without also shipping screenshots or bug reports.
+/// Copies the top-level JSONL run records and their saved screenshots so
+/// exported logs include the Started task snapshot without bug reports.
 fn copy_run_histories(runs_dir: Option<&Path>, staging_dir: &Path) {
     let Some(runs_dir) = runs_dir else {
         return;
     };
+    let mut exported_runs = Vec::new();
     for entry in crate::run_history::list(runs_dir).into_iter().take(20) {
         let source = runs_dir
             .join(crate::run_log::sanitize(&entry.execution_id))
             .join(&entry.file_name);
-        let destination = staging_dir
-            .join("logs/runs")
-            .join(crate::run_log::sanitize(&entry.execution_id))
-            .join(crate::run_log::sanitize(&entry.file_name));
+        let history_stem = entry
+            .file_name
+            .strip_suffix(".jsonl")
+            .unwrap_or(&entry.file_name);
+        let export_file_name = format!(
+            "{}_{}.jsonl",
+            crate::run_log::sanitize(history_stem),
+            crate::run_log::sanitize(&entry.execution_id)
+        );
+        let destination = staging_dir.join("logs/runs").join(&export_file_name);
         let Some(parent) = destination.parent() else {
             continue;
         };
         if fs::create_dir_all(parent).is_err() {
             continue;
         }
-        let _ = fs::copy(&source, &destination);
+        if fs::copy(&source, &destination).is_err() {
+            continue;
+        }
+        copy_run_screenshots(
+            &runs_dir.join(crate::run_log::sanitize(&entry.execution_id)),
+            &staging_dir
+                .join("logs/runs/screens")
+                .join(crate::run_log::sanitize(&entry.execution_id)),
+        );
+        let started_at_unix_ms = i64::try_from(entry.started_at_unix_ms).unwrap_or_default();
+        let started_at = DateTime::<Utc>::from_timestamp_millis(started_at_unix_ms)
+            .unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
+            .with_timezone(&Local);
+        exported_runs.push(RunHistoryExportEntry {
+            execution_id: entry.execution_id,
+            file_name: export_file_name,
+            started_at,
+            started_at_unix_ms: entry.started_at_unix_ms,
+            task_count: entry.task_count,
+            size_bytes: entry.size_bytes,
+        });
     }
+
+    if exported_runs.is_empty() {
+        return;
+    }
+
+    let index = RunHistoryExportIndex {
+        version: 1,
+        runs: exported_runs,
+    };
+    if let Ok(output) = serde_json::to_vec_pretty(&index) {
+        let _ = write_file(&staging_dir.join("logs/runs/index.json"), &output);
+    }
+}
+
+fn copy_run_screenshots(run_dir: &Path, screenshots_dir: &Path) {
+    for (source_path, relative) in collect_root_files(&run_dir.join("screens")) {
+        let destination = screenshots_dir.join(&relative);
+        let Some(parent) = destination.parent() else {
+            continue;
+        };
+        if fs::create_dir_all(parent).is_err() {
+            continue;
+        }
+        let _ = fs::copy(&source_path, &destination);
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RunHistoryExportIndex {
+    version: u8,
+    runs: Vec<RunHistoryExportEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RunHistoryExportEntry {
+    execution_id: String,
+    file_name: String,
+    started_at: DateTime<Local>,
+    started_at_unix_ms: u64,
+    task_count: usize,
+    size_bytes: u64,
 }
 
 fn collect_root_files(root: &Path) -> Vec<(PathBuf, PathBuf)> {
@@ -1787,11 +1859,12 @@ mod tests {
         fs::create_dir_all(run_dir.join("screens")).unwrap();
         fs::write(run_dir.join(file_name), body).unwrap();
         fs::write(run_dir.join("screens/main.png"), [1, 2, 3]).unwrap();
+        fs::write(run_dir.join("screens/manual-123.png"), [4, 5, 6]).unwrap();
         fs::write(run_dir.join("logs/nested.log"), b"nested").unwrap();
     }
 
     #[test]
-    fn copy_run_histories_copies_recent_top_level_jsonl_only() {
+    fn copy_run_histories_copies_recent_jsonl_and_screenshots() {
         let runs_dir = std::env::temp_dir().join(format!(
             "maa_tauri_android-export-runs-{}",
             uuid::Uuid::new_v4()
@@ -1810,21 +1883,48 @@ mod tests {
         copy_run_histories(Some(&runs_dir), &staging_dir);
 
         let exported_runs = staging_dir.join("logs/runs");
-        let exported_dirs: Vec<_> = fs::read_dir(&exported_runs)
+        let mut exported_files: Vec<_> = fs::read_dir(&exported_runs)
             .unwrap()
             .flatten()
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.starts_with("run_") && name.ends_with(".jsonl"))
             .collect();
-        assert_eq!(exported_dirs.len(), 20);
+        exported_files.sort();
+        assert_eq!(exported_files.len(), 20);
+        assert!(exported_files.contains(&"run_20240101_210000_2_run-21.jsonl".to_string()));
+        assert!(exported_files.contains(&"run_20240101_020000_2_run-02.jsonl".to_string()));
         assert!(exported_runs
-            .join("run-21/run_20240101_210000_2.jsonl")
+            .join("run_20240101_210000_2_run-21.jsonl")
             .is_file());
         assert!(exported_runs
-            .join("run-02/run_20240101_020000_2.jsonl")
+            .join("run_20240101_020000_2_run-02.jsonl")
             .is_file());
-        assert!(!exported_runs.join("run-01").exists());
-        assert!(!exported_runs.join("run-21/screens/main.png").exists());
-        assert!(!exported_runs.join("run-21/logs/nested.log").exists());
+        assert!(!exported_runs.join("run-21").exists());
+        assert!(!exported_runs.join("run-02").exists());
+        let exported_screens = staging_dir.join("logs/runs/screens");
+        assert_eq!(
+            fs::read(exported_screens.join("run-21/main.png")).unwrap(),
+            [1, 2, 3]
+        );
+        assert_eq!(
+            fs::read(exported_screens.join("run-02/manual-123.png")).unwrap(),
+            [4, 5, 6]
+        );
+        assert!(!exported_screens.join("run-01").exists());
+        let index: serde_json::Value =
+            serde_json::from_slice(&fs::read(exported_runs.join("index.json")).unwrap()).unwrap();
+        assert_eq!(index["version"], 1);
+        assert_eq!(index["runs"].as_array().unwrap().len(), 20);
+        assert_eq!(
+            index["runs"][0]["fileName"],
+            "run_20240101_210000_2_run-21.jsonl"
+        );
+        assert_eq!(index["runs"][0]["executionId"], "run-21");
+        assert_eq!(index["runs"][0]["taskCount"], 2);
+        assert_eq!(
+            index["runs"][19]["fileName"],
+            "run_20240101_020000_2_run-02.jsonl"
+        );
         fs::remove_dir_all(runs_dir).unwrap();
         fs::remove_dir_all(staging_dir).unwrap();
     }
@@ -1844,7 +1944,7 @@ mod tests {
     }
 
     #[test]
-    fn log_archive_includes_recent_run_history_files() {
+    fn log_archive_includes_recent_run_history_and_screenshots() {
         struct LogOnlySource;
 
         impl DiagnosticSource for LogOnlySource {
@@ -1889,8 +1989,19 @@ mod tests {
         export_log_archive(&source, &[], None, Some(&runs_dir), output.clone()).unwrap();
 
         let zip = fs::read(&output).unwrap();
-        let history = zip_entry(&zip, "logs/runs/run-1/run_20240101_120000_2.jsonl");
+        let history = zip_entry(&zip, "logs/runs/run_20240101_120000_2_run-1.jsonl");
         assert_eq!(history, b"started with snapshot\n");
+        assert_eq!(
+            zip_entry(&zip, "logs/runs/screens/run-1/main.png"),
+            [1, 2, 3].as_slice()
+        );
+        let index = zip_entry(&zip, "logs/runs/index.json");
+        let index: serde_json::Value = serde_json::from_slice(&index).unwrap();
+        assert_eq!(
+            index["runs"][0]["fileName"],
+            "run_20240101_120000_2_run-1.jsonl"
+        );
+        assert_eq!(index["runs"][0]["executionId"], "run-1");
         fs::remove_dir_all(runs_dir).unwrap();
         fs::remove_file(output).unwrap();
     }

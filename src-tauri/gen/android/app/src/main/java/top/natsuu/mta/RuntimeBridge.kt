@@ -689,8 +689,9 @@ object RuntimeBridge {
         return runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val uri = copyToDownloads(context, source, mime)
-                startShare(context, uri, source.name, mime)
-                source.name
+                val displayName = queryDisplayName(context, uri) ?: source.name
+                startShare(context, uri, displayName, mime)
+                displayName
             } else {
                 val fallback = File(
                     requireNotNull(context.getExternalFilesDir(null)) {
@@ -715,13 +716,30 @@ object RuntimeBridge {
         val uri = requireNotNull(
             resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values),
         ) { "MediaStore rejected the download entry" }
-        resolver.openOutputStream(uri)?.use { output ->
-            source.inputStream().use { input -> input.copyTo(output) }
-        } ?: throw IOException("could not open output stream for $uri")
-        values.clear()
-        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-        return uri
+        try {
+            resolver.openOutputStream(uri)?.use { output ->
+                source.inputStream().use { input -> input.copyTo(output) }
+            } ?: throw IOException("could not open output stream for $uri")
+            values.clear()
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            return uri
+        } catch (error: Throwable) {
+            resolver.delete(uri, null, null)
+            throw error
+        }
+    }
+
+    private fun queryDisplayName(context: Context, uri: Uri): String? {
+        return context.contentResolver.query(
+            uri,
+            arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
     }
 
     private fun startShare(context: Context, uri: Uri, title: String, mime: String) {

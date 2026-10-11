@@ -337,6 +337,7 @@ struct AppState {
     runs_dir: RwLock<Option<PathBuf>>,
     latest_log: RwLock<Option<Arc<run_log::RunLogger>>>,
     run_storage: tokio::sync::Mutex<()>,
+    log_export: tokio::sync::Mutex<()>,
     preparation_task: Arc<tokio::sync::Mutex<()>>,
     welcome_revision: AtomicU64,
     schedule_store: RwLock<Option<Arc<schedule::ScheduleStore>>>,
@@ -354,6 +355,7 @@ impl Default for AppState {
             runs_dir: RwLock::new(None),
             latest_log: RwLock::new(None),
             run_storage: tokio::sync::Mutex::new(()),
+            log_export: tokio::sync::Mutex::new(()),
             preparation_task: Arc::new(tokio::sync::Mutex::new(())),
             welcome_revision: AtomicU64::new(0),
             schedule_store: RwLock::new(None),
@@ -3392,6 +3394,10 @@ fn export_log_archive_via_bridge(path: &str) -> Result<String, AppError> {
 
 #[tauri::command]
 async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogExport, AppError> {
+    // The command is async and the export can stay pending across WebView route
+    // changes; serialize archive creation so two callers cannot race on the
+    // same staging path if an embedder or automation issues a second request.
+    let _export_guard = state.log_export.lock().await;
     let cache_dir = app
         .path()
         .cache_dir()
@@ -3427,7 +3433,7 @@ async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogEx
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or_default();
-    let output = exports_dir.join(format!("maa_tauri_android-logs-{timestamp}.zip"));
+    let output = exports_dir.join(log_export_file_name(timestamp, Uuid::new_v4()));
     let archive = tokio::task::spawn_blocking(move || {
         let source = diagnostics::log_export_source();
         diagnostics::export_log_archive(&source, &roots, snapshots, runs_dir.as_deref(), output)
@@ -3447,6 +3453,10 @@ async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogEx
     #[cfg(not(target_os = "android"))]
     let file_name: Option<String> = None;
     Ok(LogExport { path, file_name })
+}
+
+fn log_export_file_name(timestamp: u128, export_id: Uuid) -> String {
+    format!("maa_tauri_android-logs-{timestamp}-{export_id}.zip")
 }
 
 #[tauri::command]
@@ -3705,6 +3715,16 @@ mod tests {
             instance_id: instance_id.to_string(),
             mode,
         }
+    }
+
+    #[test]
+    fn log_export_names_include_a_unique_suffix() {
+        let first = log_export_file_name(1791621977044, Uuid::new_v4());
+        let second = log_export_file_name(1791621977044, Uuid::new_v4());
+
+        assert!(first.starts_with("maa_tauri_android-logs-1791621977044-"));
+        assert!(first.ends_with(".zip"));
+        assert_ne!(first, second);
     }
 
     fn selected_ids(tasks: &[crate::domain::types::ResolvedTask]) -> Vec<&str> {

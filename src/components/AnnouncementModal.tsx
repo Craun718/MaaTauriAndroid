@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "../lib/i18n";
+import { useHoldCountdown } from "../lib/useHoldCountdown";
 import { RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
 
@@ -11,6 +12,9 @@ interface AnnouncementModalProps {
   onRememberChange: (remember: boolean) => void;
   onClose: () => void;
   onConfirm: () => void;
+  /** While a hold window is running the announcement cannot be closed or
+   * confirmed, so a startup announcement is not dismissed before it is read. */
+  holdMs?: number;
 }
 
 export function AnnouncementModal({
@@ -20,23 +24,34 @@ export function AnnouncementModal({
   onRememberChange,
   onClose,
   onConfirm,
+  holdMs = 0,
 }: AnnouncementModalProps) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
+  const holdSeconds = useHoldCountdown(open, holdMs);
+  const held = holdSeconds > 0;
 
   useEffect(() => {
-    if (!open) return;
+    if (open) panelRef.current?.focus();
+  }, [open]);
 
-    panelRef.current?.focus();
+  useEffect(() => {
+    if (!open || held) return;
+
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
 
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [open, onClose]);
+  }, [open, held, onClose]);
 
   if (!open) return null;
+
+  function requestClose() {
+    if (held) return;
+    onClose();
+  }
 
   const contentOccurrences = new Map<string, number>();
   const announcementItems = content.map((item) => {
@@ -54,10 +69,10 @@ export function AnnouncementModal({
         type="button"
         aria-label={t("close")}
         tabIndex={-1}
-        onClick={onClose}
+        onClick={requestClose}
         className="fixed inset-0 z-40 cursor-default bg-black/40"
       />
-      <div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-center p-8 pt-[calc(2rem_+_var(--tt-safe-top))] pb-[calc(2rem_+_var(--tt-safe-bottom))]">
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-8 pt-[calc(2rem_+_var(--tt-safe-top))] pb-[calc(2rem_+_var(--tt-safe-bottom))]">
         <div
           ref={panelRef}
           role="dialog"
@@ -70,9 +85,10 @@ export function AnnouncementModal({
             <h2 className="font-medium">{t("announcement")}</h2>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
+              disabled={held}
               aria-label={t("close")}
-              className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
             >
               <X size="1rem" />
             </button>
@@ -88,9 +104,15 @@ export function AnnouncementModal({
             >
               {t("hideAnnouncementOnLaunch")}
             </Checkbox>
+            {held && (
+              <p className="text-xs text-ink-muted">
+                {t("announcementDismissCountdown", { seconds: holdSeconds })}
+              </p>
+            )}
             <button
               type="button"
               onClick={onConfirm}
+              disabled={held}
               className="btn btn-primary h-10 w-full"
             >
               {t("confirm")}

@@ -115,6 +115,7 @@ const en = {
   announcementPreparing: "Loading announcement",
   announcementUnavailable: "Announcement is unavailable right now.",
   hideAnnouncementOnLaunch: "Don't show this announcement again",
+  announcementDismissCountdown: "You can close this in {seconds}s",
   confirm: "Confirm",
   cancel: "Cancel",
 
@@ -698,6 +699,7 @@ const zh: Record<MessageKey, string> = {
   announcementPreparing: "正在加载公告",
   announcementUnavailable: "公告暂时不可用。",
   hideAnnouncementOnLaunch: "下次启动不再展示",
+  announcementDismissCountdown: "请稍候，{seconds} 秒后可关闭",
   confirm: "确认",
   cancel: "取消",
 

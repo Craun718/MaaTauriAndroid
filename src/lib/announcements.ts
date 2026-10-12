@@ -1,5 +1,9 @@
 import type { UserConfiguration } from "./types";
 
+/** Startup announcements stay on screen this long before they can be
+ * dismissed, so a launch does not let the user tap past unread content. */
+export const STARTUP_ANNOUNCEMENT_HOLD_MS = 5000;
+
 interface AnnouncementIdentity {
   fingerprint?: string;
   appVersion?: string;

@@ -7,6 +7,7 @@ import { VersionCard } from "../components/VersionCard";
 import {
   acknowledgeAnnouncement,
   resolveAnnouncementRemember,
+  STARTUP_ANNOUNCEMENT_HOLD_MS,
   shouldShowAnnouncement,
 } from "../lib/announcements";
 import { useTranslation } from "../lib/i18n";
@@ -99,9 +100,12 @@ function ProjectAnnouncements({
     welcomeAcknowledgedAppVersion: configuration.welcomeAcknowledgedAppVersion,
     skipWelcomeAnnouncement: configuration.skipWelcomeAnnouncement,
   });
-  const announcementOpen =
-    manualFingerprint === contentFingerprint ||
-    (shouldAutoOpen && dismissedWelcomeFingerprint !== contentFingerprint);
+  const autoOpened =
+    shouldAutoOpen && dismissedWelcomeFingerprint !== contentFingerprint;
+  const reopenedManually = manualFingerprint === contentFingerprint;
+  const announcementOpen = reopenedManually || autoOpened;
+  const announcementHoldMs =
+    autoOpened && !reopenedManually ? STARTUP_ANNOUNCEMENT_HOLD_MS : 0;
 
   function closeAnnouncement() {
     setManualFingerprint(undefined);
@@ -154,6 +158,7 @@ function ProjectAnnouncements({
         onRememberChange={setRememberSelection}
         onClose={closeAnnouncement}
         onConfirm={confirmAnnouncement}
+        holdMs={announcementHoldMs}
       />
     </>
   );

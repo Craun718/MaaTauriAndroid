@@ -63,7 +63,7 @@ app_name = "Your PI"
 - `resource/m9a`、`resource/m9a.toml`：M9A 的 CI-only checkout 和 profile
 - `resource/narutomobile`、`resource/narutomobile.toml`：NarutoMobile 的 CI-only checkout 和 profile
 - `resource/maapvz`、`resource/maapvz.toml`：MAAPVZ 的 CI-only checkout 和 profile
-- `resource/maaend`、`resource/maaend.toml`：MaaEnd 的 CI-only checkout 和 profile（`v2.31.0`）
+- `resource/maaend`、`resource/maaend.toml`：MaaEnd 的 CI-only checkout 和 profile（`v2.32.0`）
 
 M9A、NarutoMobile 与 MAAPVZ 的 Python agent runtime 由 CI 每次重新构建，默认是 `resource/*-agent-runtime-arm64-v8a.zip` 构建产物，不提交。MaaEnd 有两个编译型 agent，CI 分别生成 `resource/maaend-go-service-runtime-<abi>.zip` 与 `resource/maaend-cpp-algo-runtime-<abi>.zip`，同样不提交。某个 checkout 要使用仓库内资源，设：
 

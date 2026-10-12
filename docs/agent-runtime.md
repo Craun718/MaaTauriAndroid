@@ -31,7 +31,7 @@
 scripts/setup.sh                              # MaaFramework 原生库
 python3 scripts/build-resource.py \
   https://github.com/MAA1999/M9A.git \
-  --id m9a --ref 4fbfb4ac85697f2f75910016ee7ba6128d3d9494 \
+  --id m9a --ref f4640501729562a7106a39bdad48274c6c8ba424 \
   --submodules --exclude pillow --require pillow==11.0.0
 ```
 
@@ -76,7 +76,7 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项
 
 ### MaaEnd 例外
 
-MaaEnd `v2.31.0`（commit `f6e3b5f8b27a8f84391bb73d85a296dabaddfb5d`）有两个编译型 agent。CI 先用 `build-resource.py --submodules --prepare ... --skip-runtime` 组装 PI，并把 `AndroidOpenGame` 插到 `DailyFull` / `QuickDaily` / `RealtimeAssist` 三个预设首位；随后按上游 `tools/build_android_agents.py` 交叉编译，再用 `scripts/pack_compiled_agent.py` 分别产出两个 ZIP。两个 ZIP 与 `interface.json` 的 agent 顺序一一对应，不能合成一个 bundle，否则 APK 会把同一份 agent 负载重复打包两次。
+MaaEnd `v2.32.0`（commit `5501b27f3b3f552e8897a8839521dd36caf617a9`）有两个编译型 agent。CI 先用 `build-resource.py --submodules --prepare ... --skip-runtime` 组装 PI，并把 `AndroidOpenGame` 插到 `DailyFull` / `QuickDaily` / `RealtimeAssist` 三个预设首位；随后按上游 `tools/build_android_agents.py` 交叉编译，再用 `scripts/pack_compiled_agent.py` 分别产出两个 ZIP。两个 ZIP 与 `interface.json` 的 agent 顺序一一对应，不能合成一个 bundle，否则 APK 会把同一份 agent 负载重复打包两次。
 
 ## 给下游：为自己的资源构建
 

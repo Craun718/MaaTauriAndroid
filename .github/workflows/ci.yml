@@ -203,7 +203,7 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
-      RESOURCE_REF: 4fbfb4ac85697f2f75910016ee7ba6128d3d9494
+      RESOURCE_REF: f4640501729562a7106a39bdad48274c6c8ba424
     steps:
       - uses: actions/checkout@v7
 
@@ -363,7 +363,7 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
-      RESOURCE_REF: a5ad50e68986dc012f1020cebb91946d82ea4538
+      RESOURCE_REF: 16eacbffbbb45e7265b4332f2f4656df1b62214c
     steps:
       - uses: actions/checkout@v7
 
@@ -496,7 +496,7 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
-      RESOURCE_REF: 989ba881d675690deea734f363f6e2c6d6e1da48
+      RESOURCE_REF: 707d80352148a1b7294ffbc3e701cd7c9f8b84c5
     steps:
       - uses: actions/checkout@v7
 
@@ -627,7 +627,7 @@ jobs:
       # The application build still uses NDK 28.2. MaaEnd's upstream Android
       # agent recipe requires NDK 29 and CMake 3.31 for cpp-algo.
       MAAFW_VERSION: v5.14.2
-      MAAEND_VERSION: v2.31.0
+      MAAEND_VERSION: v2.32.0
       AGENT_NDK_VERSION: 29.0.13599879
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
@@ -710,7 +710,7 @@ jobs:
           python3 scripts/build-resource.py \
             https://github.com/MaaEnd/MaaEnd.git \
             --id maaend \
-            --ref f6e3b5f8b27a8f84391bb73d85a296dabaddfb5d \
+            --ref 5501b27f3b3f552e8897a8839521dd36caf617a9 \
             --submodules \
             --prepare "python3 scripts/prepare-maaend.py resource/maaend/Android/pi-root" \
             --skip-runtime \
@@ -734,7 +734,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: resource/maaend/agent/cpp-algo/MaaUtils/MaaDeps
-          key: maaend-v2.31.0-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
+          key: maaend-v2.32.0-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
       - name: Cache the MaaFramework agent SDK
         uses: actions/cache@v6
         with:

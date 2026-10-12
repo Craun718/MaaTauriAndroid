@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   acknowledgeAnnouncement,
   isAnnouncementAcknowledged,
+  resolveAnnouncementRemember,
   shouldShowAnnouncement,
 } from "./announcements";
 import type { UserConfiguration } from "./types";
@@ -157,5 +158,28 @@ describe("acknowledgeAnnouncement", () => {
     expect(next.welcomeFingerprint).toBe("new");
     expect(next.welcomeAcknowledgedAppVersion).toBe("0.9.0");
     expect(next.skipWelcomeAnnouncement).toBe(false);
+  });
+});
+
+describe("resolveAnnouncementRemember", () => {
+  it("defaults to the stored preference before the user picks", () => {
+    expect(resolveAnnouncementRemember(undefined, {})).toBe(false);
+    expect(
+      resolveAnnouncementRemember(undefined, {
+        skipWelcomeAnnouncement: true,
+      }),
+    ).toBe(true);
+    expect(
+      resolveAnnouncementRemember(undefined, {
+        skipWelcomeAnnouncement: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the user's selection on an unacknowledged announcement", () => {
+    expect(resolveAnnouncementRemember(true, {})).toBe(true);
+    expect(
+      resolveAnnouncementRemember(false, { skipWelcomeAnnouncement: true }),
+    ).toBe(false);
   });
 });

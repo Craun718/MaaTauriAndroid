@@ -10,9 +10,14 @@ interface AnnouncementAcknowledgement extends AnnouncementIdentity {
   welcomeAcknowledgedAppVersion?: string;
 }
 
-interface AnnouncementVisibilityState extends AnnouncementAcknowledgement {
-  hasContent: boolean;
+interface AnnouncementPreference {
   skipWelcomeAnnouncement?: boolean;
+}
+
+interface AnnouncementVisibilityState
+  extends AnnouncementAcknowledgement,
+    AnnouncementPreference {
+  hasContent: boolean;
 }
 
 /** A welcome is acknowledged only for the same content and installed app version. */
@@ -50,4 +55,17 @@ export function acknowledgeAnnouncement(
     welcomeAcknowledgedAppVersion: appVersion,
     skipWelcomeAnnouncement: skipNextLaunch,
   };
+}
+
+/**
+ * The "don't show again" checkbox mirrors the user's in-session choice; the
+ * persisted preference only seeds it. Acknowledgement must not gate it: the
+ * modal auto-opens precisely while nothing is acknowledged yet (first launch
+ * after install), and a gated checkbox would be inert exactly there.
+ */
+export function resolveAnnouncementRemember(
+  selection: boolean | undefined,
+  { skipWelcomeAnnouncement }: AnnouncementPreference,
+): boolean {
+  return selection ?? Boolean(skipWelcomeAnnouncement);
 }

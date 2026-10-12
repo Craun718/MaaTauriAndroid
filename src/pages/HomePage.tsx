@@ -6,7 +6,7 @@ import { ScheduleEntryCard } from "../components/ScheduleEntryCard";
 import { VersionCard } from "../components/VersionCard";
 import {
   acknowledgeAnnouncement,
-  isAnnouncementAcknowledged,
+  resolveAnnouncementRemember,
   shouldShowAnnouncement,
 } from "../lib/announcements";
 import { useTranslation } from "../lib/i18n";
@@ -86,17 +86,11 @@ function ProjectAnnouncements({
     project.metadata;
   const contentFingerprint = welcomeFingerprint ?? welcome.join("\u0000");
   const [manualFingerprint, setManualFingerprint] = useState<string>();
-  const [rememberSelection, setRememberSelection] = useState(
-    Boolean(configuration.skipWelcomeAnnouncement),
+  const [rememberSelection, setRememberSelection] = useState<boolean>();
+  const remember = resolveAnnouncementRemember(
+    rememberSelection,
+    configuration,
   );
-  const remember = isAnnouncementAcknowledged({
-    fingerprint: contentFingerprint,
-    appVersion,
-    welcomeFingerprint: configuration.welcomeFingerprint,
-    welcomeAcknowledgedAppVersion: configuration.welcomeAcknowledgedAppVersion,
-  })
-    ? rememberSelection
-    : false;
   const shouldAutoOpen = shouldShowAnnouncement({
     hasContent: welcome.length > 0,
     fingerprint: contentFingerprint,
@@ -116,7 +110,6 @@ function ProjectAnnouncements({
 
   function confirmAnnouncement() {
     closeAnnouncement();
-    setRememberSelection(remember);
     void onSaveConfiguration(
       acknowledgeAnnouncement(
         configuration,

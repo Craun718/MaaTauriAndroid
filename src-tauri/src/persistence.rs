@@ -565,6 +565,7 @@ mod tests {
             ..UserConfiguration::default()
         };
         store.save(&project(), &backup).unwrap();
+        store.save(&project(), &backup).unwrap();
         let backup_path = backup_paths(&path).remove(0);
         fs::write(&path, b"{not json").unwrap();
 

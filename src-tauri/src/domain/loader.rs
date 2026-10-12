@@ -441,7 +441,7 @@ fn parse_welcome(
         if value.starts_with("https://") || value.starts_with("http://") {
             declarations.push(value.clone());
             welcome.push(value);
-        } else if is_file_path(&value) {
+        } else if is_project_file_candidate(&value) {
             declarations.push(declaration.clone());
             let relative = value.strip_prefix("./").unwrap_or(&value);
             welcome.push(read_project_text(root, relative).unwrap_or(value));
@@ -804,23 +804,32 @@ fn localize(value: Option<&str>, translations: &BTreeMap<String, String>) -> Opt
     }
 }
 
-/// MaaFwApp's description form detection: `./`/`../` prefixes, document
-/// extensions, path separators, or ALL-CAPS simple names (`LICENSE`) point at
-/// a project file; http(s) URLs and everything else stays literal text.
-fn is_file_path(content: &str) -> bool {
+/// MaaFwApp's project-file detection: a single-line value carrying path
+/// features (`./`/`../` prefixes, document extensions, path separators, or
+/// ALL-CAPS simple names such as `LICENSE`) is a candidate that gets read from
+/// the project root; whether it really is a file is decided by the read, and a
+/// failure falls back to the literal text.
+///
+/// Candidates may hold non-ASCII characters (`announcement/1.简介.md`) and
+/// spaces: M9A declares its announcements as `$Welcome.N` keys resolving to
+/// bare Chinese file names, so an ASCII-only guard would show the file name
+/// instead of the announcement body. Remote URLs, multi-line text and HTML
+/// stay literal.
+fn is_project_file_candidate(content: &str) -> bool {
     if content.starts_with("https://") || content.starts_with("http://") {
         return false;
     }
-    if content.starts_with("./") || content.starts_with("../") {
+    if content.contains('\r') || content.contains('\n') || content.contains('\0') {
+        return false;
+    }
+    if content.starts_with("./")
+        || content.starts_with("../")
+        || content.starts_with(".\\")
+        || content.starts_with("..\\")
+    {
         return true;
     }
-    let simple_name = !content.is_empty()
-        && content.len() <= 100
-        && content
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '\\'))
-        && !content.bytes().all(|b| b.is_ascii_digit());
-    if !simple_name {
+    if content.contains('<') || content.contains('>') {
         return false;
     }
     let lower = content.to_ascii_lowercase();
@@ -849,7 +858,7 @@ fn description_body(
     translations: &BTreeMap<String, String>,
 ) -> Option<String> {
     let resolved = localize(value.and_then(Value::as_str), translations)?;
-    if !is_file_path(&resolved) {
+    if !is_project_file_candidate(&resolved) {
         return Some(resolved);
     }
     let relative = resolved.strip_prefix("./").unwrap_or(&resolved);
@@ -857,11 +866,14 @@ fn description_body(
 }
 
 /// Reads a UTF-8 file inside the project root. Absolute paths and `..` climbs
-/// that would leave the root yield `None` instead of escaping it.
+/// that would leave the root yield `None` instead of escaping it. Backslashes
+/// are separators on the desktop clients but plain filename characters on
+/// Android, so normalize them before resolving.
 fn read_project_text(root: &Path, relative: &str) -> Option<String> {
-    let relative = Path::new(relative);
+    let relative = relative.replace('\\', "/");
+    let path = Path::new(&relative);
     let mut depth = 0usize;
-    for component in relative.components() {
+    for component in path.components() {
         match component {
             std::path::Component::ParentDir => depth = depth.checked_sub(1)?,
             std::path::Component::Normal(_) => depth += 1,
@@ -869,7 +881,7 @@ fn read_project_text(root: &Path, relative: &str) -> Option<String> {
             std::path::Component::RootDir | std::path::Component::Prefix(_) => return None,
         }
     }
-    fs::read_to_string(root.join(relative)).ok()
+    fs::read_to_string(root.join(path)).ok()
 }
 
 fn normalize_path(root: &Path, relative: &str) -> PathBuf {
@@ -1568,6 +1580,73 @@ mod tests {
             ]
         );
         assert_eq!(project.metadata.welcome_fingerprint, None);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// M9A declares its announcements as `$Welcome.N` keys that resolve to bare
+    /// relative paths with Chinese file names (`announcement/1.简介.md`); the
+    /// path heuristic must accept them, so the modal shows the body rather than
+    /// the file name, and must follow a language switch to that language's file.
+    #[test]
+    fn materializes_localized_welcome_files_with_non_ascii_names() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-welcome-localized",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("locale")).expect("temp locale should be created");
+        fs::create_dir_all(root.join("announcement/en_us"))
+            .expect("announcement directory should be created");
+        fs::write(root.join("announcement/1.简介.md"), "# M9A 长期公告\n")
+            .expect("the localized announcement should be written");
+        fs::write(
+            root.join("announcement/en_us/1.introduction.md"),
+            "# M9A announcement\n",
+        )
+        .expect("the translated announcement should be written");
+        fs::write(
+            root.join("interface.json"),
+            r#"{
+                "interface_version": 2,
+                "name": "m9a",
+                "languages": {
+                    "zh_cn": "locale/zh_cn.json",
+                    "en_us": "locale/en_us.json"
+                },
+                "welcome": ["$Welcome.1"],
+                "resource": [{"name": "base", "path": ["resource/base"]}]
+            }"#,
+        )
+        .expect("interface should be written");
+        fs::write(
+            root.join("locale/zh_cn.json"),
+            r#"{"Welcome.1": "announcement/1.简介.md"}"#,
+        )
+        .expect("the zh locale should be written");
+        fs::write(
+            root.join("locale/en_us.json"),
+            r#"{"Welcome.1": "announcement/en_us/1.introduction.md"}"#,
+        )
+        .expect("the en locale should be written");
+
+        let chinese = ProjectLoader::default()
+            .load(root.join("interface.json"), "zh_cn")
+            .expect("a project with a localized welcome should load");
+        let english = ProjectLoader::default()
+            .load(root.join("interface.json"), "en_us")
+            .expect("a project with a localized welcome should load");
+
+        assert_eq!(
+            chinese.metadata.welcome,
+            vec!["# M9A 长期公告\n".to_string()]
+        );
+        assert_eq!(
+            english.metadata.welcome,
+            vec!["# M9A announcement\n".to_string()]
+        );
+        assert_eq!(
+            chinese.metadata.welcome_declarations,
+            vec!["$Welcome.1".to_string()]
+        );
         fs::remove_dir_all(&root).ok();
     }
 

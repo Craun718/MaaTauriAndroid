@@ -140,6 +140,7 @@ enum PendingUpdate {
     Github { repo: String, pick: GithubPick },
 }
 
+#[derive(Debug, Clone)]
 enum GithubPick {
     Resolved { url: String, sha256: String },
     Pinned { version: String },

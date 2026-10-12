@@ -151,13 +151,13 @@ fn release_from(release: &Release) -> Result<GithubRelease, UpdateError> {
         .trim()
         .strip_prefix(['v', 'V'])
         .unwrap_or(display.trim());
-    Ok(Some(GithubRelease {
+    Ok(GithubRelease {
         version: display.to_string(),
         note: release.body.clone().filter(|body| !body.trim().is_empty()),
         url: asset.browser_download_url.clone(),
         sha256: asset_digest(asset).expect("pick_asset returns digested assets"),
         size: asset.size,
-    }))
+    })
 }
 
 async fn fetch_releases(

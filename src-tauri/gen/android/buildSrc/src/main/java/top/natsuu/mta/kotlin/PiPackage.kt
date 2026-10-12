@@ -49,6 +49,9 @@ object PiPackage {
     /** A Windows drive letter, which is never project-relative. */
     private val DRIVE_LETTER = Regex("""^[A-Za-z]:""")
 
+    /** A rich-text body whose own links may name project files. */
+    private val RICH_TEXT_EXTENSION = Regex("""\.(md|txt|html?)$""", RegexOption.IGNORE_CASE)
+
     fun plan(projectRoot: File, extraEntries: List<String> = emptyList()): PiPackagePlan {
         val root = projectRoot.canonicalFile
         val interfaceFile = root.resolve(INTERFACE_FILE)
@@ -61,15 +64,17 @@ object PiPackage {
         val missing = linkedSetOf<String>()
         val imported = mutableListOf<Map<*, *>>()
 
-        // Records `path` when it resolves inside the project. A protocol-declared path that
-        // does not exist is reported rather than dropped, so a rename upstream cannot pass.
-        fun record(path: String, required: Boolean) {
-            val normalized = normalize(path) ?: return
+        // Records `path` when it resolves inside the project and returns the normalized
+        // form. A protocol-declared path that does not exist is reported rather than
+        // dropped, so a rename upstream cannot pass.
+        fun record(path: String, required: Boolean): String? {
+            val normalized = normalize(path) ?: return null
             if (root.resolve(normalized).exists()) {
                 entries += normalized
-            } else if (required) {
-                missing += normalized
+                return normalized
             }
+            if (required) missing += normalized
+            return null
         }
 
         entries += INTERFACE_FILE
@@ -99,9 +104,12 @@ object PiPackage {
         }
 
         // Icon and rich-text keys at any depth, on the interface and on every imported file.
-        val translations = defaultTranslations(root, languagePaths)
+        val translations = translationsByLanguage(root, languagePaths)
+        val richTextBodies = linkedSetOf<String>()
         for (documentFile in listOf(document) + imported) {
-            collectPathValues(documentFile, translations) { record(it, required = false) }
+            collectPathValues(documentFile, translations) { value ->
+                record(value, required = false)?.let { richTextBodies += it }
+            }
         }
 
         // Rich text may embed project-relative images with markdown. Missing ones are not
@@ -112,6 +120,23 @@ object PiPackage {
             readObject(file, locale).values
                 .filterIsInstance<String>()
                 .forEach { value -> markdownTargets(value).forEach { record(it, required = false) } }
+        }
+
+        // A referenced body is itself rich text. M9A keeps its announcements in
+        // `announcement/` and links the screenshots from inside those files, so the body
+        // closure has to follow the links as well; otherwise the modal renders a broken
+        // image even though the interface never named the file directly.
+        val visitedBodies = mutableSetOf<String>()
+        val pendingBodies = ArrayDeque(richTextBodies)
+        while (pendingBodies.isNotEmpty()) {
+            val body = pendingBodies.removeFirst()
+            if (!visitedBodies.add(body) || !RICH_TEXT_EXTENSION.containsMatchIn(body)) continue
+            val file = root.resolve(body)
+            if (!file.isFile) continue
+            val text = runCatching { file.readText() }.getOrNull() ?: continue
+            markdownTargets(text).forEach { target ->
+                record(target, required = false)?.let { pendingBodies += it }
+            }
         }
 
         // An interface that declares `agent` needs the payload its `child_args` run.
@@ -144,7 +169,7 @@ object PiPackage {
      */
     private fun collectPathValues(
         value: Any?,
-        translations: Map<String, String>,
+        translations: List<Map<String, String>>,
         visit: (String) -> Unit,
     ) {
         when (value) {
@@ -161,25 +186,29 @@ object PiPackage {
 
     /**
      * A path-capable value may be a `$Key` translation reference, plain prose, a bare path,
-     * or markdown that embeds images. Only the latter two can name project files.
+     * or markdown that embeds images. Only the latter two can name project files. A `$Key`
+     * resolves against every declared language, because `welcome` and the other rich-text
+     * keys are language-specific.
      */
     private fun visitPathValue(
         value: String,
-        translations: Map<String, String>,
+        translations: List<Map<String, String>>,
         visit: (String) -> Unit,
     ) {
-        val text = if (value.startsWith("\$")) {
-            translations[value.substring(1)] ?: return
+        val texts = if (value.startsWith("\$")) {
+            translations.mapNotNull { it[value.substring(1)] }
         } else {
-            value
+            listOf(value)
         }
-        val trimmed = text.trim()
-        if (URL_SCHEME.containsMatchIn(trimmed)) return
-        // A bare path never contains whitespace or newlines; prose does.
-        if (trimmed.isNotEmpty() && trimmed.none { it.isWhitespace() }) {
-            visit(trimmed)
+        for (text in texts.distinct()) {
+            val trimmed = text.trim()
+            if (URL_SCHEME.containsMatchIn(trimmed)) continue
+            // A bare path never contains whitespace or newlines; prose does.
+            if (trimmed.isNotEmpty() && trimmed.none { it.isWhitespace() }) {
+                visit(trimmed)
+            }
+            markdownTargets(text).forEach(visit)
         }
-        markdownTargets(text).forEach(visit)
     }
 
     private fun markdownTargets(text: String): List<String> =
@@ -189,20 +218,25 @@ object PiPackage {
             .toList()
 
     /**
-     * Translations used to resolve `$Key` icon references. Mirrors the runtime loader and
-     * [PiLauncherIcon]: `zh_cn` first, then the first declared language.
+     * Translations used to resolve `$Key` path references. All declared languages are kept
+     * because `welcome`, `description` and friends resolve per language at runtime; the
+     * launcher icon picks its own `zh_cn`-first language in [PiLauncherIcon], but packing
+     * only that default would drop every other language's body from the APK.
      */
-    private fun defaultTranslations(root: File, languagePaths: List<String>): Map<String, String> {
-        for (path in languagePaths.sortedBy { if (it.contains("zh_cn")) 0 else 1 }) {
-            val file = normalize(path)?.let(root::resolve) ?: continue
-            if (!file.isFile) continue
-            val parsed = runCatching { readObject(file, path) }.getOrNull() ?: continue
-            return parsed.entries.mapNotNull { (key, value) ->
-                if (key is String && value is String) key to value else null
-            }.toMap()
+    private fun translationsByLanguage(
+        root: File,
+        languagePaths: List<String>,
+    ): List<Map<String, String>> =
+        languagePaths.mapNotNull { path ->
+            val file = normalize(path)?.let(root::resolve) ?: return@mapNotNull null
+            if (!file.isFile) return@mapNotNull null
+            val parsed = runCatching { readObject(file, path) }.getOrNull() ?: return@mapNotNull null
+            parsed.entries
+                .mapNotNull { (key, value) ->
+                    if (key is String && value is String) key to value else null
+                }
+                .toMap()
         }
-        return emptyMap()
-    }
 
     private fun readObject(file: File, label: String): Map<*, *> {
         val parsed = JsonSlurper().parse(file)

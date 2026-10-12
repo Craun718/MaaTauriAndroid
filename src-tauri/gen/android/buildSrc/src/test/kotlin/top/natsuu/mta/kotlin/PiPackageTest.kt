@@ -319,4 +319,70 @@ class PiPackageTest {
 
         assertEquals(listOf("assets/missing.png"), plan.missing)
     }
+
+    @Test
+    fun packsTheWelcomeBodyOfEveryDeclaredLanguage() {
+        // M9A resolves $Welcome.N per language (`announcement/1.简介.md` in zh_cn,
+        // `announcement/en_us/1.introduction.md` in en_us). Packing only the zh default
+        // would leave an English device showing the raw file path instead of the body.
+        val root = project(
+            """
+            {
+                "interface_version": 2,
+                "name": "demo",
+                "languages": {
+                    "zh_cn": "locales/zh_cn.json",
+                    "en_us": "locales/en_us.json"
+                },
+                "welcome": ["${'$'}Welcome.1"],
+                "resource": [{"name": "base", "path": ["./resource/base"]}]
+            }
+            """.trimIndent(),
+            mapOf(
+                "locales/zh_cn.json" to """{"Welcome.1": "announcement/1.简介.md"}""",
+                "locales/en_us.json" to
+                    """{"Welcome.1": "announcement/en_us/1.introduction.md"}""",
+                "resource/base/pipeline/start.json" to "{}",
+                "announcement/1.简介.md" to "# 公告",
+                "announcement/en_us/1.introduction.md" to "# Announcement",
+            ),
+        )
+
+        val plan = PiPackage.plan(root)
+
+        assertTrue(plan.entries.contains("announcement/1.简介.md"))
+        assertTrue(plan.entries.contains("announcement/en_us/1.introduction.md"))
+        assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
+    fun followsMarkdownImagesInsideReferencedRichTextBodies() {
+        // M9A's `announcement/2.模拟器多开.md` links `announcement/images/...` from inside
+        // the file. The interface only names the body, so the image is only reachable
+        // through the body's own markdown.
+        val root = project(
+            """
+            {
+                "interface_version": 2,
+                "name": "demo",
+                "languages": {"zh_cn": "locales/zh_cn.json"},
+                "welcome": ["announcement/2.模拟器多开.md"],
+                "resource": [{"name": "base", "path": ["./resource/base"]}]
+            }
+            """.trimIndent(),
+            mapOf(
+                "locales/zh_cn.json" to "{}",
+                "resource/base/pipeline/start.json" to "{}",
+                "announcement/2.模拟器多开.md" to
+                    "![主页面](announcement/images/newbie-main-interface.png)",
+                "announcement/images/newbie-main-interface.png" to "png",
+            ),
+        )
+
+        val plan = PiPackage.plan(root)
+
+        assertTrue(plan.entries.contains("announcement/2.模拟器多开.md"))
+        assertTrue(plan.entries.contains("announcement/images/newbie-main-interface.png"))
+        assertTrue(plan.missing.isEmpty())
+    }
 }

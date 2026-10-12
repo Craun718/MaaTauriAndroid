@@ -80,7 +80,7 @@ pi.profile=/path/to/repo/resource/m9a.toml
 | `resource[].path`、`controller[].attach_resource_path` | 加载根目录（递归） |
 | `import[]` | 任务/选项/预设文件，并继续读取以到达嵌套图标 |
 | `languages{}` | 已声明的翻译文件 |
-| 任意深度及每个导入文件中的 `icon` / `contact` / `license` / `description` / `doc` / `desc` / `welcome` | 当值指向文件时打包该文件，包括 `$Key` 查表和 Markdown 图片链接 |
+| 任意深度及每个导入文件中的 `icon` / `contact` / `license` / `description` / `doc` / `desc` / `welcome` | 当值指向文件时打包该文件；`$Key` 在每个已声明语言里查表，Markdown 图片链接和正文文件自身链接的目标都会一起打包 |
 | `agent`（对象或数组） | 包含 `child_args` 入口点的 `agent` 目录 |
 | — | `data/`，Agent 会读取它，但协议不会声明它 |
 

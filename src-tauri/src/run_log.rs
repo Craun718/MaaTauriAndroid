@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -59,6 +60,11 @@ pub struct RunLogger {
     history: Mutex<Option<BufWriter<fs::File>>>,
     history_path: Option<PathBuf>,
     ui_sink: RwLock<Option<Arc<dyn Fn(&RunEvent) + Send + Sync>>>,
+    /// Mirrors every event into the Android floating panel's log feed. Off
+    /// unless the run installed that panel: a run nothing is drawing over has
+    /// no use for the feed, and keeping it off keeps the panel from ever
+    /// showing a run that does not own it.
+    overlay_mirror: AtomicBool,
 }
 
 static LATEST_LOGGER: RwLock<Option<Arc<RunLogger>>> = RwLock::new(None);
@@ -120,6 +126,7 @@ impl RunLogger {
             history: Mutex::new(history),
             history_path,
             ui_sink: RwLock::new(None),
+            overlay_mirror: AtomicBool::new(false),
         })
     }
 
@@ -133,6 +140,11 @@ impl RunLogger {
 
     pub fn set_ui_sink(&self, sink: Arc<dyn Fn(&RunEvent) + Send + Sync>) {
         *self.ui_sink.write().expect("run log UI sink lock poisoned") = Some(sink);
+    }
+
+    /// Turns the floating panel's log mirror on or off for this run.
+    pub fn set_overlay_mirror(&self, enabled: bool) {
+        self.overlay_mirror.store(enabled, Ordering::Relaxed);
     }
 
     pub fn append(
@@ -178,6 +190,13 @@ impl RunLogger {
             _ => Level::Info,
         };
         log::log!(target: RUN_EVENT_TARGET, level, "{payload}");
+        if self.overlay_mirror.load(Ordering::Relaxed) {
+            crate::run_progress::record_overlay_log(
+                event.at_unix_ms,
+                overlay_line_level(kind),
+                &event.message,
+            );
+        }
         Ok(event)
     }
 
@@ -201,6 +220,15 @@ impl RunLogger {
             sink(&event);
         }
         Ok(event)
+    }
+}
+
+/// Panel rows are colour-coded, so the level travels with the mirrored line.
+fn overlay_line_level(kind: RunEventKind) -> &'static str {
+    match kind {
+        RunEventKind::Failure => "error",
+        RunEventKind::Warning => "warn",
+        _ => "info",
     }
 }
 
@@ -258,6 +286,14 @@ mod tests {
         assert!(logger.run_dir().join("logs").is_dir());
         assert!(logger.history_path.is_some());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn overlay_line_level_matches_the_event_severity() {
+        assert_eq!(overlay_line_level(RunEventKind::Failure), "error");
+        assert_eq!(overlay_line_level(RunEventKind::Warning), "warn");
+        assert_eq!(overlay_line_level(RunEventKind::Started), "info");
+        assert_eq!(overlay_line_level(RunEventKind::Focus), "info");
     }
 
     #[test]
@@ -340,6 +376,7 @@ mod tests {
             history: Mutex::new(None),
             history_path: None,
             ui_sink: RwLock::new(None),
+            overlay_mirror: AtomicBool::new(false),
         };
         let event = logger
             .append(

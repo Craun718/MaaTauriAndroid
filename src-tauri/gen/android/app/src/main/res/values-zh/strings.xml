@@ -9,4 +9,20 @@
     <string name="schedule_notification_channel">定时任务</string>
     <string name="schedule_notification_title">定时任务正在启动</string>
     <string name="schedule_notification_text">正在准备后台自动化任务</string>
+    <!-- 前台模式悬浮遥控层 -->
+    <string name="overlay_state_preparing">准备中</string>
+    <string name="overlay_state_running">运行中</string>
+    <string name="overlay_state_stopping">停止中</string>
+    <string name="overlay_progress_fraction">%1$d/%2$d</string>
+    <string name="overlay_stop">停止</string>
+    <string name="overlay_open_app">打开应用</string>
+    <string name="overlay_collapse">收起</string>
+    <string name="overlay_tab_tasks">任务</string>
+    <string name="overlay_tab_log">日志</string>
+    <string name="overlay_export">导出日志</string>
+    <string name="overlay_export_saved">日志已保存：%1$s</string>
+    <string name="overlay_export_failed">日志导出失败</string>
+    <string name="overlay_tasks_empty">暂无任务</string>
+    <string name="overlay_task_unnamed">未命名任务</string>
+    <string name="overlay_log_empty">暂无日志</string>
 </resources>

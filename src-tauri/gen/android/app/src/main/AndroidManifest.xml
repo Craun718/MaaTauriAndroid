@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Foreground-mode floating control panel (RunOverlayController). The user
+         grants it from the system "display over other apps" screen. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission
         android:name="flyme.permission.READ_NOTIFICATION_LIVE_STATE"
         tools:ignore="UnknownPermission" />

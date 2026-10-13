@@ -6,7 +6,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
 import { ProjectImage } from "../components/ProjectImage";
@@ -19,6 +19,8 @@ import { VersionCard } from "../components/VersionCard";
 import {
   clearDiagnosticData,
   exportConfiguration,
+  getOverlayPermissionStatus,
+  requestOverlayPermission,
   restartApp,
 } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
@@ -69,8 +71,28 @@ export function SettingsPage() {
   const [exportingBackup, setExportingBackup] = useState(false);
   const [importingBackup, setImportingBackup] = useState(false);
   const [restartPending, setRestartPending] = useState(false);
+  const [overlayPermission, setOverlayPermission] = useState(false);
   const { exportLogs, exporting } = useLogExport();
   const [languageDraft, setLanguageDraft] = useState<UiLanguage>();
+
+  // The overlay permission lives in system settings, so it can change while
+  // this page stays open: re-check every time the app returns to the front.
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      void getOverlayPermissionStatus()
+        .then((granted) => {
+          if (!cancelled) setOverlayPermission(granted);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
 
   const project = snapshot?.project;
   const resource =
@@ -285,6 +307,48 @@ export function SettingsPage() {
         <p className="text-sm text-ink-muted">
           {t("foregroundModeDescription")}
         </p>
+        <Checkbox
+          className="min-h-10 gap-2"
+          checked={snapshot?.configuration.foregroundOverlay ?? false}
+          disabled={restartPending || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.foregroundOverlay = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
+          <span className="font-medium">{t("foregroundOverlay")}</span>
+        </Checkbox>
+        <p className="text-sm text-ink-muted">
+          {t("foregroundOverlayDescription")}
+        </p>
+        {!snapshot?.configuration.foregroundMode && (
+          <p className="text-xs text-ink-muted">
+            {t("foregroundOverlayForegroundOnly")}
+          </p>
+        )}
+        {snapshot?.configuration.foregroundOverlay && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-ink-muted">
+              {t("foregroundOverlayPermission")}:{" "}
+              {overlayPermission
+                ? t("permissionGranted")
+                : t("permissionRequiredStatus")}
+            </span>
+            {!overlayPermission && (
+              <button
+                type="button"
+                onClick={() => {
+                  void requestOverlayPermission().catch(() => undefined);
+                }}
+                className="h-8 shrink-0 rounded-md border border-line px-2.5 text-sm font-semibold"
+              >
+                {t("foregroundOverlayGrant")}
+              </button>
+            )}
+          </div>
+        )}
         <Checkbox
           className="min-h-10 gap-2"
           checked={snapshot?.configuration.closeTargetAppAfterRun ?? true}

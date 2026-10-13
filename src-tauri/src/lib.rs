@@ -946,6 +946,33 @@ fn display_hazards() -> runtime::DisplayHazards {
     runtime::display_hazards().unwrap_or_default()
 }
 
+/// Whether Android lets the app draw over other apps. The foreground floating
+/// panel is only useful with it, so the settings screen reports it.
+#[tauri::command]
+fn overlay_permission_status() -> bool {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("hasOverlayPermission").unwrap_or(false)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        false
+    }
+}
+
+/// Opens the system "display over other apps" screen for this app.
+#[tauri::command]
+fn request_overlay_permission() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("requestOverlayPermission").map(|_| ())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 async fn bootstrap(
     app: AppHandle,
@@ -1344,6 +1371,9 @@ fn save_configuration(
     state.set_configuration(configuration.clone())?;
     #[cfg(target_os = "android")]
     let _ = set_virtual_display_touch_markers(configuration.show_virtual_display_touches);
+    run_progress::set_run_overlay_foreground(
+        configuration.foreground_mode && configuration.foreground_overlay,
+    );
     configure_telemetry(&project, &configuration);
     runtime::apply_debug_mode(configuration.debug_mode);
     Ok(configuration)
@@ -2447,6 +2477,7 @@ pub(crate) fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> 
 /// stays wedged on the preparing lease and the run controls never recover.
 fn abort_preparing_run(app: &AppHandle, logger: &run_log::RunLogger, message: String) {
     stop_run_foreground_service();
+    run_progress::finish_run_overlay();
     if let Ok(event) = logger.append(
         run_log::RunEventKind::Failure,
         runtime::RunState::Idle,
@@ -2518,6 +2549,12 @@ async fn start_run_core(
     }
     let resolved = resolve_run(&project, &configuration)?;
     let tasks = startup_tasks(&resolved.tasks, task_selection.as_ref())?;
+    // The run narrative — the history event's task list and the floating
+    // panel's task page — is the same ordered label list.
+    let task_labels: Vec<String> = tasks
+        .iter()
+        .map(|task| run_progress::task_progress_label(task).to_string())
+        .collect();
     let task_count = tasks.len();
     if task_count == 0 {
         if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger {
@@ -2666,6 +2703,16 @@ async fn start_run_core(
         let _ = app.emit("virtual-display-changed", ());
     }
 
+    // Mirrors the run into the Android floating control panel, which is the
+    // only way to stop a foreground run without leaving the target app. The
+    // panel needs both switches: foreground mode to have a physical screen to
+    // draw over, and the overlay preference for the user to have opted in.
+    let overlay_enabled = configuration.foreground_mode && configuration.foreground_overlay;
+    run_progress::begin_run_overlay(overlay_enabled, task_labels.clone());
+    // Feeds the panel's log page. Off for a background run, which has no panel
+    // to draw on and would only pay for the mirror on every event.
+    logger.set_overlay_mirror(overlay_enabled);
+
     let sessions = state.maa.clone();
     let run_execution_id = execution_id.clone();
     let logger_for_run = logger.clone();
@@ -2796,10 +2843,6 @@ async fn start_run_core(
                 // Enabled labels keep the existing run-history UI working;
                 // the full resolved-task snapshot preserves the configured
                 // choices and availability state for diagnostics.
-                let task_labels: Vec<String> = tasks
-                    .iter()
-                    .map(|task| run_progress::task_progress_label(task).to_string())
-                    .collect();
                 let started_data = serde_json::json!({
                     "tasks": task_labels,
                     "taskSnapshot": task_snapshot,
@@ -2824,23 +2867,11 @@ async fn start_run_core(
                 let result = tokio::task::spawn_blocking(move || {
                     let report_progress =
                         |done: u32, total: u32, task: &crate::domain::types::ResolvedTask| {
-                            let payload = run_progress::progress_payload(
+                            run_progress::push_progress(
                                 done,
                                 total,
                                 run_progress::task_progress_label(task),
-                                None,
                             );
-                            #[cfg(target_os = "android")]
-                            if let Err(error) = call_runtime_bridge_string_with_string(
-                                "updateRunProgress",
-                                &payload,
-                            ) {
-                                log::warn!(
-                                    "Could not update the run progress notification: {error}"
-                                );
-                            }
-                            #[cfg(not(target_os = "android"))]
-                            let _ = payload;
                         };
                     runtime::run_tasks(
                         &run_tasker,
@@ -2967,6 +2998,7 @@ async fn start_run_core(
                         }
                     };
                 sessions.finish_with(&run_execution_id, || {
+                    run_progress::finish_run_overlay();
                     if should_close_target_app {
                         stop_run_foreground_service();
                     }
@@ -3038,10 +3070,12 @@ fn resolve_focus_modal() {
     focus::resolve_modal_ack();
 }
 
-#[tauri::command]
-fn stop_run(
-    app: AppHandle,
-    state: State<'_, AppState>,
+/// Asks the active session to stop. Shared by the `stop_run` command and the
+/// Android floating panel's stop button, so both go through the same lease
+/// bookkeeping.
+fn request_run_stop(
+    app: &AppHandle,
+    state: &AppState,
     execution_id: Option<String>,
 ) -> Result<String, AppError> {
     let requested_id = execution_id.or_else(|| {
@@ -3082,10 +3116,20 @@ fn stop_run(
             "The run is stopping".to_string(),
         );
     })? {
+        run_progress::set_run_overlay_phase(run_progress::RunOverlayPhase::Stopping);
         Ok("The run is stopping".to_string())
     } else {
         Ok("No run is active".to_string())
     }
+}
+
+#[tauri::command]
+fn stop_run(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    execution_id: Option<String>,
+) -> Result<String, AppError> {
+    request_run_stop(&app, state.inner(), execution_id)
 }
 
 #[tauri::command]
@@ -3408,11 +3452,14 @@ fn export_log_archive_via_bridge(path: &str) -> Result<String, AppError> {
     Ok(name)
 }
 
-#[tauri::command]
-async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogExport, AppError> {
-    // The command is async and the export can stay pending across WebView route
-    // changes; serialize archive creation so two callers cannot race on the
-    // same staging path if an embedder or automation issues a second request.
+/// Packs every log source into one staged archive. Shared by the WebView
+/// command and the floating panel's export button, so both produce the same
+/// archive.
+async fn build_log_archive(app: &AppHandle, state: &AppState) -> Result<PathBuf, AppError> {
+    // The export can stay pending across WebView route changes; serialize
+    // archive creation so two callers cannot race on the same staging path if
+    // an embedder, an automation, or the floating panel issues a second
+    // request.
     let _export_guard = state.log_export.lock().await;
     let cache_dir = app
         .path()
@@ -3456,16 +3503,25 @@ async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogEx
     })
     .await
     .map_err(|error| AppError::Message(error.to_string()))??;
+    Ok(archive)
+}
+
+/// Copies a staged archive into the system Downloads collection and opens the
+/// share sheet, off the calling thread. Returns the display name of the saved
+/// copy.
+#[cfg(target_os = "android")]
+async fn export_archive_to_downloads(path: String) -> Result<String, AppError> {
+    tokio::task::spawn_blocking(move || export_log_archive_via_bridge(&path))
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))?
+}
+
+#[tauri::command]
+async fn export_logs(app: AppHandle, state: State<'_, AppState>) -> Result<LogExport, AppError> {
+    let archive = build_log_archive(&app, state.inner()).await?;
     let path = archive.to_string_lossy().into_owned();
     #[cfg(target_os = "android")]
-    let file_name = {
-        let bridge_path = path.clone();
-        Some(
-            tokio::task::spawn_blocking(move || export_log_archive_via_bridge(&bridge_path))
-                .await
-                .map_err(|error| AppError::Message(error.to_string()))??,
-        )
-    };
+    let file_name = Some(export_archive_to_downloads(path.clone()).await?);
     #[cfg(not(target_os = "android"))]
     let file_name: Option<String> = None;
     Ok(LogExport { path, file_name })
@@ -4932,6 +4988,8 @@ pub fn run() {
             retry_preparation,
             window_insets,
             display_hazards,
+            overlay_permission_status,
+            request_overlay_permission,
             load_project,
             read_project_image,
             read_project_text,
@@ -5136,6 +5194,57 @@ async fn ensure_background_project(app: &AppHandle, state: &AppState) -> Result<
             mark_preparation_failed(error.to_string());
             Err(error)
         }
+    }
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_requestRunStop(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> std::os::raw::c_int {
+    // The floating panel's stop button. Returns 1 once the session accepted
+    // the request, mirroring `stop_run`; the panel shows its own "stopping"
+    // state from the pushed snapshot rather than from this result.
+    let Some(app) = android_app_handle() else {
+        return 0;
+    };
+    let state = app.state::<AppState>();
+    i32::from(request_run_stop(&app, state.inner(), None).is_ok())
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_nativeExportRunLogs(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
+    // The floating panel's export button. While a foreground run covers the
+    // screen the WebView is unreachable, so the panel asks Rust to pack the
+    // archive and hand it to the shell's Downloads/share path in one hop.
+    // Called from the panel's worker thread, never the main one: packing is a
+    // blocking zip write. Returns the saved display name, or null on failure.
+    let Some(app) = android_app_handle() else {
+        return std::ptr::null_mut();
+    };
+    let state = app.state::<AppState>();
+    let exported = tauri::async_runtime::block_on(async {
+        let archive = build_log_archive(&app, state.inner()).await?;
+        export_archive_to_downloads(archive.to_string_lossy().into_owned()).await
+    });
+    let name = match exported {
+        Ok(name) => name,
+        Err(error) => {
+            log::warn!("Could not export the run logs from the floating panel: {error}");
+            return std::ptr::null_mut();
+        }
+    };
+    match unsafe { jni::JNIEnv::from_raw(env.cast()) } {
+        Ok(mut environment) => match environment.new_string(name) {
+            Ok(value) => value.into_raw().cast(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Err(_) => std::ptr::null_mut(),
     }
 }
 

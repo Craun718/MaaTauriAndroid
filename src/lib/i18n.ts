@@ -254,6 +254,12 @@ const en = {
   foregroundMode: "Foreground mode",
   foregroundModeDescription:
     "Run on the physical screen instead of a virtual display. Android will show the target app while the run is active.",
+  foregroundOverlay: "Floating control panel",
+  foregroundOverlayDescription:
+    "While a foreground run is active, draws a draggable ball over the physical screen: tap it to stop the run or open this app without leaving the target app. Needs the display-over-other-apps permission, and the ball itself is captured by the automation's screenshots.",
+  foregroundOverlayPermission: "Display over other apps",
+  foregroundOverlayGrant: "Grant permission",
+  foregroundOverlayForegroundOnly: "Only takes effect in foreground mode.",
   showTouchPositions: "Show click positions",
   showVirtualDisplayFps: "Show current frame rate",
   telemetry: "Anonymous telemetry",
@@ -586,6 +592,12 @@ const zh: Record<MessageKey, string> = {
   foregroundMode: "前台模式",
   foregroundModeDescription:
     "在物理屏幕上运行，而不是虚拟屏。运行期间 Android 会显示目标应用。",
+  foregroundOverlay: "前台控制球",
+  foregroundOverlayDescription:
+    "前台模式运行期间在物理屏上画一个可拖动的小球，点开即可停止任务或打开本应用，不用切回应用。需要「显示在其他应用上层」权限；小球占据的那块画面会被自动化截到。",
+  foregroundOverlayPermission: "显示在其他应用上层",
+  foregroundOverlayGrant: "授予权限",
+  foregroundOverlayForegroundOnly: "仅在前台模式下生效。",
   showTouchPositions: "显示点击位置",
   showVirtualDisplayFps: "显示当前帧率",
   telemetry: "匿名遥测",

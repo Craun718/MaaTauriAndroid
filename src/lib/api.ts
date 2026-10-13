@@ -197,6 +197,18 @@ export async function isNotificationGranted() {
   }
 }
 
+/// Whether Android lets the app draw over other apps. The foreground floating
+/// control panel cannot be shown without it.
+export async function getOverlayPermissionStatus() {
+  return invoke<boolean>("overlay_permission_status");
+}
+
+/// Opens the system "display over other apps" screen for this app. The user
+/// comes back with the app in the foreground; callers re-query the status then.
+export async function requestOverlayPermission() {
+  return invoke<void>("request_overlay_permission");
+}
+
 export async function startRun(selection?: TaskRunSelection) {
   if (!selection) return invoke<StartRunStatus>("start_run");
   return invoke<StartRunStatus>("start_run", { selection });

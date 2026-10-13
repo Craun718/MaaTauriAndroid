@@ -34,6 +34,8 @@ vi.mock("../lib/api", () => ({
   installUpdate: vi.fn(async () => undefined),
   getUpdatePrefs: vi.fn(async () => undefined),
   setUpdatePrefs: vi.fn(async () => undefined),
+  getOverlayPermissionStatus: vi.fn(async () => false),
+  requestOverlayPermission: vi.fn(async () => undefined),
 }));
 
 const project: Project = {

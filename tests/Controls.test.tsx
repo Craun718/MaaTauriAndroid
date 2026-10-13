@@ -39,6 +39,8 @@ vi.mock("../src/lib/api", () => ({
   installUpdate: vi.fn(async () => undefined),
   getUpdatePrefs: vi.fn(async () => undefined),
   setUpdatePrefs: vi.fn(async () => undefined),
+  getOverlayPermissionStatus: vi.fn(async () => true),
+  requestOverlayPermission: vi.fn(async () => undefined),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

@@ -19,8 +19,10 @@ import android.os.ParcelFileDescriptor
 import android.os.Looper
 import android.os.Process
 import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.io.IOException
@@ -35,6 +37,7 @@ import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 import org.json.JSONObject
 import androidx.core.content.FileProvider
+import top.natsuu.mta.overlay.RunOverlayController
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
 
@@ -284,6 +287,49 @@ object RuntimeBridge {
     fun updateRunFocusStatus(status: String): Boolean {
         val context = agentContext ?: return false
         return RunForegroundService.updateStatus(context, status)
+    }
+
+    /** 前台悬浮遥控层的一帧运行态（JSON，见 run_progress.rs 的 overlay 约定） */
+    @JvmStatic
+    fun updateRunOverlay(json: String): Boolean {
+        val context = agentContext ?: return false
+        return RunOverlayController.update(context, json)
+    }
+
+    /** 设置页用它显示悬浮窗权限状态；没权限时这一层画不出来。 */
+    @JvmStatic
+    fun hasOverlayPermission(): Boolean {
+        val context = agentContext ?: return false
+        return RunOverlayController.hasPermission(context)
+    }
+
+    /**
+     * 打开系统的「显示在其他应用上层」页面。优先用 Activity 启动，拿不到
+     * Activity（比如定时轮到点跑起来时）才退回带 NEW_TASK 的应用 context；
+     * 用户返回后由设置页重新查询权限。
+     */
+    @JvmStatic
+    fun requestOverlayPermission(): Boolean {
+        val context = agentContext ?: return false
+        val activity = hostActivity?.get()
+        return runCatching {
+            mainHandler.post { launchOverlayPermissionSettings(context, activity) }
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun launchOverlayPermissionSettings(context: Context, activity: Activity?) {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}"),
+        )
+        val started = activity
+            ?.let { host -> runCatching { host.startActivity(intent) }.isSuccess }
+            ?: false
+        if (started) return
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
+            .onFailure { Log.w(LOG_TAG, "Could not open the overlay permission settings", it) }
     }
 
     /**
@@ -674,6 +720,29 @@ object RuntimeBridge {
     }
 
     /**
+     * 悬浮面板的「导出日志」。前台运行盖住屏幕时 WebView 够不着，所以面板直接
+     * 让 Rust 打包，再走和 WebView 导出同一条 Downloads / 分享链路。打包是阻塞
+     * 的 zip 写入，放后台线程；面板本身没有能挂提示的位置，结果用 toast 反馈。
+     * 返回值只表示任务是否已经派出去。
+     */
+    @JvmStatic
+    fun exportRunLogs(): Boolean {
+        val context = agentContext ?: return false
+        thread(start = true, name = "mta-run-log-export") {
+            val name = runCatching { nativeExportRunLogs() }.getOrNull()
+            mainHandler.post {
+                val message = if (name.isNullOrBlank()) {
+                    context.getString(R.string.overlay_export_failed)
+                } else {
+                    context.getString(R.string.overlay_export_saved, name)
+                }
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            }
+        }
+        return true
+    }
+
+    /**
      * Copies a private app file into the system Downloads collection and opens
      * the share sheet. Returns the display name of the saved copy, or null
      * when the export could not be completed. On API < 29 MediaStore.Downloads
@@ -968,6 +1037,14 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun startScheduledRun(ruleId: String, scheduledTimeMs: Long): Int
+
+    /** 悬浮遥控层的停止按钮；返回值只表示请求是否被受理。 */
+    @JvmStatic
+    external fun requestRunStop(): Int
+
+    /** 悬浮遥控层导出日志；返回存进 Downloads 的显示名，失败返回 null。 */
+    @JvmStatic
+    external fun nativeExportRunLogs(): String?
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val UNKNOWN = "unknown"

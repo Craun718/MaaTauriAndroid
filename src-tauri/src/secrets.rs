@@ -325,6 +325,7 @@ mod tests {
             close_target_app_after_run: false,
             max_run_duration_seconds: 0,
             foreground_mode: false,
+            foreground_overlay: false,
             show_virtual_display_fps: true,
             telemetry_enabled: false,
             ui_language: Default::default(),

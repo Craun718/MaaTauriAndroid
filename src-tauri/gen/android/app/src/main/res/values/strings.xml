@@ -9,4 +9,20 @@
     <string name="schedule_notification_channel">Scheduled runs</string>
     <string name="schedule_notification_title">Scheduled run starting</string>
     <string name="schedule_notification_text">Preparing the scheduled automation run</string>
+    <!-- Floating control panel over the physical screen during a foreground run. -->
+    <string name="overlay_state_preparing">Preparing</string>
+    <string name="overlay_state_running">Running</string>
+    <string name="overlay_state_stopping">Stopping</string>
+    <string name="overlay_progress_fraction">%1$d/%2$d</string>
+    <string name="overlay_stop">Stop</string>
+    <string name="overlay_open_app">Open app</string>
+    <string name="overlay_collapse">Collapse</string>
+    <string name="overlay_tab_tasks">Tasks</string>
+    <string name="overlay_tab_log">Log</string>
+    <string name="overlay_export">Export</string>
+    <string name="overlay_export_saved">Logs saved: %1$s</string>
+    <string name="overlay_export_failed">Could not export the logs</string>
+    <string name="overlay_tasks_empty">No tasks</string>
+    <string name="overlay_task_unnamed">Unnamed task</string>
+    <string name="overlay_log_empty">No log entries yet</string>
 </resources>

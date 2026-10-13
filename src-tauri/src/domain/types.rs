@@ -353,6 +353,13 @@ pub struct UserConfiguration {
     /// display. This only takes effect on the next run.
     #[serde(default)]
     pub foreground_mode: bool,
+    /// Foreground-mode remote control: mirror the run into a floating panel
+    /// drawn over the physical screen so a run can be stopped without leaving
+    /// the target app. Only the Android shell can draw it, and only with the
+    /// "display over other apps" permission granted. This only takes effect on
+    /// the next run.
+    #[serde(default)]
+    pub foreground_overlay: bool,
     #[serde(default)]
     pub telemetry_enabled: bool,
     #[serde(default = "default_true")]
@@ -397,6 +404,7 @@ impl Default for UserConfiguration {
             close_target_app_after_run: true,
             max_run_duration_seconds: 0,
             foreground_mode: false,
+            foreground_overlay: false,
             telemetry_enabled: false,
             show_virtual_display_touches: true,
             show_virtual_display_fps: true,
@@ -589,6 +597,29 @@ mod tests {
         encoded["foregroundMode"] = serde_json::json!("foreground");
 
         assert!(serde_json::from_value::<UserConfiguration>(encoded).is_err());
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_the_foreground_overlay_to_false() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy.as_object_mut().unwrap().remove("foregroundOverlay");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert!(!parsed.foreground_overlay);
+    }
+
+    #[test]
+    fn foreground_overlay_round_trips_through_the_configuration() {
+        let mut configuration = UserConfiguration::default();
+        configuration.foreground_overlay = true;
+
+        let encoded = serde_json::to_value(&configuration).unwrap();
+        assert_eq!(encoded["foregroundOverlay"], serde_json::json!(true));
+
+        let decoded: UserConfiguration = serde_json::from_value(encoded).unwrap();
+        assert!(decoded.foreground_overlay);
     }
 
     /// The interface switches on the `kind` tag, so the variant names have to reach

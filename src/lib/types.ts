@@ -292,6 +292,8 @@ export interface UserConfiguration {
   /** Stops a run after this many seconds; `0` or absent disables the limit. */
   maxRunDurationSeconds?: number;
   foregroundMode?: boolean;
+  /** Foreground-mode floating control panel; needs the overlay permission. */
+  foregroundOverlay?: boolean;
   telemetryEnabled: boolean;
   showVirtualDisplayTouches?: boolean;
   showVirtualDisplayFps?: boolean;

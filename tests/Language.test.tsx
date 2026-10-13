@@ -28,6 +28,8 @@ vi.mock("../src/lib/api", () => ({
   installUpdate: vi.fn(async () => undefined),
   getUpdatePrefs: vi.fn(async () => undefined),
   setUpdatePrefs: vi.fn(async () => undefined),
+  getOverlayPermissionStatus: vi.fn(async () => true),
+  requestOverlayPermission: vi.fn(async () => undefined),
 }));
 
 /** A configuration saved before the language field existed has no uiLanguage at all. */

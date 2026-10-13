@@ -190,18 +190,7 @@ impl FocusSink {
     /// drops notifications while the POST_NOTIFICATIONS runtime permission
     /// is missing; the frontend shows an in-app fallback card in that case.
     fn notify_system(&self, name: Option<&str>, content: &str) {
-        use tauri_plugin_notification::NotificationExt;
-        let title = name.unwrap_or("MaaTauriAndroid");
-        if let Err(error) = self
-            .app
-            .notification()
-            .builder()
-            .title(title)
-            .body(content)
-            .show()
-        {
-            log::warn!("system notification failed: {error}");
-        }
+        crate::system_notification::post(&self.app, name.unwrap_or("MaaTauriAndroid"), content);
     }
 
     fn emit(

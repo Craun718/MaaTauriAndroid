@@ -13,6 +13,7 @@ mod run_supervisor;
 mod runtime;
 mod schedule;
 mod secrets;
+mod system_notification;
 mod telemetry;
 mod update;
 mod version;
@@ -2043,16 +2044,7 @@ fn stop_run_foreground_service() {
 /// POST_NOTIFICATIONS is missing, and the trigger log still has the record.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn notify_schedule_not_started(app: &AppHandle, detail: &str) {
-    use tauri_plugin_notification::NotificationExt;
-    if let Err(error) = app
-        .notification()
-        .builder()
-        .title("Scheduled run did not start")
-        .body(detail)
-        .show()
-    {
-        log::warn!("schedule not-started notification failed: {error}");
-    }
+    system_notification::post(app, "Scheduled run did not start", detail);
 }
 
 /// Attaches the system log a replacement privileged process captured for its

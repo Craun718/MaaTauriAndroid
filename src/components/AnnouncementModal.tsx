@@ -1,9 +1,11 @@
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { announcementTitle } from "../lib/announcements";
 import { useTranslation } from "../lib/i18n";
 import { useHoldCountdown } from "../lib/useHoldCountdown";
 import { RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
+import { Tabs } from "./ui/Tabs";
 
 interface AnnouncementModalProps {
   open: boolean;
@@ -28,6 +30,7 @@ export function AnnouncementModal({
 }: AnnouncementModalProps) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
+  const [activeKey, setActiveKey] = useState<string>();
   const holdSeconds = useHoldCountdown(open, holdMs);
   const held = holdSeconds > 0;
 
@@ -54,14 +57,22 @@ export function AnnouncementModal({
   }
 
   const contentOccurrences = new Map<string, number>();
-  const announcementItems = content.map((item) => {
-    const occurrence = contentOccurrences.get(item) ?? 0;
-    contentOccurrences.set(item, occurrence + 1);
+  const announcements = content.map((body, index) => {
+    const occurrence = contentOccurrences.get(body) ?? 0;
+    contentOccurrences.set(body, occurrence + 1);
     return {
-      item,
-      key: occurrence === 0 ? item : `${item}:${occurrence}`,
+      key: occurrence === 0 ? body : `${body}:${occurrence}`,
+      body,
+      label: announcementTitle(body) ?? `${t("announcement")} ${index + 1}`,
     };
   });
+  // Announcement bodies can arrive after the modal opens; a key that is no
+  // longer present falls back to the first tab instead of blanking the panel.
+  const activeAnnouncement = announcements.some(
+    (announcement) => announcement.key === activeKey,
+  )
+    ? activeKey
+    : announcements[0]?.key;
 
   return (
     <>
@@ -94,9 +105,22 @@ export function AnnouncementModal({
             </button>
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-            {announcementItems.map(({ item, key }) => (
-              <RichDescription key={key} text={item} />
-            ))}
+            {announcements.length > 1 ? (
+              <Tabs
+                items={announcements.map(({ key, label, body }) => ({
+                  value: key,
+                  label,
+                  content: <RichDescription text={body} />,
+                }))}
+                value={activeAnnouncement}
+                onValueChange={setActiveKey}
+                ariaLabel={t("announcement")}
+              />
+            ) : (
+              announcements.map(({ key, body }) => (
+                <RichDescription key={key} text={body} />
+              ))
+            )}
             <Checkbox
               checked={remember}
               onCheckedChange={onRememberChange}

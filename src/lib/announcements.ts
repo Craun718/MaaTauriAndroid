@@ -1,8 +1,34 @@
+import { stripInlineRichText } from "./richText";
 import type { UserConfiguration } from "./types";
 
 /** Startup announcements stay on screen this long before they can be
  * dismissed, so a launch does not let the user tap past unread content. */
 export const STARTUP_ANNOUNCEMENT_HOLD_MS = 5000;
+
+const atxHeading = /^ {0,3}#{1,6}(?:[ \t]+(.*?))?[ \t]*$/;
+const codeFence = /^ {0,3}(?:```|~~~)/;
+
+/**
+ * The text of an announcement's first Markdown heading, used as its tab label.
+ * Fenced code blocks are skipped so a `# comment` inside a sample is not
+ * mistaken for a title, and inline markup is stripped because the label is
+ * plain text. Announcements without a heading return undefined; callers fall
+ * back to a numbered label.
+ */
+export function announcementTitle(body: string): string | undefined {
+  let fenced = false;
+  for (const line of body.split(/\r?\n/)) {
+    if (codeFence.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    const heading = atxHeading.exec(line)?.[1]?.replace(/[ \t]+#+$/, "");
+    const title = stripInlineRichText(heading ?? "");
+    if (title) return title;
+  }
+  return undefined;
+}
 
 interface AnnouncementIdentity {
   fingerprint?: string;

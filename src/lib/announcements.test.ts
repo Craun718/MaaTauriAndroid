@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   acknowledgeAnnouncement,
+  announcementTitle,
   isAnnouncementAcknowledged,
   resolveAnnouncementRemember,
   shouldShowAnnouncement,
@@ -181,5 +182,35 @@ describe("resolveAnnouncementRemember", () => {
     expect(
       resolveAnnouncementRemember(false, { skipWelcomeAnnouncement: true }),
     ).toBe(false);
+  });
+});
+
+describe("announcementTitle", () => {
+  it("uses the first heading of the body", () => {
+    expect(announcementTitle("# 更新公告\n\n本次更新内容如下")).toBe(
+      "更新公告",
+    );
+    expect(announcementTitle("第一行\n\n## 二级标题")).toBe("二级标题");
+  });
+
+  it("skips headings inside fenced code blocks", () => {
+    expect(announcementTitle("```sh\n# 安装依赖\n```\n\n# 真正的标题")).toBe(
+      "真正的标题",
+    );
+    expect(announcementTitle("~~~\n# 只是注释\n~~~")).toBeUndefined();
+  });
+
+  it("strips inline markup and closing hashes", () => {
+    expect(
+      announcementTitle("## [下载地址](https://example.test) **新版本** ##"),
+    ).toBe("下载地址 新版本");
+    expect(announcementTitle("# `maa-tauri` 说明")).toBe("maa-tauri 说明");
+    expect(announcementTitle("# C# 支持")).toBe("C# 支持");
+  });
+
+  it("returns undefined when the body has no usable heading", () => {
+    expect(announcementTitle("纯文本公告")).toBeUndefined();
+    expect(announcementTitle("#\n\n###")).toBeUndefined();
+    expect(announcementTitle("")).toBeUndefined();
   });
 });

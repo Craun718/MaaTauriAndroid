@@ -8,7 +8,7 @@
 - `src-tauri/gen/android/`：Android Shell、JNI 桥接、Shizuku 控制服务与 Gradle 工程。
 - `src-tauri/fixtures/`：嵌入式测试项目数据。
 - `vendor/maa/`：vendored MaaFramework 二进制与许可文件；不要修改二进制内容。
-- `resource/m9a/`、`resource/narutomobile/`、`resource/maapvz/`：CI-only 的上游资源 checkout；**不要把内容提交进本仓库或修改其中的任何内容**。需要改上游行为时改本仓库的代码，上游 URL、commit 和构建参数钉在 CI job 的 `scripts/build-resource.py` 调用里；PI 布局差异由 `scripts/prepare-pi.py` 适配。
+- `resource/m9a/`、`resource/narutomobile/`、`resource/maapvz/`、`resource/maaend/`：CI-only 的上游资源 checkout；**不要把内容提交进本仓库或修改其中的任何内容**。需要改上游行为时改本仓库的代码，上游 URL、commit 和构建参数钉在 CI job 的 `scripts/build-resource.py` 调用里；PI 布局差异由 `scripts/prepare-pi.py` 适配（maaend 用 `scripts/prepare-maaend.py`）。
 
 ## 系统栏适配（edge-to-edge）
 
@@ -57,9 +57,9 @@ CI 定义在 `.github/workflows/ci.yml`，由 push / PR 触发，也支持 `work
 | `android-rust` | Android 目标的 `cargo check`，依赖 `frontend` 的 `dist`             |
 | `m9a-android`  | 构建 arm64 debug APK，并上传 APK 与 agent runtime artifact          |
 
-资源 APK job 受路径过滤控制。公共构建路径变更会触发全部三个 job；各自的 `resource/<resource-id>.toml` 变更只触发对应 job。需要强制跑（例如只改了文档但要出包）用 `workflow_dispatch`。
+资源 APK job 受路径过滤控制。公共构建路径变更会触发全部资源 job；各自的 `resource/<resource-id>.toml` 变更只触发对应 job。需要强制跑（例如只改了文档但要出包）用 `workflow_dispatch`。
 
-三个资源 job（`m9a-android` / `narutomobile-android` / `maapvz-android`）上传的 artifact 名和包内文件名都带 7 位 commit hash 后缀：artifact 为 `<id>-apk-debug-<hash>` / `<id>-agent-runtime-<abi>-<hash>`，对应文件为 `app-<flavor>-debug-<hash>.apk`（flavor 是 `arm64` / `x86_64`）与 `<id>-agent-runtime-<abi>-<hash>.zip`。hash 取 `pull_request` 的 head commit、其余事件取 `github.sha` 前 7 位（PR 上 `github.sha` 是合成 merge commit，不能用于追溯）。改名在 Gradle 打包之后执行——profile 的 `bundle` 按不带 hash 的名字解析，提前改名会让打包失败。
+四个资源 job（`m9a-android` / `narutomobile-android` / `maapvz-android` / `maaend-android`）上传的 artifact 名和包内文件名都带 7 位 commit hash 后缀：artifact 为 `<id>-apk-debug-<hash>` / `<id>-agent-runtime-<abi>-<hash>`，对应文件为 `app-<flavor>-debug-<hash>.apk`（flavor 是 `arm64` / `x86_64`）与 `<id>-agent-runtime-<abi>-<hash>.zip`；`maaend-android` 的 runtime 分两份，名带 `maaend-go-service-runtime-` / `maaend-cpp-algo-runtime-` 前缀。hash 取 `pull_request` 的 head commit、其余事件取 `github.sha` 前 7 位（PR 上 `github.sha` 是合成 merge commit，不能用于追溯）。改名在 Gradle 打包之后执行——profile 的 `bundle` 按不带 hash 的名字解析，提前改名会让打包失败。
 
 ## 真机测试
 
@@ -102,16 +102,17 @@ daisyUI 把自己的样式包在 `@layer utilities > daisyui.*` 子层里，而�
 
 ## 提交与 PR
 
-提交前由 husky + lint-staged 的 pre-commit 钩子自动执行检查（配置见 `lint-staged.config.mjs`），**刻意不跑测试**（测试交给 CI 的 `frontend` / `rust` job）：
+提交前由 husky + lint-staged 的 pre-commit 钩子自动执行检查（配置见 `lint-staged.config.mjs`）：
 
 | 暂存文件                                              | 动作                                             |
 | ----------------------------------------------------- | ------------------------------------------------ |
-| `*.{ts,tsx}`                                          | `tsc --noEmit`，整项目类型检查                   |
+| `*.{ts,tsx}`                                          | `tsc --noEmit`（整项目类型检查）+ `pnpm test`（整套 Vitest） |
+| `*.{kt,kts}`                                          | `./src-tauri/gen/android/gradlew --project-dir src-tauri/gen/android :app:compileUniversalDebugKotlin`，debug variant 的 Kotlin 编译 |
 | `*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,svg,html}` | `biome check --write`，格式化并 lint 后自动重新暂存 |
 | `*.{py,pyi}`                                          | `ruff check`，只检查不自动改                     |
 | `*.rs`                                                | `cargo fmt --manifest-path src-tauri/Cargo.toml` |
 
-三个细节：`tsc` 不接受单个文件路径，`cargo fmt` 只能整 crate 格式化，因此这两项都以函数形式配置——不拼接暂存文件名；Ruff 相反，逐文件检查正合它意（配置由它自己按 `ruff.toml` 逐文件解析），所以直接串命令。`cargo fmt` 之所以安全，是因为 CI 有 `cargo fmt --check`，未参与本次提交的 `.rs` 文件本来就是干净的。Ruff 刻意不加 `--fix`，免得自动改写 `scripts/build_agent_bundle.py` 这个 vendored 副本；它也不在仓库依赖里，本地没装的话钩子会失败（`uv tool install ruff==0.16.2`）。
+几条细节。`tsc` 不接受单个文件路径、`cargo fmt` 只能整 crate 格式化、Gradle 同样没有单文件编译，所以这三项都以函数形式配置——不拼接暂存文件名，代价是作用范围落在整个项目上；`pnpm test` 也刻意跑整套，因为用例常常覆盖跨模块行为，单文件隔离不出来。Ruff 相反，逐文件检查正合它意（配置由它自己按 `ruff.toml` 逐文件解析），所以直接串命令。`cargo fmt` 之所以安全，是因为 CI 有 `cargo fmt --check`，未参与本次提交的 `.rs` 文件本来就是干净的。Ruff 刻意不加 `--fix`，免得自动改写 `scripts/build_agent_bundle.py` 这个 vendored 副本；它也不在仓库依赖里，本地没装的话钩子会失败（`uv tool install ruff==0.16.2`）。
 
 钩子由 `pnpm install` 触发的 `prepare` 脚本安装，`core.hooksPath` 指向 `.husky/_`。Biome 规则在 `biome.json`：`resource/`（CI-only checkout，JSON 被 `resource/m9a.toml` 的 sha256 锁定）、`vendor/`、`src-tauri/gen/` 一律不处理。Biome 不覆盖 Markdown 和 YAML，这些文件不进入 pre-commit 格式化流程。紧急情况下用 `git commit --no-verify` 跳过。
 

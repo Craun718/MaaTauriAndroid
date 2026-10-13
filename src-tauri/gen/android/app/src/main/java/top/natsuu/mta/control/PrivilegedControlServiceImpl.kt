@@ -555,10 +555,11 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
             METHOD_START_GAME -> {
                 val target = packageName.orEmpty()
                 if (target.isNotEmpty()) {
-                    // Android reuses an existing task on the default display, so a
-                    // launch-display option alone cannot move an already-running app.
-                    val shouldForceStop = forceStop || displayId != 0
-                    if (shouldForceStop) {
+                    // A non-zero display is not a reason to stop on its own:
+                    // startGameOnDisplay first tries to bring an already-running
+                    // app over to the target display and only falls back to
+                    // stopping it when the move cannot work.
+                    if (forceStop) {
                         val stopped = appLauncher.stopPackage(target)
                         if (stopped != RESULT_OK) return RESULT_COMMAND_FAILED
                     }

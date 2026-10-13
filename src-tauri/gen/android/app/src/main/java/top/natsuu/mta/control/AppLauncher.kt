@@ -48,10 +48,23 @@ internal class AppLauncher(
             } else {
                 fallbackStart(packageName, intent, displayId)
             }
-            LaunchLocation.WRONG_DISPLAY -> if (usedShellFallback) {
-                PrivilegedControlServiceImpl.RESULT_COMMAND_FAILED
-            } else {
-                fallbackStart(packageName, intent, displayId)
+            LaunchLocation.WRONG_DISPLAY -> {
+                // Android brings an existing task to the front on the display it
+                // already lives on, so a misplaced app has to be restarted rather
+                // than relaunched. Restarting is the last resort: it only runs
+                // when the task really sits on another display, never for one that
+                // is already there in a different windowing mode.
+                val sitsOnAnotherDisplay = taskLocationOf(packageName)
+                    ?.displayId
+                    ?.let { it != displayId }
+                    ?: false
+                if (sitsOnAnotherDisplay) {
+                    restartOnDisplay(packageName, intent, displayId)
+                } else if (usedShellFallback) {
+                    PrivilegedControlServiceImpl.RESULT_COMMAND_FAILED
+                } else {
+                    fallbackStart(packageName, intent, displayId)
+                }
             }
         }
     }
@@ -96,6 +109,33 @@ internal class AppLauncher(
         }
     }
 
+    /**
+     * Last resort for a target that stays on another display: stop it, cold start
+     * it on [displayId] and verify where it landed. The hidden move APIs are the
+     * preferred way over; this only runs once they have been tried and failed.
+     */
+    private fun restartOnDisplay(
+        packageName: String,
+        intent: Intent,
+        displayId: Int,
+    ): Int {
+        android.util.Log.i(
+            TAG,
+            "$packageName stayed off displayId=$displayId; force-stopping and starting over",
+        )
+        if (stopPackage(packageName) != PrivilegedControlServiceImpl.RESULT_OK) {
+            return PrivilegedControlServiceImpl.RESULT_COMMAND_FAILED
+        }
+        relaunchFullscreen(intent, displayId)
+        return if (awaitAppOnDisplay(packageName, displayId, intent) ==
+            LaunchLocation.TARGET_DISPLAY
+        ) {
+            PrivilegedControlServiceImpl.RESULT_OK
+        } else {
+            PrivilegedControlServiceImpl.RESULT_COMMAND_FAILED
+        }
+    }
+
     private fun launchIntent(spec: String): Intent? {
         val component = componentOf(spec)
         val baseIntent = component?.let {
@@ -131,15 +171,23 @@ internal class AppLauncher(
         var attemptedMove = false
         var attemptedFullscreenRelaunch = false
         var stableSince: Long? = null
+        // Nothing below moves the task a second time, so once the move and the
+        // fullscreen relaunch have been tried, waiting out the rest of the
+        // deadline only delays the caller. Settle briefly for an asynchronous
+        // move to land, then report the wrong display. Kept short to leave room
+        // for the caller's restart inside MaaFramework's 20s StartApp timeout.
+        var moveSettleUntil: Long? = null
         val deadline = SystemClock.uptimeMillis() + DISPLAY_WAIT_MS + LAUNCH_STABILITY_MS
         while (SystemClock.uptimeMillis() < deadline) {
             val task = findTask(packageName)
             if (task == null) {
                 stableSince = null
+                moveSettleUntil = null
                 SystemClock.sleep(POLL_INTERVAL_MS)
                 continue
             }
             if (task.displayId == displayId) {
+                moveSettleUntil = null
                 if (task.windowingMode != WINDOWING_MODE_FULLSCREEN && !attemptedFullscreenRelaunch) {
                     attemptedFullscreenRelaunch = true
                     stableSince = null
@@ -178,6 +226,9 @@ internal class AppLauncher(
                     attemptedFullscreenRelaunch = true
                     relaunchFullscreen(intent, displayId)
                 }
+                moveSettleUntil = SystemClock.uptimeMillis() + WRONG_DISPLAY_SETTLE_MS
+            } else if (moveSettleUntil?.let { SystemClock.uptimeMillis() >= it } == true) {
+                return LaunchLocation.WRONG_DISPLAY
             }
             SystemClock.sleep(POLL_INTERVAL_MS)
         }
@@ -563,6 +614,7 @@ internal class AppLauncher(
         private const val DISPLAY_WAIT_MS = 10_000L
         private const val LAUNCH_STABILITY_MS = 5_000L
         private const val FALLBACK_WAIT_MS = 3_000L
+        private const val WRONG_DISPLAY_SETTLE_MS = 1_000L
         private const val POLL_INTERVAL_MS = 250L
         private const val WINDOWING_MODE_FULLSCREEN = 1
         private const val NEW_TASK_FLAGS =

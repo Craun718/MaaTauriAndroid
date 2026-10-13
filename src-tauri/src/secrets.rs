@@ -359,6 +359,7 @@ mod tests {
             welcome_fingerprint: None,
             welcome_acknowledged_app_version: None,
             skip_welcome_announcement: false,
+            background_image: None,
         }
     }
 

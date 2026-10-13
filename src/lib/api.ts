@@ -227,6 +227,18 @@ export async function importConfiguration() {
   return invoke<ConfigurationImportResult>("import_configuration");
 }
 
+export async function importBackgroundImage() {
+  return invoke<UserConfiguration>("import_background_image");
+}
+
+export async function removeBackgroundImage() {
+  return invoke<UserConfiguration>("remove_background_image");
+}
+
+export async function readBackgroundImage() {
+  return invoke<ArrayBuffer>("read_background_image");
+}
+
 export async function captureManualScreenshot(executionId?: string) {
   return invoke<{ executionId: string; path: string }>(
     "capture_manual_screenshot",

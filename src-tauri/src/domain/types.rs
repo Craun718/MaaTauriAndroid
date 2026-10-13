@@ -330,6 +330,15 @@ pub enum UiLanguage {
     En,
 }
 
+/// Points at one generated image in the app-private background directory.
+/// The image body stays on this device and is never embedded in configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundImage {
+    pub file_name: String,
+    pub revision: u64,
+}
+
 /// What the user configured, as opposed to what the project declared.
 ///
 /// There is no controller field: Android can only drive its own native control
@@ -389,6 +398,11 @@ pub struct UserConfiguration {
     pub welcome_acknowledged_app_version: Option<String>,
     #[serde(default)]
     pub skip_welcome_announcement: bool,
+    /// Set only when the selected image has been copied into this device's
+    /// private background directory. Imports preserve the local image instead
+    /// of adopting another device's unavailable file reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_image: Option<BackgroundImage>,
 }
 
 fn default_schema_version() -> u32 {
@@ -420,6 +434,7 @@ impl Default for UserConfiguration {
             welcome_fingerprint: None,
             welcome_acknowledged_app_version: None,
             skip_welcome_announcement: false,
+            background_image: None,
         }
     }
 }
@@ -779,4 +794,35 @@ pub struct RunTaskSnapshotEntry {
     pub unavailable_reason: Option<String>,
     pub selected: bool,
     pub option_values: BTreeMap<String, OptionValue>,
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_configuration_without_background_image_parses() {
+        let mut value = serde_json::to_value(UserConfiguration::default()).unwrap();
+        value.as_object_mut().unwrap().remove("backgroundImage");
+
+        let configuration: UserConfiguration = serde_json::from_value(value).unwrap();
+        assert_eq!(configuration.background_image, None);
+    }
+
+    #[test]
+    fn background_image_uses_camel_case_and_stays_absent_when_unset() {
+        let mut configuration = UserConfiguration::default();
+        let value = serde_json::to_value(&configuration).unwrap();
+        assert!(value.get("backgroundImage").is_none());
+
+        configuration.background_image = Some(BackgroundImage {
+            file_name: "background.png".to_string(),
+            revision: 7,
+        });
+        let value = serde_json::to_value(&configuration).unwrap();
+        assert_eq!(
+            value["backgroundImage"],
+            serde_json::json!({"fileName": "background.png", "revision": 7})
+        );
+    }
 }

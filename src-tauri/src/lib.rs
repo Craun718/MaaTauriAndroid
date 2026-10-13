@@ -1,5 +1,6 @@
 mod agent;
 mod atomic_io;
+mod background_image;
 mod configuration_backup;
 mod diagnostics;
 mod domain;
@@ -625,6 +626,8 @@ fn normalize_configuration(project: &Project, configuration: &mut UserConfigurat
         .iter()
         .map(|task| (task.name.clone(), task.groups.clone()))
         .collect();
+    configuration.background_image =
+        background_image::normalize_reference(configuration.background_image.take());
     configuration.initialized = true;
     // Telemetry ships opted-in for the first install (Project Interface v2.9
     // recommends default-on, revocable); persisted choices always win afterwards.
@@ -3520,6 +3523,7 @@ async fn import_configuration(
         };
 
         let (project, _) = state.project_and_configuration()?;
+        let local_background_image = state.configuration()?.background_image;
         let parse = tokio::task::spawn_blocking(move || {
             let result = (|| {
                 let metadata = std::fs::metadata(&selected)?;
@@ -3528,6 +3532,9 @@ async fn import_configuration(
                 }
                 let bytes = std::fs::read(&selected)?;
                 let mut backup = configuration_backup::parse_configuration(&bytes, &project.name)?;
+                // The image body never travels in a backup; adopting another
+                // device's generated file name would create a dead reference.
+                backup.configuration.background_image = local_background_image;
                 normalize_configuration(&project, &mut backup.configuration);
                 configuration_backup::validate_import(
                     &project,
@@ -3555,6 +3562,123 @@ async fn import_configuration(
             snapshot: Some(current_snapshot(&state)),
         })
     }
+}
+
+#[tauri::command]
+async fn import_background_image(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<UserConfiguration, AppError> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, state);
+        return Err(AppError::Message(
+            "background image import is only available on Android".to_string(),
+        ));
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        if state.maa.status() != runtime::RunState::Idle {
+            return Err(AppError::Message(
+                "a run is active; stop it before changing the background".to_string(),
+            ));
+        }
+        let _storage_guard = state.run_storage.lock().await;
+        if state.maa.status() != runtime::RunState::Idle {
+            return Err(AppError::Message(
+                "a run is active; stop it before changing the background".to_string(),
+            ));
+        }
+
+        let selected = tokio::task::spawn_blocking(pick_background_image_via_bridge)
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))?;
+        let Some(selected) = selected? else {
+            return state.configuration();
+        };
+
+        let (project, configuration) = state.project_and_configuration()?;
+        let data_root = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| AppError::Path(error.to_string()))?;
+        let imported = tokio::task::spawn_blocking(move || {
+            let result = (|| {
+                if std::fs::metadata(&selected)?.len() > background_image::MAX_IMAGE_BYTES as u64 {
+                    return Err(AppError::BackgroundImage(
+                        background_image::BackgroundImageError::TooLarge,
+                    ));
+                }
+                let bytes = std::fs::read(&selected)?;
+                let saved = background_image::save(
+                    &data_root,
+                    configuration
+                        .background_image
+                        .as_ref()
+                        .map(|image| image.revision)
+                        .unwrap_or_default(),
+                    &bytes,
+                )?;
+                let mut configuration = configuration;
+                configuration.background_image = Some(saved.image);
+                Ok::<_, AppError>((configuration, saved.image.file_name))
+            })();
+            let _ = std::fs::remove_file(&selected);
+            result
+        })
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))?;
+        let (configuration, file_name) = imported?;
+
+        state.set_configuration(configuration.clone())?;
+        tokio::task::spawn_blocking(move || {
+            background_image::remove_stale_files(&data_root, Some(&file_name));
+        })
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))?;
+        Ok(configuration)
+    }
+}
+
+#[tauri::command]
+async fn remove_background_image(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<UserConfiguration, AppError> {
+    let mut configuration = state.configuration()?;
+    let had_image = configuration.background_image.take().is_some();
+    state.set_configuration(configuration.clone())?;
+
+    let data_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    if had_image {
+        tokio::task::spawn_blocking(move || background_image::remove(&data_root))
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))?;
+    }
+    Ok(configuration)
+}
+
+#[tauri::command]
+async fn read_background_image(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<tauri::ipc::Response, AppError> {
+    let configuration = state.configuration()?;
+    let image = configuration
+        .background_image
+        .ok_or_else(|| AppError::Message("No background image is configured".to_string()))?;
+    let data_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| AppError::Path(error.to_string()))?;
+    let bytes = tokio::task::spawn_blocking(move || background_image::read(&data_root, &image))
+        .await
+        .map_err(|error| AppError::Message(error.to_string()))??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 #[cfg(target_os = "android")]
@@ -3609,6 +3733,16 @@ fn export_file_via_bridge(path: &str, mime: &str) -> Result<String, AppError> {
 
 #[cfg(target_os = "android")]
 fn pick_configuration_file_via_bridge() -> Result<Option<String>, AppError> {
+    pick_file_via_bridge("pickConfigurationFile")
+}
+
+#[cfg(target_os = "android")]
+fn pick_background_image_via_bridge() -> Result<Option<String>, AppError> {
+    pick_file_via_bridge("pickImageFile")
+}
+
+#[cfg(target_os = "android")]
+fn pick_file_via_bridge(method: &'static str) -> Result<Option<String>, AppError> {
     let bridge_class =
         runtime::runtime_bridge_class().map_err(|error| AppError::Message(error.to_string()))?;
     let vm = runtime::java_vm()
@@ -3617,12 +3751,7 @@ fn pick_configuration_file_via_bridge() -> Result<Option<String>, AppError> {
         .attach_current_thread()
         .map_err(|error| AppError::Message(error.to_string()))?;
     let object = env
-        .call_static_method(
-            bridge_class,
-            "pickConfigurationFile",
-            "()Ljava/lang/String;",
-            &[],
-        )
+        .call_static_method(bridge_class, method, "()Ljava/lang/String;", &[])
         .map_err(|error| {
             let _ = env.exception_clear();
             AppError::Message(error.to_string())
@@ -3959,6 +4088,8 @@ enum AppError {
     Diagnostic(#[from] diagnostics::DiagnosticError),
     #[error("{0}")]
     Schedule(#[from] schedule::ScheduleError),
+    #[error("{0}")]
+    BackgroundImage(#[from] background_image::BackgroundImageError),
     #[error("{0}")]
     Backup(#[from] configuration_backup::ConfigurationBackupError),
     #[error("{0}")]
@@ -4669,6 +4800,20 @@ mod tests {
     }
 
     #[test]
+    fn normalize_configuration_clears_invalid_background_references() {
+        let project = project();
+        let mut configuration = UserConfiguration::default();
+        configuration.background_image = Some(crate::domain::types::BackgroundImage {
+            file_name: "../background.png".to_string(),
+            revision: 1,
+        });
+
+        normalize_configuration(&project, &mut configuration);
+
+        assert_eq!(configuration.background_image, None);
+    }
+
+    #[test]
     fn native_preparation_update_parses_camel_case_json() {
         let update: NativePreparationUpdate = serde_json::from_str(
             r#"{
@@ -5327,6 +5472,9 @@ pub fn run() {
             request_schedule_notification_permission,
             export_configuration,
             import_configuration,
+            import_background_image,
+            remove_background_image,
+            read_background_image,
             update::update_get_status,
             update::update_check,
             update::update_resolve,

@@ -52,6 +52,7 @@ object RuntimeBridge {
     private const val RESTART_DELAY_MS = 250L
     private const val CONFIGURATION_PICK_TIMEOUT_MS = 120_000L
     private const val MAX_IMPORT_BYTES = 4L * 1024L * 1024L
+    private const val MAX_IMAGE_BYTES = 16L * 1024L * 1024L
 
     @Volatile
     private var agentContext: Context? = null
@@ -74,9 +75,12 @@ object RuntimeBridge {
     }
 
     private val configurationPickRequest = AtomicReference<ConfigurationPickRequest?>(null)
+    private val imagePickRequest = AtomicReference<ConfigurationPickRequest?>(null)
 
     @Volatile
     private var configurationFilePickerLauncher: ((Array<String>) -> Unit)? = null
+    @Volatile
+    private var imageFilePickerLauncher: ((Array<String>) -> Unit)? = null
 
     private const val LOG_TAG = "MaaTauriAndroidControl"
 
@@ -122,6 +126,11 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun registerImageFilePicker(launcher: (Array<String>) -> Unit) {
+        imageFilePickerLauncher = launcher
+    }
+
+    @JvmStatic
     fun pickConfigurationFile(): String? {
         if (agentContext == null) return null
         val request = ConfigurationPickRequest()
@@ -149,6 +158,38 @@ object RuntimeBridge {
         )
         if (!completed) {
             configurationPickRequest.compareAndSet(request, null)
+        }
+        return request.path.get()
+    }
+
+    @JvmStatic
+    fun pickImageFile(): String? {
+        if (agentContext == null) return null
+        val request = ConfigurationPickRequest()
+        if (imagePickRequest.getAndSet(request) != null) {
+            // Each import owns a separate request, while the UI prevents two
+            // background operations from overlapping.
+            return null
+        }
+        mainHandler.post {
+            val launcher = imageFilePickerLauncher
+            if (launcher == null) {
+                completeImageFilePick(null)
+            } else {
+                runCatching {
+                    launcher(arrayOf("image/*"))
+                }.onFailure { error ->
+                    Log.w(LOG_TAG, "Could not open the image picker", error)
+                    completeImageFilePick(null)
+                }
+            }
+        }
+        val completed = request.latch.await(
+            CONFIGURATION_PICK_TIMEOUT_MS,
+            TimeUnit.MILLISECONDS,
+        )
+        if (!completed) {
+            imagePickRequest.compareAndSet(request, null)
         }
         return request.path.get()
     }
@@ -191,6 +232,50 @@ object RuntimeBridge {
                 }
             }.onFailure { error ->
                 Log.w(LOG_TAG, "Could not copy the selected configuration", error)
+            }.getOrNull()
+            request.path.set(path)
+            request.latch.countDown()
+        }
+    }
+
+    @JvmStatic
+    fun completeImageFilePick(uri: Uri?) {
+        val request = imagePickRequest.getAndSet(null)
+        if (request == null || uri == null) {
+            request?.latch?.countDown()
+            return
+        }
+        thread(name = "mta-copy-background-image") {
+            val path = runCatching {
+                val context = requireNotNull(agentContext) {
+                    "the app context is unavailable"
+                }
+                val importDir = File(context.cacheDir, "background-imports")
+                importDir.mkdirs()
+                val target = File.createTempFile("background-", ".image", importDir)
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            var total = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > MAX_IMAGE_BYTES) {
+                                    throw IOException("background image is too large")
+                                }
+                                output.write(buffer, 0, count)
+                            }
+                        }
+                    } ?: throw IOException("could not open the selected image")
+                    target.absolutePath
+                } catch (error: Throwable) {
+                    target.delete()
+                    throw error
+                }
+            }.onFailure { error ->
+                Log.w(LOG_TAG, "Could not copy the selected image", error)
             }.getOrNull()
             request.path.set(path)
             request.latch.countDown()

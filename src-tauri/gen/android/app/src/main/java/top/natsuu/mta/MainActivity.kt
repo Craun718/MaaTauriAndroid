@@ -20,6 +20,11 @@ class MainActivity : TauriActivity() {
   ) { uri ->
     RuntimeBridge.completeConfigurationFilePick(uri)
   }
+  private val imageFilePicker = registerForActivityResult(
+    ActivityResultContracts.OpenDocument(),
+  ) { uri ->
+    RuntimeBridge.completeImageFilePick(uri)
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     val splashScreen = installSplashScreen()
@@ -29,6 +34,9 @@ class MainActivity : TauriActivity() {
     RuntimeBridge.attachActivity(this)
     RuntimeBridge.registerConfigurationFilePicker { mimeTypes ->
       configurationFilePicker.launch(mimeTypes)
+    }
+    RuntimeBridge.registerImageFilePicker { mimeTypes ->
+      imageFilePicker.launch(mimeTypes)
     }
     RuntimeBridge.configureScreen(
         resources.displayMetrics.widthPixels,

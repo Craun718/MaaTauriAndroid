@@ -2,9 +2,11 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import {
   applyPreset as invokeApplyPreset,
+  importBackgroundImage as invokeImportBackgroundImage,
   importConfiguration as invokeImportConfiguration,
   loadProject as invokeLoadProject,
   reinstallResources as invokeReinstallResources,
+  removeBackgroundImage as invokeRemoveBackgroundImage,
   saveConfiguration as invokeSaveConfiguration,
   prepareApp,
 } from "../lib/api";
@@ -40,6 +42,8 @@ interface AppStore {
   bootstrap: () => Promise<void>;
   reinstallResources: () => Promise<void>;
   importConfiguration: () => Promise<ConfigurationImportResult>;
+  importBackgroundImage: () => Promise<void>;
+  removeBackgroundImage: () => Promise<void>;
   loadProject: (path: string, language?: string) => Promise<void>;
   setProjectLanguage: (language: string) => Promise<void>;
   applyPreset: (presetName: string) => Promise<void>;
@@ -205,7 +209,7 @@ export async function waitForPendingSaves(): Promise<void> {
   while (pendingSaves > 0) await saveQueue;
 }
 
-export const useAppStore = create<AppStore>((set) => ({
+export const useAppStore = create<AppStore>()((set) => ({
   bootstrapStatus: "loading",
   busy: false,
   saving: false,
@@ -263,6 +267,54 @@ export const useAppStore = create<AppStore>((set) => ({
     } catch (error) {
       set({ error: message(error), busy: false });
       reportError(error);
+    }
+  },
+  async importBackgroundImage() {
+    if (!useAppStore.getState().snapshot) return;
+    const revision = ++configurationRevision;
+    set({ busy: true, error: undefined });
+    const request = saveQueue.then(async () => {
+      const configuration = await invokeImportBackgroundImage();
+      const state = useAppStore.getState();
+      if (configurationRevision === revision && state.snapshot) {
+        set({
+          snapshot: { ...state.snapshot, configuration },
+          busy: false,
+        });
+      }
+    });
+    saveQueue = request.catch(() => undefined);
+    try {
+      await request;
+    } catch (error) {
+      set({ error: message(error), busy: false });
+      reportError(error);
+    } finally {
+      set({ busy: false });
+    }
+  },
+  async removeBackgroundImage() {
+    if (!useAppStore.getState().snapshot) return;
+    const revision = ++configurationRevision;
+    set({ busy: true, error: undefined });
+    const request = saveQueue.then(async () => {
+      const configuration = await invokeRemoveBackgroundImage();
+      const state = useAppStore.getState();
+      if (configurationRevision === revision && state.snapshot) {
+        set({
+          snapshot: { ...state.snapshot, configuration },
+          busy: false,
+        });
+      }
+    });
+    saveQueue = request.catch(() => undefined);
+    try {
+      await request;
+    } catch (error) {
+      set({ error: message(error), busy: false });
+      reportError(error);
+    } finally {
+      set({ busy: false });
     }
   },
   async setProjectLanguage(language) {

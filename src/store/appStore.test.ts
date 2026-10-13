@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyPreset,
+  importBackgroundImage,
   importConfiguration,
   loadProject,
   prepareApp,
   reinstallResources,
+  removeBackgroundImage,
   saveConfiguration,
 } from "../lib/api";
 import {
@@ -41,8 +43,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../lib/api", () => ({
   applyPreset: vi.fn(),
   importConfiguration: vi.fn(),
+  importBackgroundImage: vi.fn(),
   prepareApp: vi.fn(),
   loadProject: vi.fn(),
+  removeBackgroundImage: vi.fn(),
   reinstallResources: vi.fn(),
   saveConfiguration: vi.fn(),
 }));
@@ -59,6 +63,8 @@ const mockedPrepareApp = vi.mocked(prepareApp);
 const mockedLoadProject = vi.mocked(loadProject);
 const mockedReinstallResources = vi.mocked(reinstallResources);
 const mockedImportConfiguration = vi.mocked(importConfiguration);
+const mockedImportBackgroundImage = vi.mocked(importBackgroundImage);
+const mockedRemoveBackgroundImage = vi.mocked(removeBackgroundImage);
 const mockedBuildAndroidProject = vi.mocked(buildAndroidProject);
 const mockedLoadProjectSource = vi.mocked(loadProjectSource);
 const mockedCreateStartupReader = vi.mocked(createStartupProjectTextReader);
@@ -218,6 +224,49 @@ describe("canApplyWelcomeState", () => {
         welcomeState(0),
       ),
     ).toBe(true);
+  });
+});
+
+describe("appStore background image", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppStore.setState({
+      snapshot: { configuration },
+      projectSource: undefined,
+      busy: false,
+      saving: false,
+      error: undefined,
+      dismissedWelcomeFingerprint: undefined,
+    });
+    useNotificationStore.setState({ notifications: [] });
+  });
+
+  it("adopts the configured image after a successful import", async () => {
+    const imported = configurationWith({
+      backgroundImage: { fileName: "background.png", revision: 2 },
+    });
+    mockedImportBackgroundImage.mockResolvedValue(imported);
+
+    await useAppStore.getState().importBackgroundImage();
+
+    expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().error).toBeUndefined();
+    expect(useAppStore.getState().snapshot?.configuration).toBe(imported);
+  });
+
+  it("clears the configured image after successful removal", async () => {
+    const current = configurationWith({
+      backgroundImage: { fileName: "background.webp", revision: 4 },
+    });
+    useAppStore.setState({ snapshot: { configuration: current } });
+    const removed = configurationWith({ backgroundImage: undefined });
+    mockedRemoveBackgroundImage.mockResolvedValue(removed);
+
+    await useAppStore.getState().removeBackgroundImage();
+
+    expect(useAppStore.getState().busy).toBe(false);
+    expect(useAppStore.getState().error).toBeUndefined();
+    expect(useAppStore.getState().snapshot?.configuration).toBe(removed);
   });
 });
 

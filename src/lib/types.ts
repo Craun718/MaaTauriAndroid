@@ -219,6 +219,12 @@ export interface RunConfiguration {
   tasks: ConfiguredTask[];
 }
 
+/** Points at a generated image in this device's private background directory. */
+export interface BackgroundImage {
+  fileName: string;
+  revision: number;
+}
+
 export type TaskRunSelectionMode = "current" | "currentAndFollowing";
 
 export interface TaskRunSelection {
@@ -320,6 +326,7 @@ export interface UserConfiguration {
   welcomeFingerprint?: string;
   welcomeAcknowledgedAppVersion?: string;
   skipWelcomeAnnouncement?: boolean;
+  backgroundImage?: BackgroundImage;
 }
 
 export type ConfigurationRecoveryKind = "backupRestored" | "resetToDefault";

@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   Download,
+  ImagePlus,
   RefreshCw,
   SlidersHorizontal,
   Trash2,
@@ -23,6 +24,7 @@ import {
   requestOverlayPermission,
   restartApp,
 } from "../lib/api";
+import { useBackgroundImageObjectUrl } from "../lib/backgroundImage";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import {
@@ -276,6 +278,7 @@ export function SettingsPage() {
             : t("importConfiguration")}
         </button>
       </section>
+      <CustomBackgroundCard restartPending={restartPending} />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
         <h2 className="font-medium">{t("runBehavior")}</h2>
         <Checkbox
@@ -522,6 +525,103 @@ export function SettingsPage() {
         />
       )}
     </div>
+  );
+}
+
+/** Local-only background image management; the body never enters a backup. */
+function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
+  const snapshot = useAppStore((state) => state.snapshot);
+  const busy = useAppStore((state) => state.busy);
+  const saving = useAppStore((state) => state.saving);
+  const importBackgroundImage = useAppStore(
+    (state) => state.importBackgroundImage,
+  );
+  const removeBackgroundImage = useAppStore(
+    (state) => state.removeBackgroundImage,
+  );
+  const notify = useNotificationStore((state) => state.notify);
+  const { t } = useTranslation();
+  const [importing, setImporting] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const image = snapshot?.configuration.backgroundImage;
+  const source = useBackgroundImageObjectUrl(image);
+  const disabled =
+    busy || saving || restartPending || importing || removing || !snapshot;
+
+  return (
+    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <h2 className="font-medium">{t("customBackground")}</h2>
+      <div className="relative aspect-video overflow-hidden rounded-md border border-line bg-surface-muted">
+        {source ? (
+          <img src={source} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full items-center justify-center p-2 text-center text-sm text-ink-muted">
+            {t("backgroundImageEmpty")}
+          </div>
+        )}
+      </div>
+      <p className="text-sm text-ink-muted">
+        {t("customBackgroundDescription")}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={async () => {
+            setImporting(true);
+            try {
+              await importBackgroundImage();
+              const nextImage =
+                useAppStore.getState().snapshot?.configuration.backgroundImage;
+              if (
+                nextImage &&
+                (nextImage.fileName !== image?.fileName ||
+                  nextImage.revision !== image?.revision)
+              ) {
+                notify(t("backgroundImageImported"));
+              }
+            } catch (error) {
+              notify(error instanceof Error ? error.message : String(error), {
+                tone: "error",
+              });
+            } finally {
+              setImporting(false);
+            }
+          }}
+          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+        >
+          <ImagePlus size="1rem" />
+          {importing
+            ? t("backgroundImageImporting")
+            : t("backgroundImageImport")}
+        </button>
+        <button
+          type="button"
+          disabled={disabled || !image}
+          onClick={async () => {
+            setRemoving(true);
+            try {
+              await removeBackgroundImage();
+              const configuration =
+                useAppStore.getState().snapshot?.configuration;
+              if (image && configuration && !configuration.backgroundImage) {
+                notify(t("backgroundImageRemoved"));
+              }
+            } catch (error) {
+              notify(error instanceof Error ? error.message : String(error), {
+                tone: "error",
+              });
+            } finally {
+              setRemoving(false);
+            }
+          }}
+          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+        >
+          <Trash2 size="1rem" />
+          {removing ? t("backgroundImageRemoving") : t("backgroundImageRemove")}
+        </button>
+      </div>
+    </section>
   );
 }
 

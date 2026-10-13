@@ -288,6 +288,16 @@ const en = {
   configurationImportConfirm:
     "Import this backup? All current settings, run configurations and schedules will be replaced. Password inputs will be empty and must be entered again.",
   configurationImported: "Backup imported",
+  customBackground: "Custom background",
+  customBackgroundDescription:
+    "Choose a picture on this device. It fills the background without distortion, is kept in app-private storage, and is not included in backups.",
+  backgroundImageImport: "Choose image",
+  backgroundImageImporting: "Importing",
+  backgroundImageRemove: "Remove",
+  backgroundImageRemoving: "Removing",
+  backgroundImageEmpty: "No background image",
+  backgroundImageImported: "Background image updated",
+  backgroundImageRemoved: "Background image removed",
   configurationRecoveryBackupRestored:
     "Settings could not be read; the latest usable backup was restored.",
   configurationRecoveryResetForParse:
@@ -637,6 +647,16 @@ const zh: Record<MessageKey, string> = {
   configurationImportConfirm:
     "要导入这份备份吗？当前设置、运行配置和定时任务都会被整体替换。密码输入将为空，需要重新填写。",
   configurationImported: "备份已导入",
+  customBackground: "自定义背景",
+  customBackgroundDescription:
+    "选择本机图片作为背景。图片会等比放大铺满界面并裁掉超出部分，仅保存在应用私有目录，不会进入备份。",
+  backgroundImageImport: "选择图片",
+  backgroundImageImporting: "导入中",
+  backgroundImageRemove: "移除",
+  backgroundImageRemoving: "移除中",
+  backgroundImageEmpty: "未设置背景图片",
+  backgroundImageImported: "背景图片已更新",
+  backgroundImageRemoved: "背景图片已移除",
   configurationRecoveryBackupRestored:
     "设置文件无法读取，已恢复最近一个可用备份。",
   configurationRecoveryResetForParse:

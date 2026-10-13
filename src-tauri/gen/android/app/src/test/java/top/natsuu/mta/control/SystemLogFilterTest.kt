@@ -48,7 +48,8 @@ class SystemLogFilterTest {
         val result = SystemLogFilter.filter(lines, pid = 1234, processPrefix = prefix, untilMs = 2_000)
 
         assertEquals(1, result.kept.size)
-        assertEquals(2, result.scanned)
+        // 越窗的那行只用来结束扫描，不算进去
+        assertEquals(1, result.scanned)
     }
 
     @Test

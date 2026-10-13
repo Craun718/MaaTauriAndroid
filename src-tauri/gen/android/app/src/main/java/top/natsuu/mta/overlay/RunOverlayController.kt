@@ -109,7 +109,7 @@ internal fun parseRunOverlaySnapshot(json: String): RunOverlaySnapshot? = runCat
     val payload = JSONObject(json)
     RunOverlaySnapshot(
         foreground = payload.optBoolean("foreground", false),
-        phase = payload.optString("phase", PHASE_RUNNING),
+        phase = normalizePhase(payload.optString("phase")),
         done = payload.optInt("done"),
         total = payload.optInt("total"),
         label = payload.optString("label"),
@@ -119,6 +119,15 @@ internal fun parseRunOverlaySnapshot(json: String): RunOverlaySnapshot? = runCat
         log = parseLog(payload),
     )
 }.getOrNull()
+
+/**
+ * 未知阶段按运行中处理：和 [phaseLabelRes] 的兜底一致。Rust 侧加新阶段时旧壳
+ * 只当它在跑，不会把生字符串漏到标题上。
+ */
+private fun normalizePhase(raw: String): String = when (raw) {
+    PHASE_PREPARING, PHASE_RUNNING, PHASE_STOPPING, PHASE_FINISHED -> raw
+    else -> PHASE_RUNNING
+}
 
 /** 空标签也要占位，否则列表下标就和 Rust 推来的 `active` 对不上了。 */
 private fun parseTasks(payload: JSONObject): List<String> {

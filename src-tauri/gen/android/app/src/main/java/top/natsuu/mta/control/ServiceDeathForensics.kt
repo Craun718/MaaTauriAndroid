@@ -39,8 +39,16 @@ internal class ServiceDeathForensics(
     @Synchronized
     fun take(connectedPid: Int?): PendingServiceDeath? {
         val stored = prefs.getString(KEY_PENDING, null) ?: return null
-        prefs.edit().remove(KEY_PENDING).commit()
         val pending = runCatching { parse(stored) }.getOrNull()
+        if (pending == null) {
+            // 存坏了就别留着占位
+            prefs.edit().remove(KEY_PENDING).commit()
+            return null
+        }
+        // 还没问到新进程的 pid，留到下次连上再取，别把取证机会丢掉
+        if (connectedPid == null) return null
+        // 取过即清：一次死亡只取证一次
+        prefs.edit().remove(KEY_PENDING).commit()
         return ServiceDeathForensicsLogic.accepted(pending, connectedPid, clock())
     }
 
@@ -73,6 +81,8 @@ internal object ServiceDeathForensicsLogic {
         nowMs: Long,
     ): PendingServiceDeath? {
         if (pending == null || connectedPid == null) return null
+        // 没记下 pid 就认不出死者，翻日志也只能翻到别的进程
+        if (pending.pid == null) return null
         // 同一个 pid 说明它没死（进程被替换也会报死亡）
         if (pending.pid == connectedPid) return null
         if (nowMs - pending.diedAtMs > ServiceDeathForensics.MAX_AGE_MS) return null

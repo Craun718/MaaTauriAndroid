@@ -3093,6 +3093,7 @@ async fn start_run_core(
                 // and let compositing settle before the first frame, or the
                 // panel is captured as part of the game picture. The floating
                 // ball keeps running: it is the only control entry point.
+                #[cfg(target_os = "android")]
                 if overlay_enabled {
                     let _ = call_runtime_bridge_boolean("clearRunOverlayForStart");
                 }

@@ -3603,6 +3603,7 @@ async fn import_background_image(
             .path()
             .app_data_dir()
             .map_err(|error| AppError::Path(error.to_string()))?;
+        let save_root = data_root.clone();
         let imported = tokio::task::spawn_blocking(move || {
             let result = (|| {
                 if std::fs::metadata(&selected)?.len() > background_image::MAX_IMAGE_BYTES as u64 {
@@ -3612,7 +3613,7 @@ async fn import_background_image(
                 }
                 let bytes = std::fs::read(&selected)?;
                 let saved = background_image::save(
-                    &data_root,
+                    &save_root,
                     configuration
                         .background_image
                         .as_ref()
@@ -3621,8 +3622,9 @@ async fn import_background_image(
                     &bytes,
                 )?;
                 let mut configuration = configuration;
+                let file_name = saved.image.file_name.clone();
                 configuration.background_image = Some(saved.image);
-                Ok::<_, AppError>((configuration, saved.image.file_name))
+                Ok::<_, AppError>((configuration, file_name))
             })();
             let _ = std::fs::remove_file(&selected);
             result

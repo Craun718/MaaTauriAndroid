@@ -284,7 +284,9 @@ mod tests {
     #[test]
     fn read_rejects_an_oversized_file_before_reading_it() {
         let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("background.png");
+        let directory = directory(root.path());
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("background.png");
         fs::write(&path, vec![0x89; MAX_IMAGE_BYTES + 1]).unwrap();
 
         assert!(matches!(

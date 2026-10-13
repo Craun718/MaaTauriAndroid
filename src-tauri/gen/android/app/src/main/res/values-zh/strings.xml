@@ -9,6 +9,10 @@
     <string name="schedule_notification_channel">定时任务</string>
     <string name="schedule_notification_title">定时任务正在启动</string>
     <string name="schedule_notification_text">正在准备后台自动化任务</string>
+    <string name="schedule_shizuku_down_channel">定时任务提醒</string>
+    <string name="schedule_shizuku_down_title">Shizuku 未运行</string>
+    <string name="schedule_shizuku_down_text">Shizuku 未运行，定时任务无法启动。请重新启动 Shizuku 后再试。</string>
+    <string name="schedule_shizuku_down_after_boot">重启后 Shizuku 没有恢复，定时任务无法启动。请重新启动 Shizuku。</string>
     <!-- 前台模式悬浮遥控层 -->
     <string name="overlay_state_preparing">准备中</string>
     <string name="overlay_state_running">运行中</string>

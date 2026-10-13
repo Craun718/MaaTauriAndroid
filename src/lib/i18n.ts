@@ -137,6 +137,12 @@ const en = {
   diagnosticShizukuOpenFailed: "Shizuku is not installed or cannot be opened",
   diagnosticVirtualDisplayRejected:
     "The privileged control service rejected the virtual display",
+  diagnosticRunStopped: "The run was stopped",
+  diagnosticRunAborted: "The run was aborted because it could not continue",
+  diagnosticRunTimeLimit:
+    "The run was stopped after reaching the configured maximum duration",
+  diagnosticControlServiceLost:
+    "the privileged control service became unavailable during the run; stopping the run",
   diagnosticVirtualDisplayInactive: "The virtual display is not active",
   diagnosticVirtualDisplayScreenEmpty:
     "No app is running on the virtual display. Start the game or select a start task.",
@@ -393,6 +399,17 @@ const en = {
   scheduleResultFailedValidation: "Validation failed",
   scheduleResultFailedServiceStart: "Service start failed",
   scheduleResultForegroundServiceDenied: "Foreground service denied",
+  scheduleHealthTitle: "Schedule environment",
+  scheduleHealthHint:
+    "Scheduled runs depend on these; fix the items below so they can start in the background.",
+  scheduleHealthFix: "Fix",
+  scheduleHealthBackendDown: "The privileged backend is not running",
+  scheduleHealthBackendNotGranted:
+    "The privileged backend has not been authorized",
+  scheduleHealthBattery: "Battery optimization is not ignored",
+  scheduleHealthExactAlarm: "Exact alarms are not allowed",
+  scheduleHealthNotification: "Notification permission is off",
+  scheduleHealthOverlay: "Overlay permission is off",
   // Update
   update: "Update",
   updateSource: "Source",
@@ -732,6 +749,10 @@ const zh: Record<MessageKey, string> = {
   diagnosticShizukuOpenFailed:
     "无法打开 Shizuku；请确认它已安装，且未被系统拦截",
   diagnosticVirtualDisplayRejected: "特权控制服务拒绝了虚拟屏请求",
+  diagnosticRunStopped: "任务已手动停止",
+  diagnosticRunAborted: "任务因异常中止，无法继续运行",
+  diagnosticRunTimeLimit: "已达到单次运行时长上限，任务已停止",
+  diagnosticControlServiceLost: "运行中特权控制服务已不可用，正在停止任务",
   diagnosticVirtualDisplayInactive: "虚拟屏未启动",
   diagnosticVirtualDisplayScreenEmpty:
     "虚拟屏上没有 App 在运行，请启动游戏或选择启动任务",
@@ -803,6 +824,15 @@ const zh: Record<MessageKey, string> = {
   scheduleResultFailedValidation: "校验失败",
   scheduleResultFailedServiceStart: "服务启动失败",
   scheduleResultForegroundServiceDenied: "前台服务被拒绝",
+  scheduleHealthTitle: "调度环境检查",
+  scheduleHealthHint: "定时任务的唤醒与执行依赖这些条件，请先修复下列问题。",
+  scheduleHealthFix: "去修复",
+  scheduleHealthBackendDown: "提权后端未运行",
+  scheduleHealthBackendNotGranted: "提权后端未授权",
+  scheduleHealthBattery: "未忽略电池优化",
+  scheduleHealthExactAlarm: "未允许精确闹钟",
+  scheduleHealthNotification: "通知权限未开启",
+  scheduleHealthOverlay: "悬浮窗权限未开启",
   update: "更新",
   updateSource: "更新源",
   updateSourceAuto: "自动",
@@ -895,6 +925,12 @@ const diagnosticKeys: Record<string, MessageKey> = {
   "Shizuku is not installed or cannot be opened": "diagnosticShizukuOpenFailed",
   "The privileged control service rejected the virtual display":
     "diagnosticVirtualDisplayRejected",
+  "The run was stopped": "diagnosticRunStopped",
+  "The run was aborted because it could not continue": "diagnosticRunAborted",
+  "The run was stopped after reaching the configured maximum duration":
+    "diagnosticRunTimeLimit",
+  "the privileged control service became unavailable during the run; stopping the run":
+    "diagnosticControlServiceLost",
   "The virtual display is not active": "diagnosticVirtualDisplayInactive",
   "Android rejected the virtual display back-key injection":
     "diagnosticVirtualDisplayBackRejected",

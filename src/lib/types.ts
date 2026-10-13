@@ -273,6 +273,16 @@ export interface ScheduleSummary {
   lastTrigger?: ScheduleTriggerLogEntry;
 }
 
+/** Prerequisites a scheduled run depends on, probed for the schedule page. */
+export interface ScheduleHealth {
+  backendAvailable: boolean;
+  backendGranted: boolean;
+  batteryWhitelisted: boolean;
+  exactAlarmAllowed: boolean;
+  notificationsAllowed: boolean;
+  overlayAllowed: boolean;
+}
+
 /**
  * Language the app interface is rendered in. "system" follows the device locale:
  * Chinese for `zh*` tags, English for everything else.

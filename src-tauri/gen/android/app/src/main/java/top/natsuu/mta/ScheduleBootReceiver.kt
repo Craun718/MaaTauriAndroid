@@ -16,6 +16,9 @@ class ScheduleBootReceiver : BroadcastReceiver() {
         }
         val schedules = File(context.filesDir, "schedule-alarm-state.json")
         ScheduleAlarmManager.syncFromLocalJson(context, schedules.readTextOrNull())
+        // Shizuku (adb mode) is gone after a restart; give it a grace window and
+        // then remind the user instead of failing at the first scheduled trigger.
+        ShizukuDownMonitor.armAfterBoot(context)
     }
 
     private fun File.readTextOrNull(): String? = runCatching {

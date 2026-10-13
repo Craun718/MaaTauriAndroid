@@ -313,7 +313,14 @@ async fn watch_loop(
             _ = stop_rx.changed() => break,
             _ = wait_for_deadline(deadline) => {
                 if let Some(duration) = max_run_duration {
-                    fatal(&app, &logger, &sessions, &execution_id, timeout_message(duration));
+                    fatal(
+                        &app,
+                        &logger,
+                        &sessions,
+                        &execution_id,
+                        timeout_message(duration),
+                        crate::runtime::StopOrigin::RunDurationLimit,
+                    );
                 }
                 break;
             }
@@ -336,7 +343,26 @@ async fn watch_loop(
             .as_ref()
             .map_or(HealthFinding::ProbeUnavailable, assess_health);
         match finding {
-            HealthFinding::Healthy | HealthFinding::ProbeUnavailable => {}
+            HealthFinding::Healthy => {}
+            HealthFinding::ProbeUnavailable => {
+                // A probe that fails while the privileged backend is gone means
+                // the control service died or was replaced mid-run: the display
+                // backing the run is unreachable, so the run cannot finish.
+                // Ending it here mirrors a lost display instead of leaving it
+                // running against a dead controller.
+                if crate::privileged_backend_blocker().is_some() {
+                    fatal(
+                        &app,
+                        &logger,
+                        &sessions,
+                        &execution_id,
+                        "the privileged control service became unavailable during the run; stopping the run"
+                            .to_string(),
+                        crate::runtime::StopOrigin::Fatal,
+                    );
+                    break;
+                }
+            }
             HealthFinding::DisplayLost => {
                 fatal(
                     &app,
@@ -344,6 +370,7 @@ async fn watch_loop(
                     &sessions,
                     &execution_id,
                     "the virtual display backing the run was lost; stopping the run".to_string(),
+                    crate::runtime::StopOrigin::Fatal,
                 );
                 break;
             }
@@ -354,6 +381,7 @@ async fn watch_loop(
                     &sessions,
                     &execution_id,
                     format!("the target app {package} exited during the run; stopping the run"),
+                    crate::runtime::StopOrigin::Fatal,
                 );
                 break;
             }
@@ -386,7 +414,14 @@ async fn watch_loop(
         _ = stop_rx.changed() => {}
         _ = wait_for_deadline(deadline) => {
             if let Some(duration) = max_run_duration {
-                fatal(&app, &logger, &sessions, &execution_id, timeout_message(duration));
+                fatal(
+                    &app,
+                    &logger,
+                    &sessions,
+                    &execution_id,
+                    timeout_message(duration),
+                    crate::runtime::StopOrigin::RunDurationLimit,
+                );
             }
         }
     }
@@ -476,6 +511,7 @@ fn fatal(
     sessions: &Arc<crate::runtime::MaaSessions>,
     execution_id: &str,
     message: String,
+    origin: crate::runtime::StopOrigin,
 ) {
     log::warn!("run supervisor: {message}");
     if let Ok(event) = logger.append(
@@ -490,7 +526,7 @@ fn fatal(
     // The run will terminate when the tasker processes the stop request.
     // The supervisor break exits the watch loop; the run's normal completion
     // path handles the final state and cleanup.
-    let _ = sessions.request_stop(Some(execution_id));
+    let _ = sessions.request_stop_origin(Some(execution_id), origin);
 }
 
 #[cfg(test)]

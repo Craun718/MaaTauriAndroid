@@ -9,6 +9,10 @@
     <string name="schedule_notification_channel">Scheduled runs</string>
     <string name="schedule_notification_title">Scheduled run starting</string>
     <string name="schedule_notification_text">Preparing the scheduled automation run</string>
+    <string name="schedule_shizuku_down_channel">Schedule warnings</string>
+    <string name="schedule_shizuku_down_title">Shizuku is not running</string>
+    <string name="schedule_shizuku_down_text">Scheduled runs cannot start without Shizuku. Restart Shizuku, then try again.</string>
+    <string name="schedule_shizuku_down_after_boot">Shizuku did not come back after the restart, so scheduled runs cannot start. Start Shizuku again.</string>
     <!-- Floating control panel over the physical screen during a foreground run. -->
     <string name="overlay_state_preparing">Preparing</string>
     <string name="overlay_state_running">Running</string>

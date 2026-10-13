@@ -16,6 +16,7 @@ import type {
   RunEvent,
   RunHistoryEntry,
   RunResult,
+  ScheduleHealth,
   ScheduleRule,
   ScheduleRuleStatus,
   ScheduleSummary,
@@ -283,6 +284,22 @@ export async function setScheduleRuleEnabled(id: string, enabled: boolean) {
 
 export async function getScheduleStatus() {
   return invoke<ScheduleSummary>("get_schedule_status");
+}
+
+export async function getScheduleHealth() {
+  return invoke<ScheduleHealth>("schedule_health");
+}
+
+export async function requestBatteryOptimizationExemption() {
+  return invoke<void>("request_battery_optimization_exemption");
+}
+
+export async function requestExactAlarmPermission() {
+  return invoke<void>("request_exact_alarm_permission");
+}
+
+export async function requestScheduleNotificationPermission() {
+  return invoke<void>("request_schedule_notification_permission");
 }
 
 export async function getUpdateStatus() {

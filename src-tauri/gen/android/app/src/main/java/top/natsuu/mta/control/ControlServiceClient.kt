@@ -19,9 +19,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.concurrent.thread
 import rikka.shizuku.Shizuku
 import top.natsuu.mta.IMaaTauriAndroidControlService
 import top.natsuu.mta.RuntimeBridge
+import top.natsuu.mta.ShizukuDownMonitor
 import top.natsuu.mta.XmsfNetworkGate
 import top.natsuu.mta.control.root.RootServiceBootstrapRegistry
 import top.natsuu.mta.control.root.RootServiceStarter
@@ -46,6 +48,12 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
 
     @Volatile
     private var rootBinder: IBinder? = null
+
+    /** 最近连上的提权进程 pid，死后不清，用来在系统日志里认人。 */
+    @Volatile
+    private var lastServicePid: Int? = null
+
+    private val forensics = ServiceDeathForensics(context)
 
     private var rootDeathRecipient: IBinder.DeathRecipient? = null
     private val serviceArgs = Shizuku.UserServiceArgs(
@@ -369,19 +377,63 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         }
         ControlHost.attach(service)
         XmsfNetworkGate.onPrivilegedServiceConnected(context)
+        lastServicePid = queryServicePid(service)
         RuntimeBridge.setControlState(STATE_CONNECTED)
+        ShizukuDownMonitor.onConnected(context)
         completeConnectionRequest(true)
         completePermissionRequest(true)
+        // 上个提权进程的死亡取证要翻系统日志，别拖住连接回调
+        thread(name = "mta-service-forensics") { reportPendingServiceDeath(service, lastServicePid) }
     }
 
     private fun handleServiceDisconnected() {
         stopVirtualDisplaySafely()
         ControlHost.detach()
         RuntimeBridge.setControlState(STATE_DISCONNECTED)
+        ShizukuDownMonitor.onDisconnected(context)
+        // 死的多半是被系统杀的（lmkd、AMS、厂商守护进程），凶手只写系统日志
+        forensics.remember("the privileged control service disconnected", lastServicePid)
         completeConnectionRequest(false)
         completePermissionRequest(false)
         completeRootConnectionRequest(false)
     }
+
+    private fun queryServicePid(service: IMaaTauriAndroidControlService): Int? =
+        runCatching { service.servicePid() }
+            .onFailure { Log.w(TAG, "query service pid failed", it) }
+            .getOrNull()
+
+    /**
+     * 上个提权进程死了，让新进程翻它的系统日志挂回死亡事件。只有 pid 不同、且死亡
+     * 没过太久才值得翻；日志在提权侧就按 pid/进程名过滤，别的应用不出设备。
+     */
+    private fun reportPendingServiceDeath(
+        service: IMaaTauriAndroidControlService,
+        connectedPid: Int?,
+    ) {
+        val pending = forensics.take(connectedPid) ?: return
+        val deadPid = pending.pid ?: return
+        val dump = try {
+            service.dumpSystemLog(
+                pending.sinceMs,
+                pending.untilMs,
+                deadPid,
+                serviceProcessPrefix(),
+            )
+        } catch (error: Throwable) {
+            Log.w(TAG, "service death log dump failed", error)
+            return
+        }
+        RuntimeBridge.reportServiceDeathForensics(pending.reason, dump)
+    }
+
+    /** 与 [serviceArgs] 的 processNameSuffix / root 启动脚本里的进程名一致。 */
+    private fun serviceProcessPrefix(): String =
+        if (selectedBackend == BACKEND_ROOT) {
+            "${context.packageName}:root_service"
+        } else {
+            "${context.packageName}:maa_tauri_android_control"
+        }
 
     private fun disconnectForBackendSwitch(
         previousBackend: String,

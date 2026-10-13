@@ -70,6 +70,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".ShizukuCheckReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".ScheduleBootReceiver"
             android:enabled="true"
             android:exported="false">

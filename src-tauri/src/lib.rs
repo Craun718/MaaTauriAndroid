@@ -2036,6 +2036,67 @@ fn stop_run_foreground_service() {
     }
 }
 
+/// Posts a system notification for a scheduled run that did not start. Only
+/// failures are announced: a run skipped because the rule was disabled, a
+/// duplicate, or a busy device is the normal case and would only train the
+/// user to ignore the channel. Best-effort — Android silently drops it while
+/// POST_NOTIFICATIONS is missing, and the trigger log still has the record.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn notify_schedule_not_started(app: &AppHandle, detail: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    if let Err(error) = app
+        .notification()
+        .builder()
+        .title("Scheduled run did not start")
+        .body(detail)
+        .show()
+    {
+        log::warn!("schedule not-started notification failed: {error}");
+    }
+}
+
+/// Attaches the system log a replacement privileged process captured for its
+/// predecessor's death. The killer (lmkd, AMS, a vendor daemon) only writes to
+/// logcat, and the dead process cannot read its own: the replacement fetches the
+/// window and hands it back here, where it lands in the run log, the app log and
+/// a telemetry attachment on the death.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn report_service_death_forensics(reason: &str, log_dump: &str) {
+    log::warn!("privileged service death forensics ({reason}):\n{log_dump}");
+    let summary = format!(
+        "The privileged control service died ({reason}); the replacement process captured the system log"
+    );
+    let attachment = write_service_death_forensics(reason, log_dump);
+    if let Some(app) = android_app_handle() {
+        let state = app.state::<AppState>();
+        if let Ok(logger) = state.latest_log() {
+            let _ = logger.append(
+                run_log::RunEventKind::Warning,
+                runtime::RunState::Idle,
+                summary.clone(),
+                None,
+                None,
+            );
+        }
+    }
+    telemetry::run_event("service_death_forensics", &summary, attachment.as_deref());
+}
+
+/// Writes the captured dump next to the run data so the exported diagnostics
+/// include it, and returns its path for the telemetry attachment.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn write_service_death_forensics(reason: &str, log_dump: &str) -> Option<String> {
+    let app = android_app_handle()?;
+    let directory = app.path().app_data_dir().ok()?.join("forensics");
+    std::fs::create_dir_all(&directory).ok()?;
+    let path = directory.join(format!(
+        "service-death-{}.txt",
+        chrono::Local::now().timestamp_millis()
+    ));
+    std::fs::write(&path, format!("# reason: {reason}\n{log_dump}")).ok()?;
+    Some(path.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn sync_schedule_alarms() -> Result<(), AppError> {
     #[cfg(target_os = "android")]
@@ -2097,6 +2158,89 @@ fn set_schedule_rule_enabled(
 #[tauri::command]
 fn get_schedule_status(state: State<'_, AppState>) -> Result<schedule::ScheduleSummary, AppError> {
     state.schedule_store()?.summary().map_err(AppError::from)
+}
+
+/// Prerequisites a scheduled run depends on. The schedule page renders these as
+/// a health card: a backend that is not running and one that is running without
+/// a grant read as the same "backend" problem otherwise, but only one of them is
+/// fixed by authorizing.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScheduleHealth {
+    backend_available: bool,
+    backend_granted: bool,
+    battery_whitelisted: bool,
+    exact_alarm_allowed: bool,
+    notifications_allowed: bool,
+    overlay_allowed: bool,
+}
+
+#[tauri::command]
+fn schedule_health() -> Result<ScheduleHealth, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        let (state, _) = runtime::control_state();
+        // State 1 is "the backend is not there at all": Shizuku is not running,
+        // or root access was never granted. Every other non-connected state is a
+        // reachable backend missing its grant (or one still coming up), which the
+        // user fixes by authorizing instead of starting the service.
+        Ok(ScheduleHealth {
+            backend_available: state != 1,
+            backend_granted: state == 3,
+            battery_whitelisted: call_runtime_bridge_boolean("isBatteryOptimizationIgnored")?,
+            exact_alarm_allowed: call_runtime_bridge_boolean("canScheduleExactAlarmsNow")?,
+            notifications_allowed: call_runtime_bridge_boolean("scheduleNotificationsAllowed")?,
+            overlay_allowed: call_runtime_bridge_boolean("hasOverlayPermission")?,
+        })
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Err(AppError::Message(
+            "Schedule health is only available on Android".to_string(),
+        ))
+    }
+}
+
+/// Opens the battery-optimization exemption screen so a background trigger is
+/// not delayed or dropped by the system.
+#[tauri::command]
+fn request_battery_optimization_exemption() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("requestBatteryOptimizationExemption").map(|_| ())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
+}
+
+/// Opens the exact-alarm authorization screen (API 31+).
+#[tauri::command]
+fn request_exact_alarm_permission() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("requestExactAlarmPermission").map(|_| ())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
+}
+
+/// Requests POST_NOTIFICATIONS so the schedule warning and result notifications
+/// are visible (API 33+).
+#[tauri::command]
+fn request_schedule_notification_permission() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("ensureNotificationPermission").map(|_| ())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -2283,6 +2427,69 @@ fn virtual_display_rejection_message(
         5 => format!("{status}; check Shizuku and the app logs, then try again"),
         _ => format!("{status}; try again shortly"),
     }
+}
+
+/// Why the privileged control service cannot be used right now, phrased for
+/// the user; `None` when it is connected. The wording is the same one a failed
+/// virtual display start would produce, so the frontend's start-retry still
+/// recognises a missing grant and a control unit that is coming up. The
+/// scheduled path owns no UI, so a start it cannot complete has to be refused
+/// here with the real cause instead of surfacing as a lock-screen or launch
+/// failure later.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn privileged_backend_blocker() -> Option<String> {
+    let (state, status) = runtime::control_state();
+    if state == 3 {
+        return None;
+    }
+    let backend = PrivilegedBackend::parse(runtime::privileged_backend());
+    Some(virtual_display_rejection_message(state, &status, backend))
+}
+
+/// Control states where the backend is reachable but has not granted this app
+/// access yet. Only a request resolves them: the other states are either
+/// transient (starting) or need the user to act outside the app (Shizuku
+/// missing, disconnected, or failed), where a prompt would do nothing.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn privileged_backend_needs_grant(state: i64) -> bool {
+    backend_needs_grant(
+        PrivilegedBackend::parse(runtime::privileged_backend()),
+        state,
+    )
+}
+
+/// Pure form of [`privileged_backend_needs_grant`], so it can be tested without
+/// the process-wide backend selection.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn backend_needs_grant(backend: PrivilegedBackend, state: i64) -> bool {
+    match backend {
+        // Shizuku is running but has not granted this app access.
+        PrivilegedBackend::Shizuku => state == 2,
+        // Root is selected but the control unit is not connected: a cold start
+        // reports "disconnected" from a snapshot taken before its asynchronous
+        // request (and the su prompt) has finished, which would otherwise be
+        // misreported as a missing grant.
+        PrivilegedBackend::Root => state == 0 || state == 4,
+    }
+}
+
+/// [`privileged_backend_blocker`] with a grant request first when the backend
+/// is reachable but not authorized. A cold start (Root especially) snapshots
+/// "not granted" before its asynchronous request lands, so refusing there would
+/// reject a start that a single request would let through. Blocking: the
+/// request can wait on a Shizuku or su prompt, so callers on the async runtime
+/// go through `spawn_blocking`.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn privileged_backend_blocker_for_start() -> Option<String> {
+    let blocker = privileged_backend_blocker()?;
+    if !privileged_backend_needs_grant(runtime::control_state().0) {
+        return Some(blocker);
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = call_runtime_bridge_boolean("requestPrivilegedAccess");
+    }
+    privileged_backend_blocker()
 }
 
 #[cfg(target_os = "android")]
@@ -2567,6 +2774,7 @@ async fn start_run_core(
                     result: schedule::ScheduleTriggerResult::FailedValidation,
                     detail: Some("There are no enabled tasks to run".to_string()),
                 })?;
+            notify_schedule_not_started(&app, "There are no enabled tasks to run");
         }
         return Ok(StartRunStatus {
             execution_id: String::new(),
@@ -2647,6 +2855,9 @@ async fn start_run_core(
                     detail: Some(message.clone()),
                 });
             }
+            // Failures are announced; a scheduled run that never came up is
+            // invisible otherwise (the app is not in the foreground).
+            notify_schedule_not_started(&app, &message);
         }
         state.maa.finish_with(&execution_id, || {
             abort_preparing_run(&app, &logger, message.clone());
@@ -2658,6 +2869,20 @@ async fn start_run_core(
     // display must exist before session creation and before any StartApp task.
     #[cfg(target_os = "android")]
     {
+        // Checked before the resource load and session creation below: while
+        // the backend is unavailable or unauthorized those steps can only fail,
+        // and the failure would be reported as a resource problem instead of
+        // the missing grant the user has to act on. A reachable but ungranted
+        // backend is asked first (off the async worker, since the request can
+        // wait on a prompt), so a cold start is not misjudged as unauthorized.
+        let backend_blocker =
+            match tokio::task::spawn_blocking(privileged_backend_blocker_for_start).await {
+                Ok(blocker) => blocker,
+                Err(_) => privileged_backend_blocker(),
+            };
+        if let Some(blocker) = backend_blocker {
+            return Err(fail_preparing(blocker));
+        }
         if configuration.foreground_mode {
             // The bridge resets the native control context and screen metrics to
             // the physical primary display, so display 0 becomes a valid target.
@@ -2685,6 +2910,7 @@ async fn start_run_core(
                         detail: Some("Android rejected the run foreground service".to_string()),
                     });
                 }
+                notify_schedule_not_started(&app, "Android rejected the run foreground service");
             }
             let _ = logger.append(
                 run_log::RunEventKind::Warning,
@@ -2862,6 +3088,14 @@ async fn start_run_core(
                     runtime::RunResultSeverity::Info,
                     String::new(),
                 );
+                // Foreground runs screenshot the physical display, which is
+                // where the floating panel is drawn. Close the expanded panel
+                // and let compositing settle before the first frame, or the
+                // panel is captured as part of the game picture. The floating
+                // ball keeps running: it is the only control entry point.
+                if overlay_enabled {
+                    let _ = call_runtime_bridge_boolean("clearRunOverlayForStart");
+                }
                 let run_tasker = tasker.clone();
                 let task_logger = logger_for_run.clone();
                 let result = tokio::task::spawn_blocking(move || {
@@ -2916,6 +3150,11 @@ async fn start_run_core(
                 } else {
                     None
                 };
+                // Why the run stopped, latched by whichever stop path fired:
+                // a stop the user tapped, the duration limit, or a fatal health
+                // finding. A `Stopped` outcome used to always read as a manual
+                // stop even when the supervisor cut the run short.
+                let stop_origin = sessions.stop_origin();
                 let (kind, state, message, data, telemetry_message, outcome_label, attachment_path) =
                     match outcome {
                         runtime::RunOutcome::Completed => {
@@ -2931,14 +3170,14 @@ async fn start_run_core(
                             )
                         }
                         runtime::RunOutcome::Stopped => {
-                            let message = "The run was stopped".to_string();
+                            let message = stop_origin.message().to_string();
                             (
                                 run_log::RunEventKind::Cancelled,
                                 runtime::RunState::Idle,
                                 message.clone(),
                                 None,
                                 message,
-                                "stopped",
+                                stop_origin.outcome_label(),
                                 None,
                             )
                         }
@@ -4851,6 +5090,29 @@ mod tests {
         );
         assert_eq!(PrivilegedBackend::Root.as_str(), "root");
     }
+
+    // A cold start reports "not granted" before its asynchronous request
+    // lands; only a requestable state must ask for the grant instead of
+    // refusing the start.
+    #[test]
+    fn only_a_reachable_ungranted_backend_is_asked_for_a_grant() {
+        // Shizuku down, disconnected, or failed: a prompt cannot fix it.
+        assert!(!backend_needs_grant(PrivilegedBackend::Shizuku, 1));
+        assert!(!backend_needs_grant(PrivilegedBackend::Shizuku, 4));
+        assert!(!backend_needs_grant(PrivilegedBackend::Shizuku, 5));
+        // Still coming up: the grant may already be in flight.
+        assert!(!backend_needs_grant(PrivilegedBackend::Shizuku, 0));
+        // Running but not granted, and the connected case nobody asks about.
+        assert!(backend_needs_grant(PrivilegedBackend::Shizuku, 2));
+        assert!(!backend_needs_grant(PrivilegedBackend::Shizuku, 3));
+        // Root cold start and its explicit "not connected" snapshot.
+        assert!(backend_needs_grant(PrivilegedBackend::Root, 0));
+        assert!(backend_needs_grant(PrivilegedBackend::Root, 4));
+        // Root unavailable (su denied) or failed: asking again is pointless.
+        assert!(!backend_needs_grant(PrivilegedBackend::Root, 1));
+        assert!(!backend_needs_grant(PrivilegedBackend::Root, 5));
+        assert!(!backend_needs_grant(PrivilegedBackend::Root, 3));
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -4934,6 +5196,41 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setControlState(
         _ => "The privileged control unit is starting".to_string(),
     };
     runtime::set_control_state(state as i64, message);
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_privilegedControlState(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> std::os::raw::c_int {
+    runtime::control_state().0 as std::os::raw::c_int
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_reportServiceDeathForensics(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    reason: *mut std::ffi::c_void,
+    log_dump: *mut std::ffi::c_void,
+) {
+    let Ok(mut environment) = (unsafe { jni::JNIEnv::from_raw(env.cast()) }) else {
+        return;
+    };
+    let reason =
+        jni::objects::JString::from(unsafe { jni::objects::JObject::from_raw(reason.cast()) });
+    let Ok(reason) = environment.get_string(&reason) else {
+        eprintln!("Failed to read the service death reason");
+        return;
+    };
+    let log_dump =
+        jni::objects::JString::from(unsafe { jni::objects::JObject::from_raw(log_dump.cast()) });
+    let Ok(log_dump) = environment.get_string(&log_dump) else {
+        eprintln!("Failed to read the service death log dump");
+        return;
+    };
+    report_service_death_forensics(&reason.to_string_lossy(), &log_dump.to_string_lossy());
 }
 
 #[cfg(target_os = "android")]
@@ -5031,6 +5328,10 @@ pub fn run() {
             delete_schedule_rule,
             set_schedule_rule_enabled,
             get_schedule_status,
+            schedule_health,
+            request_battery_optimization_exemption,
+            request_exact_alarm_permission,
+            request_schedule_notification_permission,
             export_configuration,
             import_configuration,
             update::update_get_status,
@@ -5280,6 +5581,9 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_recordScheduleForegroun
             })
             .map_err(AppError::from)
     });
+    if recorded.is_ok() {
+        notify_schedule_not_started(&app, "Android rejected the schedule foreground service");
+    }
     i32::from(recorded.is_ok())
 }
 
@@ -5319,6 +5623,23 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
             .unwrap_or(true)
     {
         return 1;
+    }
+    // Refuse before anything is stopped or launched: with the backend down the
+    // preempt below would only kill the live run and then fail to start, and
+    // the later failure would be reported as a lock screen or launch problem
+    // instead of the missing backend. A reachable but ungranted backend is
+    // asked first so a Root cold start is not misjudged as unauthorized. The
+    // stored trigger entry carries the real cause for the schedule page.
+    if let Some(blocker) = privileged_backend_blocker_for_start() {
+        let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+            rule_id,
+            scheduled_epoch_ms: scheduled_time_ms,
+            actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+            result: schedule::ScheduleTriggerResult::FailedServiceStart,
+            detail: Some(blocker.clone()),
+        });
+        notify_schedule_not_started(&app, &blocker);
+        return 0;
     }
     if state.maa.status() != runtime::RunState::Idle {
         if !rule.force_start {

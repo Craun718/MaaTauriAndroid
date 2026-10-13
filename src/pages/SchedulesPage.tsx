@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { CircleAlert, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDateTime } from "../components/ScheduleEntryCard";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -8,19 +8,30 @@ import { TextField } from "../components/ui/TextField";
 import { TimePickerDialog } from "../components/ui/TimePicker";
 import {
   deleteScheduleRule,
+  getScheduleHealth,
   getScheduleStatus,
   listScheduleRules,
+  openShizuku,
+  requestBatteryOptimizationExemption,
+  requestExactAlarmPermission,
+  requestOverlayPermission,
+  requestPrivilegedAccess,
+  requestScheduleNotificationPermission,
   saveScheduleRule,
   setScheduleRuleEnabled,
 } from "../lib/api";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
+import type { ScheduleHealthIssue } from "../lib/schedules";
 import {
   createScheduleRule,
+  scheduleHealthIssueKey,
+  scheduleHealthIssues,
   scheduleRuleErrors,
   scheduleTriggerResultKey,
 } from "../lib/schedules";
 import type {
+  ScheduleHealth,
   ScheduleRule,
   ScheduleRuleStatus,
   ScheduleSummary,
@@ -69,16 +80,20 @@ export function SchedulesPage() {
   const snapshot = useAppStore((state) => state.snapshot);
   const [rules, setRules] = useState<ScheduleRuleStatus[]>([]);
   const [status, setStatus] = useState<ScheduleSummary>();
+  const [health, setHealth] = useState<ScheduleHealth>();
   const [draft, setDraft] = useState<ScheduleRule>();
   const [timeEditor, setTimeEditor] = useState<TimeEditorState>();
 
   const reload = useCallback(async () => {
-    const [nextRules, nextStatus] = await Promise.all([
+    const [nextRules, nextStatus, nextHealth] = await Promise.all([
       listScheduleRules(),
       getScheduleStatus(),
+      // Health probes are Android-only; a desktop/dev build reports none.
+      getScheduleHealth().catch(() => undefined),
     ]);
     setRules(nextRules);
     setStatus(nextStatus);
+    setHealth(nextHealth);
   }, []);
 
   useEffect(() => {
@@ -191,6 +206,36 @@ export function SchedulesPage() {
     setTimeEditor(undefined);
   }
 
+  async function fixHealthIssue(issue: ScheduleHealthIssue) {
+    try {
+      switch (issue) {
+        case "backendDown":
+          await openShizuku();
+          break;
+        case "backendNotGranted":
+          await requestPrivilegedAccess();
+          break;
+        case "battery":
+          await requestBatteryOptimizationExemption();
+          break;
+        case "exactAlarm":
+          await requestExactAlarmPermission();
+          break;
+        case "notification":
+          await requestScheduleNotificationPermission();
+          break;
+        case "overlay":
+          await requestOverlayPermission();
+          break;
+      }
+      await reload();
+    } catch (error) {
+      notify(String(error), { tone: "error" });
+    }
+  }
+
+  const healthIssues = health ? scheduleHealthIssues(health) : [];
+
   return (
     <div className="space-y-5">
       <header className="flex items-center justify-between gap-3">
@@ -207,6 +252,34 @@ export function SchedulesPage() {
           {t("scheduleNewRule")}
         </button>
       </header>
+
+      {healthIssues.length > 0 && (
+        <section className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3">
+          <div className="flex items-center gap-2">
+            <CircleAlert size="1rem" className="text-warning" />
+            <span className="text-sm font-medium">
+              {t("scheduleHealthTitle")}
+            </span>
+          </div>
+          <p className="text-sm text-ink-muted">{t("scheduleHealthHint")}</p>
+          <ul className="space-y-1.5">
+            {healthIssues.map((issue) => (
+              <li key={issue} className="flex items-center gap-2">
+                <span className="flex-1 text-sm">
+                  {t(scheduleHealthIssueKey(issue))}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void fixHealthIssue(issue)}
+                  className="flex h-8 flex-none items-center rounded-md border border-line bg-raised px-2.5 text-sm font-medium transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  {t("scheduleHealthFix")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {draft ? (
         <section className="space-y-4 rounded-md border border-line bg-raised p-3">

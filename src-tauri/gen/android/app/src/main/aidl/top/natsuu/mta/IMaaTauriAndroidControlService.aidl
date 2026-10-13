@@ -88,6 +88,22 @@ interface IMaaTauriAndroidControlService {
     boolean isSmartResolutionEnabled() = 24;
 
     /**
+     * The privileged process's own pid. The app records it while the service is
+     * alive so a later death can be attributed to it, and so the replacement
+     * process can tell it is a different one before spending a log dump.
+     */
+    int servicePid() = 25;
+
+    /**
+     * Dumps the system log around a deadline on behalf of a privileged process
+     * that was killed: lmkd, AMS and vendor daemons only write there. Only lines
+     * mentioning [pid] or [processPrefix] are returned; other kills in the same
+     * window are counted, not shipped off-device. [processPrefix] must not be
+     * empty.
+     */
+    String dumpSystemLog(long sinceMs, long untilMs, int pid, String processPrefix) = 26;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

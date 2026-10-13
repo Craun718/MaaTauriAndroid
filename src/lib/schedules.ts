@@ -1,5 +1,53 @@
 import type { MessageKey } from "./i18n";
-import type { ScheduleRule, ScheduleTriggerResult } from "./types";
+import type {
+  ScheduleHealth,
+  ScheduleRule,
+  ScheduleTriggerResult,
+} from "./types";
+
+/**
+ * Prerequisites a scheduled run needs, in report order. `backendDown` and
+ * `backendNotGranted` are split because a backend that is not running cannot be
+ * authorized either: reporting "not granted" there would send the user to grant
+ * access on a service that is not there.
+ */
+export type ScheduleHealthIssue =
+  | "backendDown"
+  | "backendNotGranted"
+  | "battery"
+  | "exactAlarm"
+  | "notification"
+  | "overlay";
+
+const HEALTH_KEYS: Record<ScheduleHealthIssue, MessageKey> = {
+  backendDown: "scheduleHealthBackendDown",
+  backendNotGranted: "scheduleHealthBackendNotGranted",
+  battery: "scheduleHealthBattery",
+  exactAlarm: "scheduleHealthExactAlarm",
+  notification: "scheduleHealthNotification",
+  overlay: "scheduleHealthOverlay",
+};
+
+/** Failing prerequisites, empty when the schedule environment is healthy. */
+export function scheduleHealthIssues(
+  health: ScheduleHealth,
+): ScheduleHealthIssue[] {
+  const issues: ScheduleHealthIssue[] = [];
+  if (!health.backendAvailable) {
+    issues.push("backendDown");
+  } else if (!health.backendGranted) {
+    issues.push("backendNotGranted");
+  }
+  if (!health.batteryWhitelisted) issues.push("battery");
+  if (!health.exactAlarmAllowed) issues.push("exactAlarm");
+  if (!health.notificationsAllowed) issues.push("notification");
+  if (!health.overlayAllowed) issues.push("overlay");
+  return issues;
+}
+
+export function scheduleHealthIssueKey(issue: ScheduleHealthIssue): MessageKey {
+  return HEALTH_KEYS[issue];
+}
 
 const RESULT_KEYS: Record<ScheduleTriggerResult, MessageKey> = {
   started: "scheduleResultStarted",

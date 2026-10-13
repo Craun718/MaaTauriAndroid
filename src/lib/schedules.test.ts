@@ -4,10 +4,20 @@ import {
   dateTimePartsToEpochMs,
   daysInMonth,
   epochMsToDateTimeParts,
+  scheduleHealthIssues,
   scheduleRuleErrors,
   scheduleTriggerResultKey,
 } from "./schedules";
-import type { ScheduleRule } from "./types";
+import type { ScheduleHealth, ScheduleRule } from "./types";
+
+const HEALTHY: ScheduleHealth = {
+  backendAvailable: true,
+  backendGranted: true,
+  batteryWhitelisted: true,
+  exactAlarmAllowed: true,
+  notificationsAllowed: true,
+  overlayAllowed: true,
+};
 
 describe("schedule rules", () => {
   it("rejects incomplete fixed-time rules", () => {
@@ -81,5 +91,36 @@ describe("schedule rules", () => {
     expect(daysInMonth(2026, 2)).toBe(28);
     expect(daysInMonth(2024, 2)).toBe(29);
     expect(daysInMonth(2026, 4)).toBe(30);
+  });
+
+  it("reports no health issues when everything passes", () => {
+    expect(scheduleHealthIssues(HEALTHY)).toEqual([]);
+  });
+
+  // A backend that is not running cannot be authorized either, so it must
+  // report "down" instead of sending the user to grant access.
+  it("separates a backend that is down from one that is not granted", () => {
+    expect(
+      scheduleHealthIssues({
+        ...HEALTHY,
+        backendAvailable: false,
+        backendGranted: false,
+      }),
+    ).toEqual(["backendDown"]);
+    expect(scheduleHealthIssues({ ...HEALTHY, backendGranted: false })).toEqual(
+      ["backendNotGranted"],
+    );
+  });
+
+  it("reports each failing environment check once, in order", () => {
+    expect(
+      scheduleHealthIssues({
+        ...HEALTHY,
+        batteryWhitelisted: false,
+        exactAlarmAllowed: false,
+        notificationsAllowed: false,
+        overlayAllowed: false,
+      }),
+    ).toEqual(["battery", "exactAlarm", "notification", "overlay"]);
   });
 });

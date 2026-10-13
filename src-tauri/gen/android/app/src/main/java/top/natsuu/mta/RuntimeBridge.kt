@@ -18,6 +18,7 @@ import android.os.PowerManager
 import android.os.ParcelFileDescriptor
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
@@ -32,6 +33,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.lang.ref.WeakReference
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
@@ -296,11 +298,88 @@ object RuntimeBridge {
         return RunOverlayController.update(context, json)
     }
 
+    /**
+     * 前台开跑前把展开的悬浮面板收掉并等它退出合成，免得被 core 的首帧截进去。
+     * 悬浮球保留（前台运行时唯一的控制入口）。由 Rust 启动链路调用，它按顺序
+     * 起任务，这里最多阻塞一次 settle 窗口。
+     */
+    @JvmStatic
+    fun clearRunOverlayForStart(): Boolean {
+        val hiddenAt = AtomicLong(0L)
+        val latch = CountDownLatch(1)
+        mainHandler.post {
+            hiddenAt.set(RunOverlayController.hidePanelForStart())
+            latch.countDown()
+        }
+        if (!latch.await(1, TimeUnit.SECONDS)) return true
+        val since = hiddenAt.get()
+        if (since > 0L) {
+            val remaining =
+                RunOverlayController.PANEL_CLEAR_SETTLE_MS - (SystemClock.uptimeMillis() - since)
+            if (remaining > 0L) SystemClock.sleep(remaining)
+        }
+        return true
+    }
+
     /** 设置页用它显示悬浮窗权限状态；没权限时这一层画不出来。 */
     @JvmStatic
     fun hasOverlayPermission(): Boolean {
         val context = agentContext ?: return false
         return RunOverlayController.hasPermission(context)
+    }
+
+    /** 定时页健康卡用：精确闹钟是否还能排（API 31 起系统可在闲置后收回）。 */
+    @JvmStatic
+    fun canScheduleExactAlarmsNow(): Boolean {
+        val context = agentContext ?: return true
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return context.getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() == true
+    }
+
+    /** 定时页健康卡用：是否已忽略电池优化；没忽略时后台触发可能被延迟或拦截。 */
+    @JvmStatic
+    fun isBatteryOptimizationIgnored(): Boolean {
+        val context = agentContext ?: return false
+        return runCatching {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            pm.isIgnoringBatteryOptimizations(context.packageName)
+        }.getOrDefault(false)
+    }
+
+    /** 定时页健康卡用：通知权限是否已授予（API 33+ 需要 POST_NOTIFICATIONS）。 */
+    @JvmStatic
+    fun scheduleNotificationsAllowed(): Boolean {
+        val context = agentContext ?: return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    /** 打开电池优化设置页，让用户把应用加入白名单。 */
+    @JvmStatic
+    fun requestBatteryOptimizationExemption(): Boolean {
+        return launchSettingsIntent(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+    }
+
+    /** 打开精确闹钟授权页（API 31+）。 */
+    @JvmStatic
+    fun requestExactAlarmPermission(): Boolean {
+        val context = agentContext ?: return true
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return launchSettingsIntent(
+            Intent(
+                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                Uri.parse("package:${context.packageName}"),
+            ),
+        )
+    }
+
+    private fun launchSettingsIntent(intent: Intent): Boolean {
+        val context = agentContext ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching { context.startActivity(intent) }
+            .onFailure { Log.w(LOG_TAG, "Could not open the settings screen", it) }
+            .isSuccess
     }
 
     /**
@@ -1004,6 +1083,17 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun setControlState(state: Int)
+
+    /** 提权控制单元状态：0 启动中 / 1 不可用 / 2 未授权 / 3 已连接 / 4 断开 / 5 出错。 */
+    @JvmStatic
+    external fun privilegedControlState(): Int
+
+    /**
+     * 新提权进程替上个进程翻出的死亡系统日志；Rust 侧落盘并挂到运行日志与遥测上。
+     * [reason] 是死亡原因，[logDump] 是提权侧过滤后的日志文本。
+     */
+    @JvmStatic
+    external fun reportServiceDeathForensics(reason: String, logDump: String)
 
     @JvmStatic
     external fun setPrivilegedBackend(backend: String)

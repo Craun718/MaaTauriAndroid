@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
@@ -679,6 +680,20 @@ object RunOverlayController {
         // 面板关着的时候内容还在更新，重新打开必须整块铺一遍。
         contentSignature = null
         runCatching { manager?.removeView(view) }
+    }
+
+    /** 窗口撤掉到合成进屏幕、再送进截图要几帧，实测主线程忙时约 150ms。 */
+    internal const val PANEL_CLEAR_SETTLE_MS = 300L
+
+    /**
+     * 主线程调用：开着的主面板撤掉，返回撤下时刻（没开则返回 0）。
+     * 前台运行截的是物理屏，主面板不收干净会被当成游戏画面进首帧；悬浮球保留，
+     * 它是前台运行时唯一的控制入口。
+     */
+    fun hidePanelForStart(): Long {
+        if (panel == null) return 0L
+        hidePanel()
+        return SystemClock.uptimeMillis()
     }
 
     private fun detach() {

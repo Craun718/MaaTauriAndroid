@@ -46,6 +46,10 @@ pub struct MaaSessions {
     pending_stop: Mutex<Option<String>>,
     finished_run: Mutex<Option<String>>,
     stop_requested: AtomicBool,
+    /// Latched cause of the current run's stop, read when it ends. Only ever
+    /// upgraded from the `User` default so a late manual tap cannot relabel a
+    /// run the supervisor aborted.
+    stop_origin: Mutex<StopOrigin>,
     /// Native taskers that refused to go idle within the drain timeout.
     ///
     /// MaaFramework destroys its `RuntimeCache` before joining the pipeline
@@ -75,6 +79,7 @@ impl Default for MaaSessions {
             pending_stop: Mutex::new(None),
             finished_run: Mutex::new(None),
             stop_requested: AtomicBool::new(false),
+            stop_origin: Mutex::new(StopOrigin::default()),
             retired: Mutex::new(Vec::new()),
         }
     }
@@ -144,6 +149,7 @@ impl MaaSessions {
             .finished_run
             .lock()
             .expect("finished run lock poisoned") = None;
+        *self.stop_origin.lock().expect("stop origin lock poisoned") = StopOrigin::User;
         let stop_requested = self
             .pending_stop
             .lock()
@@ -157,9 +163,32 @@ impl MaaSessions {
         self.request_stop_with(execution_id, || {})
     }
 
+    /// Records a stop the run supervisor owns (a fatal health finding or the
+    /// run duration limit) so the terminal message and telemetry do not report
+    /// it as a manual stop.
+    pub fn request_stop_origin(
+        &self,
+        execution_id: Option<&str>,
+        origin: StopOrigin,
+    ) -> Result<bool, RuntimeError> {
+        self.request_stop_with_origin(execution_id, origin, || {})
+    }
+
     pub fn request_stop_with<F>(
         &self,
         execution_id: Option<&str>,
+        on_stopping: F,
+    ) -> Result<bool, RuntimeError>
+    where
+        F: FnOnce(),
+    {
+        self.request_stop_with_origin(execution_id, StopOrigin::User, on_stopping)
+    }
+
+    pub fn request_stop_with_origin<F>(
+        &self,
+        execution_id: Option<&str>,
+        origin: StopOrigin,
         on_stopping: F,
     ) -> Result<bool, RuntimeError>
     where
@@ -174,6 +203,11 @@ impl MaaSessions {
                         "execution id does not match the active run".to_string(),
                     ));
                 }
+            }
+            // Latch a supervisor-owned cause. `User` is the default, so a
+            // later manual tap cannot relabel a run the supervisor aborted.
+            if origin != StopOrigin::User {
+                *self.stop_origin.lock().expect("stop origin lock poisoned") = origin;
             }
             // The run has already been detached for draining. Do not post
             // another stop into a tasker that is on its way out, but report
@@ -385,6 +419,11 @@ impl MaaSessions {
             idle
         };
         drop(now_idle);
+    }
+
+    /// Cause latched for the current (or most recently stopped) run.
+    pub fn stop_origin(&self) -> StopOrigin {
+        *self.stop_origin.lock().expect("stop origin lock poisoned")
     }
 
     pub fn status(&self) -> RunState {
@@ -1220,6 +1259,43 @@ pub struct CreatedSession {
     pub agent: Option<AgentSession>,
 }
 
+/// Why a run stopped. Every stop used to read as "the run was stopped", which
+/// is wrong for a run the supervisor aborted (target exit, display loss, a
+/// privileged service that died) or one that reached its configured duration
+/// limit — those are exactly the cases a user needs to tell apart from a
+/// manual stop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StopOrigin {
+    #[default]
+    User,
+    /// A fatal health finding from the run supervisor.
+    Fatal,
+    /// The configured maximum run duration was reached.
+    RunDurationLimit,
+}
+
+impl StopOrigin {
+    /// Telemetry label for the run outcome.
+    pub fn outcome_label(self) -> &'static str {
+        match self {
+            StopOrigin::User => "stopped",
+            StopOrigin::Fatal => "aborted",
+            StopOrigin::RunDurationLimit => "time_limit",
+        }
+    }
+
+    /// Terminal run-log sentence; only `User` reads as a manual stop.
+    pub fn message(self) -> &'static str {
+        match self {
+            StopOrigin::User => "The run was stopped",
+            StopOrigin::Fatal => "The run was aborted because it could not continue",
+            StopOrigin::RunDurationLimit => {
+                "The run was stopped after reaching the configured maximum duration"
+            }
+        }
+    }
+}
+
 pub enum RunOutcome {
     Completed,
     Stopped,
@@ -2038,6 +2114,50 @@ mod tests {
             .request_stop_with(Some("run-2"), || stopping_message = Some("stopping"))
             .unwrap());
         assert_eq!(stopping_message, Some("stopping"));
+    }
+
+    // A stop the supervisor owns must not read as a manual stop when the run
+    // ends, and a late manual tap must not relabel it.
+    #[test]
+    fn a_supervisor_stop_keeps_its_origin() {
+        let sessions = MaaSessions::default();
+        sessions.begin_preparing("run-1").unwrap();
+        assert_eq!(sessions.stop_origin(), StopOrigin::User);
+
+        assert!(sessions
+            .request_stop_origin(Some("run-1"), StopOrigin::RunDurationLimit)
+            .unwrap());
+        assert_eq!(sessions.stop_origin(), StopOrigin::RunDurationLimit);
+
+        // The user taps stop after the limit fired: the run still reads as a
+        // duration-limit stop, not a manual one.
+        assert!(sessions.request_stop(Some("run-1")).unwrap());
+        assert_eq!(sessions.stop_origin(), StopOrigin::RunDurationLimit);
+        assert_eq!(sessions.stop_origin().outcome_label(), "time_limit");
+    }
+
+    #[test]
+    fn a_new_run_resets_the_latched_origin() {
+        let sessions = MaaSessions::default();
+        sessions.begin_preparing("run-1").unwrap();
+        sessions
+            .request_stop_origin(Some("run-1"), StopOrigin::Fatal)
+            .unwrap();
+        sessions.finish("run-1");
+
+        assert!(sessions.begin_preparing("run-2").is_ok());
+        assert_eq!(sessions.stop_origin(), StopOrigin::User);
+    }
+
+    #[test]
+    fn stop_origin_phrases_only_the_manual_case_as_a_stop() {
+        assert_eq!(StopOrigin::User.outcome_label(), "stopped");
+        assert_eq!(StopOrigin::Fatal.outcome_label(), "aborted");
+        assert_eq!(StopOrigin::User.message(), "The run was stopped");
+        assert!(StopOrigin::Fatal.message().contains("aborted"));
+        assert!(StopOrigin::RunDurationLimit
+            .message()
+            .contains("maximum duration"));
     }
 
     #[test]

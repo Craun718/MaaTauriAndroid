@@ -286,6 +286,19 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         }.getOrDefault(false)
     }
 
+    override fun servicePid(): Int = android.os.Process.myPid()
+
+    override fun dumpSystemLog(
+        sinceMs: Long,
+        untilMs: Long,
+        pid: Int,
+        processPrefix: String?,
+    ): String {
+        // 空前缀行行命中，会把整份系统日志带出设备
+        if (processPrefix.isNullOrEmpty()) return "# missing process prefix"
+        return SystemLogDump.dump(sinceMs, untilMs, pid, processPrefix)
+    }
+
     override fun attachOwner(owner: IBinder?): Int {
         return ownerLease.attach(owner)
     }

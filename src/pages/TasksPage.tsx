@@ -511,7 +511,7 @@ function PresetPicker({
   );
 }
 
-/** 内联「添加任务」面板：点开后列出项目全部任务定义，点击即追加到运行列表末尾。 */
+/** 内联「添加任务」面板：选中任务后追加到运行列表末尾并收起面板。 */
 function AddTaskPicker({
   available,
   onAdd,
@@ -549,7 +549,10 @@ function AddTaskPicker({
             <button
               key={task.name}
               type="button"
-              onClick={() => onAdd(task)}
+              onClick={() => {
+                onAdd(task);
+                setOpen(false);
+              }}
               className="flex h-9 w-full cursor-pointer items-center rounded-md px-2.5 text-left text-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               {task.label}

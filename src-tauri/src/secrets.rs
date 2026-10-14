@@ -360,6 +360,7 @@ mod tests {
             welcome_acknowledged_app_version: None,
             skip_welcome_announcement: false,
             background_image: None,
+            background_card_opacity: 100,
         }
     }
 

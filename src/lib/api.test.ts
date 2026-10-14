@@ -10,6 +10,7 @@ import {
   readProjectText,
   readProjectTexts,
   reinstallResources,
+  requestNotificationPermission,
   resolveFocusModal,
   setPrivilegedBackend,
   setVirtualDisplayLandscape,
@@ -17,8 +18,106 @@ import {
 } from "./api";
 
 const invoke = vi.hoisted(() => vi.fn());
+const { isPermissionGranted, requestPermission } = vi.hoisted(() => ({
+  isPermissionGranted: vi.fn(),
+  requestPermission: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  isPermissionGranted,
+  requestPermission,
+}));
+
+describe("notification permission", () => {
+  beforeEach(() => {
+    isPermissionGranted.mockReset().mockResolvedValue(false);
+    requestPermission.mockReset().mockResolvedValue("granted");
+  });
+
+  it("skips the hanging plugin request when permission is already granted", async () => {
+    isPermissionGranted.mockResolvedValue(true);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(requestNotificationPermission()).resolves.toBe(true);
+    }
+
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it("requests missing permission and checks again on later starts", async () => {
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+    expect(requestPermission).toHaveBeenCalledOnce();
+
+    isPermissionGranted.mockResolvedValue(true);
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+    expect(isPermissionGranted).toHaveBeenCalledTimes(2);
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it("returns false after denial and allows a later retry", async () => {
+    requestPermission.mockResolvedValueOnce("denied");
+
+    await expect(requestNotificationPermission()).resolves.toBe(false);
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+    expect(requestPermission).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not request permission if the permission check fails", async () => {
+    isPermissionGranted.mockRejectedValueOnce(new Error("bridge unavailable"));
+
+    await expect(requestNotificationPermission()).resolves.toBe(false);
+    expect(requestPermission).not.toHaveBeenCalled();
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+  });
+
+  it("handles a failed request and allows a later retry", async () => {
+    requestPermission.mockRejectedValueOnce(new Error("activity unavailable"));
+
+    await expect(requestNotificationPermission()).resolves.toBe(false);
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+    expect(requestPermission).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares concurrent calls while checking permission", async () => {
+    let finishCheck: ((granted: boolean) => void) | undefined;
+    isPermissionGranted.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishCheck = resolve;
+        }),
+    );
+
+    const first = requestNotificationPermission();
+    const second = requestNotificationPermission();
+    expect(second).toBe(first);
+    expect(isPermissionGranted).toHaveBeenCalledOnce();
+
+    finishCheck?.(false);
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it("shares concurrent calls while the permission prompt is pending", async () => {
+    let finishRequest: ((permission: string) => void) | undefined;
+    requestPermission.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          finishRequest = resolve;
+        }),
+    );
+
+    const first = requestNotificationPermission();
+    await vi.waitFor(() => expect(requestPermission).toHaveBeenCalledOnce());
+    const second = requestNotificationPermission();
+    expect(second).toBe(first);
+
+    finishRequest?.("granted");
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(isPermissionGranted).toHaveBeenCalledOnce();
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+});
 
 describe("version-aware app state snapshots", () => {
   beforeEach(() => {

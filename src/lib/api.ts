@@ -179,15 +179,26 @@ export async function resolveFocusModal() {
   return invoke<void>("resolve_focus_modal");
 }
 
-/// Asks Android for the POST_NOTIFICATIONS runtime permission (once per
-/// install). Backend OS notifications for focus `display: "notification"`
-/// are silently dropped without it.
-export async function requestNotificationPermission() {
-  try {
-    return (await requestPermission()) === "granted";
-  } catch {
-    return false;
-  }
+let pendingNotificationPermission: Promise<boolean> | undefined;
+
+/// Checks Android's POST_NOTIFICATIONS permission before requesting it.
+/// notification 2.4.0 never resolves an Android request when already granted;
+/// each such call blocks a Tokio worker. Share in-flight checks/requests too,
+/// so concurrent starts cannot enqueue duplicate permission prompts.
+export function requestNotificationPermission(): Promise<boolean> {
+  if (pendingNotificationPermission) return pendingNotificationPermission;
+  pendingNotificationPermission = (async () => {
+    try {
+      if (await isPermissionGranted()) return true;
+      return (await requestPermission()) === "granted";
+    } catch {
+      // A failed check must not fall through to the potentially hanging request.
+      return false;
+    }
+  })().finally(() => {
+    pendingNotificationPermission = undefined;
+  });
+  return pendingNotificationPermission;
 }
 
 export async function isNotificationGranted() {

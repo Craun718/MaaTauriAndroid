@@ -239,6 +239,7 @@ pub enum DiagnosticError {
 
 pub fn capture_manual_screenshot(
     source: &dyn DiagnosticSource,
+    display_id: u32,
     run_dir: &Path,
 ) -> Result<PathBuf, DiagnosticError> {
     let screenshot_dir = run_dir.join("screens");
@@ -251,7 +252,7 @@ pub fn capture_manual_screenshot(
         .map(|duration| duration.as_millis())
         .unwrap_or_default();
     let path = screenshot_dir.join(format!("manual-{timestamp}.png"));
-    capture_png_to(source, 0, &path)?;
+    capture_png_to(source, display_id, &path)?;
     Ok(path)
 }
 
@@ -2094,7 +2095,7 @@ mod tests {
             capture_bytes: [0x89, b'P', b'N', b'G', 1, 2, 3].to_vec(),
         };
 
-        let path = capture_manual_screenshot(&source, &run_dir).unwrap();
+        let path = capture_manual_screenshot(&source, 0, &run_dir).unwrap();
 
         assert_eq!(path.parent().unwrap(), run_dir.join("screens").as_path());
         assert!(path
@@ -2103,6 +2104,42 @@ mod tests {
             .is_some_and(|name| name.starts_with("manual-") && name.ends_with(".png")));
         assert_eq!(fs::read(&path).unwrap(), source.capture_bytes);
         fs::remove_dir_all(runs_root).unwrap();
+    }
+
+    #[test]
+    fn manual_screenshot_captures_the_requested_virtual_display() {
+        let run_dir = std::env::temp_dir().join(format!(
+            "maa_tauri_android-manual-virtual-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let source = FakeSource {
+            // A capture of the physical display must not succeed in this test.
+            capture_failures: Mutex::new(vec![0]),
+            capture_bytes: [0x89, b'P', b'N', b'G', 1, 2, 3].to_vec(),
+        };
+
+        let path = capture_manual_screenshot(&source, 2, &run_dir).unwrap();
+
+        assert_eq!(fs::read(path).unwrap(), source.capture_bytes);
+        fs::remove_dir_all(run_dir).unwrap();
+    }
+
+    #[test]
+    fn manual_screenshot_does_not_fall_back_to_the_physical_display() {
+        let run_dir = std::env::temp_dir().join(format!(
+            "maa_tauri_android-manual-unavailable-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let source = FakeSource {
+            capture_failures: Mutex::new(vec![2]),
+            capture_bytes: [0x89, b'P', b'N', b'G', 1, 2, 3].to_vec(),
+        };
+
+        let error = capture_manual_screenshot(&source, 2, &run_dir).unwrap_err();
+
+        assert!(error.to_string().contains("capture unavailable"));
+        assert_eq!(fs::read_dir(run_dir.join("screens")).unwrap().count(), 0);
+        fs::remove_dir_all(run_dir).unwrap();
     }
 
     #[test]
@@ -2116,7 +2153,7 @@ mod tests {
             capture_bytes: b"not-a-png".to_vec(),
         };
 
-        let error = capture_manual_screenshot(&source, &run_dir).unwrap_err();
+        let error = capture_manual_screenshot(&source, 2, &run_dir).unwrap_err();
 
         assert!(error.to_string().contains("could not read"));
         let screenshots = run_dir.join("screens").read_dir().unwrap();

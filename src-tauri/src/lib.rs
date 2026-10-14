@@ -3909,9 +3909,10 @@ async fn capture_manual_screenshot(
         ));
     }
     let run_dir = logger.run_dir().to_path_buf();
+    let display_id = runtime::active_display_id();
     let path = tokio::task::spawn_blocking(move || {
         let source = diagnostics::platform_source();
-        diagnostics::capture_manual_screenshot(&source, &run_dir)
+        diagnostics::capture_manual_screenshot(&source, display_id, &run_dir)
     })
     .await
     .map_err(|error| AppError::Message(error.to_string()))??;

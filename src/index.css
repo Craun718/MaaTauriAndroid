@@ -17,6 +17,11 @@
 :root {
   --tt-surface: #f5f7fb;
   --tt-raised: #ffffff;
+  --tt-card-opacity: 1;
+  /* 卡片布局：页面间距、默认内距及紧凑内距统一在这里调整。 */
+  --tt-card-gap: 0.75rem;
+  --tt-card-padding: 0.75rem;
+  --tt-card-padding-dense: 0.5rem;
   --tt-surface-muted: #e8edf5;
   --tt-ink: #172033;
   --tt-ink-muted: #637086;
@@ -55,6 +60,9 @@
  * 深色无需逐个写 dark: 变体——所有 utility 都引用 var(--color-*)，媒体查询覆盖同名变量即可。
  */
 @theme {
+  --spacing-card-gap: var(--tt-card-gap);
+  --spacing-card: var(--tt-card-padding);
+  --spacing-card-dense: var(--tt-card-padding-dense);
   --color-surface: var(--tt-surface);
   --color-raised: var(--tt-raised);
   --color-surface-muted: var(--tt-surface-muted);
@@ -62,6 +70,30 @@
   --color-ink-muted: var(--tt-ink-muted);
   --color-line: var(--tt-line);
   --color-accent: var(--tt-accent);
+}
+
+/*
+ * inline 让 bg-raised 在使用它的元素上读取 AppShell 的不透明度，
+ * 避免根节点先按默认值 1 算好颜色，再把不透明颜色继承给所有卡片。
+ */
+@theme inline {
+  --color-raised: color-mix(
+    in srgb,
+    var(--tt-raised) calc(var(--tt-card-opacity, 1) * 100%),
+    transparent
+  );
+}
+
+/* 不支持 color-mix 的旧 WebView 保留不透明底色。 */
+@utility bg-raised {
+  background-color: var(--tt-raised);
+  @supports (background-color: color-mix(in srgb, white, transparent)) {
+    background-color: color-mix(
+      in srgb,
+      var(--tt-raised) calc(var(--tt-card-opacity, 1) * 100%),
+      transparent
+    );
+  }
 }
 
 /*

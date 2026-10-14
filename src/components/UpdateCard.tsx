@@ -64,7 +64,7 @@ export function UpdateCard() {
       savedPrefs.cdk !== prefs.cdk);
 
   return (
-    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+    <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
       <h2 className="font-medium">{t("update")}</h2>
       {savedPrefs && prefs && (
         <>

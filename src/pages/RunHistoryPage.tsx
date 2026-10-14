@@ -100,7 +100,7 @@ export function RunHistoryPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-card-gap">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{t("runHistoryTitle")}</h1>
@@ -118,11 +118,11 @@ export function RunHistoryPage() {
       </header>
 
       {!loaded ? null : entries.length === 0 ? (
-        <p className="rounded-md border border-line bg-raised p-3 text-sm text-ink-muted">
+        <p className="rounded-md border border-line bg-raised p-card text-sm text-ink-muted">
           {t("runHistoryEmpty")}
         </p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-card-gap">
           {runHistoryDateGroups(entries, language).map((group) => (
             <RunHistoryDayAccordion
               key={group.dateKey || group.entries[0].executionId}
@@ -165,7 +165,7 @@ function RunHistoryDayAccordion({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex w-full cursor-pointer items-center justify-between gap-2 p-card text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <span className="min-w-0">
           <span className="block truncate font-medium">{group.label}</span>
@@ -259,7 +259,7 @@ function RunHistoryDetail({
   const outcome = runOutcome(events);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-card-gap">
       <header className="flex items-center gap-2">
         <button
           type="button"
@@ -274,7 +274,7 @@ function RunHistoryDetail({
         </h1>
       </header>
 
-      <div className="space-y-1 rounded-md border border-line bg-raised p-3">
+      <div className="space-y-1 rounded-md border border-line bg-raised p-card">
         <p className="text-sm text-ink-muted">{t("runHistoryStartedAt")}</p>
         <p className="font-medium">
           {formatDateTime(entry.startedAtUnixMs, language)}
@@ -299,7 +299,7 @@ function RunHistoryDetail({
         ) : null}
       </div>
 
-      <ol className="space-y-1 rounded-lg border border-line bg-raised p-2">
+      <ol className="space-y-1 rounded-lg border border-line bg-raised p-card-dense">
         {events.map((event) => {
           const key = `${event.executionId}-${event.sequence}`;
           const category = runEventCategory(event);
@@ -371,7 +371,7 @@ function RunHistoryDetail({
         })}
       </ol>
 
-      <div className="flex items-center justify-between gap-2 rounded-md border border-line bg-raised p-3">
+      <div className="flex items-center justify-between gap-2 rounded-md border border-line bg-raised p-card">
         <p className="min-w-0 text-sm text-ink-muted">
           {terminal
             ? `${t("runHistoryEndedAt")}: ${formatDateTime(terminal.atUnixMs, language)}`
@@ -390,7 +390,7 @@ function RunHistoryDetail({
 function MissingRecord({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-4">
+    <div className="space-y-card-gap">
       <header className="flex items-center gap-2">
         <button
           type="button"
@@ -404,7 +404,7 @@ function MissingRecord({ onBack }: { onBack: () => void }) {
           {t("runHistoryTitle")}
         </h1>
       </header>
-      <p className="rounded-md border border-line bg-raised p-3 text-sm text-ink-muted">
+      <p className="rounded-md border border-line bg-raised p-card text-sm text-ink-muted">
         {t("runHistoryMissing")}
       </p>
     </div>

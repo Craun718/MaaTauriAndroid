@@ -403,10 +403,16 @@ pub struct UserConfiguration {
     /// of adopting another device's unavailable file reference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_image: Option<BackgroundImage>,
+    #[serde(default = "default_background_card_opacity")]
+    pub background_card_opacity: u8,
 }
 
 fn default_schema_version() -> u32 {
     1
+}
+
+fn default_background_card_opacity() -> u8 {
+    100
 }
 
 impl Default for UserConfiguration {
@@ -435,6 +441,7 @@ impl Default for UserConfiguration {
             welcome_acknowledged_app_version: None,
             skip_welcome_announcement: false,
             background_image: None,
+            background_card_opacity: default_background_card_opacity(),
         }
     }
 }
@@ -824,5 +831,22 @@ mod background_tests {
             value["backgroundImage"],
             serde_json::json!({"fileName": "background.png", "revision": 7})
         );
+    }
+
+    #[test]
+    fn background_card_opacity_defaults_to_opaque_and_uses_camel_case() {
+        let mut value = serde_json::to_value(UserConfiguration::default()).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("backgroundCardOpacity");
+
+        let configuration: UserConfiguration = serde_json::from_value(value).unwrap();
+        assert_eq!(configuration.background_card_opacity, 100);
+
+        let mut configuration = UserConfiguration::default();
+        configuration.background_card_opacity = 62;
+        let value = serde_json::to_value(&configuration).unwrap();
+        assert_eq!(value["backgroundCardOpacity"], 62);
     }
 }

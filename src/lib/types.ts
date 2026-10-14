@@ -327,6 +327,8 @@ export interface UserConfiguration {
   welcomeAcknowledgedAppVersion?: string;
   skipWelcomeAnnouncement?: boolean;
   backgroundImage?: BackgroundImage;
+  /** Card fill opacity, as a percentage. */
+  backgroundCardOpacity?: number;
 }
 
 export type ConfigurationRecoveryKind = "backupRestored" | "resetToDefault";

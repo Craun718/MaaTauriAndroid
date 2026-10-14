@@ -200,8 +200,8 @@ export function PrivilegeStatusCard({
 
   return (
     <section
-      className={`rounded-lg border border-line bg-raised ${
-        compact ? "space-y-2 p-3" : "space-y-3 p-4"
+      className={`rounded-lg border border-line bg-raised p-card ${
+        compact ? "space-y-2" : "space-y-3"
       }`}
     >
       <div className="flex items-center justify-between gap-3">

@@ -1,9 +1,13 @@
 import { History, Home, ListChecks, Settings } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { useBackgroundImageObjectUrl } from "../lib/backgroundImage";
+import {
+  backgroundCardOpacity,
+  useBackgroundImageObjectUrl,
+} from "../lib/backgroundImage";
 import { useTranslation } from "../lib/i18n";
 import { useAppStore } from "../store/appStore";
+import { useBackgroundPreviewStore } from "../store/backgroundPreviewStore";
 import { NotificationHost } from "./ui/NotificationHost";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -11,7 +15,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const backgroundImage = useAppStore(
     (state) => state.snapshot?.configuration.backgroundImage,
   );
+  const savedCardOpacity = useAppStore(
+    (state) => state.snapshot?.configuration.backgroundCardOpacity,
+  );
+  const previewCardOpacity = useBackgroundPreviewStore(
+    (state) => state.cardOpacity,
+  );
+  const cardOpacity = backgroundCardOpacity(
+    previewCardOpacity ?? savedCardOpacity,
+  );
   const backgroundSource = useBackgroundImageObjectUrl(backgroundImage);
+  const shellStyle = {
+    "--tt-card-opacity": cardOpacity / 100,
+  } as CSSProperties;
   const navigation = [
     { to: "/", label: t("navHome"), icon: Home },
     { to: "/tasks", label: t("navTasks"), icon: ListChecks },
@@ -22,19 +38,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
       {backgroundSource && (
-        <div
-          aria-hidden="true"
-          className="fixed inset-0 -z-20 h-full w-full overflow-hidden"
-        >
+        <div aria-hidden="true" className="fixed inset-0 z-0 overflow-hidden">
           <img
             src={backgroundSource}
             alt=""
-            className="h-full w-full object-cover"
+            className="absolute inset-0 size-full object-cover object-center"
           />
         </div>
       )}
-      <div aria-hidden="true" className="fixed inset-0 -z-10 bg-surface/72" />
-      <div className="relative z-[1] mx-auto flex h-full w-full max-w-md flex-col pt-[var(--tt-safe-top)]">
+      {backgroundSource && (
+        <div aria-hidden="true" className="fixed inset-0 z-0 bg-surface/45" />
+      )}
+      <div
+        className="relative z-10 mx-auto flex h-full w-full max-w-md flex-col pt-[var(--tt-safe-top)]"
+        style={shellStyle}
+      >
         {/* The only scroll container in the app: html/body are locked in index.css
           so the overlay nav below can never be dragged around with the page.
           The top safe-area inset lives on the shell above, NOT on <main>:
@@ -47,7 +65,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="flex min-h-0 flex-1 flex-col overscroll-none overflow-y-auto overflow-x-hidden px-4 pb-[calc(4rem_+_1rem_+_1px_+_var(--tt-safe-bottom))]">
           {children}
         </main>
-        <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/92 pb-[var(--tt-safe-bottom)] backdrop-blur">
+        <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/82 pb-[var(--tt-safe-bottom)] backdrop-blur">
           <div className="mx-auto flex h-16 max-w-md items-stretch">
             {navigation.map(({ to, label, icon: Icon }) => (
               <NavLink

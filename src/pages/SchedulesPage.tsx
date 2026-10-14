@@ -237,7 +237,7 @@ export function SchedulesPage() {
   const healthIssues = health ? scheduleHealthIssues(health) : [];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-card-gap">
       <header className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{t("scheduleTitle")}</h1>
@@ -282,7 +282,7 @@ export function SchedulesPage() {
       )}
 
       {draft ? (
-        <section className="space-y-4 rounded-md border border-line bg-raised p-3">
+        <section className="space-y-4 rounded-md border border-line bg-raised p-card">
           <TextField
             label={t("scheduleName")}
             value={draft.name}
@@ -512,15 +512,15 @@ export function SchedulesPage() {
       ) : null}
 
       {rules.length === 0 ? (
-        <p className="rounded-md border border-line bg-raised p-3 text-sm text-ink-muted">
+        <p className="rounded-md border border-line bg-raised p-card text-sm text-ink-muted">
           {t("scheduleNoRules")}
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-card-gap">
           {rules.map((rule) => (
             <article
               key={rule.id}
-              className="space-y-2 rounded-md border border-line bg-raised p-3"
+              className="space-y-2 rounded-md border border-line bg-raised p-card"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">

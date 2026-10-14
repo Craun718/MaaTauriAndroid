@@ -15,6 +15,7 @@ import { RichDescription } from "../components/RichDescription";
 import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
+import { Slider } from "../components/ui/Slider";
 import { TextField } from "../components/ui/TextField";
 import { VersionCard } from "../components/VersionCard";
 import {
@@ -52,6 +53,7 @@ import type {
 } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
+import { useBackgroundPreviewStore } from "../store/backgroundPreviewStore";
 import { useNotificationStore } from "../store/notificationStore";
 
 function isUiLanguage(value: string): value is UiLanguage {
@@ -110,10 +112,10 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-card-gap">
       <h1 className="text-xl font-semibold">{t("settings")}</h1>
       <UpdateCard />
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 id="language-select-label" className="font-medium">
           {t("language")}
         </h2>
@@ -207,7 +209,7 @@ export function SettingsPage() {
           />
         </>
       )}
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("backupRestore")}</h2>
         <p className="text-sm text-ink-muted">
           {t("backupRestoreDescription")}
@@ -279,7 +281,7 @@ export function SettingsPage() {
         </button>
       </section>
       <CustomBackgroundCard restartPending={restartPending} />
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("runBehavior")}</h2>
         <Checkbox
           className="min-h-10 gap-2"
@@ -405,7 +407,7 @@ export function SettingsPage() {
           <span className="font-medium">{t("showVirtualDisplayFps")}</span>
         </Checkbox>
       </section>
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("diagnostics")}</h2>
         <div className="space-y-1">
           <Checkbox
@@ -496,7 +498,7 @@ export function SettingsPage() {
         </button>
       </section>
       {project?.metadata.telemetry?.dsn && (
-        <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+        <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
           <h2 className="font-medium">{t("telemetry")}</h2>
           <p className="text-sm text-ink-muted">{t("telemetryDescription")}</p>
           <Checkbox
@@ -531,6 +533,7 @@ export function SettingsPage() {
 /** Local-only background image management; the body never enters a backup. */
 function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
   const snapshot = useAppStore((state) => state.snapshot);
+  const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const busy = useAppStore((state) => state.busy);
   const saving = useAppStore((state) => state.saving);
   const importBackgroundImage = useAppStore(
@@ -543,13 +546,37 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
   const { t } = useTranslation();
   const [importing, setImporting] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const opacityDraft = useBackgroundPreviewStore((state) => state.cardOpacity);
+  const previewCardOpacity = useBackgroundPreviewStore(
+    (state) => state.previewCardOpacity,
+  );
+  const clearCardOpacity = useBackgroundPreviewStore(
+    (state) => state.clearCardOpacity,
+  );
   const image = snapshot?.configuration.backgroundImage;
   const source = useBackgroundImageObjectUrl(image);
+  const savedOpacity = snapshot?.configuration.backgroundCardOpacity ?? 100;
+  const opacity = opacityDraft ?? savedOpacity;
   const disabled =
     busy || saving || restartPending || importing || removing || !snapshot;
 
+  useEffect(() => () => clearCardOpacity(), [clearCardOpacity]);
+
+  function saveOpacity(value: number): void {
+    if (!snapshot || value === savedOpacity) {
+      clearCardOpacity();
+      return;
+    }
+    const revision = useBackgroundPreviewStore.getState().revision;
+    const next = structuredClone(snapshot.configuration);
+    next.backgroundCardOpacity = value;
+    void saveConfiguration(next).finally(() => {
+      clearCardOpacity(revision);
+    });
+  }
+
   return (
-    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+    <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
       <h2 className="font-medium">{t("customBackground")}</h2>
       <div className="relative aspect-video overflow-hidden rounded-md border border-line bg-surface-muted">
         {source ? (
@@ -563,6 +590,29 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
       <p className="text-sm text-ink-muted">
         {t("customBackgroundDescription")}
       </p>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium">
+            {t("backgroundCardOpacity")}
+          </span>
+          <span className="text-sm text-ink-muted">{opacity}%</span>
+        </div>
+        <Slider
+          ariaLabel={t("backgroundCardOpacity")}
+          value={opacity}
+          min={25}
+          max={100}
+          step={5}
+          disabled={
+            busy || restartPending || importing || removing || !snapshot
+          }
+          onValueChange={previewCardOpacity}
+          onValueCommit={saveOpacity}
+        />
+        <p className="text-xs text-ink-muted">
+          {t("backgroundCardOpacityDescription")}
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
@@ -706,7 +756,7 @@ function ScopedOptions({
         ) : (
           <section
             key={`${title}-ungrouped`}
-            className="space-y-2 rounded-lg border border-line bg-raised p-3"
+            className="space-y-2 rounded-lg border border-line bg-raised p-card"
           >
             <h3 className="font-medium">{t(title)}</h3>
             <VisibleOptionList
@@ -747,7 +797,7 @@ function TaskSettingSection({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-[-0.25rem] focus-visible:outline-accent"
+        className="flex w-full cursor-pointer items-center justify-between gap-2 p-card text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-[-0.25rem] focus-visible:outline-accent"
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <ProjectImage
@@ -773,11 +823,11 @@ function TaskSettingSection({
       {section.description && (
         <RichDescription
           text={section.description}
-          className="px-3 py-2 text-xs text-ink-muted"
+          className="px-card py-2 text-xs text-ink-muted"
         />
       )}
       {open && (
-        <div className="space-y-2 border-t border-line p-3">
+        <div className="space-y-2 border-t border-line p-card">
           {options.length === 0 ? (
             <p className="text-sm text-ink-muted">{t("taskSettingsEmpty")}</p>
           ) : (

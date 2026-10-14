@@ -370,7 +370,7 @@ export function TasksPage() {
                   items={activeRun?.tasks.map((task) => task.instanceId) ?? []}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="space-y-1 rounded-lg border border-line bg-surface-muted p-2">
+                  <div className="space-y-1 rounded-lg border border-line bg-card-muted p-2">
                     {activeRun?.tasks.map(renderConfiguredTask)}
                   </div>
                 </SortableContext>
@@ -544,7 +544,7 @@ function AddTaskPicker({
         {addLabel}
       </button>
       {!disabled && open && (
-        <div className="space-y-1 rounded-lg border border-line bg-surface-muted p-2">
+        <div className="space-y-1 rounded-lg border border-line bg-card-muted p-2">
           {available.map((task) => (
             <button
               key={task.name}
@@ -675,7 +675,7 @@ function TaskItem({
         {...longPress}
         className={`select-none touch-pan-y rounded-lg border p-2 text-xs ${
           unavailable
-            ? "border-line bg-surface-muted opacity-60"
+            ? "border-line bg-card-muted opacity-60"
             : "border-line bg-raised"
         }`}
       >

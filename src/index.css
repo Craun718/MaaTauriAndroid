@@ -96,6 +96,17 @@
   }
 }
 
+@utility bg-card-muted {
+  background-color: var(--tt-surface-muted);
+  @supports (background-color: color-mix(in srgb, white, transparent)) {
+    background-color: color-mix(
+      in srgb,
+      var(--tt-surface-muted) calc(var(--tt-card-opacity, 1) * 100%),
+      transparent
+    );
+  }
+}
+
 /*
  * daisyUI 主题：把原始色板映射进 daisyUI 的语义 token，它的组件因此自动继承本项目的
  * 配色、圆角和扁平风格。base-100/200/300 按 daisyUI 的约定取「卡片面 / 内嵌面 / 描边」，

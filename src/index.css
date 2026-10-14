@@ -57,21 +57,36 @@
  */
 @theme {
   --color-surface: var(--tt-surface);
-  /*
-   * 卡片底色保留一个不透明回退；支持 color-mix 的 WebView 用下一行读取
-   * 自定义背景卡片透明度。这样旧 WebView 不会因无效颜色变成透明卡片。
-   */
   --color-raised: var(--tt-raised);
-  --color-raised: color-mix(
-    in srgb,
-    var(--tt-raised) calc(var(--tt-card-opacity, 1) * 100%),
-    transparent
-  );
   --color-surface-muted: var(--tt-surface-muted);
   --color-ink: var(--tt-ink);
   --color-ink-muted: var(--tt-ink-muted);
   --color-line: var(--tt-line);
   --color-accent: var(--tt-accent);
+}
+
+/*
+ * inline 让 bg-raised 在使用它的元素上读取 AppShell 的不透明度，
+ * 避免根节点先按默认值 1 算好颜色，再把不透明颜色继承给所有卡片。
+ */
+@theme inline {
+  --color-raised: color-mix(
+    in srgb,
+    var(--tt-raised) calc(var(--tt-card-opacity, 1) * 100%),
+    transparent
+  );
+}
+
+/* 不支持 color-mix 的旧 WebView 保留不透明底色。 */
+@utility bg-raised {
+  background-color: var(--tt-raised);
+  @supports (background-color: color-mix(in srgb, white, transparent)) {
+    background-color: color-mix(
+      in srgb,
+      var(--tt-raised) calc(var(--tt-card-opacity, 1) * 100%),
+      transparent
+    );
+  }
 }
 
 /*

@@ -27,7 +27,7 @@ export function HomePage() {
     // notice behind its backdrop only turns one loader into three indicators.
     if (preparation?.status === "running") return null;
     return (
-      <div className="space-y-3">
+      <div className="space-y-card-gap">
         <h1 className="text-2xl font-semibold">{t("project")}</h1>
         <p className="text-ink-muted">{t("noProject")}</p>
       </div>
@@ -37,7 +37,7 @@ export function HomePage() {
   const { project, versions } = snapshot;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-card-gap">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">
           {project.label}

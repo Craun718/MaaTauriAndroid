@@ -24,7 +24,7 @@ export function ScheduleEntryCard() {
   return (
     <Link
       to="/schedules"
-      className="flex items-center gap-3 rounded-md border border-line bg-raised p-3 text-left transition-colors hover:bg-surface-muted"
+      className="flex items-center gap-3 rounded-md border border-line bg-raised p-card text-left transition-colors hover:bg-surface-muted"
     >
       <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent">
         <CalendarClock size="1.25rem" />

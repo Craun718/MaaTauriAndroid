@@ -235,7 +235,7 @@ export function VirtualDisplayCard() {
     : t("checking");
 
   return (
-    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+    <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <MonitorPlay size="1.125rem" className="text-accent" />

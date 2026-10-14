@@ -111,10 +111,10 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-card-gap">
       <h1 className="text-xl font-semibold">{t("settings")}</h1>
       <UpdateCard />
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 id="language-select-label" className="font-medium">
           {t("language")}
         </h2>
@@ -208,7 +208,7 @@ export function SettingsPage() {
           />
         </>
       )}
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("backupRestore")}</h2>
         <p className="text-sm text-ink-muted">
           {t("backupRestoreDescription")}
@@ -280,7 +280,7 @@ export function SettingsPage() {
         </button>
       </section>
       <CustomBackgroundCard restartPending={restartPending} />
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("runBehavior")}</h2>
         <Checkbox
           className="min-h-10 gap-2"
@@ -406,7 +406,7 @@ export function SettingsPage() {
           <span className="font-medium">{t("showVirtualDisplayFps")}</span>
         </Checkbox>
       </section>
-      <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("diagnostics")}</h2>
         <div className="space-y-1">
           <Checkbox
@@ -497,7 +497,7 @@ export function SettingsPage() {
         </button>
       </section>
       {project?.metadata.telemetry?.dsn && (
-        <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+        <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
           <h2 className="font-medium">{t("telemetry")}</h2>
           <p className="text-sm text-ink-muted">{t("telemetryDescription")}</p>
           <Checkbox
@@ -564,7 +564,7 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
   }
 
   return (
-    <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
+    <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
       <h2 className="font-medium">{t("customBackground")}</h2>
       <div className="relative aspect-video overflow-hidden rounded-md border border-line bg-surface-muted">
         {source ? (
@@ -744,7 +744,7 @@ function ScopedOptions({
         ) : (
           <section
             key={`${title}-ungrouped`}
-            className="space-y-2 rounded-lg border border-line bg-raised p-3"
+            className="space-y-2 rounded-lg border border-line bg-raised p-card"
           >
             <h3 className="font-medium">{t(title)}</h3>
             <VisibleOptionList
@@ -785,7 +785,7 @@ function TaskSettingSection({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full cursor-pointer items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-[-0.25rem] focus-visible:outline-accent"
+        className="flex w-full cursor-pointer items-center justify-between gap-2 p-card text-left transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-[-0.25rem] focus-visible:outline-accent"
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <ProjectImage
@@ -811,11 +811,11 @@ function TaskSettingSection({
       {section.description && (
         <RichDescription
           text={section.description}
-          className="px-3 py-2 text-xs text-ink-muted"
+          className="px-card py-2 text-xs text-ink-muted"
         />
       )}
       {open && (
-        <div className="space-y-2 border-t border-line p-3">
+        <div className="space-y-2 border-t border-line p-card">
           {options.length === 0 ? (
             <p className="text-sm text-ink-muted">{t("taskSettingsEmpty")}</p>
           ) : (

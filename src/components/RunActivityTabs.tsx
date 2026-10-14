@@ -165,8 +165,8 @@ export function RunActivityTabs({
         hidden={activeTab !== "logs"}
         className={
           logsActive
-            ? "flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-raised p-2"
-            : "rounded-lg border border-line bg-raised p-2"
+            ? "flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-raised p-card-dense"
+            : "rounded-lg border border-line bg-raised p-card-dense"
         }
       >
         {events.length === 0 ? (

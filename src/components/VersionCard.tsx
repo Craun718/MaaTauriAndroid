@@ -23,7 +23,7 @@ export function VersionCard({
   const environment = versions?.environment;
 
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-raised p-4">
+    <section className="space-y-3 rounded-lg border border-line bg-raised p-card">
       <h2 className="font-medium">{t(title)}</h2>
       <dl className="space-y-2 text-sm">
         {variant === "about" ? (

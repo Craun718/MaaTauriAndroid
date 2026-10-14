@@ -203,9 +203,16 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
-      RESOURCE_REF: f4640501729562a7106a39bdad48274c6c8ba424
+      RESOURCE_REPO: MAA1999/M9A
     steps:
       - uses: actions/checkout@v7
+
+      - name: Resolve latest stable M9A release
+        id: resource_release
+        run: |
+          ref="$(curl --fail --silent --show-error https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
+          echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -247,7 +254,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .cache/pip
-          key: m9a-agent-wheels-${{ env.ANDROID_ABI }}-${{ env.RESOURCE_REF }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: m9a-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
       # Pin the debug keystore. Without this every run generates a fresh one, so
       # each APK is signed with a different key: `adb install -r` then fails with
       # INSTALL_FAILED_UPDATE_INCOMPATIBLE and verifying a build on a device
@@ -363,9 +370,16 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
-      RESOURCE_REF: 16eacbffbbb45e7265b4332f2f4656df1b62214c
+      RESOURCE_REPO: duorua/narutomobile
     steps:
       - uses: actions/checkout@v7
+
+      - name: Resolve latest stable NarutoMobile release
+        id: resource_release
+        run: |
+          ref="$(curl --fail --silent --show-error https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
+          echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -407,7 +421,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .cache/pip
-          key: narutomobile-agent-wheels-${{ env.ANDROID_ABI }}-${{ env.RESOURCE_REF }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: narutomobile-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6
@@ -496,9 +510,16 @@ jobs:
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
-      RESOURCE_REF: 707d80352148a1b7294ffbc3e701cd7c9f8b84c5
+      RESOURCE_REPO: Maa-Assistant-PVZ-The-best/MAAPVZ
     steps:
       - uses: actions/checkout@v7
+
+      - name: Resolve latest stable MAAPVZ release
+        id: resource_release
+        run: |
+          ref="$(curl --fail --silent --show-error https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
+          echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -540,7 +561,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .cache/pip
-          key: maapvz-agent-wheels-${{ env.ANDROID_ABI }}-${{ env.RESOURCE_REF }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: maapvz-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6
@@ -627,13 +648,22 @@ jobs:
       # The application build still uses NDK 28.2. MaaEnd's upstream Android
       # agent recipe requires NDK 29 and CMake 3.31 for cpp-algo.
       MAAFW_VERSION: v5.14.2
-      MAAEND_VERSION: v2.32.0
+      MAAEND_REPO: MaaEnd/MaaEnd
       AGENT_NDK_VERSION: 29.0.13599879
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Resolve latest stable MaaEnd release
+        id: resource_release
+        run: |
+          release="$(curl --fail --silent --show-error https://api.github.com/repos/$MAAEND_REPO/releases/latest)"
+          ref="$(jq -er '.tag_name' <<< "$release")"
+          echo "MAAEND_VERSION=$ref" >> "$GITHUB_ENV"
+          echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -708,9 +738,9 @@ jobs:
       - name: Clone and prepare the pinned MaaEnd resource
         run: |
           python3 scripts/build-resource.py \
-            https://github.com/MaaEnd/MaaEnd.git \
+            "https://github.com/$MAAEND_REPO.git" \
             --id maaend \
-            --ref 5501b27f3b3f552e8897a8839521dd36caf617a9 \
+            --ref "$RESOURCE_REF" \
             --submodules \
             --prepare "python3 scripts/prepare-maaend.py resource/maaend/Android/pi-root" \
             --skip-runtime \
@@ -734,7 +764,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: resource/maaend/agent/cpp-algo/MaaUtils/MaaDeps
-          key: maaend-v2.32.0-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
+          key: maaend-${{ steps.resource_release.outputs.ref }}-maautils-deps-${{ env.ANDROID_ABI }}-${{ hashFiles('resource/maaend/tools/maadeps-download.py', 'resource/maaend/agent/cpp-algo/MaaUtils/tools/maadeps_download.py') }}
       - name: Cache the MaaFramework agent SDK
         uses: actions/cache@v6
         with:

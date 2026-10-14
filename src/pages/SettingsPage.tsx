@@ -53,6 +53,7 @@ import type {
 } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
+import { useBackgroundPreviewStore } from "../store/backgroundPreviewStore";
 import { useNotificationStore } from "../store/notificationStore";
 
 function isUiLanguage(value: string): value is UiLanguage {
@@ -545,7 +546,13 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
   const { t } = useTranslation();
   const [importing, setImporting] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [opacityDraft, setOpacityDraft] = useState<number>();
+  const opacityDraft = useBackgroundPreviewStore((state) => state.cardOpacity);
+  const previewCardOpacity = useBackgroundPreviewStore(
+    (state) => state.previewCardOpacity,
+  );
+  const clearCardOpacity = useBackgroundPreviewStore(
+    (state) => state.clearCardOpacity,
+  );
   const image = snapshot?.configuration.backgroundImage;
   const source = useBackgroundImageObjectUrl(image);
   const savedOpacity = snapshot?.configuration.backgroundCardOpacity ?? 100;
@@ -553,13 +560,18 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
   const disabled =
     busy || saving || restartPending || importing || removing || !snapshot;
 
-  function saveOpacity(value: number) {
-    if (!snapshot || value === savedOpacity) return;
-    setOpacityDraft(value);
+  useEffect(() => () => clearCardOpacity(), [clearCardOpacity]);
+
+  function saveOpacity(value: number): void {
+    if (!snapshot || value === savedOpacity) {
+      clearCardOpacity();
+      return;
+    }
+    const revision = useBackgroundPreviewStore.getState().revision;
     const next = structuredClone(snapshot.configuration);
     next.backgroundCardOpacity = value;
     void saveConfiguration(next).finally(() => {
-      setOpacityDraft((current) => (current === value ? undefined : current));
+      clearCardOpacity(revision);
     });
   }
 
@@ -594,7 +606,7 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
           disabled={
             busy || restartPending || importing || removing || !snapshot
           }
-          onValueChange={setOpacityDraft}
+          onValueChange={previewCardOpacity}
           onValueCommit={saveOpacity}
         />
         <p className="text-xs text-ink-muted">

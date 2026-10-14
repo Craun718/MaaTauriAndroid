@@ -7,6 +7,7 @@ import {
 } from "../lib/backgroundImage";
 import { useTranslation } from "../lib/i18n";
 import { useAppStore } from "../store/appStore";
+import { useBackgroundPreviewStore } from "../store/backgroundPreviewStore";
 import { NotificationHost } from "./ui/NotificationHost";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -14,8 +15,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const backgroundImage = useAppStore(
     (state) => state.snapshot?.configuration.backgroundImage,
   );
+  const savedCardOpacity = useAppStore(
+    (state) => state.snapshot?.configuration.backgroundCardOpacity,
+  );
+  const previewCardOpacity = useBackgroundPreviewStore(
+    (state) => state.cardOpacity,
+  );
   const cardOpacity = backgroundCardOpacity(
-    useAppStore((state) => state.snapshot?.configuration.backgroundCardOpacity),
+    previewCardOpacity ?? savedCardOpacity,
   );
   const backgroundSource = useBackgroundImageObjectUrl(backgroundImage);
   const shellStyle = {

@@ -15,6 +15,7 @@ import { RichDescription } from "../components/RichDescription";
 import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
+import { Slider } from "../components/ui/Slider";
 import { TextField } from "../components/ui/TextField";
 import { VersionCard } from "../components/VersionCard";
 import {
@@ -531,6 +532,7 @@ export function SettingsPage() {
 /** Local-only background image management; the body never enters a backup. */
 function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
   const snapshot = useAppStore((state) => state.snapshot);
+  const saveConfiguration = useAppStore((state) => state.saveConfiguration);
   const busy = useAppStore((state) => state.busy);
   const saving = useAppStore((state) => state.saving);
   const importBackgroundImage = useAppStore(
@@ -543,10 +545,23 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
   const { t } = useTranslation();
   const [importing, setImporting] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [opacityDraft, setOpacityDraft] = useState<number>();
   const image = snapshot?.configuration.backgroundImage;
   const source = useBackgroundImageObjectUrl(image);
+  const savedOpacity = snapshot?.configuration.backgroundCardOpacity ?? 100;
+  const opacity = opacityDraft ?? savedOpacity;
   const disabled =
     busy || saving || restartPending || importing || removing || !snapshot;
+
+  function saveOpacity(value: number) {
+    if (!snapshot || value === savedOpacity) return;
+    setOpacityDraft(value);
+    const next = structuredClone(snapshot.configuration);
+    next.backgroundCardOpacity = value;
+    void saveConfiguration(next).finally(() => {
+      setOpacityDraft((current) => (current === value ? undefined : current));
+    });
+  }
 
   return (
     <section className="space-y-2 rounded-lg border border-line bg-raised p-3">
@@ -563,6 +578,29 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
       <p className="text-sm text-ink-muted">
         {t("customBackgroundDescription")}
       </p>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium">
+            {t("backgroundCardOpacity")}
+          </span>
+          <span className="text-sm text-ink-muted">{opacity}%</span>
+        </div>
+        <Slider
+          ariaLabel={t("backgroundCardOpacity")}
+          value={opacity}
+          min={25}
+          max={100}
+          step={5}
+          disabled={
+            busy || restartPending || importing || removing || !snapshot
+          }
+          onValueChange={setOpacityDraft}
+          onValueCommit={saveOpacity}
+        />
+        <p className="text-xs text-ink-muted">
+          {t("backgroundCardOpacityDescription")}
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"

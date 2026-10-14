@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readBackgroundImage } from "./api";
 import {
+  backgroundCardOpacity,
   backgroundImageMimeType,
   loadBackgroundImageObjectUrl,
 } from "./backgroundImage";
@@ -25,6 +26,14 @@ describe("background image helpers", () => {
   afterEach(() => {
     URL.createObjectURL = originalCreateObjectUrl;
     URL.revokeObjectURL = originalRevokeObjectUrl;
+  });
+
+  it("keeps card opacity within the readable range", () => {
+    expect(backgroundCardOpacity(undefined)).toBe(100);
+    expect(backgroundCardOpacity(Number.NaN)).toBe(100);
+    expect(backgroundCardOpacity(12.4)).toBe(25);
+    expect(backgroundCardOpacity(62.6)).toBe(63);
+    expect(backgroundCardOpacity(120)).toBe(100);
   });
 
   it("maps generated file names to image MIME types", () => {

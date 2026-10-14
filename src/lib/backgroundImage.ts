@@ -25,6 +25,12 @@ export function backgroundImageMimeType(fileName: string): string {
   }
 }
 
+/** Card colors stay readable when a stale or hand-edited value appears. */
+export function backgroundCardOpacity(opacity: number | undefined): number {
+  if (opacity === undefined || !Number.isFinite(opacity)) return 100;
+  return Math.min(100, Math.max(25, Math.round(opacity)));
+}
+
 /**
  * A missing or unreadable local image falls back to the normal surface
  * background instead of making the shell fail; configuration cleanup can

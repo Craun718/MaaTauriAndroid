@@ -17,6 +17,7 @@
 :root {
   --tt-surface: #f5f7fb;
   --tt-raised: #ffffff;
+  --tt-card-opacity: 1;
   --tt-surface-muted: #e8edf5;
   --tt-ink: #172033;
   --tt-ink-muted: #637086;
@@ -56,7 +57,16 @@
  */
 @theme {
   --color-surface: var(--tt-surface);
+  /*
+   * 卡片底色保留一个不透明回退；支持 color-mix 的 WebView 用下一行读取
+   * 自定义背景卡片透明度。这样旧 WebView 不会因无效颜色变成透明卡片。
+   */
   --color-raised: var(--tt-raised);
+  --color-raised: color-mix(
+    in srgb,
+    var(--tt-raised) calc(var(--tt-card-opacity, 1) * 100%),
+    transparent
+  );
   --color-surface-muted: var(--tt-surface-muted);
   --color-ink: var(--tt-ink);
   --color-ink-muted: var(--tt-ink-muted);

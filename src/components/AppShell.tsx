@@ -1,7 +1,10 @@
 import { History, Home, ListChecks, Settings } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { useBackgroundImageObjectUrl } from "../lib/backgroundImage";
+import {
+  backgroundCardOpacity,
+  useBackgroundImageObjectUrl,
+} from "../lib/backgroundImage";
 import { useTranslation } from "../lib/i18n";
 import { useAppStore } from "../store/appStore";
 import { NotificationHost } from "./ui/NotificationHost";
@@ -11,7 +14,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const backgroundImage = useAppStore(
     (state) => state.snapshot?.configuration.backgroundImage,
   );
+  const cardOpacity = backgroundCardOpacity(
+    useAppStore((state) => state.snapshot?.configuration.backgroundCardOpacity),
+  );
   const backgroundSource = useBackgroundImageObjectUrl(backgroundImage);
+  const shellStyle = {
+    "--tt-card-opacity": cardOpacity / 100,
+  } as CSSProperties;
   const navigation = [
     { to: "/", label: t("navHome"), icon: Home },
     { to: "/tasks", label: t("navTasks"), icon: ListChecks },
@@ -33,7 +42,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       {backgroundSource && (
         <div aria-hidden="true" className="fixed inset-0 z-0 bg-surface/45" />
       )}
-      <div className="relative z-10 mx-auto flex h-full w-full max-w-md flex-col pt-[var(--tt-safe-top)]">
+      <div
+        className="relative z-10 mx-auto flex h-full w-full max-w-md flex-col pt-[var(--tt-safe-top)]"
+        style={shellStyle}
+      >
         {/* The only scroll container in the app: html/body are locked in index.css
           so the overlay nav below can never be dragged around with the page.
           The top safe-area inset lives on the shell above, NOT on <main>:

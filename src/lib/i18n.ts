@@ -291,6 +291,9 @@ const en = {
   customBackground: "Custom background",
   customBackgroundDescription:
     "Choose a picture on this device. It fills the background without distortion, is kept in app-private storage, and is not included in backups.",
+  backgroundCardOpacity: "Card opacity",
+  backgroundCardOpacityDescription:
+    "Lower values let more of the background show through cards.",
   backgroundImageImport: "Choose image",
   backgroundImageImporting: "Importing",
   backgroundImageRemove: "Remove",
@@ -650,6 +653,8 @@ const zh: Record<MessageKey, string> = {
   customBackground: "自定义背景",
   customBackgroundDescription:
     "选择本机图片作为背景。图片会等比放大铺满界面并裁掉超出部分，仅保存在应用私有目录，不会进入备份。",
+  backgroundCardOpacity: "卡片不透明度",
+  backgroundCardOpacityDescription: "数值越低，卡片透出的背景越多。",
   backgroundImageImport: "选择图片",
   backgroundImageImporting: "导入中",
   backgroundImageRemove: "移除",

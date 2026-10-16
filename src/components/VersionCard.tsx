@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
+import { resolveResourceVersion } from "../lib/resource-version";
 import type { Project, VersionInfo } from "../lib/types";
 
 export function VersionCard({
@@ -21,6 +22,10 @@ export function VersionCard({
 }) {
   const { t } = useTranslation();
   const environment = versions?.environment;
+  const resourceVersion = resolveResourceVersion(
+    project.version,
+    versions?.resourceTag,
+  );
 
   return (
     <section className="space-y-3 rounded-lg border border-line bg-raised p-card">
@@ -34,10 +39,7 @@ export function VersionCard({
               value={versions?.frameworkVersion}
             />
             <Row label={t("resourceName")} value={project.label} />
-            <Row
-              label={t("resourceVersion")}
-              value={project.version ?? versions?.resourceTag}
-            />
+            <Row label={t("resourceVersion")} value={resourceVersion} />
           </>
         ) : (
           <>
@@ -47,7 +49,7 @@ export function VersionCard({
               value={versions?.frameworkVersion}
             />
             <Row label={t("resourceName")} value={project.label} />
-            <Row label={t("resourceVersion")} value={versions?.resourceTag} />
+            <Row label={t("resourceVersion")} value={resourceVersion} />
             {environment && (
               <>
                 <Row label={t("device")} value={environment.device} />

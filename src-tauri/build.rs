@@ -130,11 +130,11 @@ fn main() {
         "cargo:rustc-env=MTA_APP_TAG={}",
         tag_or_short_hash(&root).unwrap_or_else(|| "unknown".to_string())
     );
+    println!("cargo:rerun-if-env-changed=MTA_RESOURCE_TAG");
     println!(
         "cargo:rustc-env=MTA_RESOURCE_TAG={}",
-        tag_or_short_hash(&root.join("resource/m9a")).unwrap_or_default()
+        std::env::var("MTA_RESOURCE_TAG").unwrap_or_default().trim()
     );
     watch_git_history(&root);
-    watch_git_history(&root.join("resource/m9a"));
     tauri_build::build()
 }

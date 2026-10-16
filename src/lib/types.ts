@@ -367,7 +367,7 @@ export interface VersionInfo {
   frameworkVersion: string;
   /** Tag of this checkout, or its short commit hash when HEAD has no tag. */
   appTag: string;
-  /** Tag (or short commit hash) of the loaded resource's own checkout. */
+  /** Tag (or short commit hash) supplied for the packaged resource at build time. */
   resourceTag?: string;
   /** Device facts the diagnostic export collects; absent on desktop. */
   environment?: EnvironmentInfo;

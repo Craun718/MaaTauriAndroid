@@ -22,8 +22,8 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// HEAD falls back to the short commit hash.
 pub const APP_TAG: &str = env!("MTA_APP_TAG");
 
-/// Tag (or short commit hash) of the `resource/m9a` Project Interface checkout.
-/// Empty when the CI-only clone is absent, so consumers hide the row.
+/// Tag (or short commit hash) of the packaged Project Interface checkout,
+/// supplied by the build environment. Empty when no build identity was supplied.
 pub const RESOURCE_TAG: &str = env!("MTA_RESOURCE_TAG");
 
 /// The application's formal name (`productName` in `tauri.conf.json`). The
@@ -150,7 +150,7 @@ pub struct VersionInfo {
     pub framework_version: String,
     /// Tag HEAD was built from, or the short commit hash when there is none.
     pub app_tag: String,
-    /// Tag (or short commit hash) of the CI-only `resource/m9a` checkout.
+    /// Tag (or short commit hash) supplied for the packaged resource at build time.
     pub resource_tag: Option<String>,
     pub environment: Option<EnvironmentInfo>,
 }

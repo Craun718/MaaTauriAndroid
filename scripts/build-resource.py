@@ -86,6 +86,37 @@ def export_source_timestamp(project_dir: Path) -> None:
     os.environ["SOURCE_DATE_EPOCH"] = str(max(timestamp, ZIP_EPOCH_TIMESTAMP))
 
 
+def export_resource_tag(project_dir: Path) -> None:
+    github_env = os.environ.get("GITHUB_ENV")
+    if not github_env:
+        raise RuntimeError("GITHUB_ENV is required to export the resource build identity")
+    try:
+        try:
+            output = subprocess.check_output(
+                ["git", "describe", "--tags", "--exact-match", "HEAD"],
+                cwd=project_dir,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError:
+            output = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=project_dir,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
+        tag = output.strip()
+        if not tag or "\n" in tag or "\r" in tag:
+            raise RuntimeError(f"invalid resource build identity for {project_dir}")
+        with Path(github_env).open("a", encoding="utf-8") as environment_file:
+            environment_file.write(f"MTA_RESOURCE_TAG={tag}\n")
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError(
+            f"cannot export resource build identity for {project_dir}: {error}"
+        ) from error
+    print(f"==> Resource build identity: {project_dir.name} {tag}")
+
+
 def build(arguments: argparse.Namespace, resource_id: str) -> None:
     export_source_timestamp(REPO_ROOT / "resource" / resource_id)
     run(
@@ -225,7 +256,7 @@ def main() -> int:
             if arguments.id
             else normalized_resource_id(arguments.url)
         )
-        clone(
+        project_dir = clone(
             arguments.url,
             arguments.ref,
             resource_id,
@@ -238,6 +269,7 @@ def main() -> int:
             ]
         )
         build(arguments, resource_id)
+        export_resource_tag(project_dir)
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

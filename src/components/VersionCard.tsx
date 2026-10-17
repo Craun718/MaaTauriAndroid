@@ -22,10 +22,7 @@ export function VersionCard({
 }) {
   const { t } = useTranslation();
   const environment = versions?.environment;
-  const resourceVersion = resolveResourceVersion(
-    project.version,
-    versions?.resourceTag,
-  );
+  const resourceVersion = resolveResourceVersion(versions?.resourceTag);
 
   return (
     <section className="space-y-3 rounded-lg border border-line bg-raised p-card">

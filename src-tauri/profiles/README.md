@@ -36,9 +36,9 @@ pi.profile=/absolute/path/to/your-pi-profile.toml
 
 TOML profile 使用 snake_case 键。相对 `pi_assets` 和 `bundle` 路径相对**配方文件自己所在的目录**；相对 `maa_dir` 路径相对**仓库根**。
 
-“概要”和“关于”的资源版本均优先显示 `interface.json` 的非空 `version`，缺失时回退到构建环境提供的 `MTA_RESOURCE_TAG`，两者均缺失才显示“未知”；字符串首尾空白会被去除。CI 的 `scripts/build-resource.py` 在资源准备完成后，从本次资源 checkout 解析 HEAD 的 Git tag，没有 tag 时使用短 commit hash，通过 `GITHUB_ENV` 传给后续 APK 构建，并在日志中打印资源 ID 和构建标识。解析或导出失败会终止 CI。该标识在 Rust 编译时写入，改变环境变量会触发重新生成。
+“概要”和“关于”的资源版本统一显示构建环境提供的 `MTA_RESOURCE_TAG`，不读取 `interface.json` 的 `version`；字符串首尾空白会被去除。CI 的 `scripts/build-resource.py` 在资源准备完成后，从本次资源 checkout 解析 HEAD 的 Git tag，没有 tag 时使用短 commit hash，通过 `GITHUB_ENV` 传给后续 APK 构建，并在日志中打印资源 ID 和构建标识。解析或导出失败会终止 CI。该标识在 Rust 编译时写入，改变环境变量会触发重新生成。
 
-本地打包可在构建命令前显式设置 `MTA_RESOURCE_TAG`，例如 `MTA_RESOURCE_TAG=v1.2.3 python3 scripts/build_apk.py --profile /absolute/path/to/your-pi-profile.toml`。无 Git 元数据或未提供变量时允许构建，仍可显示 `interface.json` 的发布版本。
+本地打包须在构建命令前显式设置 `MTA_RESOURCE_TAG`，值取资源 checkout 的 HEAD tag，无 tag 时取短 commit hash，例如 `MTA_RESOURCE_TAG=v1.2.3 python3 scripts/build_apk.py --profile /absolute/path/to/your-pi-profile.toml`。未提供变量时仍允许构建，但资源版本显示“未知”。
 
 最小例子：
 

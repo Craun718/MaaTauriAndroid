@@ -526,7 +526,9 @@ def regenerate_records(site_packages: Path) -> None:
                 if path == record:
                     continue
                 digest = hashlib.sha256(path.read_bytes()).digest()
-                encoded = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+                encoded = (
+                    "sha256=" + base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+                )
                 new_rows.append(
                     (
                         path.relative_to(site_packages).as_posix(),
@@ -751,7 +753,9 @@ def validate_records(site_packages: Path) -> None:
             if not path.is_file():
                 raise BuildError(f"RECORD references missing file: {path}")
             digest = hashlib.sha256(path.read_bytes()).digest()
-            expected = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+            expected = (
+                "sha256=" + base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+            )
             if encoded != expected or size_text != str(path.stat().st_size):
                 raise BuildError(f"RECORD hash or size mismatch: {path}")
         has_license = any(

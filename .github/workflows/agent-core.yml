@@ -1,0 +1,50 @@
+name: Android Python agent core
+
+on:
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: CPython source version (3.13.x)
+        default: '3.13.15'
+        required: true
+        type: string
+      maafw_version:
+        description: MaaFramework Python binding version
+        default: '5.14.2'
+        required: true
+        type: string
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager --install "ndk;28.2.13676358"
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build autoconf automake libtool pkg-config
+      - run: python -m pip install cmake==3.31.6 packaging==25.0
+      - name: Build both Android ABIs with CPU OpenCV and ORT
+        env:
+          PYTHON_VERSION: ${{ inputs.python_version }}
+          MAAFW_VERSION: ${{ inputs.maafw_version }}
+        run: |
+          python scripts/build_agent_core.py \
+            --python-version "$PYTHON_VERSION" \
+            --maafw-version "$MAAFW_VERSION" \
+            --work-dir build/agent-core \
+            --jobs 2
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-python-agent-core-${{ github.sha }}
+          path: build/agent-core/dist/
+          if-no-files-found: error

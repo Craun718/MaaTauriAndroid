@@ -171,6 +171,8 @@ scripts/build-agent-runtime.sh \
   --require pillow==11.0.0
 ```
 
+这里的 `--exclude pillow` 跳过上游 Pillow 的安装项或版本约束，再由 `--require` 提供 Android 替代版本；不能据此认为项目不需要 Pillow。core 自带库的替换限制，以及尚未实现的按需组件选择，见 [Agent runtime 构建：替换语义与当前限制](../../docs/agent-runtime.md#--exclude-的替换语义与当前限制)。
+
 组装与打包都走仓库内的通用工具：`scripts/build_agent_bundle.py`（vendored 自 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)，AGPL-3.0，来源 commit 见文件头，许可见 [../../scripts/MAA-FWAPP-LICENSE.md](../../scripts/MAA-FWAPP-LICENSE.md)）组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，`src-tauri/profiles/pack_agent_bundle.py` 出 ZIP；`--core-repo` / `--core-tag` 由 `scripts/env.sh` 传入（默认 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)）。
 
 `src-tauri/profiles/pack_agent_bundle.py` 是构建 **Python** agent 压缩包的唯一受支持方式：

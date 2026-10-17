@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Vendored into MaaTauriAndroid from Craun718/MaaAgentCoreAndroid. The body is
-# upstream's apart from the launcher.c path below and plain lint cleanups from
+# upstream's apart from the launcher.c path, CPU OpenCV/ORT integration and lint cleanups from
 # ruff.toml (`select = ["ALL"]`), so a `git diff` against upstream shows more
 # than this header.
 #
@@ -32,6 +32,16 @@ import tempfile
 import zipfile
 from pathlib import Path
 from typing import TypedDict
+
+from build_agent_native import (
+    NATIVE_PROVIDES,
+    OPENCV_VERSION,
+    ORT_REQUIREMENTS,
+    ORT_VERSION,
+    NativeBuildError,
+    build_native,
+    prepare_sources,
+)
 
 NUMPY_VERSION = "2.3.2"
 STRENUM_VERSION = "0.4.15"
@@ -81,6 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--python-version", required=True)
     parser.add_argument("--maafw-version", required=True)
     parser.add_argument("--work-dir", type=Path, default=Path("build/work"))
+    parser.add_argument("--jobs", type=int, default=2, help="Parallel native build jobs (default: 2)")
     parser.add_argument("--print-normalized-versions", action="store_true")
     return parser.parse_args()
 
@@ -215,6 +226,15 @@ def download_runtime_wheels(
         CHAQUOPY_INDEX,
     ]
     run([*base_command, f"StrEnum=={STRENUM_VERSION}"])
+    # ORT's runtime dependencies have pure-Python wheels. Request those even
+    # when PyPI also publishes native wheels for the build machine.
+    for name, version in ORT_REQUIREMENTS.items():
+        run([
+            sys.executable, "-m", "pip", "download", "--dest", destination,
+            "--only-binary=:all:", "--no-deps", "--platform", "any",
+            "--implementation", "py", "--abi", "none",
+            "--python-version", python_version, f"{name}=={version}",
+        ])
     wheel_hashes: dict[str, str] = {}
     for abi_info in ABIS.values():
         run(
@@ -226,11 +246,12 @@ def download_runtime_wheels(
             ]
         )
     for path in destination.glob("*.whl"):
-        if path.name.startswith(("StrEnum-", "numpy-")):
+        if not path.name.lower().startswith("maafw-"):
             wheel_hashes[path.name] = sha256(path)
-    if len(wheel_hashes) != 1 + len(ABIS):
+    expected_count = 1 + len(ABIS) + len(ORT_REQUIREMENTS)
+    if len(wheel_hashes) != expected_count:
         raise BuildError(
-            f"Expected {1 + len(ABIS)} runtime wheels, found {sorted(wheel_hashes)}"
+            f"Expected {expected_count} runtime wheels, found {sorted(wheel_hashes)}"
         )
     return wheel_hashes
 
@@ -440,6 +461,7 @@ def install_site_packages(
         py_abi,
         f"numpy=={NUMPY_VERSION}",
         f"StrEnum=={STRENUM_VERSION}",
+        *(f"{name}=={version}" for name, version in ORT_REQUIREMENTS.items()),
     ]
     for api in WHEEL_APIS:
         command.extend(["--platform", f"android_{api}_{wheel_abi}"])
@@ -496,11 +518,11 @@ def regenerate_records(site_packages: Path) -> None:
             root = site_packages / root_name
             if not root.exists():
                 continue
-            for path in sorted(
-                item
-                for item in root.rglob("*")
+            paths = [root] if root.is_file() else sorted(
+                item for item in root.rglob("*")
                 if item.is_file() and not item.is_symlink()
-            ):
+            )
+            for path in paths:
                 if path == record:
                     continue
                 digest = hashlib.sha256(path.read_bytes()).digest()
@@ -575,6 +597,8 @@ def write_manifest(
             "numpy": NUMPY_VERSION,
             "strenum": STRENUM_VERSION,
             "maafw": maafw_version,
+            **NATIVE_PROVIDES,
+            "opencv-python-headless": OPENCV_VERSION,
         },
     }
     path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -630,6 +654,9 @@ def validate_bundle(
             )
     if manifest["provides"].get("maafw") != maafw_version:
         raise BuildError(f"Manifest maafw mismatch for {abi}")
+    for name, version in NATIVE_PROVIDES.items():
+        if manifest["provides"].get(name) != version:
+            raise BuildError(f"Manifest {name} mismatch for {abi}")
 
     launcher = bundle / "bin" / "python3"
     elf_type, machine, interpreters = elf_info(launcher)
@@ -662,11 +689,18 @@ def validate_bundle(
             raise BuildError(f"Wrong ELF machine in {shared_object}: {machine}")
 
     site_packages = bundle / "site-packages"
-    required_sites = ("maa", "numpy", "numpy.libs", "strenum")
+    required_sites = ("maa", "numpy", "numpy.libs", "strenum", "onnxruntime")
     if not all((site_packages / name).is_dir() for name in required_sites):
         raise BuildError(f"Missing site-packages directories for {abi}")
     if (site_packages / "maa" / "bin").exists():
         raise BuildError(f"maa/bin must not be packaged for {abi}")
+    for required in (
+        "cv2.so", "onnxruntime/capi/onnxruntime_pybind11_state.so",
+    ):
+        if not (site_packages / required).is_file():
+            raise BuildError(f"Missing native Python binding {required} for {abi}")
+    if not (prefix_lib / "libc++_shared.so").is_file():
+        raise BuildError(f"Missing C++ runtime for {abi}")
     for native in site_packages.rglob("*"):
         if native.is_file() and not native.is_symlink() and ".so" in native.name:
             _, machine, _ = elf_info(native)
@@ -695,6 +729,9 @@ def validate_records(site_packages: Path) -> None:
         for root_name in roots:
             root = site_packages / root_name
             if not root.exists():
+                continue
+            if root.is_file():
+                actual_paths.add(root.relative_to(site_packages))
                 continue
             actual_paths.update(
                 path.relative_to(site_packages)
@@ -846,6 +883,8 @@ def main() -> None:
 
     if "ANDROID_HOME" not in os.environ:
         raise BuildError("ANDROID_HOME must be set")
+    if args.jobs < 1:
+        raise BuildError("--jobs must be positive")
 
     py_abi = f"cp{major}{minor}"
     script_root = Path(__file__).resolve().parent.parent
@@ -860,6 +899,7 @@ def main() -> None:
     if source_root.exists():
         shutil.rmtree(source_root)
 
+    native_commits = prepare_sources(work, python_version)
     python_archive = download_python_source(python_version, inputs)
     maafw_wheel = download_maafw_wheel(maafw_version, inputs)
     runtime_wheel_hashes = download_runtime_wheels(inputs, python_version, py_abi)
@@ -893,6 +933,10 @@ def main() -> None:
             python_version,
             abi_info["wheel_abi"],
             py_abi,
+        )
+        build_native(
+            work, site_packages, prefix_source, prefix / "lib",
+            abi, abi_info["host"], python_version, NUMPY_VERSION, args.jobs,
         )
         prune_site_packages(site_packages)
         regenerate_records(site_packages)
@@ -932,6 +976,9 @@ def main() -> None:
         "maafwPrerelease": is_prerelease(maafw_version),
         "numpyVersion": NUMPY_VERSION,
         "strenumVersion": STRENUM_VERSION,
+        "opencvVersion": OPENCV_VERSION,
+        "onnxruntimeVersion": ORT_VERSION,
+        "nativeSourceCommits": native_commits,
         "runtimeWheelSha256": runtime_wheel_hashes,
         "pythonSourceSha256": sha256(python_archive),
         "maafwWheelSha256": sha256(maafw_wheel),
@@ -951,6 +998,8 @@ def main() -> None:
         f"- MaaFramework Python binding: `{maafw_version}`",
         f"- numpy: `{NUMPY_VERSION}`",
         f"- StrEnum: `{STRENUM_VERSION}`",
+        f"- OpenCV (CPU, headless): `{OPENCV_VERSION}`",
+        f"- ONNX Runtime (CPU): `{ORT_VERSION}`",
         "- Android ABIs: `arm64-v8a`, `x86_64`",
         "",
         (
@@ -972,6 +1021,7 @@ if __name__ == "__main__":
         main()
     except (
         BuildError,
+        NativeBuildError,
         OSError,
         subprocess.CalledProcessError,
         shutil.Error,

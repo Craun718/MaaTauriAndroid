@@ -180,7 +180,7 @@ def build(args: argparse.Namespace) -> None:
         log(f"==> [2/4] Building agent runtime ({args.abi})…")
         run(["python3", str(REPO_ROOT / "scripts" / "prepare-pi.py"), str(project_dir)])
         runtime_cmd = [
-            "python3", str(REPO_ROOT / "scripts" / "build-agent-runtime.sh"),
+            "bash", str(REPO_ROOT / "scripts" / "build-agent-runtime.sh"),
             "--project-dir", str(project_dir),
             "--out", str(runtime_zip),
             "--abi", args.abi,

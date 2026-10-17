@@ -51,6 +51,37 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项
 
 ## 版本钉定
 
+### 从源码构建包含 OpenCV / ORT 的 core
+
+`scripts/build_agent_core.py` 从源码交叉编译 CPython、OpenCV 和 ONNX Runtime，产出 `arm64-v8a` 与 `x86_64` 两份 core。`scripts/build_agent_native.py` 维护原生依赖版本和 Android 适配：
+
+| 库 | 版本 | 内容 |
+|:---|:---|:---|
+| OpenCV | 4.12.0 | `cv2.so`；CPU、无 GUI，包含 core/imgproc/imgcodecs/calib3d/features2d/flann/photo/video/objdetect/dnn/ml；不包含 contrib 与视频输入输出 |
+| ONNX Runtime | 1.23.2 | `onnxruntime` Python 包与原生扩展；CPU provider，不启用 CUDA、NNAPI、XNNPACK |
+| ORT Python 依赖 | 见 `ORT_REQUIREMENTS` | coloredlogs、humanfriendly、flatbuffers、packaging、protobuf、sympy、mpmath，下载纯 Python wheel |
+| C++ 运行库 | 来自构建使用的 NDK | `prefix/lib/libc++_shared.so` 与许可声明，沿用配方已有的 `LD_LIBRARY_PATH` |
+
+NumPy 仍为 2.3.2，StrEnum 仍为 0.4.15。OpenCV 和 ORT 均使用目标 CPython 的头文件、共享库以及目标 NumPy 头文件编译，构建机 Python 只用于生成源码。OpenCV 上游默认禁用 Android Python binding，脚本会修改该判断；ORT 的 Python 探测则替换为显式的目标库配置。上游片段不匹配时直接失败。源码 tag 对应的 commit、输入 wheel 的哈希及版本记录在 `build-metadata.json`，许可证随 core 打包。
+
+构建机需要与目标 Python 主次版本一致的 Python（默认 3.13）、Android SDK、NDK 28.2.13676358、CMake 3.31、Ninja、Git、packaging 和 CPython 的构建工具。`ANDROID_HOME` 指向 SDK；NDK 优先取 `ANDROID_NDK_HOME` / `ANDROID_NDK_ROOT`，否则取 `$ANDROID_HOME/ndk/28.2.13676358`。
+
+```bash
+python3 scripts/build_agent_core.py \
+  --python-version 3.13.15 --maafw-version 5.14.2 \
+  --work-dir build/agent-core --jobs 2
+
+scripts/build-agent-runtime.sh \
+  --project-dir <你的资源目录> --out /tmp/agent-runtime.zip \
+  --core build/agent-core/dist/agent-core-3.13.15-arm64-v8a.tar.gz
+```
+
+也可手动触发 `.github/workflows/agent-core.yml`，从 `android-python-agent-core-<commit>` artifact 下载两种 ABI 的 core、构建元数据和哈希。该工作流只上传构建产物，不发布 release，也不修改已有 core tag。构建时检查 ELF 架构、文件布局及 RECORD 哈希；Python 导入、OpenCV 运算和 ORT 模型推理仍需 Android 真机验证。
+
+core 的 `provides` 会声明这两者及 ORT 的依赖，runtime 组装会跳过 requirements 中对应项的版本钉定；`opencv-python-headless` 也映射到 core 的无 GUI OpenCV，不提供 `opencv-contrib-python`。OpenCV 这里的版本是源码版本 `4.12.0`，不包含 PyPI wheel 的打包后缀。完整依赖锁建议传 `--no-deps`，避免 pip 为传递依赖重新解析 core 已包含的原生库。
+
+### 下载预编译 core
+
 全部集中在 `scripts/env.sh`，可用同名环境变量覆盖；改动时同步 `.github/workflows/ci.yml` 和 `vendor/maa/README.md`：
 
 | 变量 | 值 | 作用 |
@@ -60,6 +91,8 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项
 | `MAAFW_CORE_TAG` | `agent-core-3.13.15-maafw5.14.2` | 核心版本（对应 MaaFW 5.14.2） |
 
 对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC，patch 版本间保持兼容。
+
+上述已有 tag 的内容不变；资源 APK 的现有 CI 仍下载它，maapvz 的 `--exclude onnxruntime` 也继续用于旧 core。使用新库时，通过 `--core` 传入新产物，或发布新 core 后再更新 tag。新 core 已提供 ORT 时，requirements 中的排除参数不会删除 core 自带的副本。
 
 ## 仓库内置项目的构建参数
 
@@ -73,6 +106,31 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项
 | maaend | 不适用 | 不适用；上游脚本交叉编译 `go-service` 与 `cpp-algo` |
 
 模式是统一的：先排除依赖解析默认选中的版本，再用 `--require` 钉回 Chaquopy 索引上有 Android 轮子的版本（桌面 PyPI 上的 pillow 没有 arm64 Android 轮子）；纯桌面依赖直接剪掉。
+
+### `--exclude` 的替换语义与当前限制
+
+接入 Android 替代库时，`--exclude` 用于跳过上游 requirements 中原有的安装项或版本约束，替代实现由 `--require` 或 core 提供。不能仅凭包名出现在 `--exclude` 中，就判断项目不需要这个库。
+
+例如 `--exclude pillow --require pillow==11.0.0` 表示跳过上游 Pillow 的版本约束，安装 Android 索引上的 11.0.0。当前 `plan()` 会先过滤上游项，再加入 `--require`，并把 Pillow 从后续清理名单中移除，因此替代版本会保留。单独排除不适用于 Android 的桌面依赖仍会跳过安装；`--exclude` 本身不会自动寻找替代实现。
+
+core 自带库的替换目前还有限制：
+
+- `decide()` 先判断 `core.provides`，再判断 `--exclude`，因此 core 已提供的库会沿用 core 版本，且不会被加入清理名单。
+- `--require` 当前会无条件交给 pip，包括 core 已提供的库；尚未实现先移除旧副本、安装替代版本并同步清单的完整替换流程，不能依赖它安全覆盖 core 自带库。
+- runtime 组装当前复制整个 core。源码 core 包含的 OpenCV、ORT 及其依赖都会进入 runtime，尚未根据项目需求裁剪；`provides` 表示 core 提供了什么，不代表项目实际需要什么。
+
+### 按需打包的设计约定（尚未实现）
+
+组件选择应放在 `scripts/build_agent_bundle.py` 的 `build()` 组装阶段，在复制 core 文件之前解析需求，并在生成 `pure.zip` 之前完成选择。core 构建阶段负责记录组件的文件归属、依赖关系和共享库；最终 ZIP 打包工具负责归档与完整性检查。
+
+选择顺序应为：
+
+1. 从 requirements 的直接依赖、传递依赖和 Android 条件标记识别实际需求，同时纳入 `--require` 显式添加的需求。
+2. 应用 `--exclude`，跳过上游的安装项或版本约束，保留供替代实现使用的需求信息。
+3. 根据 `--require` 指定的替代版本或 core 提供的 Android 实现确定最终来源；缺少可用实现时明确报错。
+4. 按最终选择复制组件、安装其他依赖并更新 runtime 清单；共享依赖按所有已选组件的需求保留。
+
+例如，项目声明了 `onnxruntime`，同时传入 `--exclude onnxruntime`，且 core 提供 Android ORT 时，应保留 ORT 的需求并选择 core 实现。OpenCV 的 `opencv-python` / `opencv-python-headless` 名称应归一到同一个组件；ORT 的 Python 依赖和 `libc++_shared.so` 应按依赖关系保留，不能因为移除某个组件而删掉其他组件仍需要的文件。
 
 ### MaaEnd 例外
 

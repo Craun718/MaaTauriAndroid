@@ -120,6 +120,8 @@ jobs:
       # why the selection stays narrow.
       - run: pip install ruff==0.16.2
       - run: ruff check .
+      - name: Check agent core packaging logic
+        run: python -m unittest discover -s scripts -p 'test_agent_core.py'
 
   android-rust:
     needs: frontend

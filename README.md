@@ -93,7 +93,7 @@ scripts/build_apk.py --profile resource/m9a.toml --release
 
 资源项目由 CI 在构建期 clone；本地使用时先手动 clone 到 `resource/<resource_id>/`，再执行上述命令。资源不进 git。
 
-默认从源码编译 agent core（需 ANDROID_HOME + NDK，首次耗时较长）；加 `--use-prebuilt-core` 改为从 release 下载预编译产物。`--skip-runtime` 跳过 agent runtime 构建，直接出 APK。
+默认从源码编译 agent core，包含 CPU 版 OpenCV 与 ONNX Runtime 的 Python binding（需 ANDROID_HOME、NDK 28.2.13676358、CMake 3.31、Ninja、packaging，以及与目标 Python 主次版本一致的构建机 Python；首次耗时较长）。完整说明见 [Agent runtime 构建](docs/agent-runtime.md)。加 `--use-prebuilt-core` 改为从 release 下载预编译产物；旧 core 不会自动增加这两个库。`--skip-runtime` 跳过 agent runtime 构建，直接出 APK。
 
 本地检查：
 

@@ -2,9 +2,11 @@ package top.natsuu.mta
 
 import android.content.res.Configuration
 import android.os.Bundle
+import android.webkit.WebView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import top.natsuu.mta.pip.VirtualDisplayPipController
 
 /**
  * Edge-to-edge only: [enableEdgeToEdge] plus the enforced edge-to-edge of targetSdk 36 lay the
@@ -15,6 +17,23 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
  * Keeping clear of the bars is done in CSS with those env vars (see AGENTS.md, 系统栏适配).
  */
 class MainActivity : TauriActivity() {
+  val pipController by lazy { VirtualDisplayPipController(this) }
+
+  override fun onWebViewCreate(webView: WebView) {
+    super.onWebViewCreate(webView)
+    pipController.bindWebView(webView)
+  }
+
+  override fun onUserLeaveHint() {
+    super.onUserLeaveHint()
+    pipController.onUserLeaveHint()
+  }
+
+  override fun onPictureInPictureModeChanged(active: Boolean, newConfig: Configuration) {
+    super.onPictureInPictureModeChanged(active, newConfig)
+    pipController.onModeChanged(active)
+  }
+
   private val configurationFilePicker = registerForActivityResult(
     ActivityResultContracts.OpenDocument(),
   ) { uri ->
@@ -46,6 +65,7 @@ class MainActivity : TauriActivity() {
   }
 
   override fun onDestroy() {
+    pipController.destroy()
     RuntimeBridge.setVirtualDisplayLandscape(false)
     RuntimeBridge.detachActivity(this)
     if (!RunForegroundService.isRunning) {
@@ -60,6 +80,7 @@ class MainActivity : TauriActivity() {
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {
+    pipController.onModeChanged(isInPictureInPictureMode)
     super.onConfigurationChanged(newConfig)
     RuntimeBridge.logDebug(
       "Host configuration changed: orientation=${newConfig.orientation}",

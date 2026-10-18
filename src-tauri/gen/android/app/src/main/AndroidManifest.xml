@@ -36,6 +36,7 @@
             android:launchMode="singleTask"
             android:label="@string/main_activity_title"
             android:name=".MainActivity"
+            android:supportsPictureInPicture="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.maa_tauri_android.Splash"
             android:exported="true">

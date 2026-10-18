@@ -377,6 +377,9 @@ pub struct UserConfiguration {
     /// written to the run log regardless of this switch.
     #[serde(default = "default_true")]
     pub show_virtual_display_fps: bool,
+    /// Automatically show the virtual display in PiP when returning home.
+    #[serde(default = "default_true")]
+    pub pip_on_home: bool,
     /// User-facing debug switch: unlocks the app's own debug logging and turns
     /// on MaaFramework's debug mode (recognition snapshots and debug draws).
     #[serde(default)]
@@ -428,6 +431,7 @@ impl Default for UserConfiguration {
             telemetry_enabled: false,
             show_virtual_display_touches: true,
             show_virtual_display_fps: true,
+            pip_on_home: true,
             debug_mode: false,
             ui_language: UiLanguage::System,
             active_resource: None,
@@ -525,6 +529,20 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(parsed.show_virtual_display_fps);
+    }
+
+    #[test]
+    fn pip_preference_is_backward_compatible_and_round_trips() {
+        let mut value = serde_json::to_value(UserConfiguration::default()).unwrap();
+        value.as_object_mut().unwrap().remove("pipOnHome");
+        let legacy: UserConfiguration = serde_json::from_value(value.clone()).unwrap();
+        assert!(legacy.pip_on_home);
+        value["pipOnHome"] = serde_json::json!(false);
+        let disabled: UserConfiguration = serde_json::from_value(value.clone()).unwrap();
+        assert!(!disabled.pip_on_home);
+        assert_eq!(serde_json::to_value(disabled).unwrap()["pipOnHome"], false);
+        value["pipOnHome"] = serde_json::json!("false");
+        assert!(serde_json::from_value::<UserConfiguration>(value).is_err());
     }
 
     #[test]

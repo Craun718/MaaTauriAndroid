@@ -1745,6 +1745,55 @@ fn virtual_display_stream() -> Result<VirtualDisplayStream, AppError> {
     }
 }
 
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VirtualDisplayPipRect {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VirtualDisplayPipRequest {
+    unavailable_label: String,
+    eligible: bool,
+    width: i32,
+    height: i32,
+    source_rect: Option<VirtualDisplayPipRect>,
+}
+
+fn validate_pip_request(request: &VirtualDisplayPipRequest) -> Result<(), AppError> {
+    if request.eligible && (request.width <= 0 || request.height <= 0) {
+        return Err(AppError::Message(
+            "PiP requires positive display dimensions".into(),
+        ));
+    }
+    if let Some(rect) = &request.source_rect {
+        if rect.left < 0 || rect.top < 0 || rect.right <= rect.left || rect.bottom <= rect.top {
+            return Err(AppError::Message("PiP source rectangle is invalid".into()));
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn update_virtual_display_pip(request: VirtualDisplayPipRequest) -> Result<(), AppError> {
+    validate_pip_request(&request)?;
+    #[cfg(target_os = "android")]
+    {
+        let json = serde_json::to_string(&request)
+            .map_err(|error| AppError::Message(error.to_string()))?;
+        if !call_runtime_bridge_string_with_string("updateVirtualDisplayPip", &json)? {
+            return Err(AppError::Message(
+                "The PiP host activity is unavailable".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn set_virtual_display_landscape(enabled: bool) -> Result<(), AppError> {
     #[cfg(target_os = "android")]
@@ -5009,6 +5058,64 @@ mod tests {
     }
 
     #[test]
+    fn pip_requests_validate_geometry_and_serialize_the_jni_contract() {
+        let mut request = VirtualDisplayPipRequest {
+            unavailable_label: "Unavailable".into(),
+            eligible: true,
+            width: 1280,
+            height: 720,
+            source_rect: Some(VirtualDisplayPipRect {
+                left: 10,
+                top: 20,
+                right: 110,
+                bottom: 80,
+            }),
+        };
+        assert!(validate_pip_request(&request).is_ok());
+        let payload = serde_json::to_value(&request).unwrap();
+        assert_eq!(payload["sourceRect"]["left"], 10);
+        assert_eq!(payload["unavailableLabel"], "Unavailable");
+        request.width = 0;
+        assert!(validate_pip_request(&request).is_err());
+        request.eligible = false;
+        assert!(validate_pip_request(&request).is_ok());
+        request.source_rect.as_mut().unwrap().right = 10;
+        assert!(validate_pip_request(&request).is_err());
+        request.source_rect.as_mut().unwrap().left = -1;
+        assert!(validate_pip_request(&request).is_err());
+        request.source_rect = None;
+        assert!(validate_pip_request(&request).is_ok());
+        assert!(
+            serde_json::from_value::<VirtualDisplayPipRequest>(serde_json::json!({
+                "eligible": "yes", "width": 1280, "height": 720,
+                "sourceRect": null, "unavailableLabel": "Unavailable"
+            }))
+            .is_err()
+        );
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn pip_updates_are_safe_on_desktop_and_reject_invalid_input() {
+        assert!(update_virtual_display_pip(VirtualDisplayPipRequest {
+            unavailable_label: "Unavailable".into(),
+            eligible: false,
+            width: 0,
+            height: 0,
+            source_rect: None,
+        })
+        .is_ok());
+        assert!(update_virtual_display_pip(VirtualDisplayPipRequest {
+            unavailable_label: "Unavailable".into(),
+            eligible: true,
+            width: -1,
+            height: 720,
+            source_rect: None,
+        })
+        .is_err());
+    }
+
+    #[test]
     #[cfg(not(target_os = "android"))]
     fn virtual_display_actions_are_unsupported_off_android() {
         assert!(matches!(
@@ -5446,6 +5553,7 @@ pub fn run() {
             virtual_display_status,
             virtual_display_stream,
             set_virtual_display_landscape,
+            update_virtual_display_pip,
             virtual_display_touch,
             virtual_display_back,
             set_virtual_display_touch_markers,

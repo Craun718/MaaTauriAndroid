@@ -395,6 +395,20 @@ export function SettingsPage() {
         </Checkbox>
         <Checkbox
           className="min-h-10 gap-2"
+          checked={snapshot?.configuration.pipOnHome ?? true}
+          disabled={restartPending || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.pipOnHome = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
+          <span className="font-medium">{t("pipOnHome")}</span>
+        </Checkbox>
+        <p className="text-sm text-ink-muted">{t("pipOnHomeDescription")}</p>
+        <Checkbox
+          className="min-h-10 gap-2"
           checked={snapshot?.configuration.showVirtualDisplayFps ?? true}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {

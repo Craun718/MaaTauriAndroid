@@ -39,6 +39,7 @@ import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 import org.json.JSONObject
 import androidx.core.content.FileProvider
+import top.natsuu.mta.pip.PreviewRouter
 import top.natsuu.mta.overlay.RunOverlayController
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
@@ -112,6 +113,14 @@ object RuntimeBridge {
     @JvmStatic
     fun attachActivity(activity: Activity) {
         hostActivity = WeakReference(activity)
+        mainHandler.post {
+            if (hostActivity?.get() !== activity) return@post
+            (activity as? MainActivity)?.pipController?.apply {
+                setRunActive(pipRunActive)
+                val display = pipDisplay
+                if (display != null) displayStarted(display[0], display[1], display[2])
+            }
+        }
     }
 
     @JvmStatic
@@ -349,15 +358,59 @@ object RuntimeBridge {
     fun isVirtualDisplayPortrait(): Boolean =
         BuildConfig.VIRTUAL_DISPLAY_ORIENTATION == "portrait"
 
+    @Volatile private var pipRunActive = false
+    @Volatile private var pipDisplay: IntArray? = null
+
+    @JvmStatic
+    fun updateVirtualDisplayPip(json: String): Boolean {
+        val activity = hostActivity?.get() as? MainActivity ?: return false
+        // Reject malformed calls before accepting their asynchronous UI work.
+        runCatching { JSONObject(json).getBoolean("eligible") }.getOrElse { return false }
+        mainHandler.post {
+            if (hostActivity?.get() === activity) {
+                runCatching { activity.pipController.update(json) }
+                    .onFailure { Log.w(LOG_TAG, "Could not update PiP request", it) }
+            }
+        }
+        return true
+    }
+
+    @JvmStatic
+    fun runServiceDestroyed() { setPipRunActive(false) }
+
+    @JvmStatic
+    fun setPipRunActive(active: Boolean): Boolean {
+        pipRunActive = active
+        mainHandler.post {
+            (hostActivity?.get() as? MainActivity)?.pipController?.setRunActive(active)
+        }
+        return true
+    }
+
+    @JvmStatic
+    fun invalidatePipDisplay(expectedDisplayId: Int? = null) {
+        if (expectedDisplayId != null && pipDisplay?.get(0) != expectedDisplayId) return
+        pipDisplay = null
+        PreviewRouter.stop()
+        mainHandler.post {
+            if (pipDisplay == null) {
+                (hostActivity?.get() as? MainActivity)?.pipController?.displayStopped()
+            }
+        }
+    }
+
     @JvmStatic
     fun startRunForegroundService(): Boolean {
         val context = agentContext ?: return false
-        return RunForegroundService.start(context)
+        val accepted = RunForegroundService.start(context)
+        setPipRunActive(accepted)
+        return accepted
     }
 
     @JvmStatic
     fun stopRunForegroundService(): Boolean {
         val context = agentContext ?: return false
+        setPipRunActive(false)
         RunForegroundService.stop(context)
         return true
     }
@@ -1034,6 +1087,10 @@ object RuntimeBridge {
 
     @JvmStatic
     fun startVirtualDisplay(width: Int, height: Int, dpi: Int): Boolean {
+        // Native display recreation invalidates its EGL output as well. Detach before
+        // releasing the encoder so a replacement never inherits a released Surface.
+        invalidatePipDisplay()
+        VirtualDisplayStreamHost.stop()
         val displayId = runCatching {
             ControlHost.startVirtualDisplay(width, height, dpi)
         }.getOrDefault(-1)
@@ -1042,11 +1099,13 @@ object RuntimeBridge {
         ControlHost.configure(displayId, width, height)
         configureScreen(width, height)
         setActiveDisplay(displayId)
-        VirtualDisplayStreamHost.start(width, height)?.let { previewSurface ->
-            runCatching {
-                ControlHost.attachPreviewSurface(previewSurface)
-            }.onFailure {
-                VirtualDisplayStreamHost.stop()
+        PreviewRouter.start(VirtualDisplayStreamHost.start(width, height))
+        val display = intArrayOf(displayId, width, height)
+        pipDisplay = display
+        mainHandler.post {
+            if (pipDisplay === display) {
+                (hostActivity?.get() as? MainActivity)?.pipController
+                    ?.displayStarted(displayId, width, height)
             }
         }
         return true
@@ -1054,9 +1113,7 @@ object RuntimeBridge {
 
     @JvmStatic
     fun stopVirtualDisplay(): Boolean {
-        runCatching {
-            ControlHost.attachPreviewSurface(null)
-        }
+        invalidatePipDisplay()
         VirtualDisplayStreamHost.stop()
         runCatching {
             ControlHost.stopVirtualDisplay()

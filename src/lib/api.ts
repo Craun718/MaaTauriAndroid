@@ -361,3 +361,28 @@ export async function windowInsets() {
 export async function getDisplayHazards() {
   return invoke<DisplayHazards>("display_hazards");
 }
+
+export interface VirtualDisplayPipRequest {
+  unavailableLabel: string;
+  eligible: boolean;
+  width: number;
+  height: number;
+  sourceRect: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null;
+}
+
+let pendingPipUpdate = Promise.resolve();
+
+export function updateVirtualDisplayPip(
+  request: VirtualDisplayPipRequest,
+): Promise<void> {
+  const update = pendingPipUpdate.then(() =>
+    invoke<void>("update_virtual_display_pip", { request }),
+  );
+  pendingPipUpdate = update.catch(() => undefined);
+  return update;
+}

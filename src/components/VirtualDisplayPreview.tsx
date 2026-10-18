@@ -1,5 +1,6 @@
 import { CircleAlert, LoaderCircle } from "lucide-react";
 import {
+  type ReactElement,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -82,13 +83,15 @@ export function VirtualDisplayPreview({
   status,
   showTouchMarkers,
   interactive = true,
+  onReadyChange,
   className,
 }: {
   status: VirtualDisplayStatus;
   showTouchMarkers: boolean;
   interactive?: boolean;
+  onReadyChange?: (ready: boolean) => void;
   className: string;
-}) {
+}): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const markerCanvasRef = useRef<HTMLCanvasElement>(null);
   const statusRef = useRef(status);
@@ -99,6 +102,11 @@ export function VirtualDisplayPreview({
   const [streamRestart, setStreamRestart] = useState(0);
   const { t } = useTranslation();
   const notify = useNotificationStore((state) => state.notify);
+
+  useEffect(() => {
+    onReadyChange?.(streamState === "ready");
+    return () => onReadyChange?.(false);
+  }, [streamState, onReadyChange]);
 
   statusRef.current = status;
 
@@ -176,7 +184,9 @@ export function VirtualDisplayPreview({
     }
 
     document.addEventListener("visibilitychange", reconnectWhenVisible);
+    window.addEventListener("virtual-display-pip-restored", restartStream);
     return () => {
+      window.removeEventListener("virtual-display-pip-restored", restartStream);
       document.removeEventListener("visibilitychange", reconnectWhenVisible);
     };
   }, [restartStream]);
@@ -232,6 +242,7 @@ export function VirtualDisplayPreview({
             context.drawImage(frame as unknown as CanvasImageSource, 0, 0);
             frame.close();
             decoderRecreations = 0;
+            if (!disposed) setStreamState("ready");
           },
           error(error) {
             reportFrontendError("Virtual display decoder failed", error);
@@ -310,7 +321,6 @@ export function VirtualDisplayPreview({
               avc: { format: "annexb" },
             });
             waitingForKeyFrame = true;
-            setStreamState("ready");
           } catch (error) {
             reportFrontendError("Virtual display stream config failed", error);
             setStreamState("error");
@@ -333,7 +343,6 @@ export function VirtualDisplayPreview({
           });
           activeDecoder.decode(chunk);
           waitingForKeyFrame = false;
-          setStreamState("ready");
         } catch (error) {
           const key =
             event.data.byteLength > 0 &&

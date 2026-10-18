@@ -304,7 +304,9 @@ export function TasksPage() {
       }`}
     >
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>
-      {!configuration.foregroundMode && <VirtualDisplayCard />}
+      {!configuration.foregroundMode && (
+        <VirtualDisplayCard running={runActive} />
+      )}
       <RunPanel
         ref={runPanelRef}
         onRunStarted={() => {

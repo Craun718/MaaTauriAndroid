@@ -8,7 +8,13 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   getVirtualDisplayStatus,
@@ -16,6 +22,7 @@ import {
   setVirtualDisplayLandscape,
   stopRun,
   stopVirtualDisplay,
+  updateVirtualDisplayPip,
 } from "../lib/api";
 import {
   reportFrontendDebug,
@@ -23,6 +30,7 @@ import {
 } from "../lib/frontendLogging";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
+import { pipEligible, pipSourceRect } from "../lib/virtualDisplayPip";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { Modal } from "./ui/Modal";
@@ -35,7 +43,19 @@ import { VirtualDisplayPreview } from "./VirtualDisplayPreview";
 // because their height is already below the cap.
 const CARD_PREVIEW_MAX_HEIGHT = "16rem";
 
-export function VirtualDisplayCard() {
+export function VirtualDisplayCard({
+  running,
+}: {
+  running: boolean;
+}): ReactElement {
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewReady, setPreviewReady] = useState(false);
+  const pipEnabled = useAppStore(
+    (state) => state.snapshot?.configuration.pipOnHome ?? true,
+  );
+  const foreground = useAppStore(
+    (state) => state.snapshot?.configuration.foregroundMode ?? false,
+  );
   const [status, setStatus] = useState<VirtualDisplayStatus>();
   const [, setStatusError] = useState<string>();
   const [refreshing, setRefreshing] = useState(true);
@@ -52,6 +72,57 @@ export function VirtualDisplayCard() {
   const showFps = useAppStore(
     (state) => state.snapshot?.configuration.showVirtualDisplayFps ?? true,
   );
+
+  useEffect(() => {
+    let disposed = false;
+    const send = (eligible: boolean) => {
+      const bounds = previewRef.current?.getBoundingClientRect();
+      const request = {
+        unavailableLabel: t("virtualDisplayPipUnavailable"),
+        eligible,
+        width: status?.width ?? 0,
+        height: status?.height ?? 0,
+        sourceRect: bounds
+          ? pipSourceRect(
+              bounds,
+              {
+                width: window.innerWidth,
+                height: window.innerHeight,
+              },
+              window.devicePixelRatio || 1,
+            )
+          : null,
+      };
+      void updateVirtualDisplayPip(request).catch((error) => {
+        reportFrontendError("Could not update picture-in-picture", error);
+      });
+    };
+    const update = () => {
+      if (disposed) return;
+      send(
+        pipEligible({
+          enabled: pipEnabled,
+          foreground,
+          running,
+          fullscreen,
+          ready: previewReady,
+          status,
+        }),
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    if (previewRef.current) observer.observe(previewRef.current);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      send(false);
+    };
+  }, [pipEnabled, foreground, running, fullscreen, previewReady, status, t]);
 
   const refreshStatus = useCallback(async () => {
     setRefreshing(true);
@@ -123,6 +194,16 @@ export function VirtualDisplayCard() {
   useEffect(() => {
     if (status?.active === false) setFullscreen(false);
   }, [status?.active]);
+
+  useEffect(() => {
+    const leaveFullscreen = () => setFullscreen(false);
+    window.addEventListener("virtual-display-pip-entered", leaveFullscreen);
+    return () =>
+      window.removeEventListener(
+        "virtual-display-pip-entered",
+        leaveFullscreen,
+      );
+  }, []);
 
   useEffect(() => {
     if (!fullscreen || status?.active !== true) return;
@@ -288,6 +369,7 @@ export function VirtualDisplayCard() {
 
       {active && status && !fullscreen ? (
         <div
+          ref={previewRef}
           className="relative mx-auto rounded-md border border-line"
           style={{
             aspectRatio:
@@ -304,6 +386,7 @@ export function VirtualDisplayCard() {
             status={status}
             showTouchMarkers={showTouchMarkers}
             interactive={false}
+            onReadyChange={setPreviewReady}
             className="h-full w-full"
           />
           {fpsBadge(false)}

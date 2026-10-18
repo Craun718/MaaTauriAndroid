@@ -59,6 +59,7 @@ class RunForegroundService : Service() {
 
     override fun onDestroy() {
         running.set(false)
+        RuntimeBridge.runServiceDestroyed()
         clearProgress()
         releaseVendorGate()
         stopForeground(STOP_FOREGROUND_REMOVE)

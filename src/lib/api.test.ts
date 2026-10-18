@@ -15,6 +15,7 @@ import {
   setPrivilegedBackend,
   setVirtualDisplayLandscape,
   startRun,
+  updateVirtualDisplayPip,
 } from "./api";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -399,5 +400,54 @@ describe("display hazards", () => {
 
     await expect(getDisplayHazards()).resolves.toBe(hazards);
     expect(invoke).toHaveBeenCalledWith("display_hazards");
+  });
+});
+
+describe("PiP IPC ordering", () => {
+  const request = {
+    eligible: true,
+    width: 1280,
+    height: 720,
+    unavailableLabel: "Unavailable",
+    sourceRect: { left: 10, top: 20, right: 110, bottom: 80 },
+  };
+
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("preserves request geometry and orders disarming after pending updates", async () => {
+    let complete: (() => void) | undefined;
+    invoke.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    invoke.mockResolvedValueOnce(undefined);
+    const first = updateVirtualDisplayPip(request);
+    const disarm = { ...request, eligible: false, sourceRect: null };
+    const second = updateVirtualDisplayPip(disarm);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    expect(invoke).toHaveBeenNthCalledWith(1, "update_virtual_display_pip", {
+      request,
+    });
+    complete?.();
+    await Promise.all([first, second]);
+    expect(invoke).toHaveBeenNthCalledWith(2, "update_virtual_display_pip", {
+      request: disarm,
+    });
+  });
+
+  it("reports IPC failures and lets the next disarm through", async () => {
+    invoke.mockRejectedValueOnce(new Error("host unavailable"));
+    await expect(updateVirtualDisplayPip(request)).rejects.toThrow(
+      "host unavailable",
+    );
+    invoke.mockResolvedValueOnce(undefined);
+    await expect(
+      updateVirtualDisplayPip({ ...request, eligible: false }),
+    ).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledTimes(2);
   });
 });

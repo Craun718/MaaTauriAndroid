@@ -191,7 +191,7 @@ object VirtualDisplayStreamHost {
         }
     }
 
-    private fun requestSyncFrame() {
+    fun requestSyncFrame() {
         val params = Bundle().apply {
             putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
         }

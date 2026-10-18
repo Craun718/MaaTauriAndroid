@@ -313,6 +313,8 @@ export interface UserConfiguration {
   telemetryEnabled: boolean;
   showVirtualDisplayTouches?: boolean;
   showVirtualDisplayFps?: boolean;
+  /** Automatically show the virtual display in PiP when returning home. */
+  pipOnHome?: boolean;
   debugMode?: boolean;
   uiLanguage?: UiLanguage;
   activeResource?: string;

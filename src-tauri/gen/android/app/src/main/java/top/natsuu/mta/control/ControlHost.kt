@@ -69,6 +69,7 @@ object ControlHost {
 
     @JvmStatic
     fun detach() {
+        top.natsuu.mta.RuntimeBridge.invalidatePipDisplay()
         currentService = null
         detachNative()
     }

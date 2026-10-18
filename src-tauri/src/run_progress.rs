@@ -374,6 +374,10 @@ pub fn set_run_overlay_foreground(foreground: bool) {
 /// then forgets the run. Call it once per run, from the same place the run
 /// result is finalised.
 pub fn finish_run_overlay() {
+    #[cfg(target_os = "android")]
+    if let Err(error) = crate::call_runtime_bridge_boolean_with_bool("setPipRunActive", false) {
+        log::warn!("Could not finish the PiP run state: {error}");
+    }
     let finished = overlay_lock().take().map(|mut state| {
         state.phase = RunOverlayPhase::Finished;
         state

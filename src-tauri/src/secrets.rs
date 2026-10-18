@@ -327,6 +327,7 @@ mod tests {
             foreground_mode: false,
             foreground_overlay: false,
             show_virtual_display_fps: true,
+            pip_on_home: true,
             telemetry_enabled: false,
             ui_language: Default::default(),
             active_resource: None,

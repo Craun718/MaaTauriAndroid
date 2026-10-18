@@ -297,10 +297,10 @@ export function TasksPage() {
 
   return (
     <div
-      className={`flex flex-col gap-card-gap${
+      className={`flex flex-col gap-card-gap ${
         // 日志激活时根容器撑满 <main> 的 content box；与底部 nav 的间隙由
         // AppShell 的 pb 统一提供，这里不再另加 padding。
-        activityTab === "logs" ? " min-h-0 flex-1 overflow-hidden" : ""
+        activityTab === "logs" ? "min-h-0 flex-1 overflow-hidden" : ""
       }`}
     >
       <h1 className="text-xl font-semibold">{t("tasksAndRun")}</h1>

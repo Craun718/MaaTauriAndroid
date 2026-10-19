@@ -7,6 +7,8 @@ interface ModalProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Alternative panel background, such as the translucent app chrome. */
+  panelClassName?: string;
   children: ReactNode;
 }
 
@@ -14,7 +16,13 @@ interface ModalProps {
  * Centered modal with an inset panel: safe-area padding keeps it clear of the
  * system bars, while tall content scrolls inside the panel.
  */
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  panelClassName = "bg-raised",
+  children,
+}: ModalProps) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +56,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
           aria-modal="true"
           aria-label={title}
           tabIndex={-1}
-          className="pointer-events-auto flex max-h-full w-full max-w-md flex-col rounded-lg border border-line bg-raised p-3 shadow-lg outline-none"
+          className={`pointer-events-auto flex max-h-full w-full max-w-md flex-col rounded-lg border border-line p-3 shadow-lg outline-none ${panelClassName}`}
         >
           <div className="flex shrink-0 items-center justify-between gap-3">
             <h2 className="font-medium">{title}</h2>

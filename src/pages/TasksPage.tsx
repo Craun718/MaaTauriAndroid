@@ -33,7 +33,6 @@ import {
 } from "../components/RunActivityTabs";
 import type { RunPanelHandle } from "../components/RunPanel";
 import { RunPanel } from "../components/RunPanel";
-import { BottomDrawer } from "../components/ui/BottomDrawer";
 import { Checkbox } from "../components/ui/Checkbox";
 import { Modal } from "../components/ui/Modal";
 import { Select } from "../components/ui/Select";
@@ -407,7 +406,7 @@ export function TasksPage() {
           </button>
         </div>
       )}
-      <TaskActionsDrawer
+      <TaskActionsModal
         target={taskAction}
         onClose={() => setTaskAction(undefined)}
         onStart={(mode) => {
@@ -842,7 +841,7 @@ function TaskItem({
   );
 }
 
-function TaskActionsDrawer({
+function TaskActionsModal({
   target,
   onClose,
   onStart,
@@ -855,10 +854,11 @@ function TaskActionsDrawer({
   if (!target) return null;
 
   return (
-    <BottomDrawer
+    <Modal
       open
       onClose={onClose}
       title={t("taskActionsTitle", { task: target.label })}
+      panelClassName="bg-surface/82 backdrop-blur"
     >
       <button
         type="button"
@@ -876,6 +876,6 @@ function TaskActionsDrawer({
         <FastForward size="1rem" />
         {t("runCurrentAndFollowingTasks")}
       </button>
-    </BottomDrawer>
+    </Modal>
   );
 }

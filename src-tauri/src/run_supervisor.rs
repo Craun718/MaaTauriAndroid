@@ -16,7 +16,7 @@
 //! immediately, before recognition misses accumulate.
 
 #[cfg(any(target_os = "android", test))]
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::Emitter;
@@ -270,6 +270,32 @@ enum HealthFinding {
     ProbeUnavailable,
 }
 
+/// MAA briefly tears down the game when it restarts a failed login. Require
+/// two consecutive missing-task probes before treating that as a real exit.
+#[cfg(any(target_os = "android", test))]
+const TARGET_EXIT_CONFIRM_POLLS: u8 = 2;
+
+#[cfg(any(target_os = "android", test))]
+#[derive(Default)]
+struct TargetExitTracker {
+    missing_polls: HashMap<String, u8>,
+}
+
+#[cfg(any(target_os = "android", test))]
+impl TargetExitTracker {
+    fn reset(&mut self) {
+        self.missing_polls.clear();
+    }
+
+    /// Records a missing target and returns true once it has been absent for
+    /// enough consecutive probes to confirm an exit.
+    fn observe_exit(&mut self, package: &str) -> bool {
+        let polls = self.missing_polls.entry(package.to_string()).or_default();
+        *polls = polls.saturating_add(1);
+        *polls >= TARGET_EXIT_CONFIRM_POLLS
+    }
+}
+
 #[cfg(any(target_os = "android", test))]
 fn assess_health(state: &crate::run_diagnosis::TargetAppState) -> HealthFinding {
     if state.display_id != 0 && !state.display_alive {
@@ -302,6 +328,7 @@ async fn watch_loop(
     mut stop_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     let mut advisor = FpsAdvisor::new();
+    let mut target_exits = TargetExitTracker::default();
     let mut last_frame_count: Option<i64> = None;
     let mut ticker = tokio::time::interval(Duration::from_secs(1));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -343,7 +370,7 @@ async fn watch_loop(
             .as_ref()
             .map_or(HealthFinding::ProbeUnavailable, assess_health);
         match finding {
-            HealthFinding::Healthy => {}
+            HealthFinding::Healthy => target_exits.reset(),
             HealthFinding::ProbeUnavailable => {
                 // A probe that fails while the privileged backend is gone means
                 // the control service died or was replaced mid-run: the display
@@ -375,6 +402,16 @@ async fn watch_loop(
                 break;
             }
             HealthFinding::TargetExited(package) => {
+                if !target_exits.observe_exit(&package) {
+                    warn_health(
+                        &app,
+                        &logger,
+                        format!(
+                            "the target app {package} was not found; confirming on the next health poll"
+                        ),
+                    );
+                    continue;
+                }
                 fatal(
                     &app,
                     &logger,
@@ -386,6 +423,9 @@ async fn watch_loop(
                 break;
             }
             HealthFinding::TargetOffscreen(package) => {
+                // A task still exists, so any earlier missing streak was a
+                // transient teardown rather than an exit.
+                target_exits.reset();
                 warn_health(
                     &app,
                     &logger,
@@ -665,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn exited_target_is_fatal() {
+    fn missing_target_is_reported_for_confirmation() {
         let state = health_state(
             r#"{
                 "displayId": 20,
@@ -679,6 +719,39 @@ mod tests {
             assess_health(&state),
             HealthFinding::TargetExited("com.game.pkg".to_string())
         );
+    }
+
+    #[test]
+    fn a_single_missing_poll_does_not_confirm_an_exit() {
+        let mut tracker = TargetExitTracker::default();
+
+        assert!(!tracker.observe_exit("com.game.pkg"));
+    }
+
+    #[test]
+    fn consecutive_missing_polls_confirm_an_exit() {
+        let mut tracker = TargetExitTracker::default();
+
+        assert!(!tracker.observe_exit("com.game.pkg"));
+        assert!(tracker.observe_exit("com.game.pkg"));
+    }
+
+    #[test]
+    fn a_healthy_poll_resets_the_missing_streak() {
+        let mut tracker = TargetExitTracker::default();
+
+        assert!(!tracker.observe_exit("com.game.pkg"));
+        tracker.reset();
+        assert!(!tracker.observe_exit("com.game.pkg"));
+    }
+
+    #[test]
+    fn missing_streaks_are_tracked_per_package() {
+        let mut tracker = TargetExitTracker::default();
+
+        assert!(!tracker.observe_exit("com.game.one"));
+        assert!(!tracker.observe_exit("com.game.two"));
+        assert!(tracker.observe_exit("com.game.one"));
     }
 
     #[test]

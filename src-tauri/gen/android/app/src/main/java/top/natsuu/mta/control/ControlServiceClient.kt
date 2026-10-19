@@ -53,6 +53,14 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     @Volatile
     private var lastServicePid: Int? = null
 
+    /** 主动销毁 binder 时置位，避免把预期断连当成运行中的服务死亡。 */
+    @Volatile
+    private var intentionalDisconnect = false
+
+    /** 同一次断连可能同时经 ServiceConnection 与 Root binder 回调送达。 */
+    @Volatile
+    private var serviceLossReported = false
+
     private val forensics = ServiceDeathForensics(context)
 
     private var rootDeathRecipient: IBinder.DeathRecipient? = null
@@ -159,14 +167,15 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     }
 
     fun disconnect() {
+        intentionalDisconnect = true
         stopVirtualDisplaySafely()
         stopAgentsSafely()
+        removeRootBinder()
         destroyCurrentServiceSafely()
         if (bound) {
             Shizuku.unbindUserService(serviceArgs, this, true)
             bound = false
         }
-        removeRootBinder()
         removePermissionListener()
         completeConnectionRequest(false)
         completePermissionRequest(false)
@@ -378,6 +387,8 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         ControlHost.attach(service)
         XmsfNetworkGate.onPrivilegedServiceConnected(context)
         lastServicePid = queryServicePid(service)
+        intentionalDisconnect = false
+        serviceLossReported = false
         RuntimeBridge.setControlState(STATE_CONNECTED)
         ShizukuDownMonitor.onConnected(context)
         completeConnectionRequest(true)
@@ -386,13 +397,17 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         thread(name = "mta-service-forensics") { reportPendingServiceDeath(service, lastServicePid) }
     }
 
+    @Synchronized
     private fun handleServiceDisconnected() {
+        reportServiceLossOnce()
         stopVirtualDisplaySafely()
         ControlHost.detach()
         RuntimeBridge.setControlState(STATE_DISCONNECTED)
         ShizukuDownMonitor.onDisconnected(context)
-        // 死的多半是被系统杀的（lmkd、AMS、厂商守护进程），凶手只写系统日志
-        forensics.remember("the privileged control service disconnected", lastServicePid)
+        if (!intentionalDisconnect) {
+            // 死的多半是被系统杀的（lmkd、AMS、厂商守护进程），凶手只写系统日志
+            forensics.remember("the privileged control service disconnected", lastServicePid)
+        }
         completeConnectionRequest(false)
         completePermissionRequest(false)
         completeRootConnectionRequest(false)
@@ -439,11 +454,12 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         previousBackend: String,
         target: String,
     ) {
+        intentionalDisconnect = true
         connectionGeneration.incrementAndGet()
         stopVirtualDisplaySafely()
         stopAgentsSafely()
-        destroyCurrentServiceSafely()
         removeRootBinder()
+        destroyCurrentServiceSafely()
         if (previousBackend == BACKEND_ROOT || target == BACKEND_ROOT) {
             killResidualRootService()
         }
@@ -486,12 +502,27 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     }
 
     private fun rejectService(service: IMaaTauriAndroidControlService?) {
+        // A service that cannot attach the current owner is unusable even if
+        // destroy() does not deliver onServiceDisconnected().
+        reportServiceLossOnce()
+        intentionalDisconnect = true
+        removeRootBinder()
         destroyServiceSafely(service)
         if (bound) {
             Shizuku.unbindUserService(serviceArgs, this, true)
             bound = false
         }
-        removeRootBinder()
+    }
+
+    @Synchronized
+    private fun reportServiceLossOnce() {
+        if (intentionalDisconnect || serviceLossReported) return
+        serviceLossReported = true
+        // Notify Rust before the virtual display and control host are torn
+        // down. A replacement process may reconnect immediately, so the next
+        // health poll alone cannot reliably distinguish replacement from a
+        // healthy backend.
+        RuntimeBridge.reportControlServiceLost()
     }
 
     private fun removeRootBinder() {

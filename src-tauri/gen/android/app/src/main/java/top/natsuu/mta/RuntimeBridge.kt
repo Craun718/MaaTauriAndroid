@@ -1237,6 +1237,13 @@ object RuntimeBridge {
     @JvmStatic
     external fun reportServiceDeathForensics(reason: String, logDump: String)
 
+    /**
+     * The privileged process died or was replaced. Rust stops a preparing or
+     * running session immediately, before a quick reconnect can hide the loss.
+     */
+    @JvmStatic
+    external fun reportControlServiceLost()
+
     @JvmStatic
     external fun setPrivilegedBackend(backend: String)
 

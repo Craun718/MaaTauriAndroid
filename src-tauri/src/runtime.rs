@@ -426,6 +426,22 @@ impl MaaSessions {
         *self.stop_origin.lock().expect("stop origin lock poisoned")
     }
 
+    /// Execution and state currently owned by a preparing or active lease. A
+    /// finishing or stopping run is deliberately excluded: its cleanup is
+    /// already underway, and a backend loss must not relabel that outcome as
+    /// a new fatal abort.
+    pub fn live_execution(&self) -> Option<(String, RunState)> {
+        let lease = self.lease.lock().expect("Maa run lock poisoned");
+        match &*lease {
+            SessionLease::Preparing(execution_id) => {
+                Some((execution_id.clone(), RunState::Preparing))
+            }
+            SessionLease::Active(run) if run.tasker.stopping() => None,
+            SessionLease::Active(run) => Some((run.execution_id.clone(), RunState::Running)),
+            SessionLease::Idle | SessionLease::Finishing(_) => None,
+        }
+    }
+
     pub fn status(&self) -> RunState {
         let lease = self.lease.lock().expect("Maa run lock poisoned");
         match &*lease {
@@ -2051,6 +2067,10 @@ mod tests {
         let sessions = MaaSessions::default();
         assert_eq!(sessions.status(), RunState::Idle);
         assert!(!sessions.begin_preparing("run-1").unwrap());
+        assert_eq!(
+            sessions.live_execution(),
+            Some(("run-1".to_string(), RunState::Preparing))
+        );
         assert_eq!(sessions.status(), RunState::Preparing);
         assert!(sessions
             .begin_preparing("run-2")
@@ -2059,6 +2079,7 @@ mod tests {
             .contains("another run is preparing"));
         sessions.finish("run-1");
         assert_eq!(sessions.status(), RunState::Idle);
+        assert_eq!(sessions.live_execution(), None);
     }
 
     #[test]
@@ -2166,6 +2187,7 @@ mod tests {
         *sessions.lease.lock().unwrap() = SessionLease::Finishing("run-1".to_string());
 
         assert_eq!(sessions.status(), RunState::Stopping);
+        assert_eq!(sessions.live_execution(), None);
         assert!(sessions.begin_preparing("run-2").is_err());
 
         let mut stopping_message = None;

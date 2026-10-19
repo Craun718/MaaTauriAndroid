@@ -950,6 +950,14 @@ fn display_hazards() -> runtime::DisplayHazards {
     runtime::display_hazards().unwrap_or_default()
 }
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn should_warn_smart_resolution(
+    foreground_mode: bool,
+    hazards: Option<&runtime::DisplayHazards>,
+) -> bool {
+    !foreground_mode && hazards.is_some_and(|hazards| hazards.smart_resolution)
+}
+
 /// Whether Android lets the app draw over other apps. The foreground floating
 /// panel is only useful with it, so the settings screen reports it.
 #[tauri::command]
@@ -2126,6 +2134,68 @@ fn report_service_death_forensics(reason: &str, log_dump: &str) {
     telemetry::run_event("service_death_forensics", &summary, attachment.as_deref());
 }
 
+/// Fails the live run as soon as its privileged control service disconnects.
+/// This must not wait for the next health probe: a replacement can reconnect
+/// before that probe and make the backend look healthy again while the work
+/// that depended on the old process is no longer safe to continue.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn report_control_service_lost() {
+    let Some(app) = android_app_handle() else {
+        return;
+    };
+    let state = app.state::<AppState>();
+    let Some((execution_id, run_state)) = state.maa.live_execution() else {
+        return;
+    };
+
+    let message =
+        "The privileged control service disconnected during the run; stopping the run".to_string();
+    log::warn!("{message}");
+    let logger = state
+        .latest_log()
+        .ok()
+        .filter(|logger| logger.execution_id() == execution_id.as_str());
+    if let Some(logger) = logger.as_ref() {
+        if let Ok(event) = logger.append(
+            run_log::RunEventKind::Failure,
+            run_state,
+            message.clone(),
+            None,
+            Some(serde_json::json!({ "diagnostic": "controlServiceLost" })),
+        ) {
+            let _ = app.emit("run-event", &event);
+        }
+    }
+
+    let logger_for_stopping = logger;
+    let app_for_stopping = app.clone();
+    let stopped =
+        state
+            .maa
+            .request_stop_with_origin(Some(&execution_id), runtime::StopOrigin::Fatal, || {
+                if let Some(logger) = logger_for_stopping.as_ref() {
+                    if let Ok(event) = logger.append(
+                        run_log::RunEventKind::Stopping,
+                        runtime::RunState::Stopping,
+                        "The privileged control service was lost; stopping the run",
+                        None,
+                        None,
+                    ) {
+                        let _ = app_for_stopping.emit("run-event", &event);
+                    }
+                }
+                runtime::set_execution_result(
+                    Some(execution_id.as_str()),
+                    runtime::RunState::Stopping,
+                    runtime::RunResultSeverity::Info,
+                    "The run is stopping".to_string(),
+                );
+            });
+    if !matches!(stopped, Ok(true)) {
+        log::warn!("could not stop run {execution_id} after the control service disconnected");
+    }
+}
+
 /// Writes the captured dump next to the run data so the exported diagnostics
 /// include it, and returns its path for the telemetry attachment.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
@@ -2926,6 +2996,18 @@ async fn start_run_core(
             };
         if let Some(blocker) = backend_blocker {
             return Err(fail_preparing(blocker));
+        }
+        let display_hazards = runtime::display_hazards();
+        if should_warn_smart_resolution(configuration.foreground_mode, display_hazards.as_ref()) {
+            if let Ok(event) = logger.append(
+                run_log::RunEventKind::Warning,
+                runtime::RunState::Preparing,
+                "System \"Smart resolution\" is enabled; it can break image recognition in background mode. Turn it off in the system display settings.",
+                None,
+                Some(serde_json::json!({ "diagnostic": "smartResolution" })),
+            ) {
+                let _ = app.emit("run-event", &event);
+            }
         }
         if configuration.foreground_mode {
             // The bridge resets the native control context and screen metrics to
@@ -4163,6 +4245,18 @@ mod tests {
     use crate::domain::types::{
         ControllerDefinition, ProjectMetadata, ResourceDefinition, TaskDefinition,
     };
+
+    #[test]
+    fn smart_resolution_warning_only_applies_to_background_runs() {
+        let hazards = runtime::DisplayHazards {
+            smart_resolution: true,
+            eye_protection_source: None,
+        };
+
+        assert!(should_warn_smart_resolution(false, Some(&hazards)));
+        assert!(!should_warn_smart_resolution(true, Some(&hazards)));
+        assert!(!should_warn_smart_resolution(false, None));
+    }
 
     #[test]
     fn snapshot_serializes_configuration_recovery_for_the_frontend() {
@@ -5483,6 +5577,17 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_reportServiceDeathForen
 
 #[cfg(target_os = "android")]
 #[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_reportControlServiceLost(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) {
+    // The callback runs on Android's main thread; stopping a tasker can block,
+    // so hand the failure path to Tauri's blocking pool.
+    let _ = tauri::async_runtime::spawn_blocking(report_control_service_lost);
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
 pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_setPrivilegedBackend(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
@@ -5860,9 +5965,6 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
     };
     let rule_id = rule_id.to_string_lossy().into_owned();
     let state = app.state::<AppState>();
-    if tauri::async_runtime::block_on(ensure_background_project(&app, state.inner())).is_err() {
-        return 0;
-    }
     let Ok(store) = state.schedule_store() else {
         return 0;
     };
@@ -5891,6 +5993,9 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
             detail: Some(blocker.clone()),
         });
         notify_schedule_not_started(&app, &blocker);
+        return 0;
+    }
+    if tauri::async_runtime::block_on(ensure_background_project(&app, state.inner())).is_err() {
         return 0;
     }
     if state.maa.status() != runtime::RunState::Idle {

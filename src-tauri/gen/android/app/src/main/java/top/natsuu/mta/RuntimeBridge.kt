@@ -141,21 +141,23 @@ object RuntimeBridge {
 
     @JvmStatic
     fun pickConfigurationFile(): String? {
-        if (agentContext == null) return null
+        if (agentContext == null) return JSONObject().put("error", "readFailed").toString()
         val request = ConfigurationPickRequest()
         if (!configurationPickRequest.compareAndSet(null, request)) {
             // Only one Rust picker can be waiting, and a stale system dialog is
             // resolved by its own callback or timeout before the next import.
-            return null
+            return JSONObject().put("error", "readFailed").toString()
         }
         mainHandler.post {
             val launcher = configurationFilePickerLauncher
             if (launcher == null) {
+                request.error.set("readFailed")
                 completeConfigurationFilePick(null)
             } else {
                 runCatching {
                     launcher(arrayOf("application/json"))
                 }.onFailure { error ->
+                    request.error.set("readFailed")
                     Log.w(LOG_TAG, "Could not open the configuration picker", error)
                     completeConfigurationFilePick(null)
                 }

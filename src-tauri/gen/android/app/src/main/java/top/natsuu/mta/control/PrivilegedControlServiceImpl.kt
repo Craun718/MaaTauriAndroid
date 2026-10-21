@@ -25,7 +25,6 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStream
 import kotlin.concurrent.thread
-import kotlin.system.exitProcess
 import top.natsuu.mta.IMaaTauriAndroidControlService
 
 class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAndroidControlService.Stub() {
@@ -57,7 +56,8 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
      * funnel into [enterExitSequence]; exactly one of them runs the cleanup
      * and stops the process.
      */
-    private val exitSequenceStarted = AtomicBoolean(false)
+    private val processExit = ProcessExitSequence()
+    private val lifelineAttached = AtomicBoolean(false)
     private val ownerLease = OwnerLease {
         enterExitSequence(
             "Owner process died; force-stopping target packages and releasing the virtual display",
@@ -308,6 +308,23 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         return ownerLease.attach(owner)
     }
 
+    override fun attachOwnerLifeline(owner: IBinder?, lifeline: ParcelFileDescriptor): Int {
+        val result = ownerLease.attach(owner)
+        if (result != OwnerLease.RESULT_ATTACHED || !lifelineAttached.compareAndSet(false, true)) {
+            lifeline.close()
+            return if (result == OwnerLease.RESULT_ATTACHED) OwnerLease.RESULT_ALREADY_OWNED else result
+        }
+        thread(name = "mta-owner-lifeline", isDaemon = true) {
+            // No bytes are written: process death or deliberate detach closes the writer.
+            OwnerLifeline.watch(
+                ParcelFileDescriptor.AutoCloseInputStream(lifeline),
+                failed = { android.util.Log.w("MaaTauriAndroidControl", "Owner lifeline failed", it) },
+                gone = { enterExitSequence("Owner lifeline closed") },
+            )
+        }
+        return OwnerLease.RESULT_ATTACHED
+    }
+
     /**
      * Shizuku invokes this reserved transaction (see the AIDL comment) when it
      * unbinds the user service, including after the app process died. The
@@ -320,21 +337,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         )
     }
 
-    private fun stopServiceProcess() {
-        android.os.Process.killProcess(android.os.Process.myPid())
-        exitProcess(0)
-    }
-
-    /**
-     * Single exit path shared by every teardown trigger (owner binder death and
-     * Shizuku destroy()). Latched: whichever fires first runs the cleanup and
-     * stops the process; the rest return at once.
-     */
     private fun enterExitSequence(reason: String) {
-        if (!exitSequenceStarted.compareAndSet(false, true)) return
         android.util.Log.w("MaaTauriAndroidControl", reason)
-        exitCleanup()
-        stopServiceProcess()
+        processExit.exit { exitCleanup() }
     }
 
     /**

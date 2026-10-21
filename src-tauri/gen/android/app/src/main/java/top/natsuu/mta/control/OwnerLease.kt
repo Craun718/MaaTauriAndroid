@@ -29,6 +29,7 @@ internal class OwnerLease(
 
         synchronized(lock) {
             if (exiting) return RESULT_SERVICE_EXITING
+            if (watch?.token == owner) return RESULT_ATTACHED
             if (watch != null || pending != null) return RESULT_ALREADY_OWNED
 
             val nextWatch = OwnerWatch(owner) { handleOwnerGone(owner) }

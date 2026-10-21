@@ -103,6 +103,9 @@ interface IMaaTauriAndroidControlService {
      */
     String dumpSystemLog(long sinceMs, long untilMs, int pid, String processPrefix) = 26;
 
+    /** Arms a pipe EOF watch independent of the Binder thread pool. */
+    int attachOwnerLifeline(in IBinder owner, in ParcelFileDescriptor lifeline) = 27;
+
     /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs

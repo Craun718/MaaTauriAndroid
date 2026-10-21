@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Process
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.topjohnwu.superuser.Shell
 import java.io.File
@@ -30,6 +31,7 @@ import top.natsuu.mta.control.root.RootServiceStarter
 
 class ControlServiceClient(private val context: Context) : ServiceConnection {
     private var bound = false
+    private var lifelineWriter: ParcelFileDescriptor? = null
     private val mainHandler = Handler(context.mainLooper)
     private val rootExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "mta-root-control").apply { isDaemon = true }
@@ -319,6 +321,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         failureState: Int = STATE_ERROR,
     ) {
         if (activeRootToken != token) {
+            binder?.let { destroyServiceSafely(IMaaTauriAndroidControlService.Stub.asInterface(it)) }
             RootServiceBootstrapRegistry.unregister(token)
             return
         }
@@ -488,18 +491,28 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     }
 
     private fun attachOwner(service: IMaaTauriAndroidControlService?): Boolean {
-        val result = runCatching {
-            service?.attachOwner(ControlHost.ownerBinder())
-        }.onFailure { error ->
-            Log.w(TAG, "Could not attach the owner token to the privileged service", error)
-        }.getOrDefault(OwnerLease.RESULT_WATCH_FAILED)
-        if (result == OwnerLease.RESULT_ATTACHED) return true
-
-        Log.w(
-            TAG,
-            "The privileged service rejected the owner attach (result=$result)",
-        )
-        return false
+        if (service == null) return false
+        return runCatching {
+            val pipe = ParcelFileDescriptor.createPipe()
+            try {
+                val result = service.attachOwnerLifeline(ControlHost.ownerBinder(), pipe[0])
+                if (result != OwnerLease.RESULT_ATTACHED) {
+                    pipe[1].close()
+                    Log.w(TAG, "The privileged service rejected its owner (result=$result)")
+                    false
+                } else {
+                    lifelineWriter?.close()
+                    lifelineWriter = pipe[1]
+                    true
+                }
+            } catch (error: Exception) {
+                pipe[1].close()
+                throw error
+            } finally {
+                pipe[0].close()
+            }
+        }.onFailure { Log.w(TAG, "Could not attach the privileged owner lifeline", it) }
+            .getOrDefault(false)
     }
 
     private fun destroyServiceSafely(service: IMaaTauriAndroidControlService?) {
@@ -511,6 +524,8 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     }
 
     private fun destroyCurrentServiceSafely() {
+        runCatching { lifelineWriter?.close() }
+        lifelineWriter = null
         destroyServiceSafely(ControlHost.current())
     }
 
@@ -659,7 +674,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     companion object {
         private const val TAG = "MaaTauriAndroidControl"
         private const val REQUEST_CODE = 9753
-        private const val SERVICE_VERSION = 15
+        private const val SERVICE_VERSION = 16
         private const val ROOT_CONNECT_TIMEOUT_MS = 15_000L
         private const val SWITCH_TIMEOUT_MS = 18_000L
         private const val PREFERENCES_NAME = "privileged_backend"

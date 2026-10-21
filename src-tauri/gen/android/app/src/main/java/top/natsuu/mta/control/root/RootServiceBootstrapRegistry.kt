@@ -1,6 +1,5 @@
 package top.natsuu.mta.control.root
 
-import android.os.Binder
 import android.os.IBinder
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -24,7 +23,7 @@ object RootServiceBootstrapRegistry {
     const val KEY_APP_BINDER = "app_binder"
 
     private val pendingBinders = ConcurrentHashMap<String, CompletableFuture<IBinder>>()
-    private val appLifecycleBinder: IBinder = Binder()
+    private val appLifecycleBinder: IBinder get() = top.natsuu.mta.control.ControlHost.ownerBinder()
 
     fun register(token: String): CompletableFuture<IBinder> {
         return CompletableFuture<IBinder>().also { pendingBinders[token] = it }

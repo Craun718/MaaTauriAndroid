@@ -32,6 +32,15 @@ class OwnerLeaseTest {
     }
 
     @Test
+    fun `bootstrap and app can confirm the same owner without linking twice`() {
+        val lease = OwnerLease {}
+        val owner = TestBinder()
+        assertEquals(OwnerLease.RESULT_ATTACHED, lease.attach(owner))
+        assertEquals(OwnerLease.RESULT_ATTACHED, lease.attach(owner))
+        assertEquals(1, owner.linkedRecipientCount)
+    }
+
+    @Test
     fun `reports a binder link failure without acquiring the lease`() {
         val ownerGone = CountDownLatch(1)
         val lease = OwnerLease { ownerGone.countDown() }

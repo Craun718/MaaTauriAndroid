@@ -28,6 +28,7 @@ import top.natsuu.mta.ShizukuDownMonitor
 import top.natsuu.mta.XmsfNetworkGate
 import top.natsuu.mta.control.root.RootServiceBootstrapRegistry
 import top.natsuu.mta.control.root.RootServiceStarter
+import top.natsuu.mta.control.root.RootLaunchEnvironment
 
 class ControlServiceClient(private val context: Context) : ServiceConnection {
     private var bound = false
@@ -633,7 +634,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
                 append(" --debug-name=").append(shellQuote(processName))
             }
         }
-        return "$invocation >/dev/null 2>&1 &"
+        return RootLaunchEnvironment.wrap(invocation, Build.VERSION.SDK_INT < 34)
     }
 
     private fun killResidualRootService() {

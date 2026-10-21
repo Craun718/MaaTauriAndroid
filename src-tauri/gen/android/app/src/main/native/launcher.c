@@ -198,6 +198,15 @@ int main(int argc, char **argv) {
         }
     }
 
+    char current_namespace[128] = {0};
+    char init_namespace[128] = {0};
+    ssize_t current_length = readlink("/proc/self/ns/mnt", current_namespace, sizeof(current_namespace) - 1);
+    ssize_t init_length = readlink("/proc/1/ns/mnt", init_namespace, sizeof(init_namespace) - 1);
+    LOGFI("mount namespace: current=%s init=%s aligned=%d",
+          current_length >= 0 ? current_namespace : "unavailable",
+          init_length >= 0 ? init_namespace : "unavailable",
+          current_length >= 0 && init_length >= 0 && strcmp(current_namespace, init_namespace) == 0);
+
     LOGFI("launcher start: apk=%s uid=%d keepRoot=%d", args.apk_path, args.uid, args.keep_root);
     if (args.keep_root && getuid() != 0) {
         LOGFE("keep-root requested, but the launcher is not running as root (uid=%d)", getuid());

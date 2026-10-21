@@ -205,6 +205,7 @@ export function VirtualDisplayPreview({
     let decoderConfig: StreamConfig | undefined;
     let decoderRecreations = 0;
     let waitingForKeyFrame = true;
+    let watchdog: number | undefined;
     setStreamState("connecting");
 
     async function connect() {
@@ -301,6 +302,13 @@ export function VirtualDisplayPreview({
       socket.binaryType = "arraybuffer";
       socket.onopen = () => {
         if (!disposed) setStreamState("connecting");
+        watchdog = window.setTimeout(() => {
+          if (disposed || !waitingForKeyFrame) return;
+          reportFrontendWarning(
+            "Virtual display stream timed out waiting for key frame",
+          );
+          restartStream();
+        }, 3_000);
       };
       socket.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
         if (disposed) return;
@@ -387,6 +395,7 @@ export function VirtualDisplayPreview({
 
     return () => {
       disposed = true;
+      if (watchdog !== undefined) window.clearTimeout(watchdog);
       if (
         socket?.readyState === WebSocket.OPEN ||
         socket?.readyState === WebSocket.CONNECTING
@@ -395,7 +404,7 @@ export function VirtualDisplayPreview({
       }
       if (decoder && decoder.state !== "closed") decoder.close();
     };
-  }, [status.active, streamRestart]);
+  }, [status.active, streamRestart, restartStream]);
 
   useEffect(() => {
     if (status.active === false) {

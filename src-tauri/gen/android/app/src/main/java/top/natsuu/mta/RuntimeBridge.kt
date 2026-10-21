@@ -68,6 +68,7 @@ object RuntimeBridge {
     private var physicalScreenWidth = 0
     @Volatile
     private var physicalScreenHeight = 0
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private class ConfigurationPickRequest {
         val path = AtomicReference<String?>(null)
@@ -1096,6 +1097,7 @@ object RuntimeBridge {
     fun startVirtualDisplay(width: Int, height: Int, dpi: Int): Boolean {
         // Native display recreation invalidates its EGL output as well. Detach before
         // releasing the encoder so a replacement never inherits a released Surface.
+        releaseVirtualDisplayWakeLock()
         invalidatePipDisplay()
         VirtualDisplayStreamHost.stop()
         val displayId = runCatching {
@@ -1106,6 +1108,7 @@ object RuntimeBridge {
         ControlHost.configure(displayId, width, height)
         configureScreen(width, height)
         setActiveDisplay(displayId)
+        acquireVirtualDisplayWakeLock()
         PreviewRouter.start(VirtualDisplayStreamHost.start(width, height))
         val display = intArrayOf(displayId, width, height)
         pipDisplay = display
@@ -1120,6 +1123,7 @@ object RuntimeBridge {
 
     @JvmStatic
     fun stopVirtualDisplay(): Boolean {
+        releaseVirtualDisplayWakeLock()
         invalidatePipDisplay()
         VirtualDisplayStreamHost.stop()
         runCatching {
@@ -1138,6 +1142,38 @@ object RuntimeBridge {
     @JvmStatic
     fun virtualDisplayStatus(): IntArray {
         return ControlHost.virtualDisplayStatus() ?: intArrayOf(0, -1, 0, 0, 0)
+    }
+
+    /**
+     * SurfaceFlinger stops feeding virtual displays once the physical screen is
+     * suspended, so the stream must keep the display awake while it is active.
+     */
+    private fun acquireVirtualDisplayWakeLock() {
+        val context = agentContext ?: return
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        val lock = runCatching {
+            powerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "mta:virtualDisplayStream",
+            )
+        }.getOrNull() ?: return
+
+        lock.setReferenceCounted(false)
+        runCatching { lock.acquire() }
+        wakeLock?.let { previous ->
+            runCatching {
+                if (previous.isHeld) previous.release()
+            }
+        }
+        wakeLock = lock
+    }
+
+    private fun releaseVirtualDisplayWakeLock() {
+        val lock = wakeLock
+        wakeLock = null
+        runCatching {
+            if (lock?.isHeld == true) lock.release()
+        }
     }
 
     /**

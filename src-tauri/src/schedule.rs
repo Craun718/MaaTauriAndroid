@@ -2,6 +2,7 @@ use chrono::{DateTime, Datelike, Duration, Local, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -114,9 +115,17 @@ struct TriggerLogDocument {
     entries: Vec<ScheduleTriggerLogEntry>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct TriggerClaim {
+    rule_id: String,
+    scheduled_epoch_ms: i64,
+}
+
 pub struct ScheduleStore {
     rules_path: PathBuf,
     log_path: PathBuf,
+    claims_path: PathBuf,
+    claims: Mutex<Option<Vec<TriggerClaim>>>,
 }
 
 impl ScheduleStore {
@@ -124,6 +133,8 @@ impl ScheduleStore {
         Self {
             rules_path: data_dir.as_ref().join("schedules.json"),
             log_path: data_dir.as_ref().join("schedule-triggers.json"),
+            claims_path: data_dir.as_ref().join("schedule-claims.json"),
+            claims: Mutex::new(None),
         }
     }
 
@@ -217,6 +228,52 @@ impl ScheduleStore {
         document.entries.truncate(TRIGGER_LOG_LIMIT);
         write_atomic(&self.log_path, &serde_json::to_vec_pretty(&document)?)?;
         Ok(())
+    }
+
+    /// Atomically claims a delivery before side effects. Diagnostic history is
+    /// not the source of truth; when storage disappears, this process retains
+    /// its claims in memory. A corrupt existing claims file remains an error.
+    pub fn claim_trigger(
+        &self,
+        rule_id: &str,
+        scheduled_epoch_ms: i64,
+    ) -> Result<bool, ScheduleError> {
+        let mut cache = self
+            .claims
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if cache.is_none() {
+            let mut persisted: Vec<TriggerClaim> = read_document(&self.claims_path)?;
+            // One-time compatibility with deliveries recorded before claims were separate.
+            if persisted.is_empty() {
+                if let Ok(history) = self.trigger_log() {
+                    persisted = history
+                        .into_iter()
+                        .map(|entry| TriggerClaim {
+                            rule_id: entry.rule_id,
+                            scheduled_epoch_ms: entry.scheduled_epoch_ms,
+                        })
+                        .collect();
+                }
+            }
+            *cache = Some(persisted);
+        }
+        let claims = cache.as_mut().expect("initialized claims");
+        let claim = TriggerClaim {
+            rule_id: rule_id.into(),
+            scheduled_epoch_ms,
+        };
+        if claims.contains(&claim) {
+            return Ok(false);
+        }
+        claims.insert(0, claim);
+        claims.truncate(TRIGGER_LOG_LIMIT);
+        if let Err(error) = write_atomic(&self.claims_path, &serde_json::to_vec(claims)?) {
+            log::warn!(
+                "schedule claim retained in memory; persistent storage unavailable: {error}"
+            );
+        }
+        Ok(true)
     }
 
     pub fn is_duplicate(
@@ -559,5 +616,37 @@ mod tests {
             serde_json::from_value(interval_json).expect("parse frontend interval rule");
         assert!(parsed.force_start);
         assert!(matches!(parsed.trigger, ScheduleTrigger::Interval { .. }));
+    }
+    #[test]
+    fn trigger_claims_survive_unreadable_diagnostic_history_and_reloads() {
+        let dir = std::env::temp_dir().join(format!("mta-claims-{}", Uuid::new_v4()));
+        fs::create_dir_all(dir.join("schedule-triggers.json")).unwrap();
+        let store = ScheduleStore::new(&dir);
+        assert!(store.claim_trigger("one", 123).unwrap());
+        assert!(!store.claim_trigger("one", 123).unwrap());
+        assert!(!ScheduleStore::new(&dir).claim_trigger("one", 123).unwrap());
+        assert!(store.claim_trigger("one", 124).unwrap());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn claims_keep_deduplicating_in_memory_when_writes_fail() {
+        let dir = std::env::temp_dir().join(format!("mta-claims-write-{}", Uuid::new_v4()));
+        let store = ScheduleStore::new(&dir);
+        assert!(store.claim_trigger("one", 1).unwrap());
+        fs::remove_dir_all(&dir).unwrap();
+        fs::write(&dir, b"unavailable storage").unwrap();
+        assert!(store.claim_trigger("one", 2).unwrap());
+        assert!(!store.claim_trigger("one", 2).unwrap());
+        fs::remove_file(dir).unwrap();
+    }
+
+    #[test]
+    fn corrupt_claim_state_does_not_risk_a_duplicate_delivery() {
+        let dir = std::env::temp_dir().join(format!("mta-claims-corrupt-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("schedule-claims.json"), b"broken JSON").unwrap();
+        assert!(ScheduleStore::new(&dir).claim_trigger("one", 1).is_err());
+        fs::remove_dir_all(dir).unwrap();
     }
 }

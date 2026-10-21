@@ -6013,12 +6013,16 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
     let Ok(Some(rule)) = store.find(&rule_id) else {
         return 0;
     };
-    if !rule.enabled
-        || store
-            .is_duplicate(&rule_id, scheduled_time_ms)
-            .unwrap_or(true)
-    {
+    if !rule.enabled {
         return 1;
+    }
+    match store.claim_trigger(&rule_id, scheduled_time_ms) {
+        Ok(true) => {}
+        Ok(false) => return 1,
+        Err(error) => {
+            log::warn!("could not verify schedule delivery identity: {error}");
+            return 0;
+        }
     }
     // Refuse before anything is stopped or launched: with the backend down the
     // preempt below would only kill the live run and then fail to start, and

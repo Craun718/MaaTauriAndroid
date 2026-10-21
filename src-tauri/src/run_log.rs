@@ -15,8 +15,6 @@ pub const RUN_EVENT_TARGET: &str = "mta::run";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunLogError {
-    #[error("could not create run directory: {0}")]
-    CreateDirectory(std::io::Error),
     #[error("could not serialize run event: {0}")]
     Serialize(serde_json::Error),
 }
@@ -114,7 +112,9 @@ impl RunLogger {
         task_count: usize,
     ) -> Result<Self, RunLogError> {
         let run_dir = runs_dir.join(sanitize(execution_id));
-        fs::create_dir_all(run_dir.join("logs")).map_err(RunLogError::CreateDirectory)?;
+        if let Err(error) = fs::create_dir_all(run_dir.join("logs")) {
+            log::warn!("optional run diagnostics directory unavailable at {run_dir:?}: {error}");
+        }
         let file_name = history_file_name(Local::now(), task_count);
         let (history_path, history) = open_history(&run_dir, &file_name)
             .map(|(path, writer)| (Some(path), Some(writer)))
@@ -356,6 +356,26 @@ mod tests {
             .unwrap();
         assert_eq!(events, vec![first, second]);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unavailable_run_directory_keeps_live_events_working() {
+        let root = std::env::temp_dir().join(format!("mta-unavailable-{}", uuid::Uuid::new_v4()));
+        fs::write(&root, b"not a directory").unwrap();
+        let logger = RunLogger::create(&root, "run", 1).unwrap();
+        assert!(logger.history_path.is_none());
+        let event = logger
+            .append(
+                RunEventKind::Preparing,
+                RunState::Preparing,
+                "still running",
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(event.sequence, 1);
+        assert_eq!(event.message, "still running");
+        fs::remove_file(root).unwrap();
     }
 
     #[test]

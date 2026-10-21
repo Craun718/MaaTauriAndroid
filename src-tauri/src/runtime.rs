@@ -1625,6 +1625,7 @@ mod tests {
             serde_json::to_value(&hazards).unwrap(),
             serde_json::json!({
                 "smartResolution": false,
+                "adbInputRestricted": false,
                 "eyeProtectionSource": null
             })
         );

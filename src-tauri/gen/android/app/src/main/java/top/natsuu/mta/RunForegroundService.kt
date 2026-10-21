@@ -42,22 +42,38 @@ data class RunProgressSnapshot(
 }
 
 class RunForegroundService : Service() {
+    private var boundToken = 0L
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        boundToken = lease.current()
+        if (boundToken == 0L) {
+            stopSelf()
+            return
+        }
         appContext = applicationContext
-        running.set(true)
         RunNotificationFactory.ensureChannels(this)
         prepareVendorSurfaces()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val current = lease.current()
+        if (current == 0L) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent?.getLongExtra(EXTRA_TOKEN, 0L) != current) return START_NOT_STICKY
+        boundToken = current
         startInForeground()
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        if (!lease.finish(boundToken)) {
+            super.onDestroy()
+            return
+        }
         running.set(false)
         RuntimeBridge.runServiceDestroyed()
         clearProgress()
@@ -130,6 +146,8 @@ class RunForegroundService : Service() {
         private const val MIN_UPDATE_INTERVAL_MS = 1_000L
         private const val VIVO_MIN_UPDATE_INTERVAL_MS = 10_000L
 
+        private const val EXTRA_TOKEN = "run_token"
+        private val lease = RunServiceLease()
         private val running = AtomicBoolean(false)
         private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -181,18 +199,23 @@ class RunForegroundService : Service() {
             // The submitter may be a scheduled run on another async worker while
             // ScheduleExecutionService checks this flag from the main thread.
             // Mark the run before Android asynchronously creates the service.
+            val token = lease.begin()
             running.set(true)
             val submitted = runCatching {
-                context.startForegroundService(Intent(context, RunForegroundService::class.java))
+                context.startForegroundService(
+                    Intent(context, RunForegroundService::class.java).putExtra(EXTRA_TOKEN, token),
+                )
                 true
             }.onFailure { error ->
-                running.set(false)
+                if (lease.finish(token)) running.set(false)
                 android.util.Log.e(TAG, "Could not start the run foreground service", error)
             }.getOrDefault(false)
             return submitted
         }
 
         fun stop(context: Context) {
+            lease.cancel()
+            running.set(false)
             finishVivoNotification(context)
             clearProgress()
             context.stopService(Intent(context, RunForegroundService::class.java))

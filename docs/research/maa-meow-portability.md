@@ -1,5 +1,7 @@
 # MAA-Meow 近期 Android 改动移植评估
 
+> 本文保留移植前的评估快照；后续提交状态见 [移植落地记录](maa-meow-porting-status.md)。
+
 评估日期：2026-10-21。当前项目基线：`e6a961e91958c82da2bea8b1aef33047e2c54dd2`。
 上游基线：`Aliothmoon/MAA-Meow` 的 `aa9193f9a11eb1f1cfa71ed5fb917487cb94f3de`。
 

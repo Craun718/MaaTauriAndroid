@@ -1,5 +1,7 @@
 # MAA-Meow 诊断与防护改动移植评估
 
+> 本文保留移植前的评估快照；后续提交状态见 [移植落地记录](maa-meow-porting-status.md)。
+
 研究日期：2026-10-21。范围仅限所列 8 项提交；结论来自源码静态审阅，未编译、未运行测试、未进行真机验证，未访问 resource 子 checkout。
 
 比较基线：MaaTauriAndroid 当前源码（本地 git 查询 HEAD 为 `e6a961e`）；MAA-Meow `upstream/main`（fetch 后查询为 `aa9193f`）。逐项执行了 `git show <commit>` 阅读实现差异；需要核对上游最终实现时使用 `git show upstream/main:<path>`，没有把停在 `feat/default-task` 的工作区文件当作 main。本文仅写入本文件，不执行同步、提交或推送。

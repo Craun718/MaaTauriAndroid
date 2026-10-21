@@ -290,7 +290,11 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
                 return@execute
             }
 
-            val commandResult = runCatching { buildRootStartCommand(token) }
+            val commandResult = runCatching {
+                val processName = "${context.packageName}:root_service"
+                Shell.cmd(RootLaunchEnvironment.reap(processName)).exec()
+                buildRootStartCommand(token)
+            }
             if (commandResult.isFailure) {
                 finishRootLaunch(token, null, commandResult.exceptionOrNull())
                 return@execute

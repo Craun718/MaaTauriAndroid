@@ -14,6 +14,15 @@ class RootLaunchEnvironmentTest {
     }
 
     @Test
+    fun residualReapingAllowsCleanupThenForcesStoppedProcessesToExit() {
+        val command = RootLaunchEnvironment.reap("app:root_service")
+        assertTrue(command.contains("pidof 'app:root_service'"))
+        assertTrue(command.contains("-lt 50"))
+        assertTrue(command.indexOf("sleep 0.1") < command.indexOf("kill -9"))
+        assertTrue(RootLaunchEnvironment.reap("app'quote").contains("'app'\"'\"'quote'"))
+    }
+
+    @Test
     fun retainedRootDoesNotRewriteDirectoryOwnership() {
         val command = RootLaunchEnvironment.wrap("launcher", false)
         assertFalse(command.contains("chown"))

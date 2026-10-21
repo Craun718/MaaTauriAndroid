@@ -2,6 +2,15 @@ package top.natsuu.mta.control.root
 
 /** Commands run inside libsu's root shell; only the app's runtime tree is repaired. */
 internal object RootLaunchEnvironment {
+    fun reap(processName: String): String {
+        val name = "'${processName.replace("'", "'\"'\"'")}'"
+        // Only invoked on the launch worker before a replacement exists.
+        return "kill ${'$'}(pidof $name) 2>/dev/null || true; " +
+            "n=0; while [ ${'$'}n -lt 50 ] && pidof $name >/dev/null; do " +
+            "sleep 0.1; n=${'$'}((n+1)); done; " +
+            "kill -9 ${'$'}(pidof $name) 2>/dev/null || true"
+    }
+
     fun wrap(invocation: String, dropToShell: Boolean): String {
         val root = "/data/local/tmp/maa-tauri-android"
         val preparation = if (dropToShell) {

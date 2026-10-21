@@ -6,6 +6,8 @@ import type { RunEvent } from "../lib/types";
 import { type RunLogEntry, useRunLogStore } from "../store/runLogStore";
 import { RichDescription } from "./RichDescription";
 
+const noLogEntries: RunLogEntry[] = [];
+
 type ActivityTab = "tasks" | "logs";
 
 export type RunActivityTab = ActivityTab;
@@ -95,8 +97,10 @@ export function RunActivityTabs({
   onActiveTabChange: (tab: RunActivityTab) => void;
 }) {
   useRunEvents();
-  const events = useRunLogStore((state) => state.entries);
-  useLatestRunHistory(events.length === 0);
+  const events = useRunLogStore((state) =>
+    activeTab === "logs" ? state.entries : noLogEntries,
+  );
+  useLatestRunHistory(activeTab === "logs" && events.length === 0);
   const { t, language } = useTranslation();
   const groupId = useId();
   const logListRef = useRef<HTMLOListElement>(null);

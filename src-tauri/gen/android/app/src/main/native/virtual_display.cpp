@@ -731,12 +731,27 @@ void copy_rgba_to_bgr(
 }
 
 void attach_preview(JNIEnv& env, jobject surface) {
+    std::lock_guard<std::mutex> lock(g_preview_mutex);
     if (surface == nullptr) {
-        stop_preview();
+        // SurfaceHolder callbacks must not join the renderer. Queue the detach
+        // on the same renderer that owns EGL; release_local() alone joins it.
+        g_preview_enabled.store(false, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> render_lock(g_render_mutex);
+            drain_render_queue_locked();
+            if (g_pending_window != nullptr) {
+                ANativeWindow_release(g_pending_window);
+                g_pending_window = nullptr;
+            }
+            g_pending_detach = true;
+        }
+        g_render_condition.notify_all();
         return;
     }
-
-    std::lock_guard<std::mutex> lock(g_preview_mutex);
+    // A stale Surface callback cannot resurrect a stopped capture session.
+    if (!g_active.load(std::memory_order_acquire)) {
+        return;
+    }
     ANativeWindow* window = ANativeWindow_fromSurface(&env, surface);
     if (env.ExceptionCheck() == JNI_TRUE || window == nullptr) {
         env.ExceptionDescribe();

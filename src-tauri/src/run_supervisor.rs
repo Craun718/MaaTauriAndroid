@@ -316,6 +316,21 @@ fn assess_health(state: &crate::run_diagnosis::TargetAppState) -> HealthFinding 
     HealthFinding::Healthy
 }
 
+/// Binder reads are synchronous and cannot be cancelled. Discard their result
+/// if this run stopped while the read was in flight.
+#[cfg(any(target_os = "android", test))]
+fn sample_while_active<T>(
+    stop: &tokio::sync::watch::Receiver<bool>,
+    read: impl FnOnce() -> T,
+) -> Option<T> {
+    let active = || !*stop.borrow() && stop.has_changed().is_ok();
+    if !active() {
+        return None;
+    }
+    let result = read();
+    active().then_some(result)
+}
+
 #[cfg(target_os = "android")]
 async fn watch_loop(
     app: tauri::AppHandle,
@@ -354,15 +369,22 @@ async fn watch_loop(
         }
 
         // FPS sample → advisor → event + warn.
-        let fps = sample_fps(&mut last_frame_count);
+        let Some(fps) = sample_while_active(&stop_rx, || sample_fps(&mut last_frame_count)) else {
+            break;
+        };
         let advice = advisor.on_sample(fps.unwrap_or(0.0));
-        let _ = app.emit("virtual-display-fps", serde_json::json!({ "fps": fps }));
+        let _ = app.emit(
+            "virtual-display-fps",
+            serde_json::json!({ "fps": fps, "executionId": execution_id }),
+        );
         if let (Some(fps), Some(advice)) = (fps, advice) {
             warn_fps(&app, &logger, fps, advice);
         }
 
         // Target app state probe → health assessment.
-        let state = crate::probe_target_app_state();
+        let Some(state) = sample_while_active(&stop_rx, crate::probe_target_app_state) else {
+            break;
+        };
         if let Some(state) = &state {
             health_cell.set(state.clone());
         }
@@ -572,6 +594,29 @@ fn fatal(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancelled_or_dropped_runs_discard_blocking_read_results() {
+        let (stop, receiver) = tokio::sync::watch::channel(false);
+        assert_eq!(sample_while_active(&receiver, || 60), Some(60));
+        assert_eq!(
+            sample_while_active(&receiver, || {
+                stop.send(true).unwrap();
+                30
+            }),
+            None
+        );
+        assert_eq!(
+            sample_while_active(&receiver, || panic!("stopped run must not read")),
+            None::<()>
+        );
+        let (stop, receiver) = tokio::sync::watch::channel(false);
+        drop(stop);
+        assert_eq!(
+            sample_while_active(&receiver, || panic!("dropped owner must not read")),
+            None::<()>
+        );
+    }
 
     fn feed(advisor: &mut FpsAdvisor, fps: f32, count: usize) -> Option<Advice> {
         let mut first = None;

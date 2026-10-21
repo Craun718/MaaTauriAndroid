@@ -26,6 +26,8 @@ pub enum ConfigurationBackupError {
     SchemaVersion { found: u32, supported: u32 },
     #[error("the configuration backup exceeds the {} MiB limit", MAX_IMPORT_BYTES / (1024 * 1024))]
     TooLarge,
+    #[error("could not read the selected configuration backup")]
+    ReadFailed,
     #[error("invalid configuration backup: {0}")]
     Validation(String),
     #[error(transparent)]
@@ -64,6 +66,23 @@ pub struct ConfigurationBackupExport {
     pub passwords_excluded: bool,
     pub configuration: UserConfiguration,
     pub schedule_rules: Vec<ScheduleRule>,
+}
+
+/// The Android picker distinguishes cancellation from failed/oversized URI copies.
+pub fn parse_picker_result(raw: Option<&str>) -> Result<Option<String>, ConfigurationBackupError> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct PickerResult {
+        path: Option<String>,
+        error: Option<String>,
+    }
+    let Some(raw) = raw else { return Ok(None) };
+    let result: PickerResult = serde_json::from_str(raw)?;
+    match (result.path, result.error.as_deref()) {
+        (Some(path), None) if !path.is_empty() => Ok(Some(path)),
+        (None, Some("tooLarge")) => Err(ConfigurationBackupError::TooLarge),
+        _ => Err(ConfigurationBackupError::ReadFailed),
+    }
 }
 
 pub fn export_configuration(
@@ -461,6 +480,31 @@ pub fn remove_password_option_values(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn picker_distinguishes_success_cancel_and_failures() {
+        assert_eq!(super::parse_picker_result(None).unwrap(), None);
+        assert_eq!(
+            super::parse_picker_result(Some(r#"{"path":"/cache/backup.json"}"#)).unwrap(),
+            Some("/cache/backup.json".into())
+        );
+        assert!(matches!(
+            super::parse_picker_result(Some(r#"{"error":"tooLarge"}"#)),
+            Err(super::ConfigurationBackupError::TooLarge)
+        ));
+        for raw in [
+            r#"{"error":"readFailed"}"#,
+            r#"{"path":""}"#,
+            r#"{"path":"x","error":"tooLarge"}"#,
+            "{}",
+        ] {
+            assert!(matches!(
+                super::parse_picker_result(Some(raw)),
+                Err(super::ConfigurationBackupError::ReadFailed)
+            ));
+        }
+        assert!(super::parse_picker_result(Some("not JSON")).is_err());
+    }
+
     use super::*;
     use crate::domain::types::{
         ConfiguredTask, InputFieldDefinition, InputType, OptionApplicability, OptionCase,

@@ -292,6 +292,9 @@ const en = {
   configurationImportConfirm:
     "Import this backup? All current settings, run configurations and schedules will be replaced. Password inputs will be empty and must be entered again.",
   configurationImported: "Backup imported",
+  configurationImportTooLarge: "The backup exceeds the 4 MiB size limit.",
+  configurationImportReadFailed:
+    "Could not read the selected backup. Please select it again.",
   customBackground: "Custom background",
   customBackgroundDescription:
     "Choose a picture on this device. It fills the background without distortion, is kept in app-private storage, and is not included in backups.",
@@ -658,6 +661,8 @@ const zh: Record<MessageKey, string> = {
   configurationImportConfirm:
     "要导入这份备份吗？当前设置、运行配置和定时任务都会被整体替换。密码输入将为空，需要重新填写。",
   configurationImported: "备份已导入",
+  configurationImportTooLarge: "备份文件超过 4 MiB 大小限制。",
+  configurationImportReadFailed: "无法读取所选备份，请重新选择文件。",
   customBackground: "自定义背景",
   customBackgroundDescription:
     "选择本机图片作为背景。图片会等比放大铺满界面并裁掉超出部分，仅保存在应用私有目录，不会进入备份。",
@@ -964,6 +969,10 @@ const diagnosticKeys: Record<string, MessageKey> = {
     "diagnosticRunTimeLimit",
   "the privileged control service became unavailable during the run; stopping the run":
     "diagnosticControlServiceLost",
+  "the configuration backup exceeds the 4 MiB limit":
+    "configurationImportTooLarge",
+  "could not read the selected configuration backup":
+    "configurationImportReadFailed",
   "The virtual display is not active": "diagnosticVirtualDisplayInactive",
   "Android rejected the virtual display back-key injection":
     "diagnosticVirtualDisplayBackRejected",

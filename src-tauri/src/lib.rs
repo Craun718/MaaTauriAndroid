@@ -3866,7 +3866,8 @@ fn export_file_via_bridge(path: &str, mime: &str) -> Result<String, AppError> {
 
 #[cfg(target_os = "android")]
 fn pick_configuration_file_via_bridge() -> Result<Option<String>, AppError> {
-    pick_file_via_bridge("pickConfigurationFile")
+    let raw = pick_file_via_bridge("pickConfigurationFile")?;
+    configuration_backup::parse_picker_result(raw.as_deref()).map_err(AppError::from)
 }
 
 #[cfg(target_os = "android")]

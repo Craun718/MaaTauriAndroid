@@ -52,7 +52,6 @@ object RuntimeBridge {
     private const val RESTART_REQUEST_CODE = 0x4D54524C
     private const val RESTART_DELAY_MS = 250L
     private const val CONFIGURATION_PICK_TIMEOUT_MS = 120_000L
-    private const val MAX_IMPORT_BYTES = 4L * 1024L * 1024L
     private const val MAX_IMAGE_BYTES = 16L * 1024L * 1024L
 
     @Volatile
@@ -72,6 +71,7 @@ object RuntimeBridge {
 
     private class ConfigurationPickRequest {
         val path = AtomicReference<String?>(null)
+        val error = AtomicReference<String?>(null)
         val latch = CountDownLatch(1)
     }
 
@@ -143,7 +143,7 @@ object RuntimeBridge {
     fun pickConfigurationFile(): String? {
         if (agentContext == null) return null
         val request = ConfigurationPickRequest()
-        if (configurationPickRequest.getAndSet(request) != null) {
+        if (!configurationPickRequest.compareAndSet(null, request)) {
             // Only one Rust picker can be waiting, and a stale system dialog is
             // resolved by its own callback or timeout before the next import.
             return null
@@ -167,8 +167,11 @@ object RuntimeBridge {
         )
         if (!completed) {
             configurationPickRequest.compareAndSet(request, null)
+            request.error.set("readFailed")
         }
-        return request.path.get()
+        val error = request.error.get()
+        if (error != null) return JSONObject().put("error", error).toString()
+        return request.path.get()?.let { JSONObject().put("path", it).toString() }
     }
 
     @JvmStatic
@@ -221,17 +224,7 @@ object RuntimeBridge {
                 try {
                     context.contentResolver.openInputStream(uri)?.use { input ->
                         target.outputStream().use { output ->
-                            val buffer = ByteArray(64 * 1024)
-                            var total = 0L
-                            while (true) {
-                                val count = input.read(buffer)
-                                if (count < 0) break
-                                total += count
-                                if (total > MAX_IMPORT_BYTES) {
-                                    throw IOException("configuration backup is too large")
-                                }
-                                output.write(buffer, 0, count)
-                            }
+                            ConfigurationImportCopy.copy(input, output)
                         }
                     } ?: throw IOException("could not open the selected configuration")
                     target.absolutePath
@@ -240,6 +233,7 @@ object RuntimeBridge {
                     throw error
                 }
             }.onFailure { error ->
+                request.error.set(if (error is ConfigurationImportTooLarge) "tooLarge" else "readFailed")
                 Log.w(LOG_TAG, "Could not copy the selected configuration", error)
             }.getOrNull()
             request.path.set(path)

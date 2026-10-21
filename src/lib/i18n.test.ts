@@ -239,3 +239,26 @@ describe("localizeRunEvent", () => {
     ).toBe("任务异常中止");
   });
 });
+
+describe("configuration import diagnostics", () => {
+  it("localizes oversized and unreadable imports", () => {
+    expect(
+      localizeDiagnostic(
+        "the configuration backup exceeds the 4 MiB limit",
+        "zh",
+      ),
+    ).toBe("备份文件超过 4 MiB 大小限制。");
+    expect(
+      localizeDiagnostic(
+        "could not read the selected configuration backup",
+        "zh",
+      ),
+    ).toBe("无法读取所选备份，请重新选择文件。");
+    expect(
+      localizeDiagnostic(
+        "could not read the selected configuration backup",
+        "en",
+      ),
+    ).toBe("Could not read the selected backup. Please select it again.");
+  });
+});

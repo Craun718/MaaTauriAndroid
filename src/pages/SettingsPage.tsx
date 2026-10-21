@@ -27,7 +27,7 @@ import {
 } from "../lib/api";
 import { useBackgroundImageObjectUrl } from "../lib/backgroundImage";
 import type { MessageKey } from "../lib/i18n";
-import { useTranslation } from "../lib/i18n";
+import { localizeDiagnostic, useTranslation } from "../lib/i18n";
 import {
   projectLanguage,
   resolveLanguage,
@@ -69,7 +69,7 @@ export function SettingsPage() {
   const busy = useAppStore((state) => state.busy);
   const saving = useAppStore((state) => state.saving);
   const notify = useNotificationStore((state) => state.notify);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [cleaning, setCleaning] = useState(false);
   const [reinstalling, setReinstalling] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
@@ -265,9 +265,15 @@ export function SettingsPage() {
               const result = await importConfiguration();
               if (result.imported) notify(t("configurationImported"));
             } catch (error) {
-              notify(error instanceof Error ? error.message : String(error), {
-                tone: "error",
-              });
+              notify(
+                localizeDiagnostic(
+                  error instanceof Error ? error.message : String(error),
+                  language,
+                ),
+                {
+                  tone: "error",
+                },
+              );
             } finally {
               setImportingBackup(false);
             }

@@ -406,7 +406,9 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         ShizukuDownMonitor.onDisconnected(context)
         if (!intentionalDisconnect) {
             // 死的多半是被系统杀的（lmkd、AMS、厂商守护进程），凶手只写系统日志
-            forensics.remember("the privileged control service disconnected", lastServicePid)
+            runCatching {
+                forensics.remember("the privileged control service disconnected", lastServicePid)
+            }.onFailure { Log.w(TAG, "Could not remember service death", it) }
         }
         completeConnectionRequest(false)
         completePermissionRequest(false)
@@ -423,6 +425,17 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
      * 没过太久才值得翻；日志在提权侧就按 pid/进程名过滤，别的应用不出设备。
      */
     private fun reportPendingServiceDeath(
+        service: IMaaTauriAndroidControlService,
+        connectedPid: Int?,
+    ) {
+        try {
+            collectPendingServiceDeath(service, connectedPid)
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not collect service death diagnostics", error)
+        }
+    }
+
+    private fun collectPendingServiceDeath(
         service: IMaaTauriAndroidControlService,
         connectedPid: Int?,
     ) {

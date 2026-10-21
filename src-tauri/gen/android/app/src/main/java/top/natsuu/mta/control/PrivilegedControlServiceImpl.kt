@@ -47,6 +47,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         android.util.Log.w("MaaTauriAndroidControl", message)
     }
     private val targetPackages = TargetPackages(targetPackageStore)
+    private val exitHistory = context?.let {
+        ProcessExitHistory(it, File("/data/local/tmp/maa-tauri-android/process-exits"))
+    }
     private val xmsfFirewall = XmsfFirewall(context)
 
     /**
@@ -138,6 +141,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
      */
     private fun reapOrphanTargetPackages() {
         val orphans = targetPackageStore.read()
+        orphans.forEach { exitHistory?.record(it) }
         if (orphans.isEmpty()) return
         android.util.Log.w(
             "MaaTauriAndroidControl",
@@ -249,6 +253,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         val targets = targetPackages.peek()
         val tasks = org.json.JSONObject()
         for (target in targets) {
+            exitHistory?.record(target)
             val location = appLauncher.taskLocationOf(target)
             val entry = org.json.JSONObject()
             entry.put("taskId", location?.taskId ?: org.json.JSONObject.NULL)

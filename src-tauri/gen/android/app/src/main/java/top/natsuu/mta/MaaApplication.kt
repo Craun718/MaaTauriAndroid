@@ -9,6 +9,7 @@ class MaaApplication : Application() {
         super.onCreate()
         StartupTrace.start()
         RuntimeBridge.attachContext(this)
+        top.natsuu.mta.control.ProcessExitHistory.recordSelf(this)
         invalidateWebViewCacheAfterUpdate()
         AppPreparationManager.start(this)
     }

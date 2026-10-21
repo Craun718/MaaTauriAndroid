@@ -23,7 +23,7 @@ internal class ServiceDeathForensics(
     context: Context,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     @Synchronized
     fun remember(reason: String, pid: Int?) {

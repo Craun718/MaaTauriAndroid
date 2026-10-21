@@ -45,6 +45,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     ) { message ->
         android.util.Log.w("MaaTauriAndroidControl", message)
     }
+    private val observedTaskIds = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private val targetPackages = TargetPackages(targetPackageStore)
     private val exitHistory = context?.let {
         ProcessExitHistory(it, File("/data/local/tmp/maa-tauri-android/process-exits"))
@@ -128,7 +129,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         // Last-resort cleanup for graceful termination (SIGTERM, exitProcess):
         // SIGKILL-style deaths are covered by the owner death recipient.
         Runtime.getRuntime().addShutdownHook(
-            Thread { runCatching(::exitCleanup) }.apply {
+            Thread { processExit.exit { exitCleanup() } }.apply {
                 name = "maa-control-shutdown-hook"
             },
         )
@@ -253,9 +254,10 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         val targets = targetPackages.peek()
         val tasks = org.json.JSONObject()
         for (target in targets) {
-            exitHistory?.record(target)
             appLauncher.excludeFromRecents(target, displayId)
             val location = appLauncher.taskLocationOf(target)
+            val previousTask = observedTaskIds.put(target, location?.taskId ?: -1)
+            exitHistory?.record(target, urgent = location == null && previousTask != null && previousTask != -1)
             val entry = org.json.JSONObject()
             entry.put("taskId", location?.taskId ?: org.json.JSONObject.NULL)
             entry.put("displayId", location?.displayId ?: org.json.JSONObject.NULL)

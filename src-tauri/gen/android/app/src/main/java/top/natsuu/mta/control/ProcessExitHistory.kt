@@ -7,7 +7,6 @@ import android.os.Build
 import android.util.AtomicFile
 import android.util.Log
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 internal data class ExitStamp(val timestamp: Long, val pid: Int) : Comparable<ExitStamp> {
@@ -42,21 +41,15 @@ internal class ProcessExitHistory(private val context: Context, private val dire
     private val worker = Executors.newSingleThreadExecutor { task ->
         Thread(task, "mta-process-exits").apply { isDaemon = true }
     }
-    private val nextQuery = ConcurrentHashMap<String, Long>()
+    private val queries = ExitQueryQueue(
+        now = android.os.SystemClock::elapsedRealtime,
+        enqueue = { worker.execute(it) },
+        query = { recordNow(it) },
+    )
 
-    fun record(packageName: String) {
+    fun record(packageName: String, urgent: Boolean = false) {
         if (Build.VERSION.SDK_INT < 30 || !PACKAGE.matches(packageName)) return
-        val now = android.os.SystemClock.elapsedRealtime()
-        // Bound queued work even while a vendor ActivityManager call is blocked.
-        val previous = nextQuery.putIfAbsent(packageName, Long.MAX_VALUE)
-        if (previous != null && (previous > now || !nextQuery.replace(packageName, previous, Long.MAX_VALUE))) return
-        worker.execute {
-            try {
-                recordNow(packageName)
-            } finally {
-                nextQuery[packageName] = android.os.SystemClock.elapsedRealtime() + 10_000L
-            }
-        }
+        queries.record(packageName, urgent)
     }
 
     @androidx.annotation.RequiresApi(30)

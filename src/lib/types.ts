@@ -401,6 +401,7 @@ export interface VirtualDisplayStatus {
  */
 export interface DisplayHazards {
   smartResolution: boolean;
+  adbInputRestricted?: boolean;
   eyeProtectionSource?: string | null;
 }
 

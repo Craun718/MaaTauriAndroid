@@ -207,6 +207,12 @@ const en = {
   // Run controls
   taskOperations: "Task actions",
   startRun: "Start run",
+  displayHazardAdbInput:
+    "USB debugging (Security settings) is disabled. Enable it in Developer options to allow shell touch input. Root can try to enable it for you.",
+  adbInputEnableRoot: "Enable with Root",
+  adbInputOpenSettings: "Developer options",
+  adbInputRepairFailed:
+    "Could not enable USB debugging (Security settings). Enable it manually in Developer options.",
   displayHazardTitle: "Before you start",
   displayHazardSmartResolution:
     'System "Smart resolution" is enabled. It can break recognition in background mode. Turn it off in the system display settings first. Start anyway?',
@@ -579,6 +585,12 @@ const zh: Record<MessageKey, string> = {
 
   taskOperations: "任务操作",
   startRun: "开始运行",
+  displayHazardAdbInput:
+    "未开启 USB 调试（安全设置），Shell 触控可能被系统拒绝。请在开发者选项中开启，也可尝试通过 Root 开启。",
+  adbInputEnableRoot: "通过 Root 开启",
+  adbInputOpenSettings: "开发者选项",
+  adbInputRepairFailed:
+    "无法开启 USB 调试（安全设置），请在开发者选项中手动开启。",
   displayHazardTitle: "启动前提醒",
   displayHazardSmartResolution:
     "检测到系统已开启「智能分辨率」，后台模式下会导致识别出错，请先在系统显示设置中关闭。是否仍然启动？",
@@ -1041,6 +1053,9 @@ export function localizeRunEvent(
   language: AppLanguage,
 ): string {
   const data = event.data;
+  if (data?.diagnostic === "adbInputRestricted") {
+    return translate(language, "displayHazardAdbInput");
+  }
   if (data?.diagnostic === "screenEmpty") {
     return translate(language, "diagnosticVirtualDisplayScreenEmpty");
   }

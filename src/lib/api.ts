@@ -386,3 +386,11 @@ export function updateVirtualDisplayPip(
   pendingPipUpdate = update.catch(() => undefined);
   return update;
 }
+
+export async function enableAdbInput(): Promise<boolean> {
+  return invoke<boolean>("enable_adb_input");
+}
+
+export async function openDeveloperSettings(): Promise<boolean> {
+  return invoke<boolean>("open_developer_settings");
+}

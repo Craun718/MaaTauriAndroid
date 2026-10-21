@@ -451,3 +451,14 @@ describe("PiP IPC ordering", () => {
     expect(invoke).toHaveBeenCalledTimes(2);
   });
 });
+
+it("routes explicit input repair and settings actions through IPC", async () => {
+  const { enableAdbInput, openDeveloperSettings } = await import("./api");
+  invoke.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+  await expect(enableAdbInput()).resolves.toBe(true);
+  await expect(openDeveloperSettings()).resolves.toBe(false);
+  expect(invoke).toHaveBeenCalledWith("enable_adb_input");
+  expect(invoke).toHaveBeenCalledWith("open_developer_settings");
+  invoke.mockRejectedValueOnce(new Error("bridge unavailable"));
+  await expect(enableAdbInput()).rejects.toThrow("bridge unavailable");
+});

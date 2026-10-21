@@ -950,6 +950,32 @@ fn display_hazards() -> runtime::DisplayHazards {
     runtime::display_hazards().unwrap_or_default()
 }
 
+#[tauri::command]
+async fn enable_adb_input() -> Result<bool, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        tokio::task::spawn_blocking(|| call_runtime_bridge_boolean("enableAdbInput"))
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))?
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+fn open_developer_settings() -> Result<bool, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("openDeveloperSettings")
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(false)
+    }
+}
+
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn should_warn_smart_resolution(
     foreground_mode: bool,
@@ -2998,6 +3024,18 @@ async fn start_run_core(
             return Err(fail_preparing(blocker));
         }
         let display_hazards = runtime::display_hazards();
+        if display_hazards
+            .as_ref()
+            .is_some_and(|hazards| hazards.adb_input_restricted)
+        {
+            if let Ok(event) = logger.append(
+                run_log::RunEventKind::Warning,
+                runtime::RunState::Preparing,
+                "USB debugging (Security settings) is disabled; shell input injection may be rejected.",
+                None,
+                Some(serde_json::json!({ "diagnostic": "adbInputRestricted" })),
+            ) { let _ = app.emit("run-event", &event); }
+        }
         if should_warn_smart_resolution(configuration.foreground_mode, display_hazards.as_ref()) {
             if let Ok(event) = logger.append(
                 run_log::RunEventKind::Warning,
@@ -4251,6 +4289,7 @@ mod tests {
     fn smart_resolution_warning_only_applies_to_background_runs() {
         let hazards = runtime::DisplayHazards {
             smart_resolution: true,
+            adb_input_restricted: false,
             eye_protection_source: None,
         };
 
@@ -5639,6 +5678,8 @@ pub fn run() {
             retry_preparation,
             window_insets,
             display_hazards,
+            enable_adb_input,
+            open_developer_settings,
             overlay_permission_status,
             request_overlay_permission,
             load_project,

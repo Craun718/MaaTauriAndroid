@@ -1,6 +1,9 @@
 import type { DisplayHazards } from "./types";
 
-export type DisplayHazard = "smartResolution" | "eyeProtection";
+export type DisplayHazard =
+  | "adbInputRestricted"
+  | "smartResolution"
+  | "eyeProtection";
 
 /**
  * Orders the pre-run warnings the same way MaaFwApp does: smart resolution
@@ -11,6 +14,7 @@ export function pendingDisplayHazards(
   foregroundMode: boolean,
 ): DisplayHazard[] {
   const pending: DisplayHazard[] = [];
+  if (hazards.adbInputRestricted) pending.push("adbInputRestricted");
   if (!foregroundMode && hazards.smartResolution) {
     pending.push("smartResolution");
   }

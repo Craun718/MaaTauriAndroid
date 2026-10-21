@@ -20,8 +20,10 @@ import {
 } from "react";
 import {
   captureManualScreenshot,
+  enableAdbInput,
   getDisplayHazards,
   getRunStatus,
+  openDeveloperSettings,
   pressVirtualDisplayBack,
   requestNotificationPermission,
   resolveCurrent,
@@ -78,6 +80,7 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
     const [executionId, setExecutionId] = useState<string>();
     const [runState, setRunState] = useState("Idle");
     const [starting, setStarting] = useState(false);
+    const [repairingAdb, setRepairingAdb] = useState(false);
     const [hazardPrompt, setHazardPrompt] = useState<DisplayHazard>();
     const hazardPromptResolver = useRef<
       ((confirmed: boolean) => void) | undefined
@@ -487,10 +490,50 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
           title={t("displayHazardTitle")}
         >
           <p className="text-sm">
-            {hazardPrompt === "smartResolution"
-              ? t("displayHazardSmartResolution")
-              : t("displayHazardEyeProtection")}
+            {hazardPrompt === "adbInputRestricted"
+              ? t("displayHazardAdbInput")
+              : hazardPrompt === "smartResolution"
+                ? t("displayHazardSmartResolution")
+                : t("displayHazardEyeProtection")}
           </p>
+          {hazardPrompt === "adbInputRestricted" && (
+            <div className="flex flex-wrap justify-center gap-2 pt-2">
+              <button
+                type="button"
+                disabled={repairingAdb}
+                className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm disabled:opacity-50"
+                onClick={async () => {
+                  setRepairingAdb(true);
+                  try {
+                    if (await enableAdbInput()) resolveHazardConfirmation(true);
+                    else notify(t("adbInputRepairFailed"), { tone: "error" });
+                  } catch (error) {
+                    reportError(error);
+                  } finally {
+                    setRepairingAdb(false);
+                  }
+                }}
+              >
+                {t("adbInputEnableRoot")}
+              </button>
+              <button
+                type="button"
+                disabled={repairingAdb}
+                className="cursor-pointer rounded-md border border-line px-3 py-2 text-sm"
+                onClick={async () => {
+                  try {
+                    if (await openDeveloperSettings())
+                      resolveHazardConfirmation(false);
+                    else notify(t("adbInputRepairFailed"), { tone: "error" });
+                  } catch (error) {
+                    reportError(error);
+                  }
+                }}
+              >
+                {t("adbInputOpenSettings")}
+              </button>
+            </div>
+          )}
           <div className="flex justify-center gap-2 pt-2">
             <button
               type="button"

@@ -35,3 +35,14 @@ describe("pendingDisplayHazards", () => {
     ).toEqual([]);
   });
 });
+
+it("warns about rejected shell input in both display modes", () => {
+  for (const foreground of [false, true]) {
+    expect(
+      pendingDisplayHazards(
+        { smartResolution: false, adbInputRestricted: true },
+        foreground,
+      ),
+    ).toEqual(["adbInputRestricted"]);
+  }
+});

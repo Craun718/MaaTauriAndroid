@@ -780,6 +780,8 @@ pub struct WindowInsets {
 #[serde(rename_all = "camelCase")]
 pub struct DisplayHazards {
     pub smart_resolution: bool,
+    #[serde(default)]
+    pub adb_input_restricted: bool,
     pub eye_protection_source: Option<String>,
 }
 
@@ -1602,6 +1604,7 @@ mod tests {
             serde_json::to_value(&hazards).unwrap(),
             serde_json::json!({
                 "smartResolution": true,
+                "adbInputRestricted": false,
                 "eyeProtectionSource": "xiaomi:screen_paper_mode_enabled"
             })
         );

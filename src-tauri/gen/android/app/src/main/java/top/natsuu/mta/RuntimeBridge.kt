@@ -802,6 +802,7 @@ object RuntimeBridge {
         return runCatching {
             JSONObject().apply {
                 put("smartResolution", ControlHost.isSmartResolutionEnabled())
+                put("adbInputRestricted", AdbInputSettings.restricted())
                 put(
                     "eyeProtectionSource",
                     EyeProtectionDetector.detect(context) ?: JSONObject.NULL,
@@ -809,6 +810,17 @@ object RuntimeBridge {
             }.toString()
         }.getOrNull()
     }
+
+    @JvmStatic
+    fun enableAdbInput(): Boolean = AdbInputSettings.enableWithRoot()
+
+    @JvmStatic
+    fun openDeveloperSettings(): Boolean = runCatching {
+        val context = requireNotNull(agentContext)
+        context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    }.getOrDefault(false)
 
     /**
      * Physical-pixel top/bottom insets the web layer must keep clear of (system

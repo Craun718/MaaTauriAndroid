@@ -486,7 +486,9 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
         </BottomDrawer>
         <Modal
           open={hazardPrompt !== undefined}
-          onClose={() => resolveHazardConfirmation(false)}
+          onClose={() => {
+            if (!repairingAdb) resolveHazardConfirmation(false);
+          }}
           title={t("displayHazardTitle")}
         >
           <p className="text-sm">
@@ -537,6 +539,7 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
           <div className="flex justify-center gap-2 pt-2">
             <button
               type="button"
+              disabled={repairingAdb}
               onClick={() => resolveHazardConfirmation(true)}
               className="h-10 min-w-20 cursor-pointer rounded-md border border-accent bg-accent px-3 font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
@@ -544,6 +547,7 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
             </button>
             <button
               type="button"
+              disabled={repairingAdb}
               onClick={() => resolveHazardConfirmation(false)}
               className="h-10 min-w-20 cursor-pointer rounded-md border border-line px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >

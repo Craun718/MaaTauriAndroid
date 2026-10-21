@@ -571,7 +571,7 @@ object RunNotificationFactory {
     private fun canRequestPromotedOngoing(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < 36) return true
         // One UI reports no promoted-notification switch although requests work.
-        if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return true
+        if (DeviceIdentity.vendor == RunNotificationVendor.SAMSUNG) return true
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         return manager.canPostPromotedNotifications()
     }

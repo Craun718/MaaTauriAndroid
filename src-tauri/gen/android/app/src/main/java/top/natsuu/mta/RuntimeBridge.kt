@@ -866,8 +866,7 @@ object RuntimeBridge {
             }.getOrNull()
             if (!productName.isNullOrBlank()) return productName
         }
-        return systemProperty("ro.product.marketname")
-            ?: "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+        return DeviceIdentity.marketName
     }
 
     private fun systemProperty(key: String): String? = runCatching {

@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 /**
@@ -17,6 +18,37 @@ internal class AppLauncher(
     private val context: Context?,
     private val shell: (Array<out String>) -> Int,
 ) {
+    private val recentsPolicy = RecentsExclusionPolicy()
+    private val recentsTransaction: ((Any) -> Unit)? by lazy {
+        if (Build.VERSION.SDK_INT < 37) null else runCatching {
+            val service = requireNotNull(activityService(ACTIVITY_TASK_SERVICE_INTERFACE, ACTIVITY_TASK_SERVICE_NAME))
+            val organizer = requireNotNull(service.javaClass.getMethod("getWindowOrganizerController").invoke(service))
+            val transaction = Class.forName("android.window.WindowContainerTransaction")
+            val token = Class.forName("android.window.WindowContainerToken")
+            val exclude = transaction.getMethod("setTaskForceExcludedFromRecents", token, Boolean::class.javaPrimitiveType)
+            val apply = organizer.javaClass.getMethod("applyTransaction", transaction)
+            val execute: (Any) -> Unit = { taskToken ->
+                val update = transaction.getConstructor().newInstance()
+                exclude.invoke(update, taskToken, true)
+                apply.invoke(organizer, update)
+                Unit
+            }
+            execute
+        }.onFailure { android.util.Log.w(TAG, "Forced recents exclusion unavailable", it) }.getOrNull()
+    }
+
+    internal fun excludeFromRecents(packageName: String, displayId: Int) {
+        if (Build.VERSION.SDK_INT < 37 || displayId <= 0) return
+        val apply = recentsTransaction ?: return
+        runCatching {
+            val task = runningTasks().firstOrNull { taskMatches(it, packageName) && displayIdOf(it) == displayId }
+                ?: return
+            if (!recentsPolicy.claim(Build.VERSION.SDK_INT, displayId, displayIdOf(task), task.taskId)) return
+            val token = requireNotNull(task.javaClass.getField("token").get(task))
+            apply(token)
+        }.onFailure { android.util.Log.w(TAG, "Could not exclude $packageName from recents", it) }
+    }
+
     fun stopPackage(spec: String): Int {
         val packageName = packageNameOf(spec)
         return if (hiddenForceStop(packageName) || shell(arrayOf("am", "force-stop", packageName)) == 0) {

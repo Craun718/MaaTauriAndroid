@@ -254,6 +254,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         val tasks = org.json.JSONObject()
         for (target in targets) {
             exitHistory?.record(target)
+            appLauncher.excludeFromRecents(target, displayId)
             val location = appLauncher.taskLocationOf(target)
             val entry = org.json.JSONObject()
             entry.put("taskId", location?.taskId ?: org.json.JSONObject.NULL)
@@ -589,7 +590,9 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
                     val result = startGameOnDisplay(target, displayId)
                     val activeDisplayId = virtualDisplay.get()?.display?.displayId
                     if (result == RESULT_OK && (displayId == 0 || displayId == activeDisplayId)) {
-                        targetPackages.add(appLauncher.packageNameOf(target))
+                        val packageId = appLauncher.packageNameOf(target)
+                        targetPackages.add(packageId)
+                        appLauncher.excludeFromRecents(packageId, displayId)
                     }
                     return result
                 }

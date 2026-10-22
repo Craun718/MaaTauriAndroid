@@ -34,6 +34,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     private val bugreportProcess = AtomicReference<Process?>(null)
     private val bugreportProgress = AtomicReference("idle|0")
     private val virtualDisplay = AtomicReference<VirtualDisplay?>(null)
+    private val displayCapabilities = AtomicReference(intArrayOf(-1, -1, -1, -1))
     private val touchMarkersEnabled = AtomicBoolean(false)
     private val touchMarkerId = AtomicLong(0)
     private val touchMarkers = ArrayDeque<IntArray>()
@@ -73,34 +74,44 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
         val displayContext = ShellIdentityContext.forCurrentUid(baseContext)
         stopVirtualDisplay()
 
-        // Several DisplayManager flags are hidden from the public SDK. Their numeric
-        // values are stable, but post-API-33 bits must not be passed on older devices.
-        var flags = (1 shl 0) or (1 shl 1) or (1 shl 3) or (1 shl 6) or (1 shl 8)
-        if (Build.VERSION.SDK_INT >= 33) {
-            flags = flags or (1 shl 10) or (1 shl 11) or (1 shl 12) or (1 shl 13)
-            if (Build.VERSION.SDK_INT >= 34) {
-                flags = flags or (1 shl 14) or (1 shl 15) or (1 shl 16)
+        val manager = ShellIdentityContext.createDisplayManager(displayContext) ?: return DISPLAY_NONE
+        val (tier, display) = VirtualDisplayPolicy.create(
+            Build.VERSION.SDK_INT,
+            rejected = { tier, error ->
+                android.util.Log.w("MaaTauriAndroidControl", "Virtual display tier $tier denied; retrying with fewer flags", error)
+            },
+        ) { flags ->
+            requireNotNull(manager.createVirtualDisplay("MTAVirtualDisplay", width, height, dpi, surface, flags)) {
+                "virtual display creation returned null"
             }
         }
-        val display = displayContext
-            .let(ShellIdentityContext::createDisplayManager)
-            ?.createVirtualDisplay(
-                "MTAVirtualDisplay",
-                width,
-                height,
-                dpi,
-                surface,
-                flags,
-            ) ?: return DISPLAY_NONE
         virtualDisplay.set(display)
-        // Without this, a focused input field on the virtual display opens the
-        // user's IME on the primary display and can leave it stuck open.
-        if (Build.VERSION.SDK_INT >= 31) {
-            hideDisplayIme(display.display.displayId)
+        try {
+            val requested = VirtualDisplayPolicy.tiers(Build.VERSION.SDK_INT)[tier]
+            val effective = display.display.flags
+            val group = runCatching {
+                val globalClass = Class.forName("android.hardware.display.DisplayManagerGlobal")
+                val global = globalClass.getMethod("getInstance").invoke(null)
+                val info = globalClass.getMethod("getDisplayInfo", Int::class.javaPrimitiveType)
+                    .invoke(global, display.display.displayId)
+                info.javaClass.getField("displayGroupId").getInt(info)
+            }.getOrDefault(-1)
+            displayCapabilities.set(intArrayOf(tier, requested, effective, group))
+            android.util.Log.i("MaaTauriAndroidControl", "Virtual display tier=$tier requested=$requested effective=$effective group=$group")
+            if (tier > 0 || (requested and VirtualDisplayPolicy.OWN_DISPLAY_GROUP != 0 && group == 0)) {
+                android.util.Log.w("MaaTauriAndroidControl", "Virtual display has reduced isolation; screen lock/power and primary input focus may affect the run")
+            }
+            // Keep virtual display inputs from opening the IME on the primary display.
+            if (Build.VERSION.SDK_INT >= 31) hideDisplayIme(display.display.displayId)
+            stabilizeDisplay(display.display.displayId, width, height)
+            return display.display.displayId
+        } catch (error: Throwable) {
+            releaseVirtualDisplay()
+            throw error
         }
-        stabilizeDisplay(display.display.displayId, width, height)
-        return display.display.displayId
     }
+
+    override fun virtualDisplayCapabilities(): IntArray = displayCapabilities.get().copyOf()
 
     private val appLauncher =
         AppLauncher(context?.let(ShellIdentityContext::forCurrentUid)) { arguments ->
@@ -168,6 +179,7 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
     }
 
     private fun releaseVirtualDisplay() {
+        displayCapabilities.set(intArrayOf(-1, -1, -1, -1))
         virtualDisplay.getAndSet(null)?.release()
         synchronized(touchMarkers) {
             touchMarkers.clear()

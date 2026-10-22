@@ -1141,7 +1141,11 @@ object RuntimeBridge {
 
     @JvmStatic
     fun virtualDisplayStatus(): IntArray {
-        return ControlHost.virtualDisplayStatus() ?: intArrayOf(0, -1, 0, 0, 0)
+        val status = ControlHost.virtualDisplayStatus() ?: intArrayOf(0, -1, 0, 0, 0)
+        val capabilities = if (status[0] != 0) {
+            runCatching { ControlHost.current()?.virtualDisplayCapabilities() }.getOrNull()
+        } else null
+        return status + (capabilities?.takeIf { it.size == 4 } ?: intArrayOf(-1, -1, -1, -1))
     }
 
     /**

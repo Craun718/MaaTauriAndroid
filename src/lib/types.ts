@@ -393,6 +393,13 @@ export interface VirtualDisplayStatus {
   width: number;
   height: number;
   frameCount: number;
+  capabilities?: {
+    flagTier: number;
+    requestedFlags: number;
+    effectiveFlags: number;
+    displayGroupId: number;
+    compatibilityMode: boolean;
+  } | null;
 }
 
 /**

@@ -35,9 +35,12 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
         }
         val runtime = runtimes.getJSONObject(runtimeIndex)
         val staging = stagingRoot(uid)
+        DirectoryAccess.check(staging.parentFile!!)
         if (runtimeIndex == 0) {
-            staging.deleteRecursively()
-            staging.mkdirs()
+            DirectoryAccess.checked(staging, "clearStaging") {
+                if (staging.exists() && !staging.deleteRecursively()) throw java.io.IOException("could not clear runtime staging")
+            }
+            DirectoryAccess.check(staging)
         } else {
             require(staging.isDirectory) { "agent runtime preparation is not sequential" }
         }
@@ -51,6 +54,7 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
             }
 
             val runtimeRoot = staging.resolve("runtime-$runtimeIndex")
+            DirectoryAccess.check(runtimeRoot)
             val runtimeZip = staging.resolve("runtime-$runtimeIndex.zip")
             copyTo(runtimeBundle, runtimeZip)
             ZipSafety.validateNoSymlinks(runtimeZip)
@@ -61,12 +65,15 @@ class AgentRuntimeManager(private val workspaceRoot: File) {
             staging.resolve("runtime.json").writeText(descriptorJson)
             if (runtimeIndex == runtimes.length() - 1) {
                 val final = finalRoot(uid)
-                final.deleteRecursively()
-                require(staging.renameTo(final)) { "could not publish the prepared agent runtime" }
+                DirectoryAccess.checked(final, "publishRuntime") {
+                    if (final.exists() && !final.deleteRecursively()) throw java.io.IOException("could not clear previous runtime")
+                    Os.rename(staging.path, final.path)
+                }
             }
         } catch (error: Throwable) {
-            staging.deleteRecursively()
-            throw error
+            val reported = DirectoryAccess.confirmedFailure(staging, "prepareRuntime", error)
+            runCatching { staging.deleteRecursively() }
+            throw reported
         }
     }
 

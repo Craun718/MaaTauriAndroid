@@ -3,6 +3,7 @@ mod atomic_io;
 mod background_image;
 mod configuration_backup;
 mod diagnostics;
+mod directory_access;
 mod domain;
 mod focus;
 mod persistence;
@@ -912,6 +913,17 @@ struct VirtualDisplayStatus {
     width: i32,
     height: i32,
     frame_count: i64,
+    capabilities: Option<VirtualDisplayCapabilities>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VirtualDisplayCapabilities {
+    flag_tier: i32,
+    requested_flags: i32,
+    effective_flags: i32,
+    display_group_id: i32,
+    compatibility_mode: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1701,18 +1713,7 @@ fn virtual_display_status() -> Result<VirtualDisplayStatus, AppError> {
     #[cfg(target_os = "android")]
     {
         let values = call_runtime_bridge_int_array("virtualDisplayStatus")?;
-        if values.len() < 5 {
-            return Err(AppError::Message(
-                "The virtual display status is incomplete".to_string(),
-            ));
-        }
-        Ok(VirtualDisplayStatus {
-            active: values[0] != 0,
-            display_id: values[1],
-            width: values[2],
-            height: values[3],
-            frame_count: i64::from(values[4]),
-        })
+        parse_virtual_display_status(&values)
     }
 
     #[cfg(not(target_os = "android"))]
@@ -1723,8 +1724,35 @@ fn virtual_display_status() -> Result<VirtualDisplayStatus, AppError> {
             width: 0,
             height: 0,
             frame_count: 0,
+            capabilities: None,
         })
     }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn parse_virtual_display_status(values: &[i32]) -> Result<VirtualDisplayStatus, AppError> {
+    if values.len() < 5 {
+        return Err(AppError::Message(
+            "The virtual display status is incomplete".to_string(),
+        ));
+    }
+    let active = values[0] != 0;
+    let capabilities =
+        (active && values.len() >= 9 && values[5] >= 0).then(|| VirtualDisplayCapabilities {
+            flag_tier: values[5],
+            requested_flags: values[6],
+            effective_flags: values[7],
+            display_group_id: values[8],
+            compatibility_mode: values[5] > 0 || (values[6] & (1 << 11) != 0 && values[8] == 0),
+        });
+    Ok(VirtualDisplayStatus {
+        active,
+        display_id: values[1],
+        width: values[2],
+        height: values[3],
+        frame_count: i64::from(values[4]),
+        capabilities,
+    })
 }
 
 #[cfg(target_os = "android")]
@@ -1915,6 +1943,7 @@ fn validate_virtual_display_back(status: &VirtualDisplayStatus) -> Result<(), Ap
     if !status.active {
         return Err(AppError::Message(
             "The virtual display is not active".to_string(),
+            "displayMissing",
         ));
     }
     Ok(())
@@ -1930,6 +1959,7 @@ fn validate_virtual_display_touch(
     if !status.active {
         return Err(AppError::Message(
             "The virtual display is not active".to_string(),
+            "displayMissing",
         ));
     }
     if !matches!(action, 6 | 7 | 8) {
@@ -2822,15 +2852,20 @@ pub(crate) fn probe_target_app_state() -> Option<run_diagnosis::TargetAppState> 
 /// telemetry. Must be called from within `MaaSessions::finish_with` so the
 /// preparing lease returns to Idle; otherwise every later start and stop
 /// stays wedged on the preparing lease and the run controls never recover.
-fn abort_preparing_run(app: &AppHandle, logger: &run_log::RunLogger, message: String) {
+fn abort_preparing_run(app: &AppHandle, logger: &run_log::RunLogger, message: String, stage: &str) {
     stop_run_foreground_service();
     run_progress::finish_run_overlay();
+    let diagnostic = directory_access::extract(&message).map(|failure| {
+        serde_json::json!({
+            "diagnostic": "directoryAccess", "directoryAccess": failure,
+        })
+    });
     if let Ok(event) = logger.append(
         run_log::RunEventKind::Failure,
         runtime::RunState::Idle,
         message.clone(),
         None,
-        None,
+        diagnostic,
     ) {
         let _ = app.emit("run-event", &event);
     }
@@ -2840,7 +2875,15 @@ fn abort_preparing_run(app: &AppHandle, logger: &run_log::RunLogger, message: St
         runtime::RunResultSeverity::Error,
         message.clone(),
     );
-    telemetry::run_event("failed", &message, None);
+    let project = app
+        .state::<AppState>()
+        .project()
+        .map(|project| project.name)
+        .unwrap_or_default();
+    telemetry::run_failure(
+        &telemetry::preparation_failure(&project, stage, &message),
+        None,
+    );
     telemetry::run_finished("failed");
 }
 
@@ -2984,7 +3027,7 @@ async fn start_run_core(
     // Any failure after `begin_preparing` must finish the lease before this
     // command returns, or every later start and stop stays wedged on the
     // preparing lease and the run controls never return to Idle.
-    let fail_preparing = |message: String| -> AppError {
+    let fail_preparing = |message: String, stage: &str| -> AppError {
         if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.as_ref() {
             if let Ok(store) = state.schedule_store() {
                 let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
@@ -3000,7 +3043,7 @@ async fn start_run_core(
             notify_schedule_not_started(&app, &message);
         }
         state.maa.finish_with(&execution_id, || {
-            abort_preparing_run(&app, &logger, message.clone());
+            abort_preparing_run(&app, &logger, message.clone(), stage);
         });
         AppError::Message(message)
     };
@@ -3021,7 +3064,7 @@ async fn start_run_core(
                 Err(_) => privileged_backend_blocker(),
             };
         if let Some(blocker) = backend_blocker {
-            return Err(fail_preparing(blocker));
+            return Err(fail_preparing(blocker, "controlService"));
         }
         let display_hazards = runtime::display_hazards();
         if display_hazards
@@ -3047,20 +3090,35 @@ async fn start_run_core(
                 let _ = app.emit("run-event", &event);
             }
         }
+        telemetry::clear_virtual_display_tag();
         if configuration.foreground_mode {
             // The bridge resets the native control context and screen metrics to
             // the physical primary display, so display 0 becomes a valid target.
             if let Err(error) = call_runtime_bridge_boolean("stopVirtualDisplay") {
-                return Err(fail_preparing(error.to_string()));
+                return Err(fail_preparing(error.to_string(), "displayStop"));
             }
         } else {
             let portrait = match call_runtime_bridge_boolean("isVirtualDisplayPortrait") {
                 Ok(portrait) => portrait,
-                Err(error) => return Err(fail_preparing(error.to_string())),
+                Err(error) => return Err(fail_preparing(error.to_string(), "displayOrientation")),
             };
             let (width, height) = virtual_display_dimensions(portrait);
             if let Err(error) = ensure_virtual_display_for_run(width, height) {
-                return Err(fail_preparing(error.to_string()));
+                return Err(fail_preparing(error.to_string(), "displayStart"));
+            }
+            if let Ok(status) = virtual_display_status() {
+                if let Some(capabilities) = status.capabilities {
+                    telemetry::tag_virtual_display(capabilities.flag_tier);
+                    if capabilities.compatibility_mode {
+                        if let Ok(event) = logger.append(
+                            run_log::RunEventKind::Warning,
+                            runtime::RunState::Preparing,
+                            "The virtual display has reduced isolation: screen off or lock may pause tasks, and input may take focus from the main screen.",
+                            None,
+                            Some(serde_json::json!({"diagnostic": "virtualDisplayCompatibility", "capabilities": capabilities})),
+                        ) { let _ = app.emit("run-event", &event); }
+                    }
+                }
             }
         }
         if !call_runtime_bridge_boolean("startRunForegroundService")? {
@@ -3107,6 +3165,7 @@ async fn start_run_core(
     let run_execution_id = execution_id.clone();
     let logger_for_run = logger.clone();
     let project_root = project.root.clone();
+    let telemetry_project = project.name.clone();
     let client_language = agent::resolved_locale(configuration.ui_language, &project.language);
     let project_version = project.version.clone();
     let attachment_rate = project
@@ -3122,6 +3181,7 @@ async fn start_run_core(
     if controller_display_id == 0 && !configuration.foreground_mode {
         return Err(fail_preparing(
             "The virtual display is not active".to_string(),
+            "displayMissing",
         ));
     }
     if let Err(error) = logger.append(
@@ -3131,7 +3191,7 @@ async fn start_run_core(
         None,
         None,
     ) {
-        return Err(fail_preparing(error.to_string()));
+        return Err(fail_preparing(error.to_string(), "runLog"));
     }
     let resolved_for_run = resolved.clone();
     let base_pipeline = resolved.base_pipeline.clone();
@@ -3199,7 +3259,7 @@ async fn start_run_core(
                     Ok(tasker) => tasker,
                     Err(error) => {
                         sessions.finish_with(&run_execution_id, || {
-                            fail(&app, &logger_for_run, error.to_string());
+                            fail(&app, &logger_for_run, error.to_string(), "sessionLease");
                         });
                         return;
                     }
@@ -3289,13 +3349,13 @@ async fn start_run_core(
                     Ok(Ok(outcome)) => outcome,
                     Ok(Err(error)) => {
                         sessions.finish_with(&run_execution_id, || {
-                            fail(&app, &logger_for_run, error.to_string());
+                            fail(&app, &logger_for_run, error.to_string(), "taskExecution");
                         });
                         return;
                     }
                     Err(error) => {
                         sessions.finish_with(&run_execution_id, || {
-                            fail(&app, &logger_for_run, error.to_string());
+                            fail(&app, &logger_for_run, error.to_string(), "taskWorker");
                         });
                         return;
                     }
@@ -3320,6 +3380,22 @@ async fn start_run_core(
                 // finding. A `Stopped` outcome used to always read as a manual
                 // stop even when the supervisor cut the run short.
                 let stop_origin = sessions.stop_origin();
+                let failure_report = match &outcome {
+                    runtime::RunOutcome::Failed {
+                        entry,
+                        status,
+                        diagnosis,
+                        diagnostic_code,
+                        ..
+                    } => Some(telemetry::task_failure(
+                        &telemetry_project,
+                        entry,
+                        &status.to_string(),
+                        *diagnostic_code,
+                        diagnosis.as_deref(),
+                    )),
+                    _ => None,
+                };
                 let (kind, state, message, data, telemetry_message, outcome_label, attachment_path) =
                     match outcome {
                         runtime::RunOutcome::Completed => {
@@ -3386,10 +3462,7 @@ async fn start_run_core(
                                 diagnosis.as_deref(),
                                 diagnostic_code,
                             );
-                            let telemetry_message = match &diagnosis {
-                                Some(diagnosis) => format!("{message} {diagnosis}"),
-                                None => message.clone(),
-                            };
+                            let telemetry_message = message.clone();
                             (
                                 run_log::RunEventKind::Failure,
                                 runtime::RunState::Idle,
@@ -3411,13 +3484,17 @@ async fn start_run_core(
                     {
                         let _ = app.emit("run-event", &event);
                     }
-                    telemetry::run_event(
-                        outcome_label,
-                        &telemetry_message,
-                        attachment_path
-                            .and_then(|path| path.to_str().map(str::to_string))
-                            .as_deref(),
-                    );
+                    let attachment =
+                        attachment_path.and_then(|path| path.to_str().map(str::to_string));
+                    if let Some(report) = &failure_report {
+                        telemetry::run_failure(report, attachment.as_deref());
+                    } else {
+                        telemetry::run_event(
+                            outcome_label,
+                            &telemetry_message,
+                            attachment.as_deref(),
+                        );
+                    }
                     telemetry::run_finished(outcome_label);
                     let severity = if kind == run_log::RunEventKind::Failure {
                         runtime::RunResultSeverity::Error
@@ -3434,12 +3511,12 @@ async fn start_run_core(
             }
             Ok(Err(error)) => {
                 sessions.finish_with(&run_execution_id, || {
-                    fail(&app, &logger_for_run, error.to_string());
+                    fail(&app, &logger_for_run, error.to_string(), "sessionCreate");
                 });
             }
             Err(error) => {
                 sessions.finish_with(&run_execution_id, || {
-                    fail(&app, &logger_for_run, error.to_string());
+                    fail(&app, &logger_for_run, error.to_string(), "sessionWorker");
                 });
             }
         }
@@ -5289,6 +5366,40 @@ mod tests {
     }
 
     #[test]
+    fn virtual_display_status_parses_capabilities_without_confusing_flag_spaces() {
+        assert!(parse_virtual_display_status(&[1, 2]).is_err());
+        assert!(parse_virtual_display_status(&[1, 2, 720, 1280, 0])
+            .unwrap()
+            .capabilities
+            .is_none());
+        assert!(parse_virtual_display_status(&[0, -1, 0, 0, 0, 1, 0, 0, 0])
+            .unwrap()
+            .capabilities
+            .is_none());
+        assert!(
+            parse_virtual_display_status(&[1, 2, 720, 1280, 0, -1, -1, -1, -1])
+                .unwrap()
+                .capabilities
+                .is_none()
+        );
+        for (tier, requested, effective, group, compatible) in [
+            (0, 1 << 11, 1 << 8, 2, false),
+            (0, 1 << 11, 1 << 8, 0, true),
+            (1, 0, 0, 0, true),
+            (0, 0, 0, -1, false),
+        ] {
+            let status = parse_virtual_display_status(&[
+                1, 2, 720, 1280, 3, tier, requested, effective, group,
+            ])
+            .unwrap();
+            let caps = status.capabilities.unwrap();
+            assert_eq!(caps.compatibility_mode, compatible);
+            assert_eq!(caps.effective_flags, effective);
+            assert_eq!(caps.requested_flags, requested);
+        }
+    }
+
+    #[test]
     fn virtual_display_back_is_valid_before_dispatch() {
         let status = VirtualDisplayStatus {
             active: true,
@@ -5296,6 +5407,7 @@ mod tests {
             width: 1280,
             height: 720,
             frame_count: 0,
+            capabilities: None,
         };
         assert!(validate_virtual_display_back(&status).is_ok());
 
@@ -5317,6 +5429,7 @@ mod tests {
             width: 1280,
             height: 720,
             frame_count: 0,
+            capabilities: None,
         };
 
         assert!(validate_virtual_display_touch(&status, 9, 0, 0, 15).is_err());
@@ -5358,6 +5471,7 @@ mod tests {
             width: 1280,
             height: 720,
             frame_count: 8,
+            capabilities: None,
         };
         assert!(virtual_display_matches_geometry(&status, 1280, 720));
 
@@ -5755,7 +5869,6 @@ pub fn run() {
                 let _ = APP_HANDLE.set(app.handle().clone());
             }
             let maa_log_dir = root.join("maa-logs");
-            let _ = std::fs::create_dir_all(&maa_log_dir);
             runtime::set_maa_log_dir(maa_log_dir);
             // The plugin registered its logger at the loosest level; info stays
             // the default until bootstrap applies the stored debug switch.

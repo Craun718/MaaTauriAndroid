@@ -367,6 +367,12 @@ export function VirtualDisplayCard({
         </div>
       </div>
 
+      {active && status?.capabilities?.compatibilityMode && (
+        <p className="text-xs text-warning">
+          {t("virtualDisplayCompatibilityWarning")}
+        </p>
+      )}
+
       {active && status && !fullscreen ? (
         <div
           ref={previewRef}

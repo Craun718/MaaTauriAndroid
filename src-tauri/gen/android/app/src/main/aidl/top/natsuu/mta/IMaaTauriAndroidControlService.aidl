@@ -106,6 +106,9 @@ interface IMaaTauriAndroidControlService {
     /** Arms a pipe EOF watch independent of the Binder thread pool. */
     int attachOwnerLifeline(in IBinder owner, in ParcelFileDescriptor lifeline) = 27;
 
+    /** tier, requested creation flags, effective Display.flags, group id; -1 means unknown. */
+    int[] virtualDisplayCapabilities() = 28;
+
     /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs

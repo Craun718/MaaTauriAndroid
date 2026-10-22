@@ -1,6 +1,11 @@
 import { useMemo } from "react";
 import { useAppStore } from "../store/appStore";
 import {
+  type DirectoryAccessDiagnostic,
+  extractDirectoryAccess,
+  parseDirectoryAccess,
+} from "./directoryAccess";
+import {
   type AppLanguage,
   isChineseLocale,
   projectLanguage,
@@ -61,7 +66,21 @@ const en = {
   privilegedHost: "Permissions",
   virtualDisplay: "Virtual display",
   virtualDisplayGeometry: "{width} x {height}",
+  directoryPermissionRuntime:
+    "The privileged process cannot access {path}. Reconnect the selected Root/Shizuku backend and retry. If you switched backends, try preparing the runtime again with Root; inspect ownership and mount details in the logs if it still fails.",
+  directoryPermissionLogs:
+    "The app cannot write logs to {path}. Check app storage access and the directory ownership shown in the logs. Tasks can continue, but file logs may be missing.",
+  directoryReadOnly:
+    "The directory {path} is on read-only storage. Check the storage or ROM restrictions before retrying; switching Root/Shizuku alone may not fix it.",
+  directoryNoSpace:
+    "Storage is full or its quota is exhausted at {path}. Free space, then retry.",
+  directoryNotDirectory:
+    "A file or invalid path blocks the directory {path}. Inspect the path in the logs before re-extracting resources or preparing the runtime again.",
+  directoryUnknown:
+    "Could not use {path}. Check the original error, process identity, directory ownership and mount information in the logs, then retry.",
   virtualDisplayRunning: "Running",
+  virtualDisplayCompatibilityWarning:
+    "Virtual display compatibility mode: screen off or lock may pause tasks, and input may take focus from the main screen.",
   virtualDisplayStopped: "Stopped",
   virtualDisplayStreamConnecting: "Connecting stream",
   virtualDisplayStreamUnavailable: "Stream unavailable",
@@ -531,7 +550,21 @@ const zh: Record<MessageKey, string> = {
   privilegedHost: "权限",
   virtualDisplay: "虚拟屏",
   virtualDisplayGeometry: "{width} x {height}",
+  directoryPermissionRuntime:
+    "特权进程无法访问 {path}。请重新连接所选的 Root/Shizuku 后端后重试；若切换过后端，可尝试在 Root 模式重新准备运行环境，仍失败时请查看日志中的属主和挂载信息。",
+  directoryPermissionLogs:
+    "应用无法写入日志目录 {path}。请检查应用存储访问权限及日志中的目录属主；任务可继续，但文件日志可能缺失。",
+  directoryReadOnly:
+    "目录 {path} 所在存储为只读。请检查存储或 ROM 限制后重试；仅切换 Root/Shizuku 不一定能解决。",
+  directoryNoSpace:
+    "目录 {path} 所在存储空间不足或配额已用尽，请释放空间后重试。",
+  directoryNotDirectory:
+    "目录 {path} 被文件或无效路径阻挡。请先查看日志中的路径，再重新解压资源或准备运行环境。",
+  directoryUnknown:
+    "无法使用目录 {path}。请查看日志中的原始错误、进程身份、目录属主和挂载信息后重试。",
   virtualDisplayRunning: "运行中",
+  virtualDisplayCompatibilityWarning:
+    "虚拟屏兼容模式：熄屏或锁屏可能暂停任务，输入操作可能抢占主屏焦点。",
   virtualDisplayStopped: "已停止",
   virtualDisplayStreamConnecting: "正在连接画面流",
   virtualDisplayStreamUnavailable: "画面流不可用",
@@ -1027,15 +1060,34 @@ export function canRequestPrivilegedAccess(status: PrivilegedStatus): boolean {
   return status.status === "permissionRequired";
 }
 
-/**
- * Localizes a known backend diagnostic. Task failures collapse to the short
- * localized notice (details live in the run history/logs); unknown text
- * passes through unchanged.
- */
+function directoryAccessMessage(
+  diagnostic: DirectoryAccessDiagnostic,
+  language: AppLanguage,
+): string {
+  const params = { path: diagnostic.path };
+  switch (diagnostic.kind) {
+    case "permission":
+      return diagnostic.scope === "agentRuntime"
+        ? translate(language, "directoryPermissionRuntime", params)
+        : translate(language, "directoryPermissionLogs", params);
+    case "readOnly":
+      return translate(language, "directoryReadOnly", params);
+    case "noSpace":
+      return translate(language, "directoryNoSpace", params);
+    case "notDirectory":
+      return translate(language, "directoryNotDirectory", params);
+    case "unknown":
+      return translate(language, "directoryUnknown", params);
+  }
+}
+
+/** Known backend failures get a short localized notice; details stay in logs. */
 export function localizeDiagnostic(
   message: string,
   language: AppLanguage,
 ): string {
+  const directory = extractDirectoryAccess(message);
+  if (directory) return directoryAccessMessage(directory, language);
   const key = diagnosticKeys[message];
   if (key) return translate(language, key);
   if (TASK_ABORT_PATTERN.test(message)) {
@@ -1053,6 +1105,13 @@ export function localizeRunEvent(
   language: AppLanguage,
 ): string {
   const data = event.data;
+  if (data?.diagnostic === "directoryAccess") {
+    const directory = parseDirectoryAccess(data.directoryAccess);
+    if (directory) return directoryAccessMessage(directory, language);
+  }
+  if (data?.diagnostic === "virtualDisplayCompatibility") {
+    return translate(language, "virtualDisplayCompatibilityWarning");
+  }
   if (data?.diagnostic === "adbInputRestricted") {
     return translate(language, "displayHazardAdbInput");
   }

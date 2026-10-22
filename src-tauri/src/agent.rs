@@ -645,9 +645,26 @@ fn android_bridge<T>(
             "the privileged control service is disconnected".to_string(),
         ));
     }
-    let result = operation(&mut env, &bridge, &service);
+    let mut result = operation(&mut env, &bridge, &service);
     if result.is_err() {
-        // Failed JNI calls leave the Java exception pending; clear it before this thread runs again.
+        // Binder exceptions carry the privileged process's directory evidence.
+        // Read the throwable only after clearing JNI's pending-exception state.
+        let exception = env.exception_occurred().ok();
+        let _ = env.exception_clear();
+        if let Some(exception) = exception.filter(|exception| !exception.is_null()) {
+            let detail = env
+                .call_method(&exception, "toString", "()Ljava/lang/String;", &[])
+                .and_then(|value| value.l())
+                .ok()
+                .and_then(|value| {
+                    env.get_string(&jni::objects::JString::from(value))
+                        .ok()
+                        .map(|text| text.to_string_lossy().into_owned())
+                });
+            if let Some(detail) = detail {
+                result = Err(AgentError::Host(detail));
+            }
+        }
         let _ = env.exception_clear();
     }
     result

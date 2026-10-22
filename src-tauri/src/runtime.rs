@@ -1077,10 +1077,24 @@ fn configure_framework_logging() {
             );
         }
     };
-    if let Err(error) = maa_framework::configure_logging(&log_dir.to_string_lossy()) {
-        warn(format!(
-            "MaaFramework log directory could not be set: {error}"
-        ));
+    match crate::directory_access::probe("maaLogs", &log_dir) {
+        Ok(()) => {
+            if let Err(error) = maa_framework::configure_logging(&log_dir.to_string_lossy()) {
+                warn(format!(
+                    "MaaFramework log directory could not be set: {error}"
+                ));
+            }
+        }
+        Err(error) => {
+            log::warn!("MaaFramework log directory is unavailable: {error}");
+            if let Some(logger) = crate::run_log::latest_global() {
+                let _ = logger.append(
+                    crate::run_log::RunEventKind::Warning, RunState::Preparing,
+                    format!("MaaFramework log directory is unavailable: {error}"), None,
+                    Some(serde_json::json!({"diagnostic": "directoryAccess", "directoryAccess": error})),
+                );
+            }
+        }
     }
     if let Err(error) = maa_framework::set_save_on_error(true) {
         warn(format!(

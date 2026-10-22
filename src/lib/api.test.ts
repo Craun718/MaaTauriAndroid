@@ -369,21 +369,44 @@ describe("run start selection", () => {
     expect(invoke).toHaveBeenCalledWith("start_run");
   });
 
-  it("passes a one-time task selection in camel case", async () => {
-    invoke.mockResolvedValue({
-      executionId: "run-2",
-      message: "The run is starting",
-      taskCount: 1,
-    });
-    const selection = {
-      runConfigurationId: "default",
-      instanceId: "task-2",
-      mode: "current" as const,
-    };
+  it.each(["current", "currentAndFollowing"] as const)(
+    "passes a %s selection using the Rust command's taskSelection argument",
+    async (mode) => {
+      invoke.mockResolvedValue({
+        executionId: "run-2",
+        message: "The run is starting",
+        taskCount: 1,
+      });
+      const selection = {
+        runConfigurationId: "default",
+        instanceId: "task-2",
+        mode,
+      };
 
-    await expect(startRun(selection)).resolves.toHaveProperty("taskCount", 1);
-    expect(invoke).toHaveBeenCalledWith("start_run", { selection });
-  });
+      await expect(startRun(selection)).resolves.toHaveProperty("taskCount", 1);
+      expect(invoke).toHaveBeenCalledWith("start_run", {
+        taskSelection: selection,
+      });
+    },
+  );
+
+  it.each(["current", "currentAndFollowing"] as const)(
+    "propagates a rejected %s selection without falling back to the full queue",
+    async (mode) => {
+      const error = "The selected task is not available for this run";
+      invoke.mockRejectedValue(error);
+      const selection = {
+        runConfigurationId: "default",
+        instanceId: "task-2",
+        mode,
+      };
+
+      await expect(startRun(selection)).rejects.toBe(error);
+      expect(invoke).toHaveBeenCalledExactlyOnceWith("start_run", {
+        taskSelection: selection,
+      });
+    },
+  );
 });
 
 describe("display hazards", () => {

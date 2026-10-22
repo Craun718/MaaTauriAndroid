@@ -223,7 +223,7 @@ export async function requestOverlayPermission() {
 
 export async function startRun(selection?: TaskRunSelection) {
   if (!selection) return invoke<StartRunStatus>("start_run");
-  return invoke<StartRunStatus>("start_run", { selection });
+  return invoke<StartRunStatus>("start_run", { taskSelection: selection });
 }
 
 export async function exportLogs() {

@@ -212,7 +212,7 @@ jobs:
       - name: Resolve latest stable M9A release
         id: resource_release
         run: |
-          ref="$(curl --fail --silent --show-error https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
+          ref="$(curl --fail --silent --show-error -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
           echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
@@ -379,7 +379,7 @@ jobs:
       - name: Resolve latest stable NarutoMobile release
         id: resource_release
         run: |
-          ref="$(curl --fail --silent --show-error https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
+          ref="$(curl --fail --silent --show-error -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
           echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
@@ -519,7 +519,7 @@ jobs:
       - name: Resolve latest stable MAAPVZ release
         id: resource_release
         run: |
-          ref="$(curl --fail --silent --show-error https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
+          ref="$(curl --fail --silent --show-error -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/$RESOURCE_REPO/releases/latest | jq -er '.tag_name')"
           echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
@@ -661,7 +661,7 @@ jobs:
       - name: Resolve latest stable MaaEnd release
         id: resource_release
         run: |
-          release="$(curl --fail --silent --show-error https://api.github.com/repos/$MAAEND_REPO/releases/latest)"
+          release="$(curl --fail --silent --show-error -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/$MAAEND_REPO/releases/latest)"
           ref="$(jq -er '.tag_name' <<< "$release")"
           echo "MAAEND_VERSION=$ref" >> "$GITHUB_ENV"
           echo "RESOURCE_REF=$ref" >> "$GITHUB_ENV"

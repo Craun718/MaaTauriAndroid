@@ -1943,7 +1943,6 @@ fn validate_virtual_display_back(status: &VirtualDisplayStatus) -> Result<(), Ap
     if !status.active {
         return Err(AppError::Message(
             "The virtual display is not active".to_string(),
-            "displayMissing",
         ));
     }
     Ok(())
@@ -1959,7 +1958,6 @@ fn validate_virtual_display_touch(
     if !status.active {
         return Err(AppError::Message(
             "The virtual display is not active".to_string(),
-            "displayMissing",
         ));
     }
     if !matches!(action, 6 | 7 | 8) {

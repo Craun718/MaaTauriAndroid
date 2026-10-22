@@ -78,7 +78,7 @@ function NotificationItem({
   return (
     <div
       role={notification.tone === "error" ? "alert" : "status"}
-      className={`pointer-events-auto flex items-start gap-2 rounded-lg border bg-raised p-3 shadow-lg ${tone.container}`}
+      className={`pointer-events-auto flex items-start gap-2 rounded-lg border bg-surface/82 p-3 shadow-lg backdrop-blur ${tone.container}`}
     >
       <Icon size="1.125rem" className={`mt-0.5 shrink-0 ${tone.icon}`} />
       <p className="min-w-0 flex-1 break-words text-sm">

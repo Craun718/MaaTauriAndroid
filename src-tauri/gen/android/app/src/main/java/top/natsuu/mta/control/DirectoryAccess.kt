@@ -54,7 +54,7 @@ internal object DirectoryAccess {
                 }
             } finally {
                 runCatching { Os.close(descriptor) }
-                runCatching { Os.unlink(probe.path) }
+                runCatching { probe.delete() }
             }
         }
     }

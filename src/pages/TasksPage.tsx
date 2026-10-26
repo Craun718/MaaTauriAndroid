@@ -61,6 +61,7 @@ import type {
 } from "../lib/types";
 import { useLongPress } from "../lib/useLongPress";
 import { useAppStore } from "../store/appStore";
+import { useGuideStore } from "../store/guideStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { useRunLogStore } from "../store/runLogStore";
 
@@ -85,6 +86,8 @@ export function TasksPage() {
   const [focusNotice, setFocusNotice] = useState<FocusNotice>();
   const [selectedPreset, setSelectedPreset] = useState<string>();
   const [activityTab, setActivityTab] = useState<RunActivityTab>("tasks");
+  const guideActive = useGuideStore((state) => state.active);
+  const guideTarget = useGuideStore((state) => state.target);
   const [runActive, setRunActive] = useState(false);
   const [taskAction, setTaskAction] = useState<TaskActionTarget>();
   const runPanelRef = useRef<RunPanelHandle>(null);
@@ -135,6 +138,12 @@ export function TasksPage() {
   useEffect(() => {
     if (runActive) setTaskAction(undefined);
   }, [runActive]);
+
+  useEffect(() => {
+    if (guideActive && guideTarget?.startsWith("tasks-")) {
+      setActivityTab(guideTarget === "tasks-activities" ? "logs" : "tasks");
+    }
+  }, [guideActive, guideTarget]);
 
   // Must stay above the early return below: React requires every hook to run on
   // every render, otherwise the hook count changes when `project` is missing.
@@ -342,7 +351,10 @@ export function TasksPage() {
               </section>
             )}
             <section className="space-y-2">
-              <div className="flex items-center gap-2">
+              <div
+                className="flex items-center gap-2"
+                data-guide-target="tasks-configurations"
+              >
                 <div className="min-w-0 flex-1">
                   <Tabs
                     items={configTabItems}
@@ -444,7 +456,7 @@ function ResourcePicker({
     resources.find((resource) => resource.name === value) ?? resources[0];
   if (!active) return null;
   return (
-    <section className="space-y-2">
+    <section className="space-y-2" data-guide-target="tasks-resource">
       <h2 id="resource-select-label" className="font-medium">
         {t("resource")}
       </h2>

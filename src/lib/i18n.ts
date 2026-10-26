@@ -50,6 +50,41 @@ const en = {
   preset: "Preset",
   enabled: "Enabled",
 
+  // First-use guide
+  guideSummaryTitle: "Know your project",
+  guideSummaryBody:
+    "Check the app, framework, and resource versions here. Include them when reporting a problem after an update.",
+  guidePrivilegeTitle: "Authorize the control unit",
+  guidePrivilegeBody:
+    "Tasks need Root or Shizuku access. Pick a backend, request access, and wait for the granted state here before starting a run.",
+  guideResourceTitle: "Choose the resource",
+  guideResourceBody:
+    "The resource decides which task bundle, options, and updates the app uses. Switch it before arranging tasks.",
+  guideConfigurationTitle: "Arrange task plans",
+  guideConfigurationBody:
+    "Use tabs to switch plans, add a new plan, enable or reorder tasks, and open a task to adjust its parameters.",
+  guideRunTitle: "Start and stop runs",
+  guideRunBody:
+    "The main button starts the enabled tasks and stops an active run. The menu beside it lets you export logs, capture a screenshot, or send a Back action.",
+  guideActivitiesTitle: "Follow the run",
+  guideActivitiesBody:
+    "Switch between the task list and live run logs. Logs remain collected while the task list is visible.",
+  guideHistoryTitle: "Inspect past runs",
+  guideHistoryBody:
+    "Every run is kept locally for 30 days. Open a record to review timing, task outcome, and detailed events.",
+  guideSettingsTitle: "Configure and diagnose",
+  guideSettingsBody:
+    "Settings contains run behavior, backup, diagnostics, updates, and this guide. Export logs before reporting an issue.",
+  guideBack: "Back",
+  guideNext: "Next",
+  guideDone: "Done",
+  guideSkip: "Skip",
+  guideReplay: "View guide",
+  guideProgress: "{current} / {total}",
+  guideRunActive: "View the guide after the current run finishes.",
+  guideUnavailable:
+    "The guide is unavailable right now. Try again from Settings.",
+
   // Home
   project: "Project",
   noProject: "No project is loaded.",
@@ -961,6 +996,39 @@ const zh: Record<MessageKey, string> = {
   updateFailureStorage: "下载数据无法写入存储。",
   updateFailureInstallerNotFound: "本机没有可以安装更新包的应用。",
   updateFailureInternal: "出现意外错误，详情请查看日志。",
+
+  guideSummaryTitle: "了解项目信息",
+  guideSummaryBody:
+    "这里可以查看应用、框架和资源版本。更新后遇到问题时，反馈中请附上这些版本信息。",
+  guidePrivilegeTitle: "授权控制单元",
+  guidePrivilegeBody:
+    "任务需要 Root 或 Shizuku 权限。先选择后端并发起授权，等这里显示已授权后再开始运行。",
+  guideResourceTitle: "选择资源",
+  guideResourceBody:
+    "资源决定当前使用的任务包、选项和更新来源。整理任务前先确认资源选择。",
+  guideConfigurationTitle: "整理任务方案",
+  guideConfigurationBody:
+    "用标签切换方案，或新增方案；启用、排序和增删任务，点开任务后还能调整参数。",
+  guideRunTitle: "开始和停止任务",
+  guideRunBody:
+    "主按钮会执行已启用的任务，运行中可停止；旁边菜单可导出日志、截取画面或发送返回操作。",
+  guideActivitiesTitle: "跟踪运行",
+  guideActivitiesBody:
+    "在任务列表和实时日志之间切换。即使停留在任务列表，日志也会继续收集。",
+  guideHistoryTitle: "查看历史运行",
+  guideHistoryBody:
+    "每轮运行会在本地保留 30 天。点开记录可以回顾耗时、任务结果和详细事件。",
+  guideSettingsTitle: "配置与诊断",
+  guideSettingsBody:
+    "设置页包含运行行为、备份、诊断、更新和本指引。反馈问题前请先导出日志。",
+  guideBack: "上一步",
+  guideNext: "下一步",
+  guideDone: "完成",
+  guideSkip: "跳过",
+  guideReplay: "查看指引",
+  guideProgress: "{current} / {total}",
+  guideRunActive: "请在当前运行结束后查看指引。",
+  guideUnavailable: "暂时无法显示指引，请稍后从设置页重试。",
 };
 
 const catalog: Record<AppLanguage, Record<MessageKey, string>> = { en, zh };

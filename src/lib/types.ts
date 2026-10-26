@@ -328,6 +328,8 @@ export interface UserConfiguration {
   welcomeFingerprint?: string;
   welcomeAcknowledgedAppVersion?: string;
   skipWelcomeAnnouncement?: boolean;
+  /** Latest in-app guide revision seen by this user. */
+  guideSeenVersion?: number;
   backgroundImage?: BackgroundImage;
   /** Card fill opacity, as a percentage. */
   backgroundCardOpacity?: number;

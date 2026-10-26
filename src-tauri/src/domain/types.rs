@@ -401,6 +401,10 @@ pub struct UserConfiguration {
     pub welcome_acknowledged_app_version: Option<String>,
     #[serde(default)]
     pub skip_welcome_announcement: bool,
+    /// The latest in-app guide revision the user has seen. An absent value or
+    /// a lower revision makes the frontend show its startup walkthrough again.
+    #[serde(default)]
+    pub guide_seen_version: Option<u32>,
     /// Set only when the selected image has been copied into this device's
     /// private background directory. Imports preserve the local image instead
     /// of adopting another device's unavailable file reference.
@@ -444,6 +448,7 @@ impl Default for UserConfiguration {
             welcome_fingerprint: None,
             welcome_acknowledged_app_version: None,
             skip_welcome_announcement: false,
+            guide_seen_version: None,
             background_image: None,
             background_card_opacity: default_background_card_opacity(),
         }
@@ -463,6 +468,17 @@ mod tests {
         let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
 
         assert!(!parsed.force_stop_target_app);
+    }
+
+    #[test]
+    fn legacy_configuration_defaults_guide_seen_version_to_none() {
+        let current = UserConfiguration::default();
+        let mut legacy = serde_json::to_value(&current).unwrap();
+        legacy.as_object_mut().unwrap().remove("guideSeenVersion");
+
+        let parsed: UserConfiguration = serde_json::from_value(legacy).unwrap();
+
+        assert_eq!(parsed.guide_seen_version, None);
     }
 
     #[test]

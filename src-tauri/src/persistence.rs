@@ -433,6 +433,38 @@ mod tests {
     }
 
     #[test]
+    fn saves_and_loads_the_guide_revision() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = UserConfigurationStore::new(temp.path().join("configuration.json"));
+        let configuration = UserConfiguration {
+            guide_seen_version: Some(1),
+            ..UserConfiguration::default()
+        };
+
+        store.save(&project(), &configuration).unwrap();
+        let loaded = store.load(&project()).unwrap();
+        assert_eq!(loaded.configuration.guide_seen_version, Some(1));
+    }
+
+    #[test]
+    fn rejects_invalid_guide_revisions_in_both_configuration_formats() {
+        for invalid in [
+            serde_json::json!(-1),
+            serde_json::json!("seen"),
+            serde_json::json!(1.5),
+        ] {
+            let mut configuration = serde_json::to_value(UserConfiguration::default()).unwrap();
+            configuration["guideSeenVersion"] = invalid;
+            assert!(
+                serde_json::from_value::<PersistedConfiguration>(configuration.clone()).is_err()
+            );
+            configuration["secretManifest"] =
+                serde_json::to_value(SecretManifest::default()).unwrap();
+            assert!(serde_json::from_value::<PersistedConfiguration>(configuration).is_err());
+        }
+    }
+
+    #[test]
     fn saves_back_up_the_previous_generation_once_per_day() {
         let temp = tempfile::tempdir().unwrap();
         let store = UserConfigurationStore::new(temp.path().join("configuration.json"));

@@ -129,6 +129,7 @@ export function RunActivityTabs({
       }
     >
       <div
+        data-guide-target="tasks-activities"
         role="tablist"
         aria-label={t("runActivity")}
         className="tabs tabs-border tabs-xs w-max min-w-full"

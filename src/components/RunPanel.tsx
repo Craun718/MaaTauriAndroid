@@ -382,7 +382,7 @@ export const RunPanel = forwardRef<RunPanelHandle, RunPanelProps>(
     return (
       <>
         <div className="space-y-2">
-          <div className="flex gap-2">
+          <div className="flex gap-2" data-guide-target="tasks-run">
             <button
               type="button"
               aria-disabled={startUnavailable}

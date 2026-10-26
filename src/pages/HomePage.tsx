@@ -10,9 +10,11 @@ import {
   STARTUP_ANNOUNCEMENT_HOLD_MS,
   shouldShowAnnouncement,
 } from "../lib/announcements";
+import { shouldDeferAnnouncement } from "../lib/guide";
 import { useTranslation } from "../lib/i18n";
 import type { Project, UserConfiguration } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { useGuideStore } from "../store/guideStore";
 import { usePreparationStore } from "../store/preparationStore";
 
 export function HomePage() {
@@ -52,6 +54,7 @@ export function HomePage() {
       />
 
       <VersionCard
+        guideTarget="home-summary"
         title="versions"
         variant="about"
         project={project}
@@ -82,6 +85,8 @@ function ProjectAnnouncements({
   const dismissedWelcomeFingerprint = useAppStore(
     (state) => state.dismissedWelcomeFingerprint,
   );
+  const guideActive = useGuideStore((state) => state.active);
+  const guideDismissed = useGuideStore((state) => state.dismissed);
   const dismissWelcome = useAppStore((state) => state.dismissWelcome);
   const { welcome, welcomeFingerprint, welcomePending, welcomeErrors } =
     project.metadata;
@@ -92,7 +97,7 @@ function ProjectAnnouncements({
     rememberSelection,
     configuration,
   );
-  const shouldAutoOpen = shouldShowAnnouncement({
+  const announcementEligible = shouldShowAnnouncement({
     hasContent: welcome.length > 0,
     fingerprint: contentFingerprint,
     appVersion,
@@ -100,6 +105,9 @@ function ProjectAnnouncements({
     welcomeAcknowledgedAppVersion: configuration.welcomeAcknowledgedAppVersion,
     skipWelcomeAnnouncement: configuration.skipWelcomeAnnouncement,
   });
+  const shouldAutoOpen =
+    announcementEligible &&
+    !shouldDeferAnnouncement(configuration, guideActive, guideDismissed);
   const autoOpened =
     shouldAutoOpen && dismissedWelcomeFingerprint !== contentFingerprint;
   const reopenedManually = manualFingerprint === contentFingerprint;

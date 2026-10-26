@@ -8,6 +8,7 @@ import {
 import { useTranslation } from "../lib/i18n";
 import { useAppStore } from "../store/appStore";
 import { useBackgroundPreviewStore } from "../store/backgroundPreviewStore";
+import { GuideHost } from "./GuideHost";
 import { NotificationHost } from "./ui/NotificationHost";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -85,6 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </nav>
         <NotificationHost />
+        <GuideHost />
       </div>
     </>
   );

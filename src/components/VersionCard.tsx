@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { GuideTargetName } from "../lib/guide";
 import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import { resolveResourceVersion } from "../lib/resource-version";
@@ -11,6 +12,7 @@ export function VersionCard({
   versions,
   footer,
   actions,
+  guideTarget,
 }: {
   title: MessageKey;
   variant: "about" | "summary";
@@ -19,13 +21,17 @@ export function VersionCard({
   footer?: string;
   /** Rendered between the rows and the footer, e.g. the about links. */
   actions?: ReactNode;
+  guideTarget?: GuideTargetName;
 }) {
   const { t } = useTranslation();
   const environment = versions?.environment;
   const resourceVersion = resolveResourceVersion(versions?.resourceTag);
 
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-raised p-card">
+    <section
+      data-guide-target={guideTarget}
+      className="space-y-3 rounded-lg border border-line bg-raised p-card"
+    >
       <h2 className="font-medium">{t(title)}</h2>
       <dl className="space-y-2 text-sm">
         {variant === "about" ? (

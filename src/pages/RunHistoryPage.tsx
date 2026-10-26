@@ -101,7 +101,10 @@ export function RunHistoryPage() {
 
   return (
     <div className="space-y-card-gap">
-      <header className="flex items-start justify-between gap-3">
+      <header
+        className="flex items-start justify-between gap-3"
+        data-guide-target="runs-history"
+      >
         <div>
           <h1 className="text-2xl font-semibold">{t("runHistoryTitle")}</h1>
           <p className="text-sm text-ink-muted">{t("runHistoryDescription")}</p>

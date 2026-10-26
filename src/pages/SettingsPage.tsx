@@ -54,6 +54,7 @@ import type {
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 import { useBackgroundPreviewStore } from "../store/backgroundPreviewStore";
+import { useGuideStore } from "../store/guideStore";
 import { useNotificationStore } from "../store/notificationStore";
 
 function isUiLanguage(value: string): value is UiLanguage {
@@ -543,7 +544,19 @@ export function SettingsPage() {
           project={project}
           versions={snapshot?.versions}
           footer={t("aboutSummaryHint")}
-          actions={<AboutLinks metadata={project.metadata} />}
+          actions={
+            <>
+              <AboutLinks metadata={project.metadata} />
+              <button
+                type="button"
+                data-guide-target="settings-about"
+                onClick={() => useGuideStore.getState().start()}
+                className="btn btn-sm w-full"
+              >
+                {t("guideReplay")}
+              </button>
+            </>
+          }
         />
       )}
     </div>

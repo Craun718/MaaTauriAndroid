@@ -200,6 +200,7 @@ export function PrivilegeStatusCard({
 
   return (
     <section
+      data-guide-target={compact ? undefined : "home-privilege"}
       className={`rounded-lg border border-line bg-raised p-card ${
         compact ? "space-y-2" : "space-y-3"
       }`}

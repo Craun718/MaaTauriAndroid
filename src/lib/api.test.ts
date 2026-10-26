@@ -431,7 +431,6 @@ describe("PiP IPC ordering", () => {
     eligible: true,
     width: 1280,
     height: 720,
-    unavailableLabel: "Unavailable",
     sourceRect: { left: 10, top: 20, right: 110, bottom: 80 },
   };
 

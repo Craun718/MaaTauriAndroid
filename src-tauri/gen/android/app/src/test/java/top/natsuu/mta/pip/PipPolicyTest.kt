@@ -28,6 +28,14 @@ class PipPolicyTest {
     }
 
     @Test
+    fun `pip survives run completion while the virtual display remains live`() {
+        assertTrue(pipHasDisplay(12, 1280, 720))
+        assertFalse(pipHasDisplay(-1, 1280, 720))
+        assertFalse(pipHasDisplay(12, 0, 720))
+        assertFalse(pipHasDisplay(12, 1280, 0))
+    }
+
+    @Test
     fun `late destruction of an old PiP surface cannot detach its replacement`() {
         val targets = PreviewTargets<Any>()
         val stream = Any()

@@ -363,7 +363,6 @@ export async function getDisplayHazards() {
 }
 
 export interface VirtualDisplayPipRequest {
-  unavailableLabel: string;
   eligible: boolean;
   width: number;
   height: number;

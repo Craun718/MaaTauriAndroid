@@ -1819,7 +1819,6 @@ struct VirtualDisplayPipRect {
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct VirtualDisplayPipRequest {
-    unavailable_label: String,
     eligible: bool,
     width: i32,
     height: i32,
@@ -5269,7 +5268,6 @@ mod tests {
     #[test]
     fn pip_requests_validate_geometry_and_serialize_the_jni_contract() {
         let mut request = VirtualDisplayPipRequest {
-            unavailable_label: "Unavailable".into(),
             eligible: true,
             width: 1280,
             height: 720,
@@ -5283,7 +5281,7 @@ mod tests {
         assert!(validate_pip_request(&request).is_ok());
         let payload = serde_json::to_value(&request).unwrap();
         assert_eq!(payload["sourceRect"]["left"], 10);
-        assert_eq!(payload["unavailableLabel"], "Unavailable");
+        assert!(payload.get("unavailableLabel").is_none());
         request.width = 0;
         assert!(validate_pip_request(&request).is_err());
         request.eligible = false;
@@ -5297,7 +5295,7 @@ mod tests {
         assert!(
             serde_json::from_value::<VirtualDisplayPipRequest>(serde_json::json!({
                 "eligible": "yes", "width": 1280, "height": 720,
-                "sourceRect": null, "unavailableLabel": "Unavailable"
+                "sourceRect": null
             }))
             .is_err()
         );
@@ -5307,7 +5305,6 @@ mod tests {
     #[test]
     fn pip_updates_are_safe_on_desktop_and_reject_invalid_input() {
         assert!(update_virtual_display_pip(VirtualDisplayPipRequest {
-            unavailable_label: "Unavailable".into(),
             eligible: false,
             width: 0,
             height: 0,
@@ -5315,7 +5312,6 @@ mod tests {
         })
         .is_ok());
         assert!(update_virtual_display_pip(VirtualDisplayPipRequest {
-            unavailable_label: "Unavailable".into(),
             eligible: true,
             width: -1,
             height: 720,

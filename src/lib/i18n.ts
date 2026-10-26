@@ -328,7 +328,6 @@ const en = {
   foregroundOverlayForegroundOnly: "Only takes effect in foreground mode.",
   showTouchPositions: "Show click positions",
   showVirtualDisplayFps: "Show current frame rate",
-  virtualDisplayPipUnavailable: "Virtual display unavailable",
   pipOnHome: "Picture-in-picture on Home",
   pipOnHomeDescription:
     "Return home from the tasks page during a background run to show the virtual display in a small window. Viewing only; game input is unavailable.",
@@ -717,7 +716,6 @@ const zh: Record<MessageKey, string> = {
   foregroundOverlayForegroundOnly: "仅在前台模式下生效。",
   showTouchPositions: "显示点击位置",
   showVirtualDisplayFps: "显示当前帧率",
-  virtualDisplayPipUnavailable: "虚拟屏幕不可用",
   pipOnHome: "回桌面自动画中画",
   pipOnHomeDescription:
     "后台任务运行中，在任务页回到桌面时自动以小窗显示虚拟屏幕。小窗仅供观看，无法操作游戏。",

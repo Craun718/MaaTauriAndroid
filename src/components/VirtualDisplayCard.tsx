@@ -78,7 +78,6 @@ export function VirtualDisplayCard({
     const send = (eligible: boolean) => {
       const bounds = previewRef.current?.getBoundingClientRect();
       const request = {
-        unavailableLabel: t("virtualDisplayPipUnavailable"),
         eligible,
         width: status?.width ?? 0,
         height: status?.height ?? 0,
@@ -122,7 +121,7 @@ export function VirtualDisplayCard({
       window.removeEventListener("scroll", update, true);
       send(false);
     };
-  }, [pipEnabled, foreground, running, fullscreen, previewReady, status, t]);
+  }, [pipEnabled, foreground, running, fullscreen, previewReady, status]);
 
   const refreshStatus = useCallback(async () => {
     setRefreshing(true);

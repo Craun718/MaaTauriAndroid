@@ -16,7 +16,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
-import android.widget.TextView
 import org.json.JSONObject
 import top.natsuu.mta.MainActivity
 import top.natsuu.mta.RuntimeBridge
@@ -34,12 +33,11 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
     private var height = 0
     @Volatile private var displayId = -1
     private var source: Rect? = null
-    private var unavailableLabel = ""
     private var inPip = false
+    private var closingPip = false
     private var destroyed = false
     private var host: FrameLayout? = null
     private var video: SurfaceView? = null
-    private var empty: TextView? = null
     private var webView: WebView? = null
     private var normalWidth = 0
     private var normalHeight = 0
@@ -82,7 +80,6 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
         val request = JSONObject(json)
         requested = request.getBoolean("eligible") &&
             request.getInt("width") == width && request.getInt("height") == height
-        unavailableLabel = request.getString("unavailableLabel")
         source = request.optJSONObject("sourceRect")?.let {
             val location = IntArray(2)
             webView?.getLocationInWindow(location)
@@ -114,8 +111,10 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
         displayId = -1
         watching = false
         requested = false
-        video?.visibility = View.GONE
-        empty?.visibility = View.VISIBLE
+        if (inPip || activity.isInPictureInPictureMode) {
+            closePip()
+            return
+        }
         updateParams()
     }
 
@@ -149,10 +148,14 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
     }
 
     fun onModeChanged(active: Boolean) {
-        if (destroyed || inPip == active) return
+        if (destroyed || closingPip || inPip == active) return
         inPip = active
         watching = active
         if (active) {
+            if (!pipHasDisplay(displayId, width, height)) {
+                closePip()
+                return
+            }
             webView?.let { view ->
                 savedWidth = view.layoutParams.width
                 savedHeight = view.layoutParams.height
@@ -180,15 +183,13 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
     }
 
     private fun createHost() {
+        if (!pipHasDisplay(displayId, width, height)) {
+            closePip()
+            return
+        }
         val root = activity.findViewById<ViewGroup>(android.R.id.content)
         val overlay = FrameLayout(activity).apply { setBackgroundColor(Color.BLACK) }
         host = overlay
-        empty = TextView(activity).apply {
-            text = unavailableLabel
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-        }
-        overlay.addView(empty, FrameLayout.LayoutParams(-1, -1))
         // Fixed video buffers keep EGL's viewport stable during PiP window resizing.
         val surface = SurfaceView(activity)
         video = surface
@@ -205,7 +206,7 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
         overlay.addView(surface, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
         overlay.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> resizeVideo() }
         root.addView(overlay, ViewGroup.LayoutParams(-1, -1))
-        if (displayId >= 0) showVideo() else displayStopped()
+        showVideo()
     }
 
     private fun resizeVideo() {
@@ -221,9 +222,18 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
     }
 
     private fun showVideo() {
-        empty?.visibility = View.GONE
         video?.visibility = View.VISIBLE
         resizeVideo()
+    }
+
+    private fun closePip() {
+        if (destroyed || closingPip) return
+        closingPip = true
+        watching = false
+        requested = false
+        removeHost()
+        // Android has no API to leave PiP while retaining the same task.
+        activity.finishAndRemoveTask()
     }
 
     private fun removeHost() {
@@ -231,7 +241,6 @@ class VirtualDisplayPipController(private val activity: MainActivity) {
         video = null
         host?.let { (it.parent as? ViewGroup)?.removeView(it) }
         host = null
-        empty = null
     }
 
     fun destroy() {

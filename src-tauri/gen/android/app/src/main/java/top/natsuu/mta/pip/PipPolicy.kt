@@ -36,4 +36,8 @@ internal class PreviewTargets<T> {
 }
 
 internal fun pipCanEnter(requested: Boolean, runActive: Boolean, displayId: Int, width: Int, height: Int): Boolean =
-    requested && runActive && displayId >= 0 && width > 0 && height > 0
+    requested && runActive && pipHasDisplay(displayId, width, height)
+
+/** A retained virtual display may outlive the run; PiP only needs a live output. */
+internal fun pipHasDisplay(displayId: Int, width: Int, height: Int): Boolean =
+    displayId >= 0 && width > 0 && height > 0

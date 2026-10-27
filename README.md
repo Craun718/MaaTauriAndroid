@@ -67,7 +67,7 @@ pnpm tauri android build --target aarch64 --apk --split-per-abi
 
 需要 x86_64 时改用 `scripts/setup.sh x86_64` 和 `pnpm tauri android build --target x86_64 --apk --split-per-abi`，agent runtime 也必须在 CI 手动触发时选择 `x86_64`。
 
-打包集合由 `interface.json` 自动推导，规则详见 [src-tauri/profiles/README.md](src-tauri/profiles/README.md)。清除 `pi.profile` 时构建回退到内置 fixture（`src-tauri/fixtures/pi/minimal`）。当前 commit 没有对应 tag 时出 debug 包，有 tag 对应才用 release 签名。
+打包集合由 `interface.json` 自动推导，规则详见 [src-tauri/profiles/README.md](src-tauri/profiles/README.md)。清除 `pi.profile` 时构建回退到内置 fixture（`src-tauri/fixtures/pi/minimal`）。上面的 `pnpm tauri android build` 默认构建 release。`scripts/build_apk.py` 在未显式传 `--release` / `--debug` 时，会按当前 commit 是否有 tag 自动选择构建模式；release APK 只有在 profile 配置了 `[signing]` 时才会签名。
 
 ### 使用已打包的 APK
 
@@ -87,7 +87,10 @@ python scripts/build_apk.py --profile <path/to/profile.toml> --release
 
 1. 读取 profile.toml，确认资源已存在。
 2. 拉取/校验对应 ABI 的 MaaFramework。
-3. 构建 agent core 和 agent runtime；除非传入 --skip-runtime 或 --use-prebuilt-core。
+3. 准备 agent runtime ZIP _（仅当 profile 配置了 agent）_ ：
+   - 默认先从源码构建 Android 用的 agent core，再用它和资源项目的 Python 依赖打包 runtime ZIP。
+   - `--use-prebuilt-core`：跳过本地构建 core，改用预编译 agent core；runtime ZIP 仍会重新打包。
+   - `--skip-runtime`：不生成新的 runtime ZIP，直接复用 profile 的 `bundle` 已指向的本地 ZIP。
 4. 自动把 pi.profile=<path/to/profile.toml> 写入 src-tauri/gen/android/local.properties。
 5. 配置 Android NDK、链接器和 Rust target。
 6. 执行 pnpm install --frozen-lockfile、cargo clean 和一次 Android 目标 cargo check。

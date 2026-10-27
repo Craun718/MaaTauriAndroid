@@ -43,22 +43,25 @@ MaaTauriAndroid 本身不包含具体业务资源。Android 上要把资源在**
 
 ## 快速开始
 
-### 使用已打包的 APK
+### 资源开发
 
-1. 安装资源项目提供的 APK。
-2. 安装 [Shizuku](https://shizuku.rikka.app/) 并完成授权，root 设备可直接使用。
-3. 选择任务、核对选项，开始运行。
+首先，你**必须**要学习并理解基于 [MaaFramework](https://github.com/MaaXYZ/MaaFramework) 进行开发所需的基础知识，并开发自己的项目资源。
 
-注意：debug 构建每次的签名可能不同，覆盖安装报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` 时需先卸载重装（会清除应用内配置）。
+- 项目模板: [MaaPracticeBoilerplate](https://github.com/MaaXYZ/MaaPracticeBoilerplate)
 
 ### 接入自己的资源项目
 
+0. 安装 pnpm、Rust、Android SDK/NDK。
 1. 按 [Project Interface V2 协议](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/zh_cn/3.3-ProjectInterfaceV2%E5%8D%8F%E8%AE%AE.md)写好 `interface.json` 和资源。开发和排查 Pipeline 请用 MaaFramework 提供的调试工具，不要把本应用当调试器。
 2. 拷贝 [`pi-profile.sample.toml`](src-tauri/profiles/pi-profile.sample.toml)，按注释填写资源路径和 agent 运行时，放到本仓库之外。
 3. 在 `src-tauri/gen/android/local.properties` 里写 `pi.profile=<配方的绝对路径>`（或设环境变量 `PI_PROFILE`、Gradle 参数 `-Ppi.profile`）。
-4. 执行 `scripts/setup.sh` 下载 MaaFramework，按 [Agent runtime 构建](docs/agent-runtime.md)构建自己的 agent runtime，然后出包：
+4. 执行 `scripts/setup.sh` 下载 MaaFramework，
+5. _如果你的项目使用了 AgentServer，需要按 [Agent runtime 构建](docs/agent-runtime.md)构建自己的 agent runtime，并填写`pi-profile.toml`的相关字段。_
+6. 编译出包：
 
 ```bash
+pnpm install
+
 pnpm tauri android build --target aarch64 --apk --split-per-abi
 ```
 
@@ -66,46 +69,42 @@ pnpm tauri android build --target aarch64 --apk --split-per-abi
 
 打包集合由 `interface.json` 自动推导，规则详见 [src-tauri/profiles/README.md](src-tauri/profiles/README.md)。清除 `pi.profile` 时构建回退到内置 fixture（`src-tauri/fixtures/pi/minimal`）。当前 commit 没有对应 tag 时出 debug 包，有 tag 对应才用 release 签名。
 
-## 资源开发
+### 使用已打包的 APK
 
-- [Project Interface V2 协议](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/zh_cn/3.3-ProjectInterfaceV2%E5%8D%8F%E8%AE%AE.md)
-- [MaaPracticeBoilerplate](https://github.com/MaaXYZ/MaaPracticeBoilerplate)
-- [打包规则与配方说明](src-tauri/profiles/README.md)
-- [Agent runtime 构建](docs/agent-runtime.md)
+1. 安装资源项目提供的 APK。
+2. 安装 [Shizuku](https://shizuku.rikka.app/) 或使用 root 进行授权。
+3. 选择任务、核对选项，开始运行。
 
-## 从源码构建
+## 半自动构建
 
-需要 pnpm 11（`corepack pnpm@11`，与 CI 一致）、Rust stable、Android SDK/NDK、Python 3（构建 agent runtime 用）。请在 clone 下来的仓库里执行：
-
-```bash
-scripts/setup.sh   # 下载 MaaFramework 二进制；资源项目只由 CI 克隆和编译
-pnpm install       # 安装 Node 依赖（同时安装 husky 钩子）
-pnpm dev           # 前端开发服务器
-```
-
-一键出包（传入已 clone 好的资源项目 profile，内含 agent runtime 构建和 APK 打包；签名按当前 commit 是否有 tag 自动选择 release / debug）：
+本项目配置了半自动构建脚本：
 
 ```bash
-scripts/build_apk.py --profile resource/m9a.toml
-scripts/build_apk.py --profile resource/m9a.toml --abi x86_64
-scripts/build_apk.py --profile resource/m9a.toml --release
+python scripts/build_apk.py --profile <path/to/profile.toml> --release
 ```
 
-资源项目由 CI 在构建期 clone；本地使用时先手动 clone 到 `resource/<resource_id>/`，再执行上述命令。资源不进 git。
+该脚本会额外完成这些步骤：
 
-默认从源码编译 agent core，包含 CPU 版 OpenCV 与 ONNX Runtime 的 Python binding（需 ANDROID_HOME、NDK 28.2.13676358、CMake 3.31、Ninja、packaging，以及与目标 Python 主次版本一致的构建机 Python；首次耗时较长）。完整说明见 [Agent runtime 构建](docs/agent-runtime.md)。加 `--use-prebuilt-core` 改为从 release 下载预编译产物；旧 core 不会自动增加这两个库。`--skip-runtime` 跳过 agent runtime 构建，直接出 APK。
-
-本地检查：
+1. 读取 profile.toml，确认资源已存在。
+2. 拉取/校验对应 ABI 的 MaaFramework。
+3. 构建 agent core 和 agent runtime；除非传入 --skip-runtime 或 --use-prebuilt-core。
+4. 自动把 pi.profile=<path/to/profile.toml> 写入 src-tauri/gen/android/local.properties。
+5. 配置 Android NDK、链接器和 Rust target。
+6. 执行 pnpm install --frozen-lockfile、cargo clean 和一次 Android 目标 cargo check。
+7. 最后调用以下命令：
 
 ```bash
-pnpm typecheck     # tsc --noEmit
-pnpm lint          # Biome lint
-pnpm test          # Vitest
-cargo fmt --manifest-path src-tauri/Cargo.toml
-cargo test --manifest-path src-tauri/Cargo.toml
+pnpm tauri android build \
+  --target aarch64 \
+  --apk \
+  --split-per-abi
 ```
 
-本仓库的 Actions 只用于自身的开发测试；资源项目的出包与发布请下游自行集成。代码风格、测试与提交规范等仓库约定见 [AGENTS.md](AGENTS.md)。
+## 自动化构建
+
+本仓库的 Actions 只用于自身的测试；资源项目的出包与发布可参考本仓库的流水线配置。
+
+注意：debug 构建每次的签名可能不同，覆盖安装报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` 时需先卸载重装（会清除应用内配置）。
 
 ## 相关项目
 

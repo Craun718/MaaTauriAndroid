@@ -1,44 +1,66 @@
 # Copy this file outside the repository, then set in
 # src-tauri/gen/android/local.properties:
 # pi.profile=/absolute/path/to/your-pi-profile.toml
+#
+# 将本文件复制到仓库外，然后在
+# src-tauri/gen/android/local.properties 中设置：
+# pi.profile=/absolute/path/to/your-pi-profile.toml
 
 # Directory containing interface.json. Relative paths resolve against this
 # profile file's directory.
+# 包含 interface.json 的目录。相对路径以本 profile 文件所在目录为基准。
 pi_assets = "/absolute/path/to/your-maa-project"
 
 # The packaged set is derived from interface.json: resource[].path, every import,
 # the languages translation files, icons and rich-text images, the Agent payload,
 # plus the data directory the Agent reads. A path the interface declares but the
 # project lacks fails the build instead of shipping a package that cannot load.
+# 打包集合由 interface.json 推导：resource[].path、所有 import、翻译文件、图标和
+# 富文本图片、Agent 负载，以及 Agent 读取的 data 目录。interface 声明了但项目中
+# 不存在的路径会让构建失败，而不是打出无法加载的包。
 
 # Optional. EXTRA project-relative paths to pack on top of that set — assets no
 # protocol key reaches. This can only add; it never prunes, and a listed path
 # that does not exist fails the build. Omit it when the interface covers
 # everything.
+# 可选。在上面推导集合之外额外打包的项目相对路径——用于协议字段没有覆盖到的
+# 资源。它只能新增，不能裁剪；列出的路径不存在会让构建失败。interface 已覆盖
+# 全部内容时省略即可。
 # pi_include = ["assets/extra/guide.pdf"]
 
 # applicationId suffix: top.natsuu.mta.<resource_id>
+# applicationId 后缀：top.natsuu.mta.<resource_id>
 resource_id = "yourpi"
 
 # Optional MirrorChyan update resource id. When set it overrides the value in
 # interface.json; omit it to keep the interface's value.
+# 可选的 MirrorChyan 更新资源 ID。设置后会覆盖 interface.json 里的同名值；
+# 省略时沿用 interface.json 的值。
 mirrorchyan_rid = "yourpi"
 
 # Optional Android launcher and activity title.
+# 可选的 Android 桌面图标名称和 Activity 标题。
 app_name = "Your PI"
 
 # Optional virtual display orientation: "landscape" or "portrait".
 # Omit it to keep the 1280x720 landscape virtual display.
+# 可选的虚拟屏方向："landscape" 或 "portrait"。省略时保持 1280x720 横屏。
 virtual_display_orientation = "landscape"
 
 # Optional. Relative paths resolve from the repository root.
+# 可选。相对路径以仓库根为基准。
 maa_dir = "vendor/maa/android"
 
-# Required when interface.json declares agents. Each runtime bundle is an
-# Android ZIP containing lib/{abi}/libMaaAgentClient.so and
+# Required when interface.json declares agents; omit the whole section when it
+# does not. Each runtime bundle is an Android ZIP containing
+# lib/{abi}/libMaaAgentClient.so and
 # lib/{abi}/libMaaAgentServer.so.
+# interface.json 声明 agent 时必填；未声明时省略整段。每个 runtime bundle 都是
+# Android ZIP，必须包含 lib/{abi}/libMaaAgentClient.so 和
+# lib/{abi}/libMaaAgentServer.so。
 # Use "{abi}" in the bundle path and environment values to resolve to the ABI
 # selected by the Android build (arm64-v8a by default).
+# bundle 路径和环境值里的 "{abi}" 会解析为 Android 构建选择的 ABI（默认 arm64-v8a）。
 [agent]
 timeout_ms = 15000
 
@@ -61,8 +83,12 @@ PYTHONPATH = "{pi}"
 # to update an app whose signing key changed. Relative paths resolve against this
 # profile file's directory, and the keystore must exist when the build starts.
 # Never commit the keystore or the passwords to the repository.
+# 可选。为这份 profile 产出的 release APK 签名。没有它时 release 保持原来的未签名
+# 状态；设置后 release APK 会用该 keystore 签名，因此同一分发必须长期复用同一个
+# keystore——签名变化后 Android 会拒绝覆盖安装。相对路径以本 profile 文件所在目录
+# 为基准，构建开始时 keystore 必须存在。不要把 keystore 或密码提交进仓库。
 # [signing]
 # store_file = "/absolute/path/to/keystore.jks"
 # store_password = "the-store-password"
 # key_alias = "mta"
-# key_password = "the-key-password" # optional; defaults to the store password
+# key_password = "the-key-password" # optional; defaults to store password / 可选；默认使用 store password

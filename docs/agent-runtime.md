@@ -27,6 +27,8 @@
 
 ## 一键与分步
 
+`interface.json` 不声明 agent 时，不需要 runtime ZIP，配方也不要写 `[agent]`。下面所有 runtime 构建步骤都只发生在资源确实声明了 agent 的场景。
+
 ```bash
 scripts/setup.sh                              # MaaFramework 原生库
 python3 scripts/build-resource.py \
@@ -38,6 +40,17 @@ python3 scripts/build-resource.py \
 `build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本；传 `--skip-runtime` 时会在 PI 准备和 MaaFramework 下载后停止，供编译型 agent 自己构建。资源目录和 Python runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，内置 profile 会通过 `{abi}` 自动解析。`build-agent-runtime.sh` 本身继续保持通用：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置项目的完整调用参数见下文「仓库内置项目的构建参数」。
 
 没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
+
+`scripts/build_apk.py` 是从已有资源目录到 APK 的半自动构建入口。它按 profile 判断是否需要 runtime：
+
+| profile 配置 | `build_apk.py` 选项 | agent core | runtime ZIP |
+| --- | --- | --- | --- |
+| 没有 `[agent]` / `[[agent.runtimes]]` | 不需要 runtime 选项 | 不构建 | 不准备 |
+| 有 `[agent]` / `[[agent.runtimes]]` | 默认 | 从源码交叉编译 | 用 core 和资源项目的 Python 依赖重新打包 |
+| 有 `[agent]` / `[[agent.runtimes]]` | `--use-prebuilt-core` | 下载预编译产物 | 仍重新打包 |
+| 有 `[agent]` / `[[agent.runtimes]]` | `--reuse-runtime-zip` | 不构建 | 直接复用 profile `bundle` 指向的本地 ZIP，但该 ZIP 必须已存在 |
+
+`--reuse-runtime-zip` 只用于已有 runtime 产物的 profile；没有 agent 时不要传它。`build_apk.py` 的旧选项 `--skip-runtime` 仍保留为隐藏兼容别名，新调用应使用 `--reuse-runtime-zip`。`build-resource.py` 的 `--skip-runtime` 是另一个语义：它让资源准备在 Python runtime 打包前停止，供编译型 agent 自己构建。
 
 runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项目的本地构建保持 `<项目>-agent-runtime-<abi>.zip` 这个名字（profile 的 `bundle` 按它解析）；CI 在上传前会把它改名为 `<项目>-agent-runtime-<abi>-<7 位 commit hash>.zip`，APK 同理，便于把下载到的包对应回具体提交。MaaEnd 是双编译型 agent 例外：CI 上传一个 `maaend-agent-runtime-<abi>-<hash>` artifact，其中包含 `maaend-go-service-runtime-<abi>-<hash>.zip` 和 `maaend-cpp-algo-runtime-<abi>-<hash>.zip` 两个 bundle。
 

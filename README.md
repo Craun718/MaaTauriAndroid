@@ -88,9 +88,9 @@ python scripts/build_apk.py --profile <path/to/profile.toml> --release
 1. 读取 profile.toml，确认资源已存在。
 2. 拉取/校验对应 ABI 的 MaaFramework。
 3. 准备 agent runtime ZIP _（仅当 profile 配置了 agent）_ ：
-   - 默认先从源码构建 Android 用的 agent core，再用它和资源项目的 Python 依赖打包 runtime ZIP。
-   - `--use-prebuilt-core`：跳过本地构建 core，改用预编译 agent core；runtime ZIP 仍会重新打包。
-   - `--skip-runtime`：不生成新的 runtime ZIP，直接复用 profile 的 `bundle` 已指向的本地 ZIP。
+   - 默认先从源码构建 Android 用的 agent core（CPython + 标准库 + `maa` 包），再把它和资源项目声明的 Python 依赖打包成 profile 指定的 runtime ZIP。
+   - `--use-prebuilt-core`：agent core 改为直接下载现成产物，不从源码编译；但 runtime ZIP 仍会重新打包。
+   - `--reuse-runtime-zip`：不重新打包 runtime ZIP。要求 profile 里 `agent.runtimes[].bundle` 指向一个已经存在的 ZIP，并直接用它继续构建 APK。
 4. 自动把 pi.profile=<path/to/profile.toml> 写入 src-tauri/gen/android/local.properties。
 5. 配置 Android NDK、链接器和 Rust target。
 6. 执行 pnpm install --frozen-lockfile、cargo clean 和一次 Android 目标 cargo check。

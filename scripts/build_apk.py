@@ -137,8 +137,9 @@ def build(args: argparse.Namespace) -> None:
         )
 
     runtime_zip = profile_dir / bundle_template.replace("{abi}", args.abi) if bundle_template else None
+    args.skip_runtime = args.skip_runtime or args.reuse_runtime_zip
     if args.skip_runtime and (runtime_zip is None or not runtime_zip.is_file()):
-        die(f"--skip-runtime requires an existing runtime ZIP at {runtime_zip}")
+        die(f"--reuse-runtime-zip requires an existing runtime ZIP at {runtime_zip}")
 
     build_mode = detect_build_mode(force_release=args.release, force_debug=args.debug)
     log(f"==> Building {resource_id} ({args.abi}) {build_mode} APK")
@@ -160,7 +161,7 @@ def build(args: argparse.Namespace) -> None:
     # --- 1.5/4 agent core ------------------------------------------------------
 
     core_tarball: Path | None = None
-    if not args.use_prebuilt_core and not args.skip_runtime:
+    if runtime_zip is not None and not args.use_prebuilt_core and not args.skip_runtime:
         pypi_maafw = maafw_version.removeprefix("v")
         core_work = REPO_ROOT / ".cache" / "agent-core"
         log(f"==> [1.5/4] Building agent core (CPython {args.python_version}, MaaFW {pypi_maafw})…")
@@ -258,7 +259,14 @@ def main() -> None:
     parser.add_argument("--abi", default="arm64-v8a", choices=list(ABIS), help="Target ABI")
     parser.add_argument("--release", action="store_true", help="Force release build")
     parser.add_argument("--debug", action="store_true", help="Force debug build")
-    parser.add_argument("--skip-runtime", action="store_true", help="Use the existing agent runtime ZIP")
+    parser.add_argument(
+        "--reuse-runtime-zip", action="store_true",
+        help="Reuse the agent runtime ZIP referenced by the profile instead of building it",
+    )
+    parser.add_argument(
+        "--skip-runtime", action="store_true",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "--python-version", default=AGENT_CORE_PY,
         help="CPython version for the agent core build (default %(default)s)",

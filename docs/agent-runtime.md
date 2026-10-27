@@ -2,7 +2,7 @@
 
 资源的 `interface.json` 声明了 agent（自定义识别器 / 动作）时，APK 需要随包携带对应的运行时 ZIP：一个能在 Android 上跑起来的 Python（或编译型）agent 载荷。本文讲这个 ZIP 是怎么构建出来的。
 
-协议层的配方写法（`[[agent.runtimes]]`、占位符、条数对应关系）见 [打包规则与配方说明](../src-tauri/profiles/README.md)，本文只讲构建。
+协议层的配方写法（`[[agent.runtimes]]`、占位符、条数对应关系）见 [打包规则与配方说明](resource-packaging.md)，本文只讲构建。
 
 ## ZIP 里有什么
 
@@ -168,7 +168,7 @@ scripts/build-agent-runtime.sh \
 
 ## 编译型 agent（ELF）
 
-`[[agent.runtimes]]` 只声明一个 ZIP（`bundle`）、包内可执行体路径（`exec`）、要标记可执行的文件（`executables`）、命令行（`args`）、工作目录（`working_dir`）与环境（`env`）。Rust 侧每次运行给每个 runtime 起一个 `AgentClient` TCP，端口经 `{identifier}` 占位符传给子进程；Kotlin 侧用 `ProcessBuilder` 直接执行 `exec`。C++ / Go / Rust 单文件 ELF（或二进制 + 共享库）把可执行体放进 bundle 即可，配方写法见 [打包规则与配方说明](../src-tauri/profiles/README.md)。
+`[[agent.runtimes]]` 只声明一个 ZIP（`bundle`）、包内可执行体路径（`exec`）、要标记可执行的文件（`executables`）、命令行（`args`）、工作目录（`working_dir`）与环境（`env`）。Rust 侧每次运行给每个 runtime 起一个 `AgentClient` TCP，端口经 `{identifier}` 占位符传给子进程；Kotlin 侧用 `ProcessBuilder` 直接执行 `exec`。C++ / Go / Rust 单文件 ELF（或二进制 + 共享库）把可执行体放进 bundle 即可，配方写法见 [打包规则与配方说明](resource-packaging.md)。
 
 编译型 agent 的包体约束：
 

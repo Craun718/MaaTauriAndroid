@@ -67,7 +67,7 @@ pnpm tauri android build --target aarch64 --apk --split-per-abi
 
 需要 x86_64 时改用 `scripts/setup.sh x86_64` 和 `pnpm tauri android build --target x86_64 --apk --split-per-abi`，agent runtime 也必须在 CI 手动触发时选择 `x86_64`。
 
-打包集合由 `interface.json` 自动推导，规则详见 [src-tauri/profiles/README.md](src-tauri/profiles/README.md)。清除 `pi.profile` 时构建回退到内置 fixture（`src-tauri/fixtures/pi/minimal`）。上面的 `pnpm tauri android build` 默认构建 release。`scripts/build_apk.py` 在未显式传 `--release` / `--debug` 时，会按当前 commit 是否有 tag 自动选择构建模式；release APK 只有在 profile 配置了 `[signing]` 时才会签名。
+打包集合由 `interface.json` 自动推导，规则详见 [docs/resource-packaging.md](docs/resource-packaging.md)。清除 `pi.profile` 时构建回退到内置 fixture（`src-tauri/fixtures/pi/minimal`）。上面的 `pnpm tauri android build` 默认构建 release。`scripts/build_apk.py` 在未显式传 `--release` / `--debug` 时，会按当前 commit 是否有 tag 自动选择构建模式；release APK 只有在 profile 配置了 `[signing]` 时才会签名。
 
 ### 使用已打包的 APK
 

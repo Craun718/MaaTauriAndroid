@@ -6,7 +6,7 @@ MaaTauriAndroid 本身不包含业务资源。资源开发者写好 Project Inte
 
 开发资源前请先读 [Project Interface V2 协议](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/zh_cn/3.3-ProjectInterfaceV2%E5%8D%8F%E8%AE%AE.md)。本应用面向发布后的配置与运行；写 Pipeline、对识别请用 MaaFramework 提供的调试工具。
 
-配方字段的完整注释见 [`pi-profile.sample.toml`](pi-profile.sample.toml)。
+配方字段的完整注释见 [`pi-profile.sample.toml`](../src-tauri/profiles/pi-profile.sample.toml)。
 
 ## 环境
 
@@ -171,9 +171,9 @@ scripts/build-agent-runtime.sh \
   --require pillow==11.0.0
 ```
 
-这里的 `--exclude pillow` 跳过上游 Pillow 的安装项或版本约束，再由 `--require` 提供 Android 替代版本；不能据此认为项目不需要 Pillow。core 自带库的替换限制，以及尚未实现的按需组件选择，见 [Agent runtime 构建：替换语义与当前限制](../../docs/agent-runtime.md#--exclude-的替换语义与当前限制)。
+这里的 `--exclude pillow` 跳过上游 Pillow 的安装项或版本约束，再由 `--require` 提供 Android 替代版本；不能据此认为项目不需要 Pillow。core 自带库的替换限制，以及尚未实现的按需组件选择，见 [Agent runtime 构建：替换语义与当前限制](agent-runtime.md#--exclude-的替换语义与当前限制)。
 
-组装与打包都走仓库内的通用工具：`scripts/build_agent_bundle.py`（vendored 自 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)，AGPL-3.0，来源 commit 见文件头，许可见 [../../scripts/MAA-FWAPP-LICENSE.md](../../scripts/MAA-FWAPP-LICENSE.md)）组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，`src-tauri/profiles/pack_agent_bundle.py` 出 ZIP；`--core-repo` / `--core-tag` 由 `scripts/env.sh` 传入（默认 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)）。
+组装与打包都走仓库内的通用工具：`scripts/build_agent_bundle.py`（vendored 自 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)，AGPL-3.0，来源 commit 见文件头，许可见 [../../scripts/MAA-FWAPP-LICENSE.md](../scripts/MAA-FWAPP-LICENSE.md)）组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，`src-tauri/profiles/pack_agent_bundle.py` 出 ZIP；`--core-repo` / `--core-tag` 由 `scripts/env.sh` 传入（默认 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)）。
 
 `src-tauri/profiles/pack_agent_bundle.py` 是构建 **Python** agent 压缩包的唯一受支持方式：
 
@@ -217,7 +217,7 @@ cd src-tauri/gen/android
 
 资源 APK 由 CI 先运行 `python3 scripts/build-resource.py <git-url> --ref <ref> --id <directory>`，其中会调用 `scripts/prepare-pi.py` 组装 PI，再执行 APK 构建。profile 改变会改变打包出的 APK；这是构建期嵌入，不是运行时开关。移除或清空 `pi.profile` 可回到 `src-tauri/fixtures/pi/minimal` 中的内置 fixture。
 
-`scripts/setup.sh` 和 `src-tauri/profiles/pack_agent_bundle.py` 之外的细节见 [Agent runtime 构建](../../docs/agent-runtime.md)。
+`scripts/setup.sh` 和 `src-tauri/profiles/pack_agent_bundle.py` 之外的细节见 [Agent runtime 构建](agent-runtime.md)。
 
 ## 装上之后
 

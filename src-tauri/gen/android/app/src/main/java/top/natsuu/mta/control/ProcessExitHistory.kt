@@ -80,10 +80,21 @@ internal class ProcessExitHistory(private val context: Context, private val dire
                 }
             },
             emit = { info ->
-                val message = "Process exit: package=$packageName process=${info.processName} " +
-                    "pid=${info.pid} at=${info.timestamp} reason=${info.reason} status=${info.status} " +
-                    "importance=${info.importance} pss=${info.pss} rss=${info.rss} " +
-                    "description=${info.description?.take(512)}"
+                val description = info.description?.take(512)
+                val anrKind =
+                    if (info.reason == ApplicationExitInfo.REASON_ANR) {
+                        AnrExitInfo.kindOf(description)
+                    } else {
+                        null
+                    }
+                val message = buildString {
+                    append("Process exit: package=$packageName process=${info.processName} ")
+                    append("pid=${info.pid} at=${info.timestamp} reason=${info.reason} ")
+                    append("status=${info.status} importance=${info.importance} ")
+                    append("pss=${info.pss} rss=${info.rss}")
+                    if (anrKind != null) append(" anrKind=$anrKind")
+                    if (description != null) append(" description=$description")
+                }
                 if (info.reason == ApplicationExitInfo.REASON_USER_REQUESTED ||
                     info.reason == ApplicationExitInfo.REASON_EXIT_SELF ||
                     info.reason == ApplicationExitInfo.REASON_PACKAGE_UPDATED

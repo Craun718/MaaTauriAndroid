@@ -47,23 +47,31 @@ class RunForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        enteredAt = SystemClock.elapsedRealtime()
         boundToken = lease.current()
-        if (boundToken == 0L) {
-            stopSelf()
-            return
-        }
         appContext = applicationContext
         RunNotificationFactory.ensureChannels(this)
+        if (boundToken == 0L) {
+            return
+        }
         prepareVendorSurfaces()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        enteredAt = SystemClock.elapsedRealtime()
         val current = lease.current()
         if (current == 0L) {
-            stopSelf()
+            // Android may deliver a start after the lease was cancelled or the
+            // process was recreated. Fulfil the foreground-service contract
+            // before stopping this stale start.
+            startInForeground()
+            stopSelf(startId)
             return START_NOT_STICKY
         }
-        if (intent?.getLongExtra(EXTRA_TOKEN, 0L) != current) return START_NOT_STICKY
+        if (intent?.getLongExtra(EXTRA_TOKEN, 0L) != current) {
+            startInForeground()
+            return START_NOT_STICKY
+        }
         boundToken = current
         startInForeground()
         return START_NOT_STICKY
@@ -95,8 +103,13 @@ class RunForegroundService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            foregroundAt = SystemClock.elapsedRealtime()
         }.onFailure { error ->
-            android.util.Log.e(TAG, "Android rejected the run foreground service", error)
+            android.util.Log.e(
+                TAG,
+                "Android rejected the run foreground service ${fgsTimeline()}",
+                error,
+            )
             stopSelf()
         }
     }
@@ -161,6 +174,13 @@ class RunForegroundService : Service() {
         private var lastNotifyAt = 0L
 
         @Volatile
+        private var startRequestedAt = 0L
+        @Volatile
+        private var enteredAt = 0L
+        @Volatile
+        private var foregroundAt = 0L
+
+        @Volatile
         private var notifyScheduled = false
 
         private val islandExecutor = Executors.newSingleThreadExecutor { runnable ->
@@ -196,6 +216,9 @@ class RunForegroundService : Service() {
         fun start(context: Context): Boolean {
             if (!SpecialUseFgsGate.canStart(context)) return false
             appContext = context.applicationContext
+            startRequestedAt = SystemClock.elapsedRealtime()
+            enteredAt = 0L
+            foregroundAt = 0L
             // The submitter may be a scheduled run on another async worker while
             // ScheduleExecutionService checks this flag from the main thread.
             // Mark the run before Android asynchronously creates the service.
@@ -211,6 +234,13 @@ class RunForegroundService : Service() {
                 android.util.Log.e(TAG, "Could not start the run foreground service", error)
             }.getOrDefault(false)
             return submitted
+        }
+
+        /** Current gap from request to service entry to startForeground, for timeout reports. */
+        fun fgsTimeline(now: Long = SystemClock.elapsedRealtime()): Map<String, Long> = buildMap {
+            if (startRequestedAt > 0) put("sinceStartMs", now - startRequestedAt)
+            if (enteredAt > 0) put("sinceEnteredMs", now - enteredAt)
+            if (foregroundAt > 0) put("sinceForegroundMs", now - foregroundAt)
         }
 
         fun stop(context: Context) {

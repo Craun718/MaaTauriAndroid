@@ -401,6 +401,18 @@ Java_top_natsuu_mta_control_ControlHost_virtualDisplayStatus(JNIEnv* env, jclass
     return result;
 }
 
+extern "C" JNIEXPORT jstring JNICALL
+Java_top_natsuu_mta_control_ControlHost_describeVirtualDisplayRelease(
+    JNIEnv* env,
+    jclass /*clazz*/
+) {
+    if (env == nullptr) {
+        return nullptr;
+    }
+    const std::string description = virtual_display::describe_release();
+    return env->NewStringUTF(description.c_str());
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_top_natsuu_mta_control_ControlHost_attachPreviewSurface(
     JNIEnv* env,

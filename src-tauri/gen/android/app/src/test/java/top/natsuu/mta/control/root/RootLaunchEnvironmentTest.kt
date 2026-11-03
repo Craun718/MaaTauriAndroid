@@ -5,6 +5,12 @@ import org.junit.Test
 
 class RootLaunchEnvironmentTest {
     @Test
+    fun rootProcessNamesAreIsolatedByAndroidUser() {
+        assertEquals("app:root_service", RootLaunchEnvironment.processName("app", 10343))
+        assertEquals("app:root_service_u999", RootLaunchEnvironment.processName("app", 99910343))
+    }
+
+    @Test
     fun shellLaunchRepairsOnlyItsRuntimeTreeAndSupportsMissingNsenter() {
         val command = RootLaunchEnvironment.wrap("'launcher' --token='value'", true)
         assertTrue(command.contains("[ ! -L /data/local/tmp/maa-tauri-android ]"))

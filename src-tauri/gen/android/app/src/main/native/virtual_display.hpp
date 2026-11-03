@@ -3,6 +3,7 @@
 #include <jni.h>
 
 #include <cstdint>
+#include <string>
 
 struct FrameInfo {
     uint32_t width = 0;
@@ -31,6 +32,7 @@ bool active();
 bool is_frame(const void* frame_ref);
 void geometry(int32_t& display_id, int32_t& width, int32_t& height);
 int64_t frame_count();
+std::string describe_release();
 
 FrameInfo lock_frame();
 int unlock_frame(FrameInfo frame);

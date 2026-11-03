@@ -62,6 +62,9 @@ object ControlHost {
     external fun virtualDisplayStatus(): IntArray?
 
     @JvmStatic
+    external fun describeVirtualDisplayRelease(): String
+
+    @JvmStatic
     external fun attachPreviewSurface(surface: Surface?)
 
     @JvmStatic

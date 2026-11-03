@@ -6,6 +6,10 @@ internal object ThreadDump {
     private const val MAX_CHARS = 12_000
 
     fun capture(): String = buildString {
+        runCatching { ControlHost.describeVirtualDisplayRelease() }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { appendLine("native: $it") }
         val self = Thread.currentThread()
         Thread.getAllStackTraces()
             .filter { (thread, stack) ->

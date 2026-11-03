@@ -16,8 +16,11 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
+#include <iterator>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -26,6 +29,24 @@ namespace {
 
 constexpr auto kLogTag = "MaaTauriAndroidControl";
 constexpr size_t kFrameBufferCount = 3;
+
+enum ReleaseStage : int {
+    RELEASE_IDLE = 0,
+    RELEASE_DETACH_LISTENER,
+    RELEASE_WAIT_CALLBACK,
+    RELEASE_DRAIN_PREVIEW,
+    RELEASE_DELETE_READER,
+    RELEASE_FRAME_BUFFERS,
+};
+
+constexpr const char* kReleaseStageNames[] = {
+    "idle",
+    "detach_listener",
+    "wait_callback",
+    "drain_preview",
+    "delete_reader",
+    "frame_buffers",
+};
 
 struct FrameBuffer {
     std::vector<uint8_t> pixels;
@@ -47,6 +68,22 @@ std::mutex g_reader_mutex;
 std::condition_variable g_frames_idle;
 std::atomic<int64_t> g_frame_count {0};
 std::atomic<bool> g_active {false};
+// AImageReader_delete can wait for its callback thread while holding an
+// internal reader lock. Prevent callbacks from acquiring images during delete.
+std::atomic<bool> g_reader_closing {true};
+std::atomic<unsigned> g_callbacks_in_flight {0};
+std::atomic<int> g_release_stage {RELEASE_IDLE};
+std::atomic<int64_t> g_release_stage_since_ms {0};
+
+int64_t now_ms() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+void enter_release_stage(ReleaseStage stage) {
+    g_release_stage_since_ms.store(now_ms(), std::memory_order_relaxed);
+    g_release_stage.store(stage, std::memory_order_release);
+}
 
 void log_error(const char* function, const char* message, int code = 0) {
     __android_log_print(ANDROID_LOG_ERROR, kLogTag, "%s: %s code=%d", function, message, code);
@@ -148,28 +185,44 @@ void copy_hardware_frame(AImage* image) {
 bool dispatch_preview(AImage* image);
 
 void on_image_available(void* /*context*/, AImageReader* reader) {
-    std::lock_guard<std::mutex> reader_lock(g_reader_mutex);
+    g_callbacks_in_flight.fetch_add(1);
+    if (g_reader_closing.load()) {
+        g_callbacks_in_flight.fetch_sub(1);
+        return;
+    }
     AImage* image = nullptr;
     if (AImageReader_acquireLatestImage(reader, &image) != AMEDIA_OK || image == nullptr) {
+        g_callbacks_in_flight.fetch_sub(1);
         return;
     }
 
     copy_hardware_frame(image);
     dispatch_preview(image);
     AImage_delete(image);
+    g_callbacks_in_flight.fetch_sub(1);
 }
 
 void stop_preview();
 
-void release_reader() {
-    // Callback and release both take the reader lock before the frame-state lock.
-    std::lock_guard<std::mutex> reader_lock(g_reader_mutex);
-    std::lock_guard<std::mutex> state_lock(g_state.mutex);
-    if (g_reader != nullptr) {
-        AImageReader_setImageListener(g_reader, nullptr);
-        AImageReader_delete(g_reader);
-        g_reader = nullptr;
+void detach_reader(AImageReader* reader) {
+    g_reader_closing.store(true);
+    if (reader != nullptr) {
+        enter_release_stage(RELEASE_DETACH_LISTENER);
+        AImageReader_setImageListener(reader, nullptr);
+        enter_release_stage(RELEASE_WAIT_CALLBACK);
+        while (g_callbacks_in_flight.load() != 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
     }
+}
+
+void discard_reader(AImageReader* reader) {
+    detach_reader(reader);
+    enter_release_stage(RELEASE_DRAIN_PREVIEW);
+    stop_preview();
+    enter_release_stage(RELEASE_DELETE_READER);
+    AImageReader_delete(reader);
+    enter_release_stage(RELEASE_IDLE);
 }
 
 } // namespace
@@ -206,25 +259,24 @@ jint start(
 
     AImageReader_ImageListener listener {};
     listener.onImageAvailable = on_image_available;
+    g_reader_closing.store(false);
     if (AImageReader_setImageListener(reader, &listener) != AMEDIA_OK) {
         log_error("virtual_display_start", "could not set the image listener");
-        AImageReader_delete(reader);
+        discard_reader(reader);
         return -1;
     }
 
     ANativeWindow* window = nullptr;
     if (AImageReader_getWindow(reader, &window) != AMEDIA_OK || window == nullptr) {
         log_error("virtual_display_start", "could not get the reader window");
-        AImageReader_setImageListener(reader, nullptr);
-        AImageReader_delete(reader);
+        discard_reader(reader);
         return -1;
     }
     jobject surface = ANativeWindow_toSurface(&env, window);
     if (env.ExceptionCheck() == JNI_TRUE || surface == nullptr) {
         env.ExceptionDescribe();
         env.ExceptionClear();
-        AImageReader_setImageListener(reader, nullptr);
-        AImageReader_delete(reader);
+        discard_reader(reader);
         return -1;
     }
 
@@ -237,8 +289,7 @@ jint start(
     }
     env.DeleteLocalRef(surface);
     if (failed || display_id < 0) {
-        AImageReader_setImageListener(reader, nullptr);
-        AImageReader_delete(reader);
+        discard_reader(reader);
         return -1;
     }
 
@@ -269,7 +320,15 @@ jint stop(JNIEnv& env, jobject service, jmethodID stop_method) {
 
 void release_local() {
     g_active.store(false, std::memory_order_release);
+    AImageReader* reader = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_reader_mutex);
+        reader = std::exchange(g_reader, nullptr);
+    }
+    detach_reader(reader);
+    enter_release_stage(RELEASE_DRAIN_PREVIEW);
     stop_preview();
+    enter_release_stage(RELEASE_FRAME_BUFFERS);
     {
         std::unique_lock<std::mutex> lock(g_state.mutex);
         g_frames_idle.wait(lock, [] {
@@ -281,7 +340,10 @@ void release_local() {
             return true;
         });
     }
-    release_reader();
+    if (reader != nullptr) {
+        enter_release_stage(RELEASE_DELETE_READER);
+        AImageReader_delete(reader);
+    }
     {
         std::lock_guard<std::mutex> lock(g_state.mutex);
         for (FrameBuffer& buffer : g_state.buffers) {
@@ -293,6 +355,25 @@ void release_local() {
         g_state.height = 0;
     }
     g_frame_count.store(0, std::memory_order_release);
+    enter_release_stage(RELEASE_IDLE);
+}
+
+std::string describe_release() {
+    const int stage = g_release_stage.load(std::memory_order_acquire);
+    if (stage <= RELEASE_IDLE || stage >= static_cast<int>(std::size(kReleaseStageNames))) {
+        return {};
+    }
+    char buffer[96];
+    snprintf(
+        buffer,
+        sizeof(buffer),
+        "%s for %lldms",
+        kReleaseStageNames[stage],
+        static_cast<long long>(
+            now_ms() - g_release_stage_since_ms.load(std::memory_order_relaxed)
+        )
+    );
+    return buffer;
 }
 
 bool active() {

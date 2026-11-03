@@ -50,6 +50,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     private val recoveringStuckService = AtomicBoolean(false)
     private val connectionGeneration = AtomicLong()
     private var boundConnectionGeneration = -1L
+    @Volatile
     private var selectedBackend = readSelectedBackend()
 
     @Volatile
@@ -77,7 +78,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         ComponentName(context, PrivilegedControlServiceImpl::class.java),
     )
         .daemon(false)
-        .processNameSuffix("maa_tauri_android_control")
+        .processNameSuffix(processNameForUser("maa_tauri_android_control"))
         .tag("control")
         .version(SERVICE_VERSION)
 
@@ -474,9 +475,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         ShizukuDownMonitor.onDisconnected(context)
         if (!intentionalDisconnect) {
             // 死的多半是被系统杀的（lmkd、AMS、厂商守护进程），凶手只写系统日志
-            runCatching {
-                forensics.remember("the privileged control service disconnected", lastServicePid)
-            }.onFailure { Log.w(TAG, "Could not remember service death", it) }
+            rememberServiceLossAfterSettling()
         }
         completeConnectionRequest(false)
         completePermissionRequest(false)
@@ -487,6 +486,26 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         runCatching { service.servicePid() }
             .onFailure { Log.w(TAG, "query service pid failed", it) }
             .getOrNull()
+
+    private fun rememberServiceLossAfterSettling() {
+        val pid = lastServicePid
+        thread(name = "mta-service-loss", isDaemon = true) {
+            Thread.sleep(SERVICE_LOSS_SETTLE_MS)
+            val shizukuState = if (selectedBackend == BACKEND_SHIZUKU) {
+                val alive = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+                val permission = runCatching { Shizuku.checkSelfPermission() }.getOrDefault(-1)
+                "; shizukuAlive=$alive shizukuPermission=$permission"
+            } else {
+                ""
+            }
+            runCatching {
+                forensics.remember(
+                    "the privileged control service disconnected$shizukuState",
+                    pid,
+                )
+            }.onFailure { Log.w(TAG, "Could not remember service death", it) }
+        }
+    }
 
     /**
      * 上个提权进程死了，让新进程翻它的系统日志挂回死亡事件。只有 pid 不同、且死亡
@@ -528,7 +547,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         if (selectedBackend == BACKEND_ROOT) {
             rootProcessName()
         } else {
-            "${context.packageName}:maa_tauri_android_control"
+            "${context.packageName}:${processNameForUser("maa_tauri_android_control")}"
         }
 
     private fun disconnectForBackendSwitch(
@@ -713,6 +732,11 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     private fun rootProcessName(): String =
         RootLaunchEnvironment.processName(context.packageName, Process.myUid())
 
+    private fun processNameForUser(base: String): String {
+        val userId = Process.myUid() / 100_000
+        return if (userId == 0) base else "${base}_u$userId"
+    }
+
     private fun isDebuggable(): Boolean =
         (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
@@ -745,6 +769,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         private const val SERVICE_VERSION = 16
         private const val ROOT_CONNECT_TIMEOUT_MS = 15_000L
         private const val SWITCH_TIMEOUT_MS = 18_000L
+        private const val SERVICE_LOSS_SETTLE_MS = 500L
         private const val PREFERENCES_NAME = "privileged_backend"
         private const val PREFERENCES_KEY = "backend"
 

@@ -2,6 +2,12 @@ package top.natsuu.mta.control.root
 
 /** Commands run inside libsu's root shell; only the app's runtime tree is repaired. */
 internal object RootLaunchEnvironment {
+    fun processName(packageName: String, uid: Int): String {
+        val userId = uid / 100_000
+        val suffix = if (userId == 0) "" else "_u$userId"
+        return "$packageName:root_service$suffix"
+    }
+
     fun reap(processName: String): String {
         val name = "'${processName.replace("'", "'\"'\"'")}'"
         // Only invoked on the launch worker before a replacement exists.

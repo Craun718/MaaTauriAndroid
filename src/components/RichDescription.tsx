@@ -4,12 +4,12 @@ import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { useProjectImage } from "../lib/useProjectImage";
 import {
   hasInlineRichText,
   inlineHtmlTagNames,
   rehypeSanitizeInlineStyles,
 } from "../lib/richText";
+import { useProjectImage } from "../lib/useProjectImage";
 
 const sanitizeSchema = {
   ...defaultSchema,

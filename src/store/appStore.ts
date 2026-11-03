@@ -15,13 +15,13 @@ import {
   resolveLanguage,
   systemLanguageTags,
 } from "../lib/language";
-import { advanceResourceGeneration } from "../lib/resourceGeneration";
 import {
   buildAndroidProject,
   createStartupProjectTextReader,
   loadProjectSource,
 } from "../lib/pi";
 import type { ProjectSource } from "../lib/pi/rawTypes";
+import { advanceResourceGeneration } from "../lib/resourceGeneration";
 import { startupTrace } from "../lib/startupTiming";
 import type {
   AppStateSnapshot,

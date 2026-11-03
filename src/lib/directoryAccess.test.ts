@@ -38,7 +38,7 @@ describe("directory access diagnostic protocol", () => {
       "MTA_DIRECTORY_ACCESS={bad}",
       "MTA_DIRECTORY_ACCESS={",
       `MTA_DIRECTORY_ACCESS=${JSON.stringify(diagnostic).slice(0, -1)}`,
-      'MTA_DIRECTORY_ACCESS={"path":"' + "a".repeat(17000),
+      `MTA_DIRECTORY_ACCESS={"path":"${"a".repeat(17000)}`,
     ]) {
       expect(extractDirectoryAccess(value)).toBeUndefined();
     }

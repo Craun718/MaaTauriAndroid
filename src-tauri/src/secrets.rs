@@ -323,6 +323,7 @@ mod tests {
             initialized: true,
             force_stop_target_app: false,
             close_target_app_after_run: false,
+            exit_app_after_run: false,
             max_run_duration_seconds: 0,
             foreground_mode: false,
             foreground_overlay: false,

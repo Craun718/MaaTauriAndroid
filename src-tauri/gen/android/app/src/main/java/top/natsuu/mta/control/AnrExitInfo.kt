@@ -6,13 +6,16 @@ package top.natsuu.mta.control
  * when the user dismisses the ANR dialog.
  */
 internal object AnrExitInfo {
-    fun kindOf(description: String?): String = when {
-        description.isNullOrBlank() -> "unknown"
-        "Input dispatching timed out" in description -> "input"
-        "did not then call Service.startForeground" in description -> "fgs_start"
-        "executing service" in description -> "service"
-        "Broadcast of" in description -> "broadcast"
-        "ContentProvider not responding" in description -> "provider"
-        else -> "other"
+    fun kindOf(description: String?): String {
+        if (description.isNullOrBlank()) return "unknown"
+        val normalized = description.lowercase()
+        return when {
+            "input dispatching timed out" in normalized -> "input"
+            "did not then call service.startforeground" in normalized -> "fgs_start"
+            "executing service" in normalized -> "service"
+            "broadcast of" in normalized -> "broadcast"
+            "contentprovider not responding" in normalized -> "provider"
+            else -> "other"
+        }
     }
 }

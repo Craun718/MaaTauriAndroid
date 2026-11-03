@@ -307,6 +307,8 @@ export interface UserConfiguration {
   initialized: boolean;
   forceStopTargetApp: boolean;
   closeTargetAppAfterRun: boolean;
+  /** Exit the whole Android app after a natural run end. */
+  exitAppAfterRun?: boolean;
   /** Stops a run after this many seconds; `0` or absent disables the limit. */
   maxRunDurationSeconds?: number;
   foregroundMode?: boolean;

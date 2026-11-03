@@ -48,6 +48,8 @@ object RuntimeBridge {
     }
 
     private const val RESTART_FALLBACK_KILL_MS = 3_000L
+    private const val APP_EXIT_SETTLE_MS = 500L
+    private const val APP_EXIT_WAKE_TIMEOUT_MS = 5_000L
     private const val CONFIGURATION_PICK_TIMEOUT_MS = 120_000L
     private const val MAX_IMAGE_BYTES = 16L * 1024L * 1024L
 
@@ -305,6 +307,36 @@ object RuntimeBridge {
             { Process.killProcess(Process.myPid()) },
             RESTART_FALLBACK_KILL_MS,
         )
+        return true
+    }
+
+    /**
+     * Ends the app process after a run has reached a natural terminal state.
+     * Rust has already flushed telemetry; this gives posted UI/service work a
+     * short grace period, then Java exit invokes the process shutdown hooks.
+     * The privileged service observes owner-binder death and cleans up its
+     * virtual display, target apps and shell process.
+     */
+    @JvmStatic
+    fun exitApp(): Boolean {
+        val context = agentContext ?: return false
+        val powerManager =
+            context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val wakeLock = powerManager?.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "mta:appExitAfterRun",
+        )
+        wakeLock?.setReferenceCounted(false)
+        runCatching { wakeLock?.acquire(APP_EXIT_WAKE_TIMEOUT_MS) }
+        mainHandler.post { runCatching { RunOverlayController.hidePanelForStart() } }
+        thread(name = "mta-app-exit") {
+            try {
+                Thread.sleep(APP_EXIT_SETTLE_MS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            Runtime.getRuntime().exit(0)
+        }
         return true
     }
 

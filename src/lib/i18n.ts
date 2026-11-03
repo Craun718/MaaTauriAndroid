@@ -312,6 +312,9 @@ const en = {
   closeTargetAppAfterRun: "Close target app after the run",
   closeTargetAppAfterRunDescription:
     "Off keeps the virtual display, the preview and the target app after the run. Stop the display to end the session.",
+  exitAppAfterRun: "Exit app after the run",
+  exitAppAfterRunDescription:
+    "After a natural completion or failure, flush notifications and telemetry, stop Android services, and exit this app. Manual stops never exit.",
   maxRunDuration: "Max run duration (minutes)",
   maxRunDurationDescription:
     "Stops the run once it reaches this limit. Leave empty for no limit.",
@@ -703,6 +706,9 @@ const zh: Record<MessageKey, string> = {
   closeTargetAppAfterRun: "运行结束后关闭目标应用",
   closeTargetAppAfterRunDescription:
     "关闭后，运行结束会保留虚拟屏、画面与目标应用，直到你手动停止画面。",
+  exitAppAfterRun: "运行结束后退出应用",
+  exitAppAfterRunDescription:
+    "自然完成或失败后，先等通知与遥测上报完成，再停止 Android 服务并退出应用。手动停止不会退出。",
   maxRunDuration: "单轮运行时长上限（分钟）",
   maxRunDurationDescription: "达到该时长后自动停止本次运行；留空表示不限制。",
   maxRunDurationInvalid: "请填写 1 到 1440 之间的整数分钟，或留空表示不限制。",

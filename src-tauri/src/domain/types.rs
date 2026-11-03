@@ -354,6 +354,10 @@ pub struct UserConfiguration {
     pub force_stop_target_app: bool,
     #[serde(default = "default_true")]
     pub close_target_app_after_run: bool,
+    /// Exit the whole Android app after a natural run end. User stops never
+    /// trigger this: an explicit stop means the device is still in use.
+    #[serde(default)]
+    pub exit_app_after_run: bool,
     /// Stops a run once it has been going for this many seconds. `0` disables
     /// the limit.
     #[serde(default)]
@@ -429,6 +433,7 @@ impl Default for UserConfiguration {
             initialized: false,
             force_stop_target_app: false,
             close_target_app_after_run: true,
+            exit_app_after_run: false,
             max_run_duration_seconds: 0,
             foreground_mode: false,
             foreground_overlay: false,

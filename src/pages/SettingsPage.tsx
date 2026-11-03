@@ -377,6 +377,22 @@ export function SettingsPage() {
         <p className="text-sm text-ink-muted">
           {t("closeTargetAppAfterRunDescription")}
         </p>
+        <Checkbox
+          className="min-h-10 gap-2"
+          checked={snapshot?.configuration.exitAppAfterRun ?? false}
+          disabled={restartPending || !snapshot}
+          onCheckedChange={(next) => {
+            if (!snapshot) return;
+            const nextConfiguration = structuredClone(snapshot.configuration);
+            nextConfiguration.exitAppAfterRun = next;
+            void saveConfiguration(nextConfiguration);
+          }}
+        >
+          <span className="font-medium">{t("exitAppAfterRun")}</span>
+        </Checkbox>
+        <p className="text-sm text-ink-muted">
+          {t("exitAppAfterRunDescription")}
+        </p>
         <RunDurationField
           seconds={snapshot?.configuration.maxRunDurationSeconds}
           disabled={restartPending || !snapshot}

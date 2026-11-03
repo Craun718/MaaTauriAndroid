@@ -46,6 +46,11 @@ use uuid::Uuid;
 #[cfg(target_os = "android")]
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
+/// Latched as soon as a natural run decides to terminate the app. This closes
+/// the tiny race where the run lease returns to Idle before the process exits.
+#[cfg(target_os = "android")]
+static EXIT_APP_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[cfg(target_os = "android")]
 pub fn android_app_handle() -> Option<&'static AppHandle> {
     APP_HANDLE.get()
@@ -2920,6 +2925,24 @@ async fn start_run_core(
                     .to_string(),
             ));
         }
+        if EXIT_APP_PENDING.load(std::sync::atomic::Ordering::SeqCst) {
+            if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.as_ref() {
+                if let Ok(store) = state.schedule_store() {
+                    let _ = store.record_trigger(schedule::ScheduleTriggerLogEntry {
+                        rule_id: rule_id.clone(),
+                        scheduled_epoch_ms: *scheduled_epoch_ms,
+                        actual_epoch_ms: chrono::Local::now().timestamp_millis(),
+                        result: schedule::ScheduleTriggerResult::RejectedActive,
+                        detail: Some(
+                            "The app exit requested by the previous run is pending".to_string(),
+                        ),
+                    });
+                }
+            }
+            return Err(AppError::Message(
+                "The app is exiting after the previous run".to_string(),
+            ));
+        }
     }
     if let Some((rule_id, scheduled_epoch_ms)) = scheduled_trigger.clone() {
         if state.maa.status() != runtime::RunState::Idle {
@@ -3227,6 +3250,7 @@ async fn start_run_core(
     );
     let force_stop_target_app = configuration.force_stop_target_app;
     let close_target_app_after_run = configuration.close_target_app_after_run;
+    let exit_app_after_run = cfg!(target_os = "android") && configuration.exit_app_after_run;
     let max_run_duration = run_supervisor::configured_limit(configuration.max_run_duration_seconds);
     let pi_env = if agent_count > 0 {
         Some(agent::pi_environment(
@@ -3386,6 +3410,7 @@ async fn start_run_core(
                 // app — stays alive until the user ends it from the display card.
                 let should_close_target_app =
                     close_target_app_after_run && outcome.is_natural_end();
+                let should_exit_app = exit_app_after_run && outcome.is_natural_end();
                 let task_name = if let runtime::RunOutcome::Failed { task_name, .. } = &outcome {
                     Some(task_name.clone())
                 } else {
@@ -3490,9 +3515,13 @@ async fn start_run_core(
                             )
                         }
                     };
+                #[cfg(target_os = "android")]
+                if should_exit_app {
+                    EXIT_APP_PENDING.store(true, std::sync::atomic::Ordering::SeqCst);
+                }
                 sessions.finish_with(&run_execution_id, || {
                     run_progress::finish_run_overlay();
-                    if should_close_target_app {
+                    if should_close_target_app || should_exit_app {
                         stop_run_foreground_service();
                     }
                     if let Ok(event) =
@@ -3523,7 +3552,30 @@ async fn start_run_core(
                         severity,
                         message,
                     );
+                    if should_exit_app {
+                        if let Ok(event) = logger_for_run.append(
+                            run_log::RunEventKind::Warning,
+                            runtime::RunState::Idle,
+                            "The app will exit after this run",
+                            None,
+                            Some(serde_json::json!({ "diagnostic": "appExitAfterRun" })),
+                        ) {
+                            let _ = app.emit("run-event", &event);
+                        }
+                    }
                 });
+                #[cfg(target_os = "android")]
+                if should_exit_app {
+                    tokio::spawn(async move {
+                        // Keep the final run report and queued notifications
+                        // useful before Kotlin tears down the process.
+                        telemetry::flush(telemetry::EXIT_FLUSH_TIMEOUT);
+                        if call_runtime_bridge_boolean("exitApp").is_err() {
+                            log::warn!("Android did not accept the post-run app exit");
+                            EXIT_APP_PENDING.store(false, std::sync::atomic::Ordering::SeqCst);
+                        }
+                    });
+                }
             }
             Ok(Err(error)) => {
                 sessions.finish_with(&run_execution_id, || {

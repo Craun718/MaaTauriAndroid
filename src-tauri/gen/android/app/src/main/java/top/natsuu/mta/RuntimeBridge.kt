@@ -728,12 +728,34 @@ object RuntimeBridge {
     @JvmStatic
     fun openShizuku(): Boolean {
         val context = agentContext ?: return false
-        val intent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
-            ?: return false
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)?.let { intent ->
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { context.startActivity(intent) }.isSuccess) return true
+        }
+        return installBundledShizuku(context)
+    }
+
+    private fun installBundledShizuku(context: Context): Boolean {
         return runCatching {
-            context.startActivity(intent)
+            val apk = File(context.cacheDir, SHIZUKU_BUNDLED_FILE)
+            context.assets.open(SHIZUKU_BUNDLED_FILE).use { input ->
+                apk.outputStream().use(input::copyTo)
+            }
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apk,
+            )
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, APK_MIME_TYPE)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
             true
+        }.onFailure { error ->
+            Log.w(LOG_TAG, "Could not launch the bundled Shizuku installer", error)
         }.getOrDefault(false)
     }
 
@@ -1431,6 +1453,7 @@ object RuntimeBridge {
     external fun nativeExportRunLogs(): String?
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+    private const val SHIZUKU_BUNDLED_FILE = "shizuku.apk"
     private const val UNKNOWN = "unknown"
 
     /** RuntimeBridge 内部请求码：目前只有通知权限这一处会发起 requestPermissions */

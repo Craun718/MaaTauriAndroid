@@ -75,6 +75,9 @@ pnpm tauri android build --target aarch64 --apk --split-per-abi
 2. 安装 [Shizuku](https://shizuku.rikka.app/) 或使用 root 进行授权。
 3. 选择任务、核对选项，开始运行。
 
+未安装 Shizuku 时，权限卡片里的「打开 Shizuku」会改为启动应用内置的
+Shizuku 13.7.0 安装器；已安装时仍打开现有 Shizuku。
+
 ## 半自动构建
 
 本项目配置了半自动构建脚本：

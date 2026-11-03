@@ -2340,6 +2340,9 @@ struct ScheduleHealth {
     exact_alarm_allowed: bool,
     notifications_allowed: bool,
     overlay_allowed: bool,
+    /// Optional OEM/app-details guide target. This is not a failing health
+    /// check: OEMs do not expose whether the user actually enabled auto-start.
+    autostart_guide: Option<String>,
 }
 
 #[tauri::command]
@@ -2358,6 +2361,7 @@ fn schedule_health() -> Result<ScheduleHealth, AppError> {
             exact_alarm_allowed: call_runtime_bridge_boolean("canScheduleExactAlarmsNow")?,
             notifications_allowed: call_runtime_bridge_boolean("scheduleNotificationsAllowed")?,
             overlay_allowed: call_runtime_bridge_boolean("hasOverlayPermission")?,
+            autostart_guide: call_runtime_bridge_optional_string("autostartGuideTarget")?,
         })
     }
 
@@ -2366,6 +2370,21 @@ fn schedule_health() -> Result<ScheduleHealth, AppError> {
         Err(AppError::Message(
             "Schedule health is only available on Android".to_string(),
         ))
+    }
+}
+
+/// Opens the resolved OEM auto-start page, falling back to app details on known
+/// restrictive manufacturers when the vendor page is unavailable.
+#[tauri::command]
+fn open_autostart_settings() -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        call_runtime_bridge_boolean("openAutostartSettings").map(|_| ())
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
     }
 }
 
@@ -5833,6 +5852,7 @@ pub fn run() {
             set_schedule_rule_enabled,
             get_schedule_status,
             schedule_health,
+            open_autostart_settings,
             request_battery_optimization_exemption,
             request_exact_alarm_permission,
             request_schedule_notification_permission,

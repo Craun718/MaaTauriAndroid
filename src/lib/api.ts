@@ -313,6 +313,10 @@ export async function getScheduleHealth() {
   return invoke<ScheduleHealth>("schedule_health");
 }
 
+export async function openAutostartSettings() {
+  return invoke<void>("open_autostart_settings");
+}
+
 export async function requestBatteryOptimizationExemption() {
   return invoke<void>("request_battery_optimization_exemption");
 }

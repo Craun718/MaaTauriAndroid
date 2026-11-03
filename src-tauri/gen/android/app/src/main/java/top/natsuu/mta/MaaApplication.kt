@@ -7,6 +7,9 @@ import java.io.File
 class MaaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Short-lived helper processes (the restart relay) must not start the
+        // app runtime or attach the main-process bridges.
+        if (packageName != getProcessName()) return
         StartupTrace.start()
         RuntimeBridge.attachContext(this)
         top.natsuu.mta.control.ProcessExitHistory.recordSelf(this)

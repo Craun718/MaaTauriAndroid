@@ -11,6 +11,7 @@ import {
   getScheduleHealth,
   getScheduleStatus,
   listScheduleRules,
+  openAutostartSettings,
   openShizuku,
   requestBatteryOptimizationExemption,
   requestExactAlarmPermission,
@@ -204,6 +205,15 @@ export function SchedulesPage() {
       },
     });
     setTimeEditor(undefined);
+  }
+
+  async function openAutostartGuide() {
+    try {
+      await openAutostartSettings();
+      await reload();
+    } catch (error) {
+      notify(String(error), { tone: "error" });
+    }
   }
 
   async function fixHealthIssue(issue: ScheduleHealthIssue) {
@@ -487,9 +497,20 @@ export function SchedulesPage() {
             {t("scheduleAutoStart")}
           </Checkbox>
           {draft.autoStart ? (
-            <p className="text-xs text-ink-muted">
-              {t("scheduleAutoStartHint")}
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-ink-muted">
+                {t("scheduleAutoStartHint")}
+              </p>
+              {health?.autostartGuide ? (
+                <button
+                  type="button"
+                  onClick={() => void openAutostartGuide()}
+                  className="h-9 rounded-md border border-line bg-raised px-3 text-sm font-medium transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  {t("scheduleOpenAutostartSettings")}
+                </button>
+              ) : null}
+            </div>
           ) : null}
 
           <div className="flex justify-end gap-2">

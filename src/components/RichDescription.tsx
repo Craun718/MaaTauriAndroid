@@ -1,11 +1,10 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
-import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { readProjectImage } from "../lib/api";
+import { useProjectImage } from "../lib/useProjectImage";
 import {
   hasInlineRichText,
   inlineHtmlTagNames,
@@ -68,53 +67,9 @@ function projectImagePath(source?: string): string | undefined {
   }
 }
 
-function imageMimeType(path: string): string {
-  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  switch (extension) {
-    case "avif":
-      return "image/avif";
-    case "bmp":
-      return "image/bmp";
-    case "gif":
-      return "image/gif";
-    case "ico":
-      return "image/x-icon";
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "png":
-      return "image/png";
-    case "webp":
-      return "image/webp";
-    default:
-      return "application/octet-stream";
-  }
-}
-
 function MarkdownImage({ node: _node, src, alt, ...rest }: MarkdownImageProps) {
   const projectPath = projectImagePath(src);
-  const [assetSrc, setAssetSrc] = useState<string>();
-
-  useEffect(() => {
-    if (!projectPath) return;
-    let active = true;
-    let objectUrl: string | undefined;
-
-    void readProjectImage(projectPath)
-      .then((bytes) => {
-        if (!active) return;
-        objectUrl = URL.createObjectURL(
-          new Blob([bytes], { type: imageMimeType(projectPath) }),
-        );
-        setAssetSrc(objectUrl);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [projectPath]);
+  const assetSrc = useProjectImage(projectPath);
 
   return (
     <img

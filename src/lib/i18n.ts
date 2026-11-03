@@ -489,6 +489,7 @@ const en = {
   scheduleHealthExactAlarm: "Exact alarms are not allowed",
   scheduleHealthNotification: "Notification permission is off",
   scheduleHealthOverlay: "Overlay permission is off",
+  scheduleOpenAutostartSettings: "Open auto-start settings",
   // Update
   update: "Update",
   updateSource: "Source",
@@ -949,6 +950,7 @@ const zh: Record<MessageKey, string> = {
   scheduleHealthExactAlarm: "未允许精确闹钟",
   scheduleHealthNotification: "通知权限未开启",
   scheduleHealthOverlay: "悬浮窗权限未开启",
+  scheduleOpenAutostartSettings: "打开自启动设置",
   update: "更新",
   updateSource: "更新源",
   updateSourceAuto: "自动",

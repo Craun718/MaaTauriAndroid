@@ -287,6 +287,8 @@ export interface ScheduleHealth {
   exactAlarmAllowed: boolean;
   notificationsAllowed: boolean;
   overlayAllowed: boolean;
+  /** Vendor or app-details guide target; absent on unrestricted ROMs. */
+  autostartGuide?: string | null;
 }
 
 /**

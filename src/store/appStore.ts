@@ -15,6 +15,7 @@ import {
   resolveLanguage,
   systemLanguageTags,
 } from "../lib/language";
+import { advanceResourceGeneration } from "../lib/resourceGeneration";
 import {
   buildAndroidProject,
   createStartupProjectTextReader,
@@ -86,6 +87,9 @@ function ensureWelcomeListener() {
 }
 
 function revisedSnapshot(snapshot: AppStateSnapshot) {
+  // A newly adopted snapshot can represent re-extracted or newly loaded
+  // resources, so mounted asset reads need a chance to retry.
+  advanceResourceGeneration();
   configurationRevision += 1;
   return { snapshot, busy: false };
 }

@@ -1,7 +1,6 @@
 package top.natsuu.mta
 
 import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
@@ -36,7 +35,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.lang.ref.WeakReference
 import kotlin.concurrent.thread
-import kotlin.system.exitProcess
 import org.json.JSONObject
 import androidx.core.content.FileProvider
 import top.natsuu.mta.pip.PreviewRouter
@@ -49,8 +47,7 @@ object RuntimeBridge {
         System.loadLibrary("maa_tauri_android_lib")
     }
 
-    private const val RESTART_REQUEST_CODE = 0x4D54524C
-    private const val RESTART_DELAY_MS = 250L
+    private const val RESTART_FALLBACK_KILL_MS = 3_000L
     private const val CONFIGURATION_PICK_TIMEOUT_MS = 120_000L
     private const val MAX_IMAGE_BYTES = 16L * 1024L * 1024L
 
@@ -289,39 +286,26 @@ object RuntimeBridge {
     }
 
     /**
-     * Restarts the whole app process. The launcher intent is registered with
-     * AlarmManager before this process is killed, so the system delivers it
-     * after the old task/process is gone; starting it directly from here can
-     * only hit onNewIntent on the existing singleTask activity and leave the
-     * relaunch to OEM prestart heuristics. Used by the debug-mode toggle; the
-     * caller must persist settings first.
+     * Restarts the whole app process through a short-lived `:restart` activity.
+     * That process kills this process, then launches a clean main task; the old
+     * direct or AlarmManager relaunch could hit onNewIntent or depend on an
+     * exact-alarm grant. The caller must persist settings first. A fallback
+     * kill prevents the main process from lingering if the relay cannot start.
      */
     @JvmStatic
     fun restartApp(): Boolean {
         val context = agentContext ?: return false
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return false
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return false
-        val launch = PendingIntent.getActivity(
-            context,
-            RESTART_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val triggerAtMs = System.currentTimeMillis() + RESTART_DELAY_MS
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager.canScheduleExactAlarms()
-        if (canUseExact) {
-            try {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, launch)
-            } catch (_: SecurityException) {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMs, launch)
-            }
-        } else {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMs, launch)
+        val relay = Intent(context, RestartActivity::class.java)
+            .putExtra(RestartActivity.EXTRA_MAIN_PID, Process.myPid())
+        runCatching { context.startActivity(relay) }.getOrElse { error ->
+            Log.w(LOG_TAG, "Could not start the restart relay", error)
+            return false
         }
-        Process.killProcess(Process.myPid())
-        exitProcess(0)
+        mainHandler.postDelayed(
+            { Process.killProcess(Process.myPid()) },
+            RESTART_FALLBACK_KILL_MS,
+        )
+        return true
     }
 
     @JvmStatic
@@ -488,6 +472,31 @@ object RuntimeBridge {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
         return context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * 定时页自启动引导用：OEM 设置页可用时返回 "oem:<id>"；已知受限厂商找不到
+     * 私有设置页时返回 "appDetails"；其它厂商不引导。
+     */
+    @JvmStatic
+    fun autostartGuideTarget(): String? {
+        val context = agentContext ?: return null
+        return when (val target = AutoStartSettings.resolveTarget(context)) {
+            is AutoStartTarget.Oem -> "oem:${target.id}"
+            AutoStartTarget.AppDetails -> "appDetails"
+            null -> null
+        }
+    }
+
+    @JvmStatic
+    fun openAutostartSettings(): Boolean {
+        val context = agentContext ?: return false
+        val target = AutoStartSettings.resolveTarget(context) ?: return false
+        return runCatching {
+            AutoStartSettings.open(context, target)
+        }.onFailure { error ->
+            Log.w(LOG_TAG, "Could not open the auto-start settings", error)
+        }.isSuccess
     }
 
     /** 打开电池优化设置页，让用户把应用加入白名单。 */

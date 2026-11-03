@@ -28,8 +28,12 @@ import java.io.File
 import java.io.IOException
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -41,6 +45,7 @@ import top.natsuu.mta.pip.PreviewRouter
 import top.natsuu.mta.overlay.RunOverlayController
 import top.natsuu.mta.control.ControlHost
 import top.natsuu.mta.control.ControlServiceClient
+import top.natsuu.mta.control.ThreadDump
 
 object RuntimeBridge {
     init {
@@ -52,17 +57,25 @@ object RuntimeBridge {
     private const val APP_EXIT_WAKE_TIMEOUT_MS = 5_000L
     private const val CONFIGURATION_PICK_TIMEOUT_MS = 120_000L
     private const val MAX_IMAGE_BYTES = 16L * 1024L * 1024L
+    private const val START_VIRTUAL_DISPLAY_TIMEOUT_MS = 30_000L
+    private const val VIRTUAL_DISPLAY_CALL_TIMEOUT_MS = 15_000L
+    private const val CONTROL_DIAGNOSTIC_TIMEOUT_MS = 3_000L
 
     @Volatile
     private var agentContext: Context? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val controlCallExecutor = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "mta-control-call").apply { isDaemon = true }
+    }
 
     @Volatile
     private var controlClient: ControlServiceClient? = null
     private var hostActivity: WeakReference<Activity>? = null
     @Volatile
     private var debugMode = false
+    @Volatile
+    private var lastControlCallFailure: String? = null
     @Volatile
     private var physicalScreenWidth = 0
     @Volatile
@@ -645,6 +658,13 @@ object RuntimeBridge {
         controlClient = client
     }
 
+    @JvmStatic
+    fun takeControlCallFailure(): String? {
+        val failure = lastControlCallFailure
+        lastControlCallFailure = null
+        return failure
+    }
+
     /** Queues another preparation attempt; returns a machine-readable result for Rust. */
     @JvmStatic
     fun retryPreparation(): String {
@@ -1142,7 +1162,11 @@ object RuntimeBridge {
         invalidatePipDisplay()
         VirtualDisplayStreamHost.stop()
         val displayId = runCatching {
-            ControlHost.startVirtualDisplay(width, height, dpi)
+            controlCall("startVirtualDisplay", START_VIRTUAL_DISPLAY_TIMEOUT_MS) {
+                ControlHost.startVirtualDisplay(width, height, dpi)
+            }
+        }.onFailure { error ->
+            Log.e(LOG_TAG, "Could not start the virtual display", error)
         }.getOrDefault(-1)
         if (displayId < 0) return false
 
@@ -1167,9 +1191,13 @@ object RuntimeBridge {
         releaseVirtualDisplayWakeLock()
         invalidatePipDisplay()
         VirtualDisplayStreamHost.stop()
-        runCatching {
-            ControlHost.stopVirtualDisplay()
-        }
+        val stopped = runCatching {
+            controlCall("stopVirtualDisplay", VIRTUAL_DISPLAY_CALL_TIMEOUT_MS) {
+                ControlHost.stopVirtualDisplay()
+            }
+        }.onFailure { error ->
+            Log.e(LOG_TAG, "Could not stop the virtual display", error)
+        }.isSuccess
         val width = physicalScreenWidth
         val height = physicalScreenHeight
         if (width > 0 && height > 0) {
@@ -1177,16 +1205,45 @@ object RuntimeBridge {
             configureScreen(width, height)
         }
         setActiveDisplay(0)
-        return true
+        return stopped
     }
 
     @JvmStatic
     fun virtualDisplayStatus(): IntArray {
-        val status = ControlHost.virtualDisplayStatus() ?: intArrayOf(0, -1, 0, 0, 0)
+        val status = runCatching {
+            controlCall("virtualDisplayStatus", VIRTUAL_DISPLAY_CALL_TIMEOUT_MS) {
+                ControlHost.virtualDisplayStatus()
+            }
+        }.getOrNull() ?: intArrayOf(0, -1, 0, 0, 0)
         val capabilities = if (status[0] != 0) {
-            runCatching { ControlHost.current()?.virtualDisplayCapabilities() }.getOrNull()
+            runCatching {
+                controlCall("virtualDisplayCapabilities", VIRTUAL_DISPLAY_CALL_TIMEOUT_MS) {
+                    ControlHost.current()?.virtualDisplayCapabilities()
+                }
+            }.getOrNull()
         } else null
         return status + (capabilities?.takeIf { it.size == 4 } ?: intArrayOf(-1, -1, -1, -1))
+    }
+
+    private fun <T> controlCall(call: String, timeoutMs: Long, block: () -> T): T {
+        val pending = controlCallExecutor.submit(Callable { block() })
+        return try {
+            pending.get(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (error: TimeoutException) {
+            lastControlCallFailure = "$call did not return within ${timeoutMs}ms"
+            val appDump = ThreadDump.capture()
+            val serviceDump = controlClient?.dumpThreads(CONTROL_DIAGNOSTIC_TIMEOUT_MS)
+            val dump = buildString {
+                if (appDump.isNotEmpty()) appendLine("app:\n$appDump")
+                if (!serviceDump.isNullOrEmpty()) appendLine("service:\n$serviceDump")
+            }.trim()
+            Log.e(LOG_TAG, lastControlCallFailure.orEmpty(), error)
+            pending.cancel(true)
+            controlClient?.recoverStuckService(call, dump)
+            throw IllegalStateException(lastControlCallFailure, error)
+        } catch (error: ExecutionException) {
+            throw error.cause ?: error
+        }
     }
 
     /**

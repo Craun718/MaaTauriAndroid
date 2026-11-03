@@ -13,11 +13,13 @@ import android.util.Log
 import com.topjohnwu.superuser.Shell
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.Callable
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
@@ -37,11 +39,15 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     private val rootExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "mta-root-control").apply { isDaemon = true }
     }
+    private val diagnosticExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "mta-control-diagnostics").apply { isDaemon = true }
+    }
     private var permissionListener: Shizuku.OnRequestPermissionResultListener? = null
     private var permissionResultCallback: ((Boolean) -> Unit)? = null
     private val connectionResultCallbacks = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private val rootConnectionCallbacks = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private val rootConnecting = AtomicBoolean(false)
+    private val recoveringStuckService = AtomicBoolean(false)
     private val connectionGeneration = AtomicLong()
     private var boundConnectionGeneration = -1L
     private var selectedBackend = readSelectedBackend()
@@ -188,6 +194,60 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         rootExecutor.shutdown()
     }
 
+    /**
+     * A Binder call that never returns cannot be cancelled. Drop the current
+     * service instead of leaving every later call queued behind the same lock.
+     */
+    fun recoverStuckService(call: String, detail: String?) {
+        if (!recoveringStuckService.compareAndSet(false, true)) return
+        Log.e(
+            TAG,
+            "Privileged call $call stuck; restarting the control service\n" +
+                detail.orEmpty(),
+        )
+        try {
+            intentionalDisconnect = true
+            connectionGeneration.incrementAndGet()
+            removeRootBinder()
+            runCatching { lifelineWriter?.close() }
+            lifelineWriter = null
+            ControlHost.current()?.let(::destroyServiceSafely)
+            if (bound) {
+                runCatching { Shizuku.unbindUserService(serviceArgs, this, true) }
+                bound = false
+            }
+            if (selectedBackend == BACKEND_ROOT) {
+                killResidualRootService()
+            }
+            // The stuck JNI call may still hold the native state lock, so a
+            // synchronous detach would deadlock this recovery path too.
+            thread(name = "mta-control-detach", isDaemon = true) {
+                runCatching { ControlHost.detach() }
+            }
+            RuntimeBridge.setControlState(STATE_DISCONNECTED)
+            completeConnectionRequest(false)
+            completePermissionRequest(false)
+            completeRootConnectionRequest(false)
+        } finally {
+            recoveringStuckService.set(false)
+        }
+    }
+
+    /** Best-effort dump that itself has to stay bounded when the service is wedged. */
+    fun dumpThreads(timeoutMs: Long): String? {
+        val service = ControlHost.current() ?: return null
+        val pending = diagnosticExecutor.submit(Callable { runCatching { service.dumpThreads() }.getOrNull() })
+        return try {
+            pending.get(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (_: TimeoutException) {
+            pending.cancel(true)
+            null
+        } catch (error: Exception) {
+            Log.w(TAG, "Privileged thread dump failed", error)
+            null
+        }
+    }
+
     private fun connectShizuku() {
         RuntimeBridge.setControlState(STATE_STARTING)
         if (!Shizuku.pingBinder()) {
@@ -291,7 +351,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
             }
 
             val commandResult = runCatching {
-                val processName = "${context.packageName}:root_service"
+                val processName = rootProcessName()
                 Shell.cmd(RootLaunchEnvironment.reap(processName)).exec()
                 buildRootStartCommand(token)
             }
@@ -466,7 +526,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     /** 与 [serviceArgs] 的 processNameSuffix / root 启动脚本里的进程名一致。 */
     private fun serviceProcessPrefix(): String =
         if (selectedBackend == BACKEND_ROOT) {
-            "${context.packageName}:root_service"
+            rootProcessName()
         } else {
             "${context.packageName}:maa_tauri_android_control"
         }
@@ -615,7 +675,7 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
         val launcher = File(context.applicationInfo.nativeLibraryDir, "liblauncher.so")
         check(launcher.isFile) { "launcher not found: $launcher" }
         val apk = requireNotNull(context.applicationInfo.sourceDir) { "the APK path is missing" }
-        val processName = "${context.packageName}:root_service"
+        val processName = rootProcessName()
         val debugDirectory =
             context.getExternalFilesDir("debug") ?: File(context.cacheDir, "debug")
         debugDirectory.mkdirs()
@@ -642,13 +702,16 @@ class ControlServiceClient(private val context: Context) : ServiceConnection {
     }
 
     private fun killResidualRootService() {
-        val processName = "${context.packageName}:root_service"
+        val processName = rootProcessName()
         runCatching {
             Shell.cmd("kill $(pidof ${shellQuote(processName)}) 2>/dev/null").exec()
         }.onFailure { error ->
             Log.w(TAG, "Could not stop a residual root control service", error)
         }
     }
+
+    private fun rootProcessName(): String =
+        RootLaunchEnvironment.processName(context.packageName, Process.myUid())
 
     private fun isDebuggable(): Boolean =
         (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0

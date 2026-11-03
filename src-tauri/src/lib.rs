@@ -2574,6 +2574,9 @@ fn call_runtime_bridge_start_virtual_display(
     if started {
         Ok(())
     } else {
+        if let Ok(Some(failure)) = call_runtime_bridge_optional_string("takeControlCallFailure") {
+            return Err(AppError::Message(failure));
+        }
         // The bridge only reports a boolean, so the live control service
         // state is the closest cause: while Shizuku is unavailable or has
         // not granted permission yet, that missing precondition is the

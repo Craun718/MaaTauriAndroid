@@ -110,6 +110,13 @@ interface IMaaTauriAndroidControlService {
     int[] virtualDisplayCapabilities() = 28;
 
     /**
+     * Captures only threads handling Binder calls or waiting on locks. Used
+     * before a stuck privileged service is torn down, and must not take any
+     * service-level lock itself.
+     */
+    String dumpThreads() = 29;
+
+    /**
      * Reserved Shizuku user-service transaction: the server invokes it when it
      * unbinds the service, including after the app process died. The service runs
      * its exit cleanup and stops itself instead of leaking a shell-uid process.

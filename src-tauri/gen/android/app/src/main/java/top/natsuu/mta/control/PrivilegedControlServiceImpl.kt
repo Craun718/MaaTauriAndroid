@@ -113,6 +113,8 @@ class PrivilegedControlServiceImpl(private val context: Context?) : IMaaTauriAnd
 
     override fun virtualDisplayCapabilities(): IntArray = displayCapabilities.get().copyOf()
 
+    override fun dumpThreads(): String = ThreadDump.capture()
+
     private val appLauncher =
         AppLauncher(context?.let(ShellIdentityContext::forCurrentUid)) { arguments ->
             shell(*arguments)

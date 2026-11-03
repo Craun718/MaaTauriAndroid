@@ -25,7 +25,7 @@ ABIS = {
     "x86_64": ("x86_64-linux-android", "x86_64"),
 }
 
-PREFERRED_NDK = "28.2.13676358"
+PREFERRED_NDK = "29.0.14206865"
 ANDROID_PACKAGE = "top.natsuu.mta"
 ANDROID_LIBRARY = "maa_tauri_android_lib"
 

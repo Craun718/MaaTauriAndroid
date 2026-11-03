@@ -269,7 +269,7 @@ tasks.named("preBuild") {
 
 extensions.configure<ApplicationExtension> {
     compileSdk = 37
-    ndkVersion = "28.2.13676358"
+    ndkVersion = "29.0.14206865"
     namespace = "top.natsuu.mta"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"

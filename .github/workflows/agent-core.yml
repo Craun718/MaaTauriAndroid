@@ -30,7 +30,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v4
-      - run: sdkmanager --install "ndk;28.2.13676358"
+      - run: sdkmanager --install "ndk;29.0.14206865"
       - run: sudo apt-get update && sudo apt-get install -y ninja-build autoconf automake libtool pkg-config
       - run: python -m pip install cmake==3.31.6 packaging==25.0
       - name: Build both Android ABIs with CPU OpenCV and ORT

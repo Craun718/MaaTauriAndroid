@@ -146,16 +146,16 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v4
-      - run: sdkmanager --install "ndk;28.2.13676358"
+      - run: sdkmanager --install "ndk;29.0.14206865"
       - uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: src-tauri
           key: android-${{ env.ANDROID_RUST_TARGET }}
       - run: |
-          toolchain="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          toolchain="$ANDROID_HOME/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin"
           {
-            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
-            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
+            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/29.0.14206865"
             echo "AR=$toolchain/llvm-ar"
             echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang"
             echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++"
@@ -240,7 +240,7 @@ jobs:
       # place after installing (see flutter/flutter#192478).
       - name: Install the Android SDK platform
         run: |
-          sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37.0"
+          sdkmanager --install "ndk;29.0.14206865" "cmake;3.22.1" "platforms;android-37.0"
           ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
 
       - uses: Swatinem/rust-cache@v2.9.2
@@ -282,9 +282,9 @@ jobs:
             echo "pi.profile=$GITHUB_WORKSPACE/resource/m9a.toml"
           } > src-tauri/gen/android/local.properties
           {
-            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
-            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358"
-            toolchain="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
+            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/29.0.14206865"
+            toolchain="$ANDROID_HOME/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin"
             echo "AR=$toolchain/llvm-ar"
             echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang"
             echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++"
@@ -292,7 +292,7 @@ jobs:
             echo "CC_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang"
             echo "CXX_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang++"
             echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$toolchain/x86_64-linux-android35-clang"
-            echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
           } >> "$GITHUB_ENV"
 
       - name: Clone the pinned M9A resource and build its runtime
@@ -407,7 +407,7 @@ jobs:
       # place after installing (see flutter/flutter#192478).
       - name: Install the Android SDK platform
         run: |
-          sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37.0"
+          sdkmanager --install "ndk;29.0.14206865" "cmake;3.22.1" "platforms;android-37.0"
           ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
 
       - uses: Swatinem/rust-cache@v2.9.2
@@ -446,8 +446,8 @@ jobs:
             echo "pi.profile=$GITHUB_WORKSPACE/resource/narutomobile.toml"
           } > src-tauri/gen/android/local.properties
           {
-            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
-            echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
           } >> "$GITHUB_ENV"
 
       - name: Clone the pinned NarutoMobile resource and build its runtime
@@ -547,7 +547,7 @@ jobs:
       # place after installing (see flutter/flutter#192478).
       - name: Install the Android SDK platform
         run: |
-          sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-37.0"
+          sdkmanager --install "ndk;29.0.14206865" "cmake;3.22.1" "platforms;android-37.0"
           ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
 
       - uses: Swatinem/rust-cache@v2.9.2
@@ -586,8 +586,8 @@ jobs:
             echo "pi.profile=$GITHUB_WORKSPACE/resource/maapvz.toml"
           } > src-tauri/gen/android/local.properties
           {
-            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
-            echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
           } >> "$GITHUB_ENV"
 
       - name: Clone the pinned MAAPVZ resource and build its runtime
@@ -651,7 +651,7 @@ jobs:
       # agent recipe requires NDK 29 and CMake 3.31 for cpp-algo.
       MAAFW_VERSION: v5.14.2
       MAAEND_REPO: MaaEnd/MaaEnd
-      AGENT_NDK_VERSION: 29.0.13599879
+      AGENT_NDK_VERSION: 29.0.14206865
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -694,8 +694,8 @@ jobs:
       - name: Install the Android SDK components
         run: |
           sdkmanager --install \
-            "ndk;28.2.13676358" \
-            "ndk;29.0.13599879" \
+            "ndk;29.0.14206865" \
+            "ndk;29.0.14206865" \
             "cmake;3.22.1" \
             "cmake;3.31.6" \
             "platforms;android-37.0"
@@ -724,9 +724,9 @@ jobs:
             echo "pi.profile=$GITHUB_WORKSPACE/resource/maaend.toml"
           } > src-tauri/gen/android/local.properties
           {
-            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
-            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358"
-            toolchain="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
+            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/29.0.14206865"
+            toolchain="$ANDROID_HOME/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin"
             echo "AR=$toolchain/llvm-ar"
             echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang"
             echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android35-clang++"
@@ -734,7 +734,7 @@ jobs:
             echo "CC_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang"
             echo "CXX_x86_64_linux_android=$toolchain/x86_64-linux-android35-clang++"
             echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$toolchain/x86_64-linux-android35-clang"
-            echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865"
           } >> "$GITHUB_ENV"
 
       - name: Clone and prepare the pinned MaaEnd resource

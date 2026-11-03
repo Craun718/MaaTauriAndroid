@@ -18,7 +18,7 @@ from pathlib import Path
 OPENCV_VERSION = "4.12.0"
 ORT_VERSION = "1.23.2"
 ANDROID_API = 24
-PREFERRED_NDK = "28.2.13676358"
+PREFERRED_NDK = "29.0.14206865"
 ORT_REQUIREMENTS = {
     "coloredlogs": "15.0.1",
     "humanfriendly": "10.0",

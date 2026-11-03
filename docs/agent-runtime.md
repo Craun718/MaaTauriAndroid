@@ -77,7 +77,7 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项
 
 NumPy 仍为 2.3.2，StrEnum 仍为 0.4.15。OpenCV 和 ORT 均使用目标 CPython 的头文件、共享库以及目标 NumPy 头文件编译，构建机 Python 只用于生成源码。OpenCV 上游默认禁用 Android Python binding，脚本会修改该判断；ORT 的 Python 探测则替换为显式的目标库配置。上游片段不匹配时直接失败。源码 tag 对应的 commit、输入 wheel 的哈希及版本记录在 `build-metadata.json`，许可证随 core 打包。
 
-构建机需要与目标 Python 主次版本一致的 Python（默认 3.13）、Android SDK、NDK 28.2.13676358、CMake 3.31、Ninja、Git、packaging 和 CPython 的构建工具。`ANDROID_HOME` 指向 SDK；NDK 优先取 `ANDROID_NDK_HOME` / `ANDROID_NDK_ROOT`，否则取 `$ANDROID_HOME/ndk/28.2.13676358`。
+构建机需要与目标 Python 主次版本一致的 Python（默认 3.13）、Android SDK、NDK 29.0.14206865、CMake 3.31、Ninja、Git、packaging 和 CPython 的构建工具。`ANDROID_HOME` 指向 SDK；NDK 优先取 `ANDROID_NDK_HOME` / `ANDROID_NDK_ROOT`，否则取 `$ANDROID_HOME/ndk/29.0.14206865`。
 
 ```bash
 python3 scripts/build_agent_core.py \

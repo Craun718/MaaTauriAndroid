@@ -33,6 +33,9 @@ const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
   "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
 
 const en = {
+  virtualDisplayReady: "Ready",
+  previewExpand: "Expand preview",
+  previewCollapse: "Collapse preview",
   credentialValidate: "Validate CDK",
   credentialChecking: "Validating…",
   credentialUnknown: "Not verified in this session.",
@@ -571,6 +574,9 @@ export function configurationRecoveryMessageKey(
 }
 
 const zh: Record<MessageKey, string> = {
+  virtualDisplayReady: "就绪",
+  previewExpand: "展开预览",
+  previewCollapse: "收起预览",
   credentialValidate: "验证 CDK",
   credentialChecking: "验证中…",
   credentialUnknown: "本次启动尚未验证。",

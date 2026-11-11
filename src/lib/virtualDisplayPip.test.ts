@@ -37,6 +37,15 @@ describe("automatic PiP eligibility", () => {
 });
 
 describe("PiP animation source rectangle", () => {
+  it("uses compact portrait preview bounds without widening them", () => {
+    expect(
+      pipSourceRect(
+        { left: 20, top: 40, right: 47, bottom: 88 },
+        { width: 400, height: 800 },
+        2,
+      ),
+    ).toEqual({ left: 40, top: 80, right: 94, bottom: 176 });
+  });
   it("converts viewport CSS pixels to physical pixels exactly once", () => {
     expect(
       pipSourceRect(

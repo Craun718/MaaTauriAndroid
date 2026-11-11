@@ -262,7 +262,8 @@ export type ScheduleTriggerResult =
   | "rejectedActive"
   | "failedValidation"
   | "failedServiceStart"
-  | "foregroundServiceDenied";
+  | "foregroundServiceDenied"
+  | "missed";
 
 export interface ScheduleTriggerLogEntry {
   ruleId: string;

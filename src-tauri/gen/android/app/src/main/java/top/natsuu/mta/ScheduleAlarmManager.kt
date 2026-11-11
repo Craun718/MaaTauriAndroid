@@ -18,6 +18,7 @@ data class ScheduledTrigger(
 ) {
     companion object {
         fun fromStatus(status: JSONObject): ScheduledTrigger? {
+            if (status.has("enabled") && !status.optBoolean("enabled")) return null
             val ruleId = status.optString("id")
             val scheduledAtMs = status.optLong("nextTriggerEpochMs", Long.MIN_VALUE)
             if (ruleId.isEmpty() || scheduledAtMs == Long.MIN_VALUE) return null
@@ -61,29 +62,52 @@ object ScheduleAlarmManager {
         syncSchedules(context, allSchedulesFromJson(json))
     }
 
-    private fun syncSchedules(context: Context, rules: List<ScheduledTrigger>) {
+    private fun syncSchedules(context: Context, rules: List<ScheduledTrigger>, authoritative: Boolean = true) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         val stateFile = File(context.filesDir, "schedule-alarm-state.json")
         val previous = allSchedulesFromJson(stateFile.readTextOrNull())
         val evidence = ScheduleEvidence.read(evidenceFile(context))
         val ids = rules.map { it.ruleId }.toSet()
-        (previous.map { it.ruleId }.toSet() - ids).forEach {
+        (if (authoritative) previous.map { it.ruleId }.toSet() - ids else emptySet()).forEach {
             alarmManager.cancel(operation(context, it, 0L))
         }
-        evidence.retainRules(ids)
+        if (authoritative) evidence.retainRules(ids)
+        val now = System.currentTimeMillis()
+        evidence.collectMissed(now, now - android.os.SystemClock.elapsedRealtime())
+        val registeredModes = mutableSetOf<String>()
         val registered = rules.filter { it.scheduledAtMs > System.currentTimeMillis() }.filter { trigger ->
-            runCatching { schedule(context, alarmManager, trigger) }
-                .onFailure { Log.e(TAG, "Could not register schedule ${trigger.ruleId}", it) }
+            runCatching { registeredModes.add(schedule(context, alarmManager, trigger)) }
+                .onFailure {
+                    alarmManager.cancel(operation(context, trigger.ruleId, 0L))
+                    Log.e(TAG, "Could not register schedule ${trigger.ruleId}", it)
+                }
                 .isSuccess
         }
-        evidence.armed.clear()
-        evidence.armed.addAll(registered.map { AlarmIdentity(it.ruleId, it.scheduledAtMs) })
+        evidence.alarmMode = registeredModes.singleOrNull() ?: if (registeredModes.isEmpty()) evidence.alarmMode else "mixed"
+        evidence.replaceArmed(registered.map { AlarmIdentity(it.ruleId, it.scheduledAtMs) }, now)
         writeScheduleFile(evidenceFile(context), evidence.json().toString())
-        writeScheduleFile(stateFile, JSONArray(registered.map { rule ->
+        writeScheduleFile(stateFile, JSONArray(rules.map { rule ->
             JSONObject().put("id", rule.ruleId)
                 .put("nextTriggerEpochMs", rule.scheduledAtMs)
                 .put("autoStart", rule.autoStart)
         }).toString())
+        // Rust can be unavailable during boot; retain the outbox until it acknowledges a durable write.
+        val iterator = evidence.missed.iterator()
+        while (iterator.hasNext()) {
+            val (identity, rebooted) = iterator.next()
+            if (identity in evidence.delivered || runCatching {
+                    RuntimeBridge.recordMissedSchedule(identity.ruleId, identity.scheduledAtMs, rebooted) != 0
+                }.getOrDefault(false)) iterator.remove()
+        }
+        writeScheduleFile(evidenceFile(context), evidence.json().toString())
+    }
+
+    @Synchronized
+    fun diagnostics(context: Context): String {
+        val alarm = context.getSystemService(AlarmManager::class.java)
+        val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarm?.canScheduleExactAlarms() == true
+        val evidence = runCatching { ScheduleEvidence.read(evidenceFile(context)) }.getOrNull()
+        return "scheduleAlarmMode=${evidence?.alarmMode ?: "unknown"}\nexactAlarmAllowed=$exact\nmissedPending=${evidence?.missed?.size ?: -1}\n"
     }
 
     @Synchronized
@@ -93,13 +117,14 @@ object ScheduleAlarmManager {
 
     @Synchronized
     fun syncFromLocalJson(context: Context, json: String?) {
-        syncSchedules(context, allSchedulesFromJson(json))
+        syncSchedules(context, allSchedulesFromJson(json), authoritative = false)
     }
 
     @Synchronized
     fun cancel(context: Context, ruleId: String) {
         context.getSystemService(AlarmManager::class.java)?.cancel(operation(context, ruleId, 0L))
         val evidence = ScheduleEvidence.read(evidenceFile(context))
+        evidence.missed.keys.removeAll { it.ruleId == ruleId }
         evidence.armed.removeAll { it.ruleId == ruleId }
         evidence.delivered.removeAll { it.ruleId == ruleId }
         writeScheduleFile(evidenceFile(context), evidence.json().toString())
@@ -111,7 +136,7 @@ object ScheduleAlarmManager {
         }).toString())
     }
 
-    private fun schedule(context: Context, alarmManager: AlarmManager, trigger: ScheduledTrigger) {
+    private fun schedule(context: Context, alarmManager: AlarmManager, trigger: ScheduledTrigger): String {
         val operation = operation(context, trigger.ruleId, trigger.scheduledAtMs)
         val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             alarmManager.canScheduleExactAlarms()
@@ -122,7 +147,7 @@ object ScheduleAlarmManager {
                     trigger.scheduledAtMs,
                     operation,
                 )
-                return
+                return "exact"
             } catch (error: SecurityException) {
                 // Some OEM builds answer the capability check affirmatively and
                 // still reject the exact set; the alarm-clock form needs no grant.
@@ -133,6 +158,7 @@ object ScheduleAlarmManager {
             AlarmManager.AlarmClockInfo(trigger.scheduledAtMs, null),
             operation,
         )
+        return "alarmClock"
     }
 
     private fun operation(context: Context, ruleId: String, scheduledAtMs: Long): PendingIntent {
@@ -153,6 +179,6 @@ object ScheduleAlarmManager {
     }
 
     private fun File.readTextOrNull(): String? = runCatching {
-        if (isFile) readText() else null
+        android.util.AtomicFile(this).openRead().bufferedReader().use { it.readText() }
     }.getOrNull()
 }

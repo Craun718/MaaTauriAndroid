@@ -50,6 +50,7 @@ export function scheduleHealthIssueKey(issue: ScheduleHealthIssue): MessageKey {
 }
 
 const RESULT_KEYS: Record<ScheduleTriggerResult, MessageKey> = {
+  missed: "scheduleResultMissed",
   started: "scheduleResultStarted",
   duplicate: "scheduleResultDuplicate",
   rejectedActive: "scheduleResultRejectedActive",

@@ -839,7 +839,7 @@ object RuntimeBridge {
     @JvmStatic
     fun deviceInfo(): String? {
         val context = agentContext ?: return null
-        return runCatching { renderDeviceInfo(context) }.getOrNull()
+        return runCatching { renderDeviceInfo(context) + "\n" + ScheduleAlarmManager.diagnostics(context) }.getOrNull()
     }
 
     /**
@@ -1422,6 +1422,9 @@ object RuntimeBridge {
 
     @JvmStatic
     external fun scheduleRulesJson(): String?
+
+    @JvmStatic
+    external fun recordMissedSchedule(ruleId: String, scheduledAtMs: Long, rebooted: Boolean): Int
 
     @JvmStatic
     external fun isAppReady(): Boolean

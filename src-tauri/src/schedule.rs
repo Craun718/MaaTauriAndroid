@@ -89,6 +89,7 @@ pub enum ScheduleTriggerResult {
     FailedValidation,
     FailedServiceStart,
     ForegroundServiceDenied,
+    Missed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +127,7 @@ pub struct ScheduleStore {
     log_path: PathBuf,
     claims_path: PathBuf,
     claims: Mutex<Option<Vec<TriggerClaim>>>,
+    history_lock: Mutex<()>,
 }
 
 impl ScheduleStore {
@@ -135,6 +137,7 @@ impl ScheduleStore {
             log_path: data_dir.as_ref().join("schedule-triggers.json"),
             claims_path: data_dir.as_ref().join("schedule-claims.json"),
             claims: Mutex::new(None),
+            history_lock: Mutex::new(()),
         }
     }
 
@@ -222,7 +225,53 @@ impl ScheduleStore {
         })
     }
 
+    /// Missed evidence never claims execution and cannot suppress a late delivery.
+    pub fn record_missed(
+        &self,
+        rule_id: &str,
+        scheduled_epoch_ms: i64,
+        rebooted: bool,
+    ) -> Result<bool, ScheduleError> {
+        let _guard = self
+            .history_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !self.find(rule_id)?.is_some_and(|rule| rule.enabled) {
+            return Ok(false);
+        }
+        if self
+            .trigger_log()?
+            .iter()
+            .any(|entry| entry.rule_id == rule_id && entry.scheduled_epoch_ms == scheduled_epoch_ms)
+        {
+            return Ok(false);
+        }
+        self.write_trigger(ScheduleTriggerLogEntry {
+            rule_id: rule_id.into(),
+            scheduled_epoch_ms,
+            actual_epoch_ms: Local::now().timestamp_millis(),
+            result: ScheduleTriggerResult::Missed,
+            detail: Some(
+                if rebooted {
+                    "The alarm was not delivered; the device restarted after its scheduled time"
+                } else {
+                    "The alarm was not delivered within the 10-minute grace period"
+                }
+                .into(),
+            ),
+        })?;
+        Ok(true)
+    }
+
     pub fn record_trigger(&self, entry: ScheduleTriggerLogEntry) -> Result<(), ScheduleError> {
+        let _guard = self
+            .history_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.write_trigger(entry)
+    }
+
+    fn write_trigger(&self, entry: ScheduleTriggerLogEntry) -> Result<(), ScheduleError> {
         let mut document = self.read_trigger_log()?;
         document.entries.insert(0, entry);
         document.entries.truncate(TRIGGER_LOG_LIMIT);
@@ -249,6 +298,7 @@ impl ScheduleStore {
                 if let Ok(history) = self.trigger_log() {
                     persisted = history
                         .into_iter()
+                        .filter(|entry| entry.result != ScheduleTriggerResult::Missed)
                         .map(|entry| TriggerClaim {
                             rule_id: entry.rule_id,
                             scheduled_epoch_ms: entry.scheduled_epoch_ms,
@@ -282,7 +332,9 @@ impl ScheduleStore {
         scheduled_epoch_ms: i64,
     ) -> Result<bool, ScheduleError> {
         Ok(self.trigger_log()?.iter().any(|entry| {
-            entry.rule_id == rule_id && entry.scheduled_epoch_ms == scheduled_epoch_ms
+            entry.rule_id == rule_id
+                && entry.scheduled_epoch_ms == scheduled_epoch_ms
+                && entry.result != ScheduleTriggerResult::Missed
         }))
     }
 
@@ -647,6 +699,35 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("schedule-claims.json"), b"broken JSON").unwrap();
         assert!(ScheduleStore::new(&dir).claim_trigger("one", 1).is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn missed_history_does_not_claim_a_late_delivery() {
+        let dir = std::env::temp_dir().join(format!("mta-missed-{}", Uuid::new_v4()));
+        let store = ScheduleStore::new(&dir);
+        let rule = ScheduleRule {
+            id: "one".into(),
+            name: String::new(),
+            enabled: true,
+            auto_start: true,
+            run_configuration_id: "run".into(),
+            force_start: false,
+            trigger: ScheduleTrigger::FixedTime {
+                days: vec![1],
+                times: vec!["12:00".into()],
+            },
+        };
+        store.save(rule).unwrap();
+        assert!(store.record_missed("one", 123, false).unwrap());
+        assert!(!store.record_missed("one", 123, false).unwrap());
+        assert!(!store.is_duplicate("one", 123).unwrap());
+        assert!(store.claim_trigger("one", 123).unwrap());
+        store.set_enabled("one", false).unwrap();
+        assert!(!store.record_missed("one", 124, true).unwrap());
+        fs::remove_file(dir.join("schedule-triggers.json")).unwrap();
+        fs::create_dir(dir.join("schedule-triggers.json")).unwrap();
+        store.set_enabled("one", true).unwrap();
+        assert!(store.record_missed("one", 125, false).is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -6170,6 +6170,45 @@ pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_recordScheduleForegroun
 
 #[cfg(target_os = "android")]
 #[no_mangle]
+pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_recordMissedSchedule(
+    env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    rule_id: *mut std::ffi::c_void,
+    scheduled_at_ms: jni::sys::jlong,
+    rebooted: jni::sys::jboolean,
+) -> jni::sys::jint {
+    let Some(app) = android_app_handle() else {
+        return 0;
+    };
+    let Ok(mut env) = (unsafe { jni::JNIEnv::from_raw(env.cast()) }) else {
+        return 0;
+    };
+    let id = unsafe { jni::objects::JString::from_raw(rule_id.cast()) };
+    let Ok(id) = env.get_string(&id) else {
+        return 0;
+    };
+    let id = id.to_string_lossy().into_owned();
+    let state = app.state::<AppState>();
+    let result = state.schedule_store().and_then(|store| {
+        store
+            .record_missed(&id, scheduled_at_ms, rebooted != 0)
+            .map_err(AppError::from)
+    });
+    match result {
+        Ok(true) => {
+            notify_schedule_not_started(&app, &format!("Alarm for {id} at {scheduled_at_ms} was not delivered within 10 minutes; restarted after scheduled time: {}", rebooted != 0));
+            1
+        }
+        Ok(false) => 1,
+        Err(error) => {
+            log::warn!("could not persist missed alarm: {error}");
+            0
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
 pub extern "system" fn Java_top_natsuu_mta_RuntimeBridge_startScheduledRun(
     env: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,

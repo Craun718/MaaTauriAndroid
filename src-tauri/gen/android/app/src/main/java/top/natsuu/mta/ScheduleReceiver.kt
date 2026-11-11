@@ -18,6 +18,8 @@ class ScheduleReceiver : BroadcastReceiver() {
             )
             return
         }
+        runCatching { ScheduleAlarmManager.markDelivered(context, ruleId, scheduledTimeMs) }
+            .onFailure { Log.e(TAG, "Could not persist alarm delivery evidence", it) }
         ScheduleExecutionService.start(context, ruleId, scheduledTimeMs)
     }
 

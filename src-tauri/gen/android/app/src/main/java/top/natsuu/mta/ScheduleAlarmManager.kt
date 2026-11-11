@@ -30,7 +30,7 @@ data class ScheduledTrigger(
 object ScheduleAlarmManager {
     private const val TAG = "MTASchedule"
 
-    fun schedulesFromJson(json: String?, now: Instant = Instant.now()): List<ScheduledTrigger> {
+    fun allSchedulesFromJson(json: String?): List<ScheduledTrigger> {
         if (json.isNullOrBlank()) return emptyList()
         return runCatching {
             val statuses = JSONArray(json)
@@ -39,43 +39,76 @@ object ScheduleAlarmManager {
                 val status = statuses.optJSONObject(index) ?: continue
                 ScheduledTrigger.fromStatus(status)?.let(triggers::add)
             }
-            triggers.filter { it.scheduledAtMs > now.toEpochMilli() }
+            triggers
         }.getOrDefault(emptyList())
     }
 
+    fun schedulesFromJson(json: String?, now: Instant = Instant.now()): List<ScheduledTrigger> =
+        allSchedulesFromJson(json).filter { it.scheduledAtMs > now.toEpochMilli() }
+
+    private fun evidenceFile(context: Context) = File(context.filesDir, "schedule-evidence.json")
+
+    @Synchronized
+    fun markDelivered(context: Context, ruleId: String, scheduledAtMs: Long) {
+        val evidence = ScheduleEvidence.read(evidenceFile(context))
+        evidence.markDelivered(AlarmIdentity(ruleId, scheduledAtMs))
+        writeScheduleFile(evidenceFile(context), evidence.json().toString())
+    }
+
+    @Synchronized
     fun sync(context: Context) {
+        val json = RuntimeBridge.scheduleRulesJson() ?: return
+        syncSchedules(context, allSchedulesFromJson(json))
+    }
+
+    private fun syncSchedules(context: Context, rules: List<ScheduledTrigger>) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        val schedules = schedulesFromJson(RuntimeBridge.scheduleRulesJson())
         val stateFile = File(context.filesDir, "schedule-alarm-state.json")
-        val previousRules = schedulesFromJson(stateFile.readTextOrNull()).map { it.ruleId }
-        schedules.forEach { schedule(context, alarmManager, it) }
-        (previousRules - schedules.map { it.ruleId }.toSet()).forEach {
-            // PendingIntent equality ignores extras, so the placeholder time is fine here.
+        val previous = allSchedulesFromJson(stateFile.readTextOrNull())
+        val evidence = ScheduleEvidence.read(evidenceFile(context))
+        val ids = rules.map { it.ruleId }.toSet()
+        (previous.map { it.ruleId }.toSet() - ids).forEach {
             alarmManager.cancel(operation(context, it, 0L))
         }
-        runCatching {
-            stateFile.writeText(JSONArray(schedules.map { rule ->
-                JSONObject().put("id", rule.ruleId)
-                    .put("nextTriggerEpochMs", rule.scheduledAtMs)
-                    .put("autoStart", rule.autoStart)
-            }).toString())
+        evidence.retainRules(ids)
+        val registered = rules.filter { it.scheduledAtMs > System.currentTimeMillis() }.filter { trigger ->
+            runCatching { schedule(context, alarmManager, trigger) }
+                .onFailure { Log.e(TAG, "Could not register schedule ${trigger.ruleId}", it) }
+                .isSuccess
         }
+        evidence.armed.clear()
+        evidence.armed.addAll(registered.map { AlarmIdentity(it.ruleId, it.scheduledAtMs) })
+        writeScheduleFile(evidenceFile(context), evidence.json().toString())
+        writeScheduleFile(stateFile, JSONArray(registered.map { rule ->
+            JSONObject().put("id", rule.ruleId)
+                .put("nextTriggerEpochMs", rule.scheduledAtMs)
+                .put("autoStart", rule.autoStart)
+        }).toString())
     }
 
-    fun isAutoStartAllowed(context: Context, ruleId: String): Boolean {
-        val stateFile = File(context.filesDir, "schedule-alarm-state.json")
-        val triggers = schedulesFromJson(stateFile.readTextOrNull())
-        return triggers.find { it.ruleId == ruleId }?.autoStart ?: false
-    }
+    @Synchronized
+    fun isAutoStartAllowed(context: Context, ruleId: String): Boolean =
+        allSchedulesFromJson(File(context.filesDir, "schedule-alarm-state.json").readTextOrNull())
+            .find { it.ruleId == ruleId }?.autoStart ?: false
 
+    @Synchronized
     fun syncFromLocalJson(context: Context, json: String?) {
-        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        schedulesFromJson(json).forEach { schedule(context, alarmManager, it) }
+        syncSchedules(context, allSchedulesFromJson(json))
     }
 
+    @Synchronized
     fun cancel(context: Context, ruleId: String) {
-        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        alarmManager.cancel(operation(context, ruleId, 0L))
+        context.getSystemService(AlarmManager::class.java)?.cancel(operation(context, ruleId, 0L))
+        val evidence = ScheduleEvidence.read(evidenceFile(context))
+        evidence.armed.removeAll { it.ruleId == ruleId }
+        evidence.delivered.removeAll { it.ruleId == ruleId }
+        writeScheduleFile(evidenceFile(context), evidence.json().toString())
+        val stateFile = File(context.filesDir, "schedule-alarm-state.json")
+        val remaining = allSchedulesFromJson(stateFile.readTextOrNull()).filter { it.ruleId != ruleId }
+        writeScheduleFile(stateFile, JSONArray(remaining.map {
+            JSONObject().put("id", it.ruleId).put("nextTriggerEpochMs", it.scheduledAtMs)
+                .put("autoStart", it.autoStart)
+        }).toString())
     }
 
     private fun schedule(context: Context, alarmManager: AlarmManager, trigger: ScheduledTrigger) {

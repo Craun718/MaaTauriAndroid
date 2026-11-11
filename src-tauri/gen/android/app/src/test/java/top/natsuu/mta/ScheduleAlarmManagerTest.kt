@@ -8,6 +8,27 @@ import org.junit.Test
 
 class ScheduleAlarmManagerTest {
     @Test
+    fun rawSchedulesKeepPastAutoStartAndLegacyHasNoEvidence() {
+        val json = """[{"id":"old","nextTriggerEpochMs":1,"autoStart":true}]"""
+        assertTrue(ScheduleAlarmManager.allSchedulesFromJson(json).single().autoStart)
+        assertTrue(ScheduleAlarmManager.schedulesFromJson(json).isEmpty())
+        assertTrue(ScheduleEvidence().armed.isEmpty())
+    }
+
+    @Test
+    fun deliveriesAreIdempotentAndRemovedRulesArePruned() {
+        val evidence = ScheduleEvidence()
+        val identity = AlarmIdentity("daily", 123)
+        evidence.markDelivered(identity)
+        evidence.markDelivered(identity)
+        assertEquals(listOf(identity), evidence.delivered)
+        evidence.armed.add(identity)
+        evidence.retainRules(emptySet())
+        assertTrue(evidence.armed.isEmpty())
+        assertTrue(evidence.delivered.isEmpty())
+    }
+
+    @Test
     fun parsesFutureSchedulesAndIgnoresDisabledData() {
         val now = Instant.parse("2026-01-02T03:04:05Z")
         val json = JSONArray().put(

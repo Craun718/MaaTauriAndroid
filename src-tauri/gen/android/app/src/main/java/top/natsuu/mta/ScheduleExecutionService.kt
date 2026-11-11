@@ -27,12 +27,13 @@ class ScheduleExecutionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        val autoStartAllowed = ScheduleAlarmManager.isAutoStartAllowed(this, ruleId)
         if (RuntimeBridge.isAppReady()) {
             ScheduleAlarmManager.sync(this)
         }
         thread(name = "mta-schedule-execution") {
             if (!RuntimeBridge.isProjectReady()) {
-                if (!ScheduleAlarmManager.isAutoStartAllowed(this@ScheduleExecutionService, ruleId)) {
+                if (!autoStartAllowed) {
                     android.util.Log.i(
                         TAG,
                         "Skipping scheduled run: auto-start is disabled for rule $ruleId",

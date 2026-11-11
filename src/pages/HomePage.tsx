@@ -2,6 +2,7 @@ import { Loader2, Megaphone } from "lucide-react";
 import { useState } from "react";
 import { AnnouncementModal } from "../components/AnnouncementModal";
 import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
+import { ReleaseNotesPrompt } from "../components/ReleaseNotes";
 import { ScheduleEntryCard } from "../components/ScheduleEntryCard";
 import { VersionCard } from "../components/VersionCard";
 import {
@@ -159,6 +160,14 @@ function ProjectAnnouncements({
         {t("openAnnouncement")}
       </button>
 
+      <ReleaseNotesPrompt
+        project={project.name}
+        blocked={
+          announcementOpen ||
+          Boolean(welcomePending) ||
+          shouldDeferAnnouncement(configuration, guideActive, guideDismissed)
+        }
+      />
       <AnnouncementModal
         open={announcementOpen}
         content={welcome}

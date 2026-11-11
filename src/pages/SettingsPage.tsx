@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
 import { ProjectImage } from "../components/ProjectImage";
+import { ReleaseNotesEntry } from "../components/ReleaseNotes";
 import { RichDescription } from "../components/RichDescription";
 import { UpdateCard } from "../components/UpdateCard";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -116,6 +117,7 @@ export function SettingsPage() {
     <div className="space-y-card-gap">
       <h1 className="text-xl font-semibold">{t("settings")}</h1>
       <UpdateCard />
+      <ReleaseNotesEntry />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 id="language-select-label" className="font-medium">
           {t("language")}

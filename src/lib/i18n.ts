@@ -33,6 +33,10 @@ const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
   "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
 
 const en = {
+  releaseNotesTitle: "Update history",
+  releaseNotesEmpty: "No saved release notes yet.",
+  releaseNotesInstalled: "Installed version",
+  releaseNotesPending: "Available version",
   // Bottom navigation
   navHome: "Home",
   navTasks: "Tasks",
@@ -559,6 +563,10 @@ export function configurationRecoveryMessageKey(
 }
 
 const zh: Record<MessageKey, string> = {
+  releaseNotesTitle: "更新日志",
+  releaseNotesEmpty: "暂无已保存的更新说明。",
+  releaseNotesInstalled: "已安装版本",
+  releaseNotesPending: "待更新版本",
   navHome: "首页",
   navTasks: "任务",
   navRuns: "运行记录",

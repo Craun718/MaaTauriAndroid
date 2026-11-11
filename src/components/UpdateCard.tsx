@@ -13,6 +13,7 @@ import {
   updateProgressPercent,
 } from "../lib/updateMessages";
 import { isActiveUpdatePhase, useUpdateStore } from "../store/updateStore";
+import { ReleaseNoteContent } from "./ReleaseNotes";
 import { Select } from "./ui/Select";
 import { TextField } from "./ui/TextField";
 
@@ -217,9 +218,11 @@ function UpdateStatusView({ status }: { status?: UpdateStatus }) {
         <summary className="cursor-pointer text-ink-muted">
           {t("updateReleaseNote")}
         </summary>
-        <p className="mt-1 whitespace-pre-wrap text-ink-muted">
-          {status.releaseNote}
-        </p>
+        <ReleaseNoteContent
+          content={status.releaseNote}
+          showVersion={false}
+          version={status.latestVersion ?? undefined}
+        />
       </details>,
     );
   }

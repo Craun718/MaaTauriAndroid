@@ -399,3 +399,13 @@ export async function enableAdbInput(): Promise<boolean> {
 export async function openDeveloperSettings(): Promise<boolean> {
   return invoke<boolean>("open_developer_settings");
 }
+
+export async function getReleaseNotes(): Promise<
+  import("./releaseNotes").ReleaseNotes
+> {
+  return invoke("update_get_release_notes");
+}
+
+export async function markReleaseNotesRead(version: string): Promise<void> {
+  return invoke("update_mark_release_notes_read", { version });
+}

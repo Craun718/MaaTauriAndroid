@@ -33,7 +33,6 @@ const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
   "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
 
 const en = {
-  virtualDisplayReady: "Ready",
   settingHelpFor: "Explain {name}",
   demoTitle: "Try configuring tasks",
   demoReplay: "Practice task setup",
@@ -59,8 +58,6 @@ const en = {
   demoConfigurationStep: "4. Switch to the “Weekly” configuration.",
 
   settingHelp: "Show setting explanation",
-  previewExpand: "Expand preview",
-  previewCollapse: "Collapse preview",
   credentialValidate: "Validate CDK",
   credentialChecking: "Validating…",
   credentialUnknown: "Not verified in this session.",
@@ -600,7 +597,6 @@ export function configurationRecoveryMessageKey(
 }
 
 const zh: Record<MessageKey, string> = {
-  virtualDisplayReady: "就绪",
   settingHelpFor: "查看「{name}」说明",
   demoTitle: "试着配置任务",
   demoReplay: "练习任务设置",
@@ -624,8 +620,6 @@ const zh: Record<MessageKey, string> = {
   demoConfigurationStep: "4. 切换到「每周」配置。",
 
   settingHelp: "查看设置说明",
-  previewExpand: "展开预览",
-  previewCollapse: "收起预览",
   credentialValidate: "验证 CDK",
   credentialChecking: "验证中…",
   credentialUnknown: "本次启动尚未验证。",

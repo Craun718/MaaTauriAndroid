@@ -1,7 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
 import {
-  ChevronDown,
-  ChevronUp,
   LoaderCircle,
   Maximize2,
   MonitorPlay,
@@ -63,7 +61,6 @@ export function VirtualDisplayCard({
   const [refreshing, setRefreshing] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   const [confirmStopOpen, setConfirmStopOpen] = useState(false);
   const [backPending, setBackPending] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
@@ -324,7 +321,7 @@ export function VirtualDisplayCard({
       : undefined;
   const statusLabel = status
     ? active
-      ? t(running ? "virtualDisplayRunning" : "virtualDisplayReady")
+      ? t("virtualDisplayRunning")
       : t("virtualDisplayStopped")
     : t("checking");
 
@@ -336,23 +333,21 @@ export function VirtualDisplayCard({
           <h2 className="min-w-0 truncate font-medium">
             {t("virtualDisplay")}
           </h2>
-          {!collapsed && (
+          <span
+            className={`flex h-6 flex-none items-center gap-1.5 rounded-md border px-2 text-xs font-medium ${
+              active
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-line bg-surface-muted text-ink-muted"
+            }`}
+          >
             <span
-              className={`flex h-6 flex-none items-center gap-1.5 rounded-md border px-2 text-xs font-medium ${
-                active
-                  ? "border-accent/40 bg-accent/10 text-accent"
-                  : "border-line bg-surface-muted text-ink-muted"
+              className={`h-1.5 w-1.5 rounded-full ${
+                active ? "bg-accent" : "bg-ink-muted"
               }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  active ? "bg-accent" : "bg-ink-muted"
-                }`}
-              />
-              {statusLabel}
-            </span>
-          )}
-          {geometry && !collapsed && (
+            />
+            {statusLabel}
+          </span>
+          {geometry && (
             <span className="flex-none text-xs text-ink-muted">{geometry}</span>
           )}
         </div>
@@ -372,21 +367,6 @@ export function VirtualDisplayCard({
           {active && (
             <button
               type="button"
-              onClick={() => setCollapsed((value) => !value)}
-              aria-expanded={!collapsed}
-              aria-label={t(collapsed ? "previewExpand" : "previewCollapse")}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted"
-            >
-              {collapsed ? (
-                <ChevronDown size="0.875rem" />
-              ) : (
-                <ChevronUp size="0.875rem" />
-              )}
-            </button>
-          )}
-          {active && (
-            <button
-              type="button"
               onClick={() => setFullscreen(true)}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-ink-muted"
               aria-label={t("virtualDisplayFullscreen")}
@@ -403,48 +383,33 @@ export function VirtualDisplayCard({
         </p>
       )}
 
-      <div
-        className={
-          collapsed
-            ? "flex items-center gap-3 rounded-md bg-surface-muted p-2"
-            : undefined
-        }
-      >
-        {active && status && !fullscreen ? (
-          <div
-            ref={previewRef}
-            className={`relative shrink-0 rounded-md border border-line ${collapsed ? "" : "mx-auto"}`}
-            style={{
-              aspectRatio:
-                status.width > 0 && status.height > 0
-                  ? `${status.width} / ${status.height}`
-                  : "2 / 1",
-              width:
-                status.width > 0 && status.height > 0
-                  ? `min(100%, calc(${collapsed ? "3rem" : CARD_PREVIEW_MAX_HEIGHT} * ${status.width} / ${status.height}))`
-                  : undefined,
-            }}
-          >
-            <VirtualDisplayPreview
-              status={status}
-              showTouchMarkers={showTouchMarkers}
-              interactive={false}
-              onReadyChange={setPreviewReady}
-              className="h-full w-full"
-            />
-            {!collapsed && fpsBadge(false)}
-          </div>
-        ) : (
-          <div className="aspect-[2/1] w-full rounded-md border border-line bg-surface-muted" />
-        )}
-
-        {collapsed && active && (
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium">{statusLabel}</p>
-            <p className="text-xs text-ink-muted">{geometry}</p>
-          </div>
-        )}
-      </div>
+      {active && status && !fullscreen ? (
+        <div
+          ref={previewRef}
+          className="relative mx-auto rounded-md border border-line"
+          style={{
+            aspectRatio:
+              status.width > 0 && status.height > 0
+                ? `${status.width} / ${status.height}`
+                : "2 / 1",
+            width:
+              status.width > 0 && status.height > 0
+                ? `min(100%, calc(${CARD_PREVIEW_MAX_HEIGHT} * ${status.width} / ${status.height}))`
+                : undefined,
+          }}
+        >
+          <VirtualDisplayPreview
+            status={status}
+            showTouchMarkers={showTouchMarkers}
+            interactive={false}
+            onReadyChange={setPreviewReady}
+            className="h-full w-full"
+          />
+          {fpsBadge(false)}
+        </div>
+      ) : (
+        <div className="aspect-[2/1] w-full rounded-md border border-line bg-surface-muted" />
+      )}
 
       {active && (
         <div className="flex items-center justify-between gap-3 text-sm">

@@ -37,7 +37,7 @@ describe("automatic PiP eligibility", () => {
 });
 
 describe("PiP animation source rectangle", () => {
-  it("uses compact portrait preview bounds without widening them", () => {
+  it("uses portrait preview bounds without widening them", () => {
     expect(
       pipSourceRect(
         { left: 20, top: 40, right: 47, bottom: 88 },

@@ -149,6 +149,16 @@ pub fn parse_configuration(
     Ok(backup)
 }
 
+/// Trust the live project schema rather than a backup's self-reported exclusion flag.
+pub fn parse_import_configuration(
+    bytes: &[u8],
+    project: &Project,
+) -> Result<ConfigurationBackup, ConfigurationBackupError> {
+    let mut backup = parse_configuration(bytes, &project.name)?;
+    backup.configuration = remove_password_values(project, backup.configuration);
+    Ok(backup)
+}
+
 pub const CONFIGURATION_SCHEMA_VERSION: u32 = 1;
 
 pub fn validate_import(
@@ -762,5 +772,44 @@ mod tests {
             times: vec!["12:00".to_string()],
         };
         assert!(validate_import(&project, &configuration(), &[invalid_schedule]).is_err());
+    }
+    #[test]
+    fn forged_passwords_are_removed_from_every_scope_and_stay_empty_after_reload() {
+        let project = project();
+        let mut source = configuration();
+        let credentials = source.run_configurations[0].tasks[0].option_values.clone();
+        source.global_option_values.extend(credentials.clone());
+        source
+            .controller_option_values
+            .insert("Android".into(), credentials.clone());
+        source
+            .resource_option_values
+            .insert("base".into(), credentials);
+        let mut forged =
+            serde_json::to_value(export_configuration(&project, &source, &[])).unwrap();
+        // Pretend to exclude passwords while carrying ciphertext or plaintext in all four scopes.
+        forged["configuration"] = serde_json::to_value(&source).unwrap();
+        let backup =
+            parse_import_configuration(&serde_json::to_vec(&forged).unwrap(), &project).unwrap();
+        let encoded = serde_json::to_string(&backup.configuration).unwrap();
+        assert!(!encoded.contains("secret"));
+        assert!(!encoded.contains("\"password\""));
+        assert!(encoded.contains("visible"));
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("configuration.json");
+        let store = crate::persistence::UserConfigurationStore::new(path.clone());
+        let mut old = serde_json::to_value(&source).unwrap();
+        old["secretManifest"] =
+            serde_json::json!({"[\"task\",\"run\",\"login\",\"credentials\",\"password\"]":null});
+        std::fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+        store.save(&project, &backup.configuration).unwrap();
+        assert_eq!(
+            store.load(&project).unwrap().configuration,
+            backup.configuration
+        );
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(saved["secretManifest"], serde_json::json!({}));
+        assert!(!saved.to_string().contains("\"secret\""));
     }
 }

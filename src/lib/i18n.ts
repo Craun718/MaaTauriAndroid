@@ -393,7 +393,8 @@ const en = {
   importingConfiguration: "Importing",
   configurationImportConfirm:
     "Import this backup? All current settings, run configurations and schedules will be replaced. Password inputs will be empty and must be entered again.",
-  configurationImported: "Backup imported",
+  configurationImported:
+    "Backup imported. Enter password fields again before running tasks.",
   configurationImportTooLarge: "The backup exceeds the 4 MiB size limit.",
   configurationImportReadFailed:
     "Could not read the selected backup. Please select it again.",
@@ -823,7 +824,7 @@ const zh: Record<MessageKey, string> = {
   importingConfiguration: "导入中",
   configurationImportConfirm:
     "要导入这份备份吗？当前设置、运行配置和定时任务都会被整体替换。密码输入将为空，需要重新填写。",
-  configurationImported: "备份已导入",
+  configurationImported: "备份已导入，请重新填写密码后再运行任务。",
   configurationImportTooLarge: "备份文件超过 4 MiB 大小限制。",
   configurationImportReadFailed: "无法读取所选备份，请重新选择文件。",
   customBackground: "自定义背景",

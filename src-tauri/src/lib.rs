@@ -552,6 +552,8 @@ impl AppState {
     ) -> Result<(), AppError> {
         let _persistence = self.persistence.lock().expect("persistence lock poisoned");
         let original = self.configuration()?;
+        let configuration =
+            configuration_backup::remove_password_values(&self.project()?, configuration);
         self.persist_configuration_locked(&configuration)?;
 
         let replacement = self
@@ -3852,11 +3854,14 @@ async fn import_configuration(
                     return Err(configuration_backup::ConfigurationBackupError::TooLarge.into());
                 }
                 let bytes = std::fs::read(&selected)?;
-                let mut backup = configuration_backup::parse_configuration(&bytes, &project.name)?;
+                let mut backup =
+                    configuration_backup::parse_import_configuration(&bytes, &project)?;
                 // The image body never travels in a backup; adopting another
                 // device's generated file name would create a dead reference.
                 backup.configuration.background_image = local_background_image;
                 normalize_configuration(&project, &mut backup.configuration);
+                backup.configuration =
+                    configuration_backup::remove_password_values(&project, backup.configuration);
                 configuration_backup::validate_import(
                     &project,
                     &backup.configuration,
@@ -4830,7 +4835,36 @@ mod tests {
         let root = std::env::temp_dir().join(format!("mta-config-backup-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let state = AppState::default();
-        let project = project();
+        let mut project = project();
+        use crate::domain::types::{
+            InputFieldDefinition, InputType, OptionApplicability, OptionDefinition, PipelineType,
+        };
+        project.options.insert(
+            "local-secret".into(),
+            OptionDefinition::Input {
+                name: "local-secret".into(),
+                label: "Local secret".into(),
+                description: None,
+                inputs: vec![InputFieldDefinition {
+                    name: "password".into(),
+                    label: "Password".into(),
+                    description: None,
+                    placeholder: None,
+                    default: None,
+                    pipeline_type: PipelineType::String,
+                    verify: None,
+                    pattern_message: None,
+                    password: true,
+                    input_type: InputType::Text,
+                }],
+                pipeline_override: serde_json::Value::Null,
+                icon: None,
+                applicability: OptionApplicability {
+                    controllers: Vec::new(),
+                    resources: Vec::new(),
+                },
+            },
+        );
         state.set_project(None, project.clone());
         let path = root.join("configuration.json");
         *state.store.write().expect("store lock poisoned") =
@@ -4854,11 +4888,20 @@ mod tests {
             .unwrap()
             .save(original_rule.clone())
             .unwrap();
-        let original = UserConfiguration {
+        let mut original = UserConfiguration {
             initialized: true,
             close_target_app_after_run: false,
             ..UserConfiguration::default()
         };
+        original.global_option_values.insert(
+            "local-secret".into(),
+            crate::domain::types::OptionValue::Inputs {
+                values: std::collections::BTreeMap::from([(
+                    "password".into(),
+                    "test-only-original".into(),
+                )]),
+            },
+        );
         state.set_configuration(original.clone()).unwrap();
 
         let imported = UserConfiguration {

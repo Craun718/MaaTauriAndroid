@@ -415,4 +415,33 @@ mod tests {
         assert_eq!(values["token"], "secret");
         assert_eq!(values["plain"], "value");
     }
+    #[test]
+    fn imported_password_omissions_do_not_call_the_old_secret_bridge() {
+        let project = project();
+        let fields = password_fields(&project);
+        let mut old_manifest = SecretManifest::default();
+        let mut old = configuration();
+        transform_configuration(&mut old, &mut |key, value| {
+            if is_password_key(key, &fields) {
+                old_manifest.insert(key.into());
+                Ok(format!("{ENVELOPE_PREFIX}{value}"))
+            } else {
+                Ok(value.into())
+            }
+        })
+        .unwrap();
+        let mut imported = crate::configuration_backup::remove_password_values(&project, old);
+        let mut bridge_calls = 0;
+        transform_configuration(&mut imported, &mut |key, value| {
+            if old_manifest.contains(key) {
+                bridge_calls += 1;
+            }
+            Ok(value.into())
+        })
+        .unwrap();
+        assert_eq!(bridge_calls, 0);
+        assert!(!serde_json::to_string(&imported)
+            .unwrap()
+            .contains(ENVELOPE_PREFIX));
+    }
 }

@@ -13,6 +13,7 @@ import {
   updateProgressPercent,
 } from "../lib/updateMessages";
 import { isActiveUpdatePhase, useUpdateStore } from "../store/updateStore";
+import { CredentialStatus } from "./CredentialStatus";
 import { ReleaseNoteContent } from "./ReleaseNotes";
 import { Select } from "./ui/Select";
 import { TextField } from "./ui/TextField";
@@ -118,6 +119,7 @@ export function UpdateCard() {
             {savedPrefs.source !== "github" && (
               <TextField
                 className="min-w-0 flex-1"
+                type="password"
                 label={t("updateCdk")}
                 placeholder={t("updateCdkPlaceholder")}
                 value={savedPrefs.cdk}
@@ -129,8 +131,15 @@ export function UpdateCard() {
             <button
               type="button"
               disabled={!prefsDirty || prefsBusy}
-              onClick={() => {
-                if (savedPrefs) void setPrefs(savedPrefs);
+              onClick={async () => {
+                await setPrefs(savedPrefs);
+                const saved = useUpdateStore.getState().prefs;
+                if (
+                  saved?.cdk === savedPrefs.cdk.trim() &&
+                  saved.source === savedPrefs.source &&
+                  saved.channel === savedPrefs.channel
+                )
+                  setDraft(undefined);
               }}
               className="ml-auto h-11 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
@@ -138,7 +147,13 @@ export function UpdateCard() {
             </button>
           </div>
           {savedPrefs.source !== "github" && (
-            <p className="text-[0.8125rem]">{t("updateCdkDescription")}</p>
+            <div className="space-y-2">
+              <p className="text-[0.8125rem]">{t("updateCdkDescription")}</p>
+              <CredentialStatus
+                savedCode={prefs.cdk}
+                dirty={prefsDirty || prefsBusy}
+              />
+            </div>
           )}
         </>
       )}

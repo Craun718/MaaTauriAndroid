@@ -199,13 +199,13 @@ describe("updateStore", () => {
     expect(useUpdateStore.getState().prefsBusy).toBe(false);
   });
 
-  it("falls back to the requested prefs when saving fails", async () => {
+  it("keeps the last saved prefs when saving fails", async () => {
     useUpdateStore.setState({ prefs });
     mocked.setUpdatePrefs.mockRejectedValue(new Error("disk full"));
 
     await useUpdateStore.getState().setPrefs({ ...prefs, channel: "beta" });
 
-    expect(useUpdateStore.getState().prefs?.channel).toBe("beta");
+    expect(useUpdateStore.getState().prefs?.channel).toBe("stable");
     expect(useUpdateStore.getState().prefsBusy).toBe(false);
   });
 });

@@ -409,3 +409,14 @@ export async function getReleaseNotes(): Promise<
 export async function markReleaseNotesRead(version: string): Promise<void> {
   return invoke("update_mark_release_notes_read", { version });
 }
+
+export async function getCredentialStatus(): Promise<
+  import("./credentialStatus").CredentialStatus
+> {
+  return invoke("update_get_credential_status");
+}
+export async function validateCredential(): Promise<
+  import("./credentialStatus").CredentialStatus
+> {
+  return invoke("update_validate_credential");
+}

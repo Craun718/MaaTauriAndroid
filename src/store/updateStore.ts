@@ -54,7 +54,7 @@ function optimisticPhase(
   });
 }
 
-export const useUpdateStore = create<UpdateStore>((set) => ({
+export const useUpdateStore = create<UpdateStore>((set, get) => ({
   status: undefined,
   prefs: undefined,
   prefsBusy: false,
@@ -87,10 +87,11 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
     if (status) setStatus(status);
   },
   async setPrefs(next) {
-    set({ prefs: next, prefsBusy: true });
+    const previous = get().prefs;
+    set({ prefsBusy: true });
     // The backend echoes the saved prefs back, and keeps the old values when a
     // task is in flight; either way the response is authoritative.
     const saved = await invokeSetUpdatePrefs(next).catch(() => undefined);
-    set({ prefs: saved ?? next, prefsBusy: false });
+    set({ prefs: saved ?? previous, prefsBusy: false });
   },
 }));

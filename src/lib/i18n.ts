@@ -33,6 +33,14 @@ const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
   "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
 
 const en = {
+  credentialValidate: "Validate CDK",
+  credentialChecking: "Validating…",
+  credentialUnknown: "Not verified in this session.",
+  credentialSaveFirst: "Save your changes before validating.",
+  credentialExpiresIn: "Valid · expires in {days} days",
+  credentialKnownExpiry:
+    "Last known expiry: in {days} days · not verified this session",
+  credentialValidUnknownExpiry: "Valid · expiry time unavailable",
   releaseNotesTitle: "Update history",
   releaseNotesEmpty: "No saved release notes yet.",
   releaseNotesInstalled: "Installed version",
@@ -563,6 +571,13 @@ export function configurationRecoveryMessageKey(
 }
 
 const zh: Record<MessageKey, string> = {
+  credentialValidate: "验证 CDK",
+  credentialChecking: "验证中…",
+  credentialUnknown: "本次启动尚未验证。",
+  credentialSaveFirst: "请先保存修改，再验证。",
+  credentialExpiresIn: "有效 · 还有 {days} 天到期",
+  credentialKnownExpiry: "上次记录还有 {days} 天到期 · 本次尚未验证",
+  credentialValidUnknownExpiry: "有效 · 未获取到到期时间",
   releaseNotesTitle: "更新日志",
   releaseNotesEmpty: "暂无已保存的更新说明。",
   releaseNotesInstalled: "已安装版本",

@@ -1824,6 +1824,10 @@ struct VirtualDisplayPipRect {
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct VirtualDisplayPipRequest {
+    #[serde(default)]
+    display_id: Option<i32>,
+    #[serde(default)]
+    viewing: bool,
     eligible: bool,
     width: i32,
     height: i32,
@@ -5342,6 +5346,8 @@ mod tests {
     #[test]
     fn pip_requests_validate_geometry_and_serialize_the_jni_contract() {
         let mut request = VirtualDisplayPipRequest {
+            display_id: None,
+            viewing: false,
             eligible: true,
             width: 1280,
             height: 720,
@@ -5379,6 +5385,8 @@ mod tests {
     #[test]
     fn pip_updates_are_safe_on_desktop_and_reject_invalid_input() {
         assert!(update_virtual_display_pip(VirtualDisplayPipRequest {
+            display_id: None,
+            viewing: false,
             eligible: false,
             width: 0,
             height: 0,
@@ -5386,6 +5394,8 @@ mod tests {
         })
         .is_ok());
         assert!(update_virtual_display_pip(VirtualDisplayPipRequest {
+            display_id: None,
+            viewing: false,
             eligible: true,
             width: -1,
             height: 720,

@@ -79,6 +79,15 @@ export function VirtualDisplayCard({
       const bounds = previewRef.current?.getBoundingClientRect();
       const request = {
         eligible,
+        displayId: status?.displayId,
+        viewing:
+          !disposed &&
+          status?.active === true &&
+          document.visibilityState === "visible" &&
+          (fullscreen ||
+            Boolean(
+              bounds && bounds.bottom > 0 && bounds.top < window.innerHeight,
+            )),
         width: status?.width ?? 0,
         height: status?.height ?? 0,
         sourceRect: bounds
@@ -112,11 +121,13 @@ export function VirtualDisplayCard({
     update();
     const observer = new ResizeObserver(update);
     if (previewRef.current) observer.observe(previewRef.current);
+    document.addEventListener("visibilitychange", update);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
       disposed = true;
       observer.disconnect();
+      document.removeEventListener("visibilitychange", update);
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
       send(false);

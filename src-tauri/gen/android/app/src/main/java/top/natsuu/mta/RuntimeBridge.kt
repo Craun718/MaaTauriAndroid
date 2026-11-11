@@ -384,6 +384,26 @@ object RuntimeBridge {
     fun isVirtualDisplayPortrait(): Boolean =
         BuildConfig.VIRTUAL_DISPLAY_ORIENTATION == "portrait"
 
+    // These visibility flags and all wake-lock mutations are owned by the main handler.
+    private var displayActivityResumed = false
+    private var displayPreviewVisible = false
+    private var displayPipVisible = false
+
+    fun setDisplayActivityResumed(resumed: Boolean) {
+        mainHandler.post { displayActivityResumed = resumed; refreshDisplayWakeLock() }
+    }
+
+    fun setDisplayPipVisible(visible: Boolean) {
+        mainHandler.post { displayPipVisible = visible; refreshDisplayWakeLock() }
+    }
+
+    private fun refreshDisplayWakeLock() {
+        if (shouldKeepDisplayAwake(pipDisplay != null, pipRunActive, displayActivityResumed,
+                displayPreviewVisible, displayPipVisible)) {
+            if (wakeLock?.isHeld != true) acquireVirtualDisplayWakeLock()
+        } else releaseVirtualDisplayWakeLock()
+    }
+
     @Volatile private var pipRunActive = false
     @Volatile private var pipDisplay: IntArray? = null
 
@@ -392,8 +412,14 @@ object RuntimeBridge {
         val activity = hostActivity?.get() as? MainActivity ?: return false
         // Reject malformed calls before accepting their asynchronous UI work.
         runCatching { JSONObject(json).getBoolean("eligible") }.getOrElse { return false }
+        val observedDisplay = pipDisplay
+        val request = JSONObject(json)
         mainHandler.post {
             if (hostActivity?.get() === activity) {
+                if (pipDisplay === observedDisplay && request.optInt("displayId", -1) == observedDisplay?.get(0)) {
+                    displayPreviewVisible = request.optBoolean("viewing", false)
+                    refreshDisplayWakeLock()
+                }
                 runCatching { activity.pipController.update(json) }
                     .onFailure { Log.w(LOG_TAG, "Could not update PiP request", it) }
             }
@@ -408,6 +434,7 @@ object RuntimeBridge {
     fun setPipRunActive(active: Boolean): Boolean {
         pipRunActive = active
         mainHandler.post {
+            refreshDisplayWakeLock()
             (hostActivity?.get() as? MainActivity)?.pipController?.setRunActive(active)
         }
         return true
@@ -420,6 +447,9 @@ object RuntimeBridge {
         PreviewRouter.stop()
         mainHandler.post {
             if (pipDisplay == null) {
+                displayPreviewVisible = false
+                displayPipVisible = false
+                refreshDisplayWakeLock()
                 (hostActivity?.get() as? MainActivity)?.pipController?.displayStopped()
             }
         }
@@ -1180,7 +1210,6 @@ object RuntimeBridge {
     fun startVirtualDisplay(width: Int, height: Int, dpi: Int): Boolean {
         // Native display recreation invalidates its EGL output as well. Detach before
         // releasing the encoder so a replacement never inherits a released Surface.
-        releaseVirtualDisplayWakeLock()
         invalidatePipDisplay()
         VirtualDisplayStreamHost.stop()
         val displayId = runCatching {
@@ -1195,12 +1224,13 @@ object RuntimeBridge {
         ControlHost.configure(displayId, width, height)
         configureScreen(width, height)
         setActiveDisplay(displayId)
-        acquireVirtualDisplayWakeLock()
         PreviewRouter.start(VirtualDisplayStreamHost.start(width, height))
         val display = intArrayOf(displayId, width, height)
         pipDisplay = display
         mainHandler.post {
             if (pipDisplay === display) {
+                displayPreviewVisible = false
+                refreshDisplayWakeLock()
                 (hostActivity?.get() as? MainActivity)?.pipController
                     ?.displayStarted(displayId, width, height)
             }
@@ -1210,7 +1240,6 @@ object RuntimeBridge {
 
     @JvmStatic
     fun stopVirtualDisplay(): Boolean {
-        releaseVirtualDisplayWakeLock()
         invalidatePipDisplay()
         VirtualDisplayStreamHost.stop()
         val stopped = runCatching {
@@ -1269,8 +1298,8 @@ object RuntimeBridge {
     }
 
     /**
-     * SurfaceFlinger stops feeding virtual displays once the physical screen is
-     * suspended, so the stream must keep the display awake while it is active.
+     * SurfaceFlinger may suspend idle streams. Acquire only for a run or a visible
+     * preview; retaining an idle virtual display must not prevent natural sleep.
      */
     private fun acquireVirtualDisplayWakeLock() {
         val context = agentContext ?: return

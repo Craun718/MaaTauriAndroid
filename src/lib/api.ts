@@ -367,6 +367,8 @@ export async function getDisplayHazards() {
 }
 
 export interface VirtualDisplayPipRequest {
+  displayId?: number;
+  viewing?: boolean;
   eligible: boolean;
   width: number;
   height: number;

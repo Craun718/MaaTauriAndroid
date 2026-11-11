@@ -32,6 +32,7 @@ class MainActivity : TauriActivity() {
   override fun onPictureInPictureModeChanged(active: Boolean, newConfig: Configuration) {
     super.onPictureInPictureModeChanged(active, newConfig)
     pipController.onModeChanged(active)
+    RuntimeBridge.setDisplayPipVisible(active)
   }
 
   private val configurationFilePicker = registerForActivityResult(
@@ -76,7 +77,13 @@ class MainActivity : TauriActivity() {
 
   override fun onResume() {
     super.onResume()
+    RuntimeBridge.setDisplayActivityResumed(true)
     AppPreparationManager.connectControl()
+  }
+
+  override fun onPause() {
+    RuntimeBridge.setDisplayActivityResumed(false)
+    super.onPause()
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {

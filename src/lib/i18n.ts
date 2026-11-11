@@ -34,6 +34,8 @@ const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
 
 const en = {
   virtualDisplayReady: "Ready",
+  settingHelpFor: "Explain {name}",
+  settingHelp: "Show setting explanation",
   previewExpand: "Expand preview",
   previewCollapse: "Collapse preview",
   credentialValidate: "Validate CDK",
@@ -575,6 +577,8 @@ export function configurationRecoveryMessageKey(
 
 const zh: Record<MessageKey, string> = {
   virtualDisplayReady: "就绪",
+  settingHelpFor: "查看「{name}」说明",
+  settingHelp: "查看设置说明",
   previewExpand: "展开预览",
   previewCollapse: "收起预览",
   credentialValidate: "验证 CDK",

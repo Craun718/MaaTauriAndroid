@@ -1,8 +1,10 @@
 import {
   ChevronDown,
   Download,
+  Globe,
   ImagePlus,
   RefreshCw,
+  Settings2,
   SlidersHorizontal,
   Trash2,
   Upload,
@@ -14,8 +16,8 @@ import { ProjectImage } from "../components/ProjectImage";
 import { ReleaseNotesEntry } from "../components/ReleaseNotes";
 import { RichDescription } from "../components/RichDescription";
 import { UpdateCard } from "../components/UpdateCard";
-import { Checkbox } from "../components/ui/Checkbox";
 import { Select } from "../components/ui/Select";
+import { SettingRow, SettingToggle } from "../components/ui/SettingRow";
 import { Slider } from "../components/ui/Slider";
 import { TextField } from "../components/ui/TextField";
 import { VersionCard } from "../components/VersionCard";
@@ -119,51 +121,57 @@ export function SettingsPage() {
       <UpdateCard />
       <ReleaseNotesEntry />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
-        <h2 id="language-select-label" className="font-medium">
+        <h2
+          id="language-select-label"
+          className="flex items-center gap-2 font-medium"
+        >
+          <Globe size="1rem" />
           {t("language")}
         </h2>
-        <div className="flex gap-2">
-          <Select
-            className="min-w-0 flex-1"
-            labelledBy="language-select-label"
-            items={[
-              { value: "system", label: t("languageSystem") },
-              { value: "zh", label: t("languageChinese") },
-              { value: "en", label: t("languageEnglish") },
-            ]}
-            value={
-              languageDraft ?? snapshot?.configuration.uiLanguage ?? "system"
-            }
-            onValueChange={(value) => {
-              if (isUiLanguage(value)) setLanguageDraft(value);
-            }}
-          />
-          <button
-            type="button"
-            disabled={
-              saving ||
-              restartPending ||
-              !snapshot ||
-              languageDraft === undefined ||
-              languageDraft === snapshot.configuration.uiLanguage
-            }
-            onClick={async () => {
-              if (!snapshot || languageDraft === undefined) return;
-              const next = structuredClone(snapshot.configuration);
-              next.uiLanguage = languageDraft;
-              await saveConfiguration(next);
-              await setProjectLanguage(
-                projectLanguage(
-                  resolveLanguage(languageDraft, systemLanguageTags()),
-                ),
-              );
-              setLanguageDraft(undefined);
-            }}
-            className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {t("apply")}
-          </button>
-        </div>
+        <SettingRow>
+          <div className="flex flex-wrap gap-2">
+            <Select
+              className="min-w-0 flex-1"
+              labelledBy="language-select-label"
+              items={[
+                { value: "system", label: t("languageSystem") },
+                { value: "zh", label: t("languageChinese") },
+                { value: "en", label: t("languageEnglish") },
+              ]}
+              value={
+                languageDraft ?? snapshot?.configuration.uiLanguage ?? "system"
+              }
+              onValueChange={(value) => {
+                if (isUiLanguage(value)) setLanguageDraft(value);
+              }}
+            />
+            <button
+              type="button"
+              disabled={
+                saving ||
+                restartPending ||
+                !snapshot ||
+                languageDraft === undefined ||
+                languageDraft === snapshot.configuration.uiLanguage
+              }
+              onClick={async () => {
+                if (!snapshot || languageDraft === undefined) return;
+                const next = structuredClone(snapshot.configuration);
+                next.uiLanguage = languageDraft;
+                await saveConfiguration(next);
+                await setProjectLanguage(
+                  projectLanguage(
+                    resolveLanguage(languageDraft, systemLanguageTags()),
+                  ),
+                );
+                setLanguageDraft(undefined);
+              }}
+              className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {t("apply")}
+            </button>
+          </div>
+        </SettingRow>
       </section>
       {project && snapshot && (
         <>
@@ -292,8 +300,9 @@ export function SettingsPage() {
       <CustomBackgroundCard restartPending={restartPending} />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("runBehavior")}</h2>
-        <Checkbox
-          className="min-h-10 gap-2"
+        <SettingToggle
+          title={t("forceStopTargetApp")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.forceStopTargetApp ?? false}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -302,11 +311,11 @@ export function SettingsPage() {
             nextConfiguration.forceStopTargetApp = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("forceStopTargetApp")}</span>
-        </Checkbox>
-        <Checkbox
-          className="min-h-10 gap-2"
+        />
+        <SettingToggle
+          title={t("foregroundMode")}
+          description={t("foregroundModeDescription")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.foregroundMode ?? false}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -315,14 +324,11 @@ export function SettingsPage() {
             nextConfiguration.foregroundMode = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("foregroundMode")}</span>
-        </Checkbox>
-        <p className="text-sm text-ink-muted">
-          {t("foregroundModeDescription")}
-        </p>
-        <Checkbox
-          className="min-h-10 gap-2"
+        />
+        <SettingToggle
+          title={t("foregroundOverlay")}
+          description={t("foregroundOverlayDescription")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.foregroundOverlay ?? false}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -331,12 +337,7 @@ export function SettingsPage() {
             nextConfiguration.foregroundOverlay = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("foregroundOverlay")}</span>
-        </Checkbox>
-        <p className="text-sm text-ink-muted">
-          {t("foregroundOverlayDescription")}
-        </p>
+        />
         {!snapshot?.configuration.foregroundMode && (
           <p className="text-xs text-ink-muted">
             {t("foregroundOverlayForegroundOnly")}
@@ -363,8 +364,10 @@ export function SettingsPage() {
             )}
           </div>
         )}
-        <Checkbox
-          className="min-h-10 gap-2"
+        <SettingToggle
+          title={t("closeTargetAppAfterRun")}
+          description={t("closeTargetAppAfterRunDescription")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.closeTargetAppAfterRun ?? true}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -373,14 +376,11 @@ export function SettingsPage() {
             nextConfiguration.closeTargetAppAfterRun = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("closeTargetAppAfterRun")}</span>
-        </Checkbox>
-        <p className="text-sm text-ink-muted">
-          {t("closeTargetAppAfterRunDescription")}
-        </p>
-        <Checkbox
-          className="min-h-10 gap-2"
+        />
+        <SettingToggle
+          title={t("exitAppAfterRun")}
+          description={t("exitAppAfterRunDescription")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.exitAppAfterRun ?? false}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -389,12 +389,7 @@ export function SettingsPage() {
             nextConfiguration.exitAppAfterRun = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("exitAppAfterRun")}</span>
-        </Checkbox>
-        <p className="text-sm text-ink-muted">
-          {t("exitAppAfterRunDescription")}
-        </p>
+        />
         <RunDurationField
           seconds={snapshot?.configuration.maxRunDurationSeconds}
           disabled={restartPending || !snapshot}
@@ -405,8 +400,9 @@ export function SettingsPage() {
             void saveConfiguration(nextConfiguration);
           }}
         />
-        <Checkbox
-          className="min-h-10 gap-2"
+        <SettingToggle
+          title={t("showTouchPositions")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.showVirtualDisplayTouches ?? true}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -415,11 +411,11 @@ export function SettingsPage() {
             nextConfiguration.showVirtualDisplayTouches = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("showTouchPositions")}</span>
-        </Checkbox>
-        <Checkbox
-          className="min-h-10 gap-2"
+        />
+        <SettingToggle
+          title={t("pipOnHome")}
+          description={t("pipOnHomeDescription")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.pipOnHome ?? true}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -428,12 +424,10 @@ export function SettingsPage() {
             nextConfiguration.pipOnHome = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("pipOnHome")}</span>
-        </Checkbox>
-        <p className="text-sm text-ink-muted">{t("pipOnHomeDescription")}</p>
-        <Checkbox
-          className="min-h-10 gap-2"
+        />
+        <SettingToggle
+          title={t("showVirtualDisplayFps")}
+          icon={<Settings2 size="1rem" />}
           checked={snapshot?.configuration.showVirtualDisplayFps ?? true}
           disabled={restartPending || !snapshot}
           onCheckedChange={(next) => {
@@ -442,15 +436,15 @@ export function SettingsPage() {
             nextConfiguration.showVirtualDisplayFps = next;
             void saveConfiguration(nextConfiguration);
           }}
-        >
-          <span className="font-medium">{t("showVirtualDisplayFps")}</span>
-        </Checkbox>
+        />
       </section>
       <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2 className="font-medium">{t("diagnostics")}</h2>
         <div className="space-y-1">
-          <Checkbox
-            className="min-h-10 gap-2"
+          <SettingToggle
+            title={t("debugMode")}
+            description={t("debugModeDescription")}
+            icon={<Settings2 size="1rem" />}
             checked={snapshot?.configuration.debugMode ?? false}
             disabled={restartPending || !snapshot}
             onCheckedChange={(next) => {
@@ -478,10 +472,7 @@ export function SettingsPage() {
                 }
               })();
             }}
-          >
-            <span className="font-medium">{t("debugMode")}</span>
-          </Checkbox>
-          <p className="text-sm text-ink-muted">{t("debugModeDescription")}</p>
+          />
         </div>
         <button
           type="button"
@@ -540,8 +531,9 @@ export function SettingsPage() {
         <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
           <h2 className="font-medium">{t("telemetry")}</h2>
           <p className="text-sm text-ink-muted">{t("telemetryDescription")}</p>
-          <Checkbox
-            className="min-h-10 gap-2"
+          <SettingToggle
+            title={t("telemetryEnabled")}
+            icon={<Settings2 size="1rem" />}
             checked={snapshot?.configuration.telemetryEnabled ?? false}
             disabled={restartPending || !snapshot}
             onCheckedChange={(next) => {
@@ -550,9 +542,7 @@ export function SettingsPage() {
               nextConfiguration.telemetryEnabled = next;
               void saveConfiguration(nextConfiguration);
             }}
-          >
-            <span className="font-medium">{t("telemetryEnabled")}</span>
-          </Checkbox>
+          />
         </section>
       )}
       {project && (
@@ -628,7 +618,10 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
 
   return (
     <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
-      <h2 className="font-medium">{t("customBackground")}</h2>
+      <SettingRow
+        title={<h2 className="font-medium">{t("customBackground")}</h2>}
+        description={t("customBackgroundDescription")}
+      />
       <div className="relative aspect-video overflow-hidden rounded-md border border-line bg-surface-muted">
         {source ? (
           <img src={source} alt="" className="h-full w-full object-cover" />
@@ -638,9 +631,7 @@ function CustomBackgroundCard({ restartPending }: { restartPending: boolean }) {
           </div>
         )}
       </div>
-      <p className="text-sm text-ink-muted">
-        {t("customBackgroundDescription")}
-      </p>
+
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium">

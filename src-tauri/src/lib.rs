@@ -5926,6 +5926,8 @@ pub fn run() {
             import_background_image,
             remove_background_image,
             read_background_image,
+            update::update_get_credential_status,
+            update::update_validate_credential,
             update::update_get_release_notes,
             update::update_mark_release_notes_read,
             update::update_get_status,

@@ -7,6 +7,7 @@
 //! the source clients, the downloader and the persisted preferences are
 //! sibling modules.
 
+mod credential;
 mod downloader;
 mod github;
 mod http;
@@ -183,6 +184,7 @@ struct Inner {
     rate_meter: TransferRateMeter,
     archive_dir: Option<PathBuf>,
     archive_project: String,
+    credential: credential::CredentialTracker,
 }
 
 impl Default for UpdateStatus {
@@ -235,6 +237,8 @@ impl UpdateState {
         let mut inner = self.lock();
         inner.prefs = UpdatePrefs::load(&dirs.prefs_dir);
         inner.archive_dir = Some(dirs.prefs_dir.clone());
+        inner.credential.status.expires_at_seconds =
+            credential::load_expiry(&dirs.prefs_dir, &inner.prefs.cdk);
     }
 
     fn set_prefs(&self, dirs: &UpdateDirs, prefs: UpdatePrefs) -> UpdatePrefs {
@@ -247,6 +251,10 @@ impl UpdateState {
         let mut prefs = prefs;
         prefs.cdk = prefs.cdk.trim().to_string();
         let _ = prefs.save(&dirs.prefs_dir);
+        if inner.prefs.cdk != prefs.cdk {
+            inner.credential.reset();
+            let _ = credential::save_expiry(&dirs.prefs_dir, &prefs.cdk, None);
+        }
         inner.prefs = prefs.clone();
         prefs
     }
@@ -654,9 +662,19 @@ async fn run_download(
         .unwrap_or_else(|| APP_VERSION.to_string());
     let (url, digest) = match pending {
         PendingUpdate::MirrorChyan { rid } => {
-            let release =
-                mirror_chyan::resolve(client.as_ref(), rid, channel.as_str(), APP_VERSION, cdk)
-                    .await?;
+            let request = CredentialRequest::begin(state.clone(), cdk);
+            let (release, observation) = mirror_chyan::resolve_observed(
+                client.as_ref(),
+                rid,
+                channel.as_str(),
+                APP_VERSION,
+                cdk,
+            )
+            .await;
+            if let Some(request) = request {
+                request.finish(observation);
+            }
+            let release = release?;
             state.advance_to_downloading(generation);
             (
                 release.url.expect("resolve validates the URL"),
@@ -865,10 +883,15 @@ pub async fn update_check(
     state: State<'_, UpdateState>,
     app_state: State<'_, crate::AppState>,
 ) -> Result<UpdateStatus, ()> {
-    state.lock().archive_project = app_state
-        .project()
-        .map(|project| project.name.clone())
-        .unwrap_or_default();
+    {
+        let mut inner = state.lock();
+        if !inner.status.phase.is_active() {
+            inner.archive_project = app_state
+                .project()
+                .map(|project| project.name.clone())
+                .unwrap_or_default();
+        }
+    }
     Ok(state.begin_check(repo_info(&app_state)))
 }
 
@@ -910,6 +933,82 @@ pub async fn update_set_prefs(
     }
 }
 
+struct CredentialRequest {
+    state: UpdateState,
+    token: (u64, u64),
+}
+impl CredentialRequest {
+    fn begin(state: UpdateState, expected_cdk: &str) -> Option<Self> {
+        let token = {
+            let mut inner = state.lock();
+            if inner.prefs.cdk != expected_cdk {
+                return None;
+            }
+            inner.credential.begin()
+        };
+        Some(Self { state, token })
+    }
+    fn finish(self, result: Result<Option<i64>, UpdateFailure>) {
+        let mut inner = self.state.lock();
+        if inner
+            .credential
+            .finish(self.token, result, ((self.state.clock)() / 1000) as i64)
+        {
+            if let Some(dir) = &inner.archive_dir {
+                if let Err(error) = credential::save_expiry(
+                    dir,
+                    &inner.prefs.cdk,
+                    inner.credential.status.expires_at_seconds,
+                ) {
+                    log::warn!("could not cache credential expiry: {error}");
+                }
+            }
+        }
+    }
+}
+impl Drop for CredentialRequest {
+    fn drop(&mut self) {
+        self.state.lock().credential.cancel(self.token);
+    }
+}
+
+#[tauri::command]
+pub async fn update_get_credential_status(
+    state: State<'_, UpdateState>,
+) -> Result<credential::CredentialStatus, ()> {
+    Ok(state.lock().credential.status.clone())
+}
+
+#[tauri::command]
+pub async fn update_validate_credential(
+    state: State<'_, UpdateState>,
+    app_state: State<'_, crate::AppState>,
+) -> Result<credential::CredentialStatus, ()> {
+    let prefs = state.lock().prefs.clone();
+    let Some(request) = CredentialRequest::begin(state.inner().clone(), &prefs.cdk) else {
+        return Ok(state.lock().credential.status.clone());
+    };
+    let result = match mirror_chyan::normalize_rid(
+        repo_info(&app_state)
+            .mirrorchyan_rid
+            .as_deref()
+            .unwrap_or(""),
+    ) {
+        Some(rid) => {
+            mirror_chyan::validate_credential(
+                state.client.as_ref(),
+                &rid,
+                prefs.channel.as_str(),
+                &prefs.cdk,
+            )
+            .await
+        }
+        None => Err(UpdateFailure::ResourceNotFound),
+    };
+    request.finish(result);
+    Ok(state.lock().credential.status.clone())
+}
+
 #[tauri::command]
 pub async fn update_get_release_notes(
     app: AppHandle,
@@ -949,6 +1048,22 @@ pub async fn update_mark_release_notes_read(
 mod tests {
     use super::http::testing::StubClient;
     use super::*;
+
+    #[test]
+    fn credential_requests_bind_the_saved_code_and_leave_update_phase_unchanged() {
+        let state = UpdateState::default();
+        state.lock().prefs.cdk = "current".into();
+        assert!(CredentialRequest::begin(state.clone(), "old").is_none());
+        let request = CredentialRequest::begin(state.clone(), "current").unwrap();
+        assert_eq!(state.lock().status.phase, UpdatePhase::Idle);
+        request.finish(Ok(Some(4_000_000_000)));
+        assert_eq!(
+            state.lock().credential.status.state,
+            credential::CredentialState::Valid
+        );
+        assert_eq!(state.lock().status.phase, UpdatePhase::Idle);
+        assert!(!state.lock().credential.status.checking);
+    }
 
     struct TestEnv {
         _temp: tempfile::TempDir,

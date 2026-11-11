@@ -20,6 +20,7 @@ pub struct MirrorRelease {
     pub url: Option<String>,
     pub sha256: Option<String>,
     pub size: Option<u64>,
+    pub expires_at_seconds: Option<i64>,
 }
 
 /// Trims a metadata `mirrorchyan_rid`; `None` when nothing usable remains.
@@ -58,27 +59,69 @@ pub async fn resolve(
     current_version: &str,
     cdk: &str,
 ) -> Result<MirrorRelease, UpdateError> {
-    let cdk = cdk.trim();
-    if cdk.is_empty() {
-        return Err(UpdateError::new(
-            UpdateFailure::CdkRequired,
-            "a MirrorChyan CDK is required to resolve the download URL",
-        ));
+    resolve_observed(client, rid, channel, current_version, cdk)
+        .await
+        .0
+}
+
+pub async fn validate_credential(
+    client: &dyn UpdateHttpClient,
+    rid: &str,
+    channel: &str,
+    cdk: &str,
+) -> Result<Option<i64>, UpdateFailure> {
+    if cdk.trim().is_empty() {
+        return Err(UpdateFailure::CdkRequired);
     }
-    let release = latest(client, rid, channel, current_version, Some(cdk)).await?;
-    if release.url.is_none() {
-        return Err(UpdateError::new(
-            UpdateFailure::InvalidResponse,
-            "the resolve response carried no download URL",
-        ));
+    latest_data(client, rid, channel, "", Some(cdk.trim()))
+        .await
+        .map(|data| data.cdk_expired_time)
+        .map_err(|error| error.failure)
+}
+
+pub async fn resolve_observed(
+    client: &dyn UpdateHttpClient,
+    rid: &str,
+    channel: &str,
+    current_version: &str,
+    cdk: &str,
+) -> (
+    Result<MirrorRelease, UpdateError>,
+    Result<Option<i64>, UpdateFailure>,
+) {
+    if cdk.trim().is_empty() {
+        return (
+            Err(UpdateError::new(
+                UpdateFailure::CdkRequired,
+                "a MirrorChyan CDK is required",
+            )),
+            Err(UpdateFailure::CdkRequired),
+        );
     }
-    if release.sha256.is_none() {
-        return Err(UpdateError::new(
-            UpdateFailure::InvalidDigest,
-            "the resolve response carried no sha256 digest",
-        ));
-    }
-    Ok(release)
+    let data = match latest_data(client, rid, channel, current_version, Some(cdk.trim())).await {
+        Ok(data) => data,
+        Err(error) => {
+            let failure = error.failure;
+            return (Err(error), Err(failure));
+        }
+    };
+    let observation = Ok(data.cdk_expired_time);
+    let result = release_from_data(data).and_then(|release| {
+        if release.url.is_none() {
+            return Err(UpdateError::new(
+                UpdateFailure::InvalidResponse,
+                "the resolve response carried no download URL",
+            ));
+        }
+        if release.sha256.is_none() {
+            return Err(UpdateError::new(
+                UpdateFailure::InvalidDigest,
+                "the resolve response carried no sha256 digest",
+            ));
+        }
+        Ok(release)
+    });
+    (result, observation)
 }
 
 async fn latest(
@@ -88,6 +131,16 @@ async fn latest(
     current_version: &str,
     cdk: Option<&str>,
 ) -> Result<MirrorRelease, UpdateError> {
+    release_from_data(latest_data(client, rid, channel, current_version, cdk).await?)
+}
+
+async fn latest_data(
+    client: &dyn UpdateHttpClient,
+    rid: &str,
+    channel: &str,
+    current_version: &str,
+    cdk: Option<&str>,
+) -> Result<MirrorData, UpdateError> {
     let mut url =
         url::Url::parse(&format!("{MIRRORCHYAN_API_BASE}/{rid}/latest")).map_err(|error| {
             UpdateError::new(
@@ -111,7 +164,7 @@ async fn latest(
     let response = client
         .get(url.as_str(), &[])
         .await
-        .map_err(UpdateError::network)?;
+        .map_err(|_| UpdateError::network("MirrorChyan request failed"))?;
     let envelope = match serde_json::from_slice::<MirrorEnvelope>(&response.body) {
         Ok(envelope) => envelope,
         Err(error) => {
@@ -153,6 +206,10 @@ async fn latest(
             "MirrorChyan returned no data",
         )
     })?;
+    Ok(data)
+}
+
+fn release_from_data(data: MirrorData) -> Result<MirrorRelease, UpdateError> {
     let version = data
         .version_name
         .filter(|version| !version.trim().is_empty())
@@ -168,6 +225,7 @@ async fn latest(
         url: data.url.filter(|url| !url.trim().is_empty()),
         sha256: data.sha256.filter(|digest| !digest.trim().is_empty()),
         size: data.size,
+        expires_at_seconds: data.cdk_expired_time,
     })
 }
 
@@ -175,11 +233,11 @@ async fn latest(
 /// (only reachable via resolve), 8001-8004 are resource problems.
 fn business_failure(code: i64) -> Option<UpdateFailure> {
     Some(match code {
-        7001 => UpdateFailure::CdkInvalid,
-        7002 => UpdateFailure::CdkExpired,
-        7003 => UpdateFailure::CdkDisabled,
-        7004 => UpdateFailure::CdkQuotaExceeded,
-        7005 => UpdateFailure::CdkMismatch,
+        7001 => UpdateFailure::CdkExpired,
+        7002 => UpdateFailure::CdkInvalid,
+        7003 => UpdateFailure::CdkQuotaExceeded,
+        7004 => UpdateFailure::CdkMismatch,
+        7005 => UpdateFailure::CdkDisabled,
         8001 => UpdateFailure::ResourceNotFound,
         8002..=8004 => UpdateFailure::ResourceUnavailable,
         _ => return None,
@@ -209,6 +267,8 @@ struct MirrorData {
     sha256: Option<String>,
     #[serde(default)]
     size: Option<u64>,
+    #[serde(default, alias = "cdkExpiredTime")]
+    cdk_expired_time: Option<i64>,
 }
 
 #[cfg(test)]
@@ -293,7 +353,7 @@ mod tests {
         assert_eq!(error.detail, "resource not found");
 
         let client =
-            StubClient::new().with_body("latest", 200, envelope_json(7002, "cdk expired", "null"));
+            StubClient::new().with_body("latest", 200, envelope_json(7001, "cdk expired", "null"));
         let error = check(&client, "m9a", "stable", "1.0.0").await.unwrap_err();
         assert_eq!(error.failure, UpdateFailure::CdkExpired);
     }
@@ -375,5 +435,36 @@ mod tests {
     fn rid_normalization_trims_and_rejects_blank() {
         assert_eq!(normalize_rid("  m9a  "), Some("m9a".to_string()));
         assert_eq!(normalize_rid("   "), None);
+    }
+    #[tokio::test]
+    async fn verification_needs_no_download_url_or_version_and_uses_official_error_codes() {
+        let client = StubClient::new().with_body(
+            "latest",
+            200,
+            envelope_json(0, "ok", r#"{"cdk_expired_time":1800000000}"#),
+        );
+        assert_eq!(
+            validate_credential(&client, "m9a", "stable", "test")
+                .await
+                .unwrap(),
+            Some(1800000000)
+        );
+        assert!(client.requested_urls()[0].contains("cdk=test"));
+        for (code, expected) in [
+            (7001, UpdateFailure::CdkExpired),
+            (7002, UpdateFailure::CdkInvalid),
+            (7003, UpdateFailure::CdkQuotaExceeded),
+            (7004, UpdateFailure::CdkMismatch),
+            (7005, UpdateFailure::CdkDisabled),
+        ] {
+            let client =
+                StubClient::new().with_body("latest", 403, envelope_json(code, "error", "null"));
+            assert_eq!(
+                validate_credential(&client, "m9a", "stable", "test")
+                    .await
+                    .unwrap_err(),
+                expected
+            );
+        }
     }
 }

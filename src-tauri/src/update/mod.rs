@@ -11,6 +11,7 @@ mod downloader;
 mod github;
 mod http;
 mod mirror_chyan;
+mod notes;
 mod prefs;
 mod rate;
 mod semver;
@@ -180,6 +181,8 @@ struct Inner {
     task: Option<TaskHandle>,
     generation: u64,
     rate_meter: TransferRateMeter,
+    archive_dir: Option<PathBuf>,
+    archive_project: String,
 }
 
 impl Default for UpdateStatus {
@@ -229,7 +232,9 @@ impl UpdateState {
     /// Reads the saved preferences once at startup; per-command reads use the
     /// cached copy so a slow disk never blocks the UI.
     pub fn load_prefs(&self, dirs: &UpdateDirs) {
-        self.lock().prefs = UpdatePrefs::load(&dirs.prefs_dir);
+        let mut inner = self.lock();
+        inner.prefs = UpdatePrefs::load(&dirs.prefs_dir);
+        inner.archive_dir = Some(dirs.prefs_dir.clone());
     }
 
     fn set_prefs(&self, dirs: &UpdateDirs, prefs: UpdatePrefs) -> UpdatePrefs {
@@ -327,6 +332,24 @@ impl UpdateState {
         inner.rate_meter.reset();
         match outcome {
             Ok(Some(checked)) => {
+                if let (Some(dir), Some(content)) = (&inner.archive_dir, &checked.note) {
+                    let source = match &checked.pending {
+                        PendingUpdate::MirrorChyan { .. } => "mirrorchyan",
+                        PendingUpdate::Github { .. } => "github",
+                    };
+                    let note = notes::ReleaseNote {
+                        project: inner.archive_project.clone(),
+                        channel: inner.prefs.channel,
+                        version: checked.version.clone(),
+                        source: source.into(),
+                        content: content.clone(),
+                        saved_at_epoch_ms: (self.clock)(),
+                        read: false,
+                    };
+                    if let Err(error) = notes::save(dir, note, APP_VERSION) {
+                        log::warn!("could not archive release notes: {error}");
+                    }
+                }
                 inner.pending = Some(checked.pending);
                 inner.status.phase = UpdatePhase::Available;
                 inner.status.latest_version = Some(checked.version);
@@ -842,6 +865,10 @@ pub async fn update_check(
     state: State<'_, UpdateState>,
     app_state: State<'_, crate::AppState>,
 ) -> Result<UpdateStatus, ()> {
+    state.lock().archive_project = app_state
+        .project()
+        .map(|project| project.name.clone())
+        .unwrap_or_default();
     Ok(state.begin_check(repo_info(&app_state)))
 }
 
@@ -881,6 +908,41 @@ pub async fn update_set_prefs(
         Ok(dirs) => Ok(state.set_prefs(&dirs, prefs)),
         Err(_) => Ok(state.lock().prefs.clone()),
     }
+}
+
+#[tauri::command]
+pub async fn update_get_release_notes(
+    app: AppHandle,
+    state: State<'_, UpdateState>,
+    app_state: State<'_, crate::AppState>,
+) -> Result<notes::ReleaseNotes, String> {
+    let dirs = resolve_dirs(&app)?;
+    let project = app_state.project().map_err(|error| error.to_string())?;
+    Ok(notes::get(
+        &dirs.prefs_dir,
+        &project.name,
+        state.lock().prefs.channel,
+        APP_VERSION,
+    ))
+}
+
+#[tauri::command]
+pub async fn update_mark_release_notes_read(
+    app: AppHandle,
+    state: State<'_, UpdateState>,
+    app_state: State<'_, crate::AppState>,
+    version: String,
+) -> Result<(), String> {
+    let dirs = resolve_dirs(&app)?;
+    let project = app_state.project().map_err(|error| error.to_string())?;
+    let inner = state.lock();
+    notes::mark_read(
+        &dirs.prefs_dir,
+        &project.name,
+        inner.prefs.channel,
+        &version,
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

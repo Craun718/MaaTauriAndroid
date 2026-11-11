@@ -563,6 +563,13 @@ export function SettingsPage() {
               >
                 {t("guideReplay")}
               </button>
+              <button
+                type="button"
+                className="btn btn-sm w-full"
+                onClick={() => useGuideStore.getState().openDemo()}
+              >
+                {t("demoReplay")}
+              </button>
             </>
           }
         />

@@ -1,7 +1,7 @@
 import type { MessageKey } from "./i18n";
 import type { UserConfiguration } from "./types";
 
-export const GUIDE_VERSION = 1;
+export const GUIDE_VERSION = 2;
 
 export type GuideRoute = "/" | "/tasks" | "/runs" | "/settings";
 export type GuideTargetName =
@@ -80,15 +80,14 @@ export function shouldShowGuide(
   configuration: Pick<UserConfiguration, "guideSeenVersion"> | undefined,
 ): boolean {
   return (
-    configuration !== undefined &&
-    (configuration.guideSeenVersion ?? 0) < GUIDE_VERSION
+    configuration !== undefined && (configuration.guideSeenVersion ?? 0) === 0
   );
 }
 
 export function markGuideSeen(
   configuration: UserConfiguration,
 ): UserConfiguration {
-  return shouldShowGuide(configuration)
+  return (configuration.guideSeenVersion ?? 0) < GUIDE_VERSION
     ? { ...configuration, guideSeenVersion: GUIDE_VERSION }
     : configuration;
 }

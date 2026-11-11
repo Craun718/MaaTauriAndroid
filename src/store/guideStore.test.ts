@@ -35,6 +35,7 @@ beforeEach(async () => {
   });
   useGuideStore.setState({
     active: false,
+    demoActive: false,
     dismissed: false,
     target: undefined,
   });
@@ -42,6 +43,14 @@ beforeEach(async () => {
 });
 
 describe("guide lifecycle", () => {
+  it("opens and cancels the isolated demo without saving task data", () => {
+    useGuideStore.getState().openDemo();
+    expect(useGuideStore.getState().demoActive).toBe(true);
+    useGuideStore.getState().cancel();
+    expect(useGuideStore.getState().demoActive).toBe(false);
+    expect(saveConfiguration).not.toHaveBeenCalled();
+  });
+
   it("starts once and keeps the current target on a repeated start", () => {
     useGuideStore.getState().start();
     useGuideStore.getState().setTarget("tasks-run");

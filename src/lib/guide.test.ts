@@ -25,7 +25,7 @@ function configurationWith(
 }
 
 describe("guide state", () => {
-  it("shows the guide for a first launch and an outdated revision", () => {
+  it("shows the guide only for a first launch", () => {
     expect(shouldShowGuide(undefined)).toBe(false);
     expect(
       shouldShowGuide(configurationWith({ guideSeenVersion: undefined })),
@@ -34,7 +34,7 @@ describe("guide state", () => {
       shouldShowGuide(
         configurationWith({ guideSeenVersion: GUIDE_VERSION - 1 }),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("does not show the current or newer guide revision again", () => {

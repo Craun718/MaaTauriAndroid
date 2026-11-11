@@ -9,6 +9,7 @@ import { useGuideStore } from "../store/guideStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { usePreparationStore } from "../store/preparationStore";
 import { GuideTooltip } from "./GuideTooltip";
+import { TaskDemo } from "./TaskDemo";
 
 export function GuideHost(): ReactElement | null {
   const snapshot = useAppStore((state) => state.snapshot);
@@ -16,6 +17,8 @@ export function GuideHost(): ReactElement | null {
   const busy = useAppStore((state) => state.busy);
   const preparation = usePreparationStore((state) => state.state);
   const active = useGuideStore((state) => state.active);
+  const demoActive = useGuideStore((state) => state.demoActive);
+  const finish = useGuideStore((state) => state.finish);
   const dismissed = useGuideStore((state) => state.dismissed);
   const start = useGuideStore((state) => state.start);
   const cancel = useGuideStore((state) => state.cancel);
@@ -35,7 +38,13 @@ export function GuideHost(): ReactElement | null {
       start();
   }, [active, cancel, dismissed, ready, snapshot?.configuration, start]);
 
-  return active && ready ? <GuideSession /> : null;
+  return active && ready ? (
+    demoActive ? (
+      <TaskDemo onDone={finish} />
+    ) : (
+      <GuideSession />
+    )
+  ) : null;
 }
 
 interface GuideGeometry {
@@ -234,7 +243,9 @@ function GuideSession(): ReactElement {
               data.status === STATUS.SKIPPED ||
               (data.status === STATUS.FINISHED && displayed.current)
             ) {
-              finish();
+              if (data.status === STATUS.FINISHED)
+                useGuideStore.getState().openDemo();
+              else finish();
             } else {
               cancel();
               useNotificationStore

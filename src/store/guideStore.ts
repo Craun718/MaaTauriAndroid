@@ -4,6 +4,8 @@ import { useAppStore } from "./appStore";
 
 interface GuideStore {
   active: boolean;
+  demoActive: boolean;
+  openDemo: () => void;
   /** Also suppresses automatic retries if saving fails during this session. */
   dismissed: boolean;
   target?: GuideTargetName;
@@ -15,20 +17,29 @@ interface GuideStore {
 
 export const useGuideStore = create<GuideStore>((set, get) => ({
   active: false,
+  demoActive: false,
+  openDemo() {
+    set({ active: true, demoActive: true, dismissed: true, target: undefined });
+  },
   dismissed: false,
   start() {
     if (get().active) return;
-    set({ active: true, dismissed: true, target: undefined });
+    set({
+      active: true,
+      demoActive: false,
+      dismissed: true,
+      target: undefined,
+    });
   },
   setTarget(target) {
     if (get().active) set({ target });
   },
   cancel() {
-    set({ active: false, target: undefined });
+    set({ active: false, demoActive: false, target: undefined });
   },
   finish() {
     if (!get().active) return;
-    set({ active: false, target: undefined });
+    set({ active: false, demoActive: false, target: undefined });
     const { snapshot, saveConfiguration } = useAppStore.getState();
     if (!snapshot) return;
     const configuration = markGuideSeen(snapshot.configuration);

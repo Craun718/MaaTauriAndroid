@@ -1,3 +1,7 @@
+import {
+  checkboxSelectionState,
+  updateCheckboxSelection,
+} from "../lib/checkboxSelection";
 import { useTranslation } from "../lib/i18n";
 import { defaultOptionValue, switchCases } from "../lib/options";
 import { stripInlineRichText } from "../lib/richText";
@@ -122,8 +126,10 @@ export function OptionEditor({
   }
 
   if (option.kind === "checkbox") {
-    const selected =
-      value?.type === "multiple" ? value.cases : option.defaultCases;
+    const { selected, atMaximum, minimumRequired } = checkboxSelectionState(
+      option,
+      value,
+    );
     return (
       <div className={compact ? "space-y-1.5" : "space-y-3"}>
         <div>
@@ -144,12 +150,16 @@ export function OptionEditor({
                     : "min-h-11 gap-3 rounded-md border border-line px-3"
                 }`}
                 checked={checked}
+                disabled={!checked && atMaximum}
                 onCheckedChange={(next) => {
                   onChange({
                     type: "multiple",
-                    cases: next
-                      ? [...selected, item.name]
-                      : selected.filter((name) => name !== item.name),
+                    cases: updateCheckboxSelection(
+                      option,
+                      selected,
+                      item.name,
+                      next,
+                    ),
                   });
                 }}
               >
@@ -167,6 +177,11 @@ export function OptionEditor({
             );
           })}
         </div>
+        {minimumRequired !== undefined && (
+          <p role="alert" className="text-[0.8125rem] text-error">
+            {t("checkboxMinimumSelection", { count: minimumRequired })}
+          </p>
+        )}
       </div>
     );
   }

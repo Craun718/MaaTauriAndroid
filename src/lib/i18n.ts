@@ -33,6 +33,7 @@ const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
   "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
 
 const en = {
+  checkboxMinimumSelection: "Select at least {count} options.",
   optionPathFile: "Choose file",
   optionPathDirectory: "Choose directory",
   optionPathPicking: "Selecting / importing…",
@@ -607,6 +608,7 @@ export function configurationRecoveryMessageKey(
 }
 
 const zh: Record<MessageKey, string> = {
+  checkboxMinimumSelection: "请至少选择 {count} 项。",
   optionPathFile: "选择文件",
   optionPathDirectory: "选择目录",
   optionPathPicking: "正在选择 / 导入…",

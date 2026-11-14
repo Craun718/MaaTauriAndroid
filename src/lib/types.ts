@@ -192,6 +192,14 @@ export interface ConfigurationTemplate {
   label: string;
   description?: string;
   tasks: TemplateTask[];
+  /** Omitted preserves settings; an empty list disables every pre-task. */
+  pretasks?: TemplatePretask[];
+}
+
+export interface TemplatePretask {
+  name: string;
+  enabled: boolean;
+  option: Record<string, OptionValue>;
 }
 
 export interface TemplateTask {

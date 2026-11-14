@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAndroidProject, metadataTextPaths } from "./adapter";
+import { loadProjectSource } from "./loader";
 import type {
   ProjectSource,
   ProjectTextReader,
@@ -375,3 +376,107 @@ it.each(invalidPretasks.map((pretask) => ({ pretask })))(
     await expect(buildAndroidProject(input, "en_us", reader)).rejects.toThrow();
   },
 );
+
+it("preserves absent versus empty preset pretask snapshots and matches only explicit names", async () => {
+  const input = source();
+  input.document.pretask = [
+    { name: "prepare", exec: "tool", option: ["credentials"] },
+    { exec: "anonymous" },
+  ];
+  input.document.option = {
+    credentials: {
+      type: "input",
+      inputs: [{ name: "username" }, { name: "password", password: true }],
+    },
+  };
+  input.document.task = [];
+  input.document.global_option = [];
+  input.document.preset = [
+    { name: "legacy" },
+    { name: "empty", pretask: [] },
+    {
+      name: "snapshot",
+      pretask: [
+        { name: "unknown", enabled: "ignored" },
+        { name: "anonymous#1" },
+        {
+          name: "prepare",
+          option: { credentials: { username: "safe", password: "forbidden" } },
+        },
+      ],
+      task: [
+        {
+          name: "Task",
+          option: {
+            credentials: { username: "task-safe", password: "forbidden-task" },
+          },
+        },
+      ],
+    },
+  ];
+  const project = await buildAndroidProject(input, "en_us", reader);
+  expect(project.presets[0].pretasks).toBeUndefined();
+  expect(project.presets[1].pretasks).toEqual([]);
+  expect(project.presets[2].pretasks).toEqual([
+    {
+      name: "prepare",
+      enabled: true,
+      option: { credentials: { type: "inputs", values: { username: "safe" } } },
+    },
+  ]);
+  expect(project.presets[2].tasks[0].option.credentials).toEqual({
+    type: "inputs",
+    values: { username: "task-safe" },
+  });
+  expect(JSON.stringify(project.presets)).not.toContain("forbidden");
+});
+
+const malformedPresetSnapshots: { pretask: RawJsonValue }[] = [
+  { pretask: null },
+  { pretask: {} },
+  { pretask: "bad" },
+  { pretask: [{}] },
+  { pretask: ["bad"] },
+  { pretask: [{ name: "prepare", enabled: "bad" }] },
+];
+it.each(malformedPresetSnapshots)(
+  "rejects malformed preset pretask snapshots $pretask",
+  async ({ pretask }) => {
+    const input = source();
+    input.document.pretask = { name: "prepare", exec: "tool" };
+    input.document.preset = [{ name: "bad", pretask }];
+    await expect(buildAndroidProject(input, "en_us", reader)).rejects.toThrow();
+  },
+);
+
+it("resolves explicit preset pretask references after all imports merge", async () => {
+  const contents: Record<string, string> = {
+    "interface.json": JSON.stringify({
+      interface_version: 2,
+      name: "test",
+      import: ["child.json"],
+      pretask: { name: "local", exec: "tool" },
+      preset: [{ name: "main", pretask: [{ name: "imported" }] }],
+    }),
+    "child.json": JSON.stringify({
+      pretask: [{ name: "imported", exec: "tool" }],
+      preset: [{ name: "imported-preset", pretask: [{ name: "local" }] }],
+    }),
+  };
+  const read: ProjectTextReader = async (path) => {
+    const value = contents[path];
+    if (value === undefined) throw new Error(`Missing ${path}`);
+    return value;
+  };
+  const project = await buildAndroidProject(
+    await loadProjectSource("/project", read),
+    "en_us",
+    read,
+  );
+  expect(project.presets[0].pretasks?.map((task) => task.name)).toEqual([
+    "imported",
+  ]);
+  expect(project.presets[1].pretasks?.map((task) => task.name)).toEqual([
+    "local",
+  ]);
+});

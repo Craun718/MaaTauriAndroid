@@ -13,6 +13,7 @@ import type {
   SettingSection,
   TaskDefinition,
   TelemetryConfig,
+  TemplatePretask,
   TemplateTask,
 } from "../types";
 import { compareUtf8, isRawObject } from "./loader";
@@ -260,6 +261,7 @@ function parseOption(
 function parseTemplateTask(
   value: RawJsonValue,
   localize: (value: unknown) => string | undefined,
+  definitions: Record<string, OptionDefinition>,
 ): TemplateTask | undefined {
   const item = object(value);
   const taskName = optionalString(item?.name);
@@ -284,12 +286,43 @@ function parseTemplateTask(
       option[name] = { type: "inputs", values: inputValues };
     }
   }
+  for (const [name, value] of Object.entries(option)) {
+    const definition = definitions[name];
+    if (definition?.kind === "input" && value.type === "inputs") {
+      for (const field of definition.inputs) {
+        if (field.password) delete value.values[field.name];
+      }
+    }
+  }
   return {
     taskName,
     enabled: boolean(item.enabled) ?? true,
     option,
     label: localize(item.label) ?? taskName,
   };
+}
+
+function parseTemplatePretasks(
+  value: RawJsonValue | undefined,
+  pretasks: PretaskDefinition[],
+  options: Record<string, OptionDefinition>,
+): TemplatePretask[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error("preset pretask must be an array");
+  const result: TemplatePretask[] = [];
+  for (const raw of value) {
+    const item = object(raw);
+    const name = optionalString(item?.name);
+    if (!item || !name) throw new Error("preset pretask name is required");
+    if (!pretasks.some((task) => task.explicitName === name)) continue;
+    if (item.enabled !== undefined && typeof item.enabled !== "boolean") {
+      throw new Error("preset pretask enabled must be boolean");
+    }
+    const parsed = parseTemplateTask(raw, () => undefined, options);
+    if (parsed)
+      result.push({ name, enabled: parsed.enabled, option: parsed.option });
+  }
+  return result;
 }
 
 function welcomeDeclarations(
@@ -591,8 +624,9 @@ export async function buildAndroidProject(
         label: localizeText(item.label) ?? presetName,
         description: localizeText(item.description),
         tasks: array(item.task)
-          .map((task) => parseTemplateTask(task, localizeText))
+          .map((task) => parseTemplateTask(task, localizeText, options))
           .filter((task): task is TemplateTask => task !== undefined),
+        pretasks: parseTemplatePretasks(item.pretask, pretasks, options),
       },
     ];
   });

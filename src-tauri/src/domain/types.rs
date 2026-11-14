@@ -295,6 +295,20 @@ pub struct ConfigurationTemplate {
     pub description: Option<String>,
     pub icon: Option<String>,
     pub tasks: Vec<TemplateTask>,
+    /// None preserves user settings; Some(empty) disables every pre-task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pretasks: Option<Vec<TemplatePretask>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplatePretask {
+    /// An explicit top-level pretask name, never an anonymous configuration key.
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub option: BTreeMap<String, OptionValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

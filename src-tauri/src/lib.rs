@@ -1476,6 +1476,10 @@ fn apply_preset(
         .ok_or_else(|| AppError::Message("Active run configuration disappeared".to_string()))?;
     let existing_tasks = run.tasks.clone();
     run.tasks = configuration_tasks_from_preset(&project, &preset, &existing_tasks);
+    for task in &mut run.tasks {
+        domain::preset::remove_password_values(&project.options, &mut task.option_values);
+    }
+    domain::preset::apply_pretasks(&project, &preset, &mut configuration);
     state.set_configuration(configuration.clone())?;
     Ok(configuration)
 }
@@ -4782,6 +4786,7 @@ mod tests {
             })
             .collect();
         let preset = ConfigurationTemplate {
+            pretasks: None,
             name: "DailyFull".to_string(),
             label: "Daily".to_string(),
             description: None,

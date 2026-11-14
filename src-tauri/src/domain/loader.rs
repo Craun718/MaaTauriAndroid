@@ -20,6 +20,8 @@ pub enum ProjectError {
     MissingField(&'static str),
     #[error("duplicate task name: {0}")]
     DuplicateTask(String),
+    #[error("invalid preset pretask definition: {0}")]
+    PresetPretask(String),
     #[error("invalid pretask definition: {0}")]
     Pretask(String),
     #[error("unknown option reference: {0}")]
@@ -322,50 +324,52 @@ impl ProjectLoader {
             }
         }
 
-        let presets = array(&document, "preset")
-            .into_iter()
-            .filter_map(|item| {
-                let allowed = strings(item.get("controller")).unwrap_or_default();
-                if !allowed.is_empty() && !allowed.contains(&controllers[0].name) {
-                    return None;
-                }
-                let name = item.get("name")?.as_str()?.to_string();
-                let tasks = item
-                    .get("task")
-                    .and_then(Value::as_array)
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(|task| {
-                                let task_name = task.get("name")?.as_str()?.to_string();
-                                let option = task
-                                    .get("option")
-                                    .and_then(Value::as_object)
-                                    .map(parse_option_values)
-                                    .unwrap_or_default();
-                                Some(TemplateTask {
-                                    label: text(task.get("label"))
-                                        .unwrap_or_else(|| task_name.clone()),
-                                    enabled: task
-                                        .get("enabled")
-                                        .and_then(Value::as_bool)
-                                        .unwrap_or(true),
-                                    option,
-                                    task_name,
-                                })
+        let mut presets = Vec::new();
+        for item in array(&document, "preset") {
+            let allowed = strings(item.get("controller")).unwrap_or_default();
+            if !allowed.is_empty() && !allowed.contains(&controllers[0].name) {
+                continue;
+            }
+            let Some(name) = item.get("name").and_then(Value::as_str) else {
+                continue;
+            };
+            let name = name.to_string();
+            let tasks = item
+                .get("task")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|task| {
+                            let task_name = task.get("name")?.as_str()?.to_string();
+                            let mut option = task
+                                .get("option")
+                                .and_then(Value::as_object)
+                                .map(parse_option_values)
+                                .unwrap_or_default();
+                            super::preset::remove_password_values(&options, &mut option);
+                            Some(TemplateTask {
+                                label: text(task.get("label")).unwrap_or_else(|| task_name.clone()),
+                                enabled: task
+                                    .get("enabled")
+                                    .and_then(Value::as_bool)
+                                    .unwrap_or(true),
+                                option,
+                                task_name,
                             })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                Some(ConfigurationTemplate {
-                    label: text(item.get("label")).unwrap_or_else(|| name.clone()),
-                    description: text(item.get("description")),
-                    icon: text(item.get("icon")),
-                    tasks,
-                    name,
+                        })
+                        .collect()
                 })
-            })
-            .collect();
+                .unwrap_or_default();
+            presets.push(ConfigurationTemplate {
+                label: text(item.get("label")).unwrap_or_else(|| name.clone()),
+                description: text(item.get("description")),
+                icon: text(item.get("icon")),
+                tasks,
+                pretasks: parse_template_pretasks(item.get("pretask"), &pretasks, &options)?,
+                name,
+            });
+        }
 
         let agents = match document.get("agent") {
             Some(Value::Array(items)) => items.iter().filter_map(parse_agent).collect::<Vec<_>>(),
@@ -719,6 +723,54 @@ fn default_string(value: Value) -> Option<String> {
         Value::Array(items) => items.first().and_then(Value::as_str).map(str::to_string),
         _ => None,
     }
+}
+
+fn parse_template_pretasks(
+    value: Option<&Value>,
+    pretasks: &[PretaskDefinition],
+    options: &BTreeMap<String, OptionDefinition>,
+) -> Result<Option<Vec<TemplatePretask>>, ProjectError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| ProjectError::PresetPretask("expected an array".into()))?;
+    let mut result = Vec::new();
+    for item in items {
+        let name = item
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| ProjectError::PresetPretask("name is required".into()))?;
+        if !pretasks
+            .iter()
+            .any(|task| task.explicit_name.as_deref() == Some(name))
+        {
+            continue;
+        }
+        let enabled = match item.get("enabled") {
+            None => true,
+            Some(Value::Bool(enabled)) => *enabled,
+            _ => {
+                return Err(ProjectError::PresetPretask(
+                    "enabled must be boolean".into(),
+                ))
+            }
+        };
+        let mut option = item
+            .get("option")
+            .and_then(Value::as_object)
+            .map(parse_option_values)
+            .unwrap_or_default();
+        super::preset::remove_password_values(options, &mut option);
+        result.push(TemplatePretask {
+            name: name.to_string(),
+            enabled,
+            option,
+        });
+    }
+    Ok(Some(result))
 }
 
 fn parse_option_values(values: &Map<String, Value>) -> BTreeMap<String, OptionValue> {

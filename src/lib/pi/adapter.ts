@@ -152,7 +152,12 @@ function parseInputField(
   ) {
     throw new Error(`unknown pipeline type: ${pipelineType}`);
   }
-  if (inputType !== "text" && inputType !== "file" && inputType !== "time") {
+  if (
+    inputType !== "text" &&
+    inputType !== "file" &&
+    inputType !== "directory" &&
+    inputType !== "time"
+  ) {
     throw new Error(`unknown input type: ${inputType}`);
   }
   return {

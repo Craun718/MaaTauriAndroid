@@ -224,6 +224,7 @@ pub enum InputType {
     #[default]
     Text,
     File,
+    Directory,
     Time,
 }
 

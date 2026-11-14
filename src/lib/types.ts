@@ -57,7 +57,7 @@ export interface InputFieldDefinition {
   verify?: string;
   patternMessage?: string;
   password: boolean;
-  inputType: "text" | "file" | "time";
+  inputType: "text" | "file" | "directory" | "time";
 }
 
 export type OptionDefinition =

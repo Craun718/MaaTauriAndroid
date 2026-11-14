@@ -180,7 +180,7 @@ export function OptionEditor({
     pipelineType?: "string" | "int" | "bool";
     verify?: string;
     patternMessage?: string;
-    inputType?: "text" | "file" | "time";
+    inputType?: "text" | "file" | "directory" | "time";
   }> = option.kind === "input" ? option.inputs : option.hotkeys;
   const values = value?.type === "inputs" ? value.values : {};
   return (

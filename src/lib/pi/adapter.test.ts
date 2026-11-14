@@ -35,6 +35,23 @@ it("filters presets by the Android controller", async () => {
   ]);
 });
 
+it("loads directory input fields", async () => {
+  const input = source();
+  input.document.option = {
+    Directory: {
+      type: "input",
+      inputs: [{ name: "path", label: "Path", input_type: "directory" }],
+    },
+  };
+  input.document.task = [];
+  input.document.global_option = [];
+  const project = await buildAndroidProject(input, "en_us", reader);
+  expect(project.options.Directory).toMatchObject({
+    kind: "input",
+    inputs: [{ name: "path", inputType: "directory" }],
+  });
+});
+
 function source(): ProjectSource {
   return {
     root: "/project",

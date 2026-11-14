@@ -1444,6 +1444,11 @@ mod tests {
                                     "name": "config",
                                     "label": "Config",
                                     "input_type": "file"
+                                },
+                                {
+                                    "name": "directory",
+                                    "label": "Directory",
+                                    "input_type": "directory"
                                 }
                             ],
                             "pipeline_override": {}
@@ -1462,6 +1467,7 @@ mod tests {
         };
         assert_eq!(inputs[0].input_type, InputType::Time);
         assert_eq!(inputs[1].input_type, InputType::File);
+        assert_eq!(inputs[2].input_type, InputType::Directory);
     }
 
     #[test]

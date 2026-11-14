@@ -741,7 +741,8 @@ pub fn validate_ocr_models(
             .map(|path| resource_path(project_root, path).join("model").join("ocr"))
             .collect();
         let missing_files: Vec<&str> = model_files
-            .into_iter()
+            .iter()
+            .copied()
             .filter(|file| {
                 !model_dirs
                     .iter()

@@ -143,7 +143,9 @@ case "${ABI}" in
     exit 2
     ;;
 esac
-if [ -f "${VENDOR_DIR}/libMaaAgentClient.so" ] && [ -f "${VENDOR_DIR}/libMaaAgentServer.so" ]; then
+installed_version="$(cat "${VENDOR_DIR}/.maafw-version" 2>/dev/null || true)"
+if [ "${installed_version}" = "${MAAFW_VERSION}" ] &&
+  [ -f "${VENDOR_DIR}/libMaaAgentClient.so" ] && [ -f "${VENDOR_DIR}/libMaaAgentServer.so" ]; then
   echo "  2/3  reusing agent libraries from vendor/maa/android/${ABI}/…"
 else
   AGENT_LIBS="${WORK}/agent-libs/${MAAFW_VERSION}/${ABI}"

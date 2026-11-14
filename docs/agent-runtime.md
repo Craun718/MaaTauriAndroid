@@ -59,7 +59,7 @@ runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项
 `scripts/build-agent-runtime.sh` 做三件事：
 
 1. **组装 Python 核心 + site-packages**：仓库内 `scripts/build_agent_bundle.py`（vendored 自 MaaFwApp，AGPL-3.0，来源 commit 见文件头；升级脚本时手动同步副本并同步头注释）从 MaaAgentCoreAndroid 的 release 下载预编译核心（CPython + 标准库 + `maa` 包，仓库与版本由 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG` 钉定，缓存在 `.cache/maafw/`），再用资源项目自己的 `requirements.txt` 装依赖——Android 轮子来自 Chaquopy 索引（`--extra-index-url https://chaquo.com/pypi-13.1/`），装完剪掉排除列表里的包，纯 Python 的收进 `pure.zip`。
-2. **备 agent 库**：`libMaaAgentClient.so` / `libMaaAgentServer.so` 优先复用 `vendor/maa/android/<abi>/` 里已铺好的；没有就从 MaaFramework release（钉 `MAAFW_VERSION`）下载对应架构。**两个来源必须是同一版本**，这是 bundle 与壳内 MaaFramework 对齐的关键。
+2. **备 agent 库**：仅当 `vendor/maa/android/<abi>/.maafw-version` 与 `MAAFW_VERSION` 一致且两个库均存在时，复用其中的 `libMaaAgentClient.so` / `libMaaAgentServer.so`；否则使用该版本的缓存或从 MaaFramework release 下载对应架构。构建 APK 前仍须通过 `scripts/setup.sh <abi>` 更新壳内原生库，使其与 bundle 对齐。
 3. **打包**：`src-tauri/profiles/pack_agent_bundle.py` 把 bundle 目录和两个 `.so` 打成上述约束的 ZIP，并校验 `lib/<abi>/` 里两个 `.so` 齐全。
 
 ## 版本钉定

@@ -99,6 +99,10 @@ pi.profile=/path/to/repo/resource/m9a.toml
 
 预任务使用应用身份和 Android 的进程环境，程序必须适用于 Android 且可执行。例如可用 `exec: "/system/bin/sh"` 配合 `args: ["./scripts/prepare.sh"]` 执行打包的脚本。桌面上的 `python`、`cmd.exe` 或桌面二进制不会自动映射到 Android 程序；Agent 的独立 Python runtime 也不会自动成为预任务解释器。Android 对应用可写目录中的二进制执行有限制，资源作者需要适配解释器或可执行程序的部署方式。
 
+`input_type: "file"` / `"directory"` 使用系统选择器，本地共享存储中的选择保留原路径供特权 Agent 使用；目录不会复制到其他位置。没有可解析本地路径的文件在 Android 10 及以上通过 MediaStore 导入共享下载目录（最多 256 MiB）；云目录或其他没有本地路径的目录不能作为原生目录传给 MaaFramework。路径也可手动填写。选择路径不会给应用身份下的预任务额外授予文件系统权限，资源作者需按实际消费路径的进程身份确认访问权限。
+
+Agent 和预任务收到的 `PI_INTERFACE_VERSION` 为 `v2.11.0`。Android 的 `PI_USER_DATA_DIR` 指向 `Context.getExternalFilesDir(null)` 下的 `user-data`，用于界面与 shell/root 子进程共享运行数据；外部存储不可用时省略此变量，不回退到 Agent 无法访问的内部私有目录。该路径保留 Android 返回的用户目录，不硬编码主用户存储路径。含密码的应用配置和 Keystore 仍由原有内部持久化流程管理。
+
 按桌面端习惯写即可，下面几条是 Android 上会对不上的地方：
 
 | 桌面端 | 在 MaaTauriAndroid 里 |

@@ -1192,6 +1192,17 @@ object RuntimeBridge {
         return requireNotNull(agentContext).applicationInfo.nativeLibraryDir
     }
 
+    /** App and shell/root subprocesses share this directory; internal filesDir is app-only. */
+    @JvmStatic
+    fun sharedUserDataDirectory(): String? = runCatching {
+        val context = requireNotNull(agentContext)
+        val external = context.getExternalFilesDir(null) ?: return@runCatching null
+        val directory = File(external, "user-data")
+        check(directory.isDirectory || directory.mkdirs()) { "could not create shared user data directory" }
+        check(directory.canRead() && directory.canWrite()) { "shared user data directory is unavailable" }
+        directory.absolutePath
+    }.getOrNull()
+
     @JvmStatic
     fun nativeLibraryPath(name: String): String {
         val context = requireNotNull(agentContext) { "the runtime bridge context is missing" }

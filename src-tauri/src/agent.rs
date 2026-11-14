@@ -304,7 +304,7 @@ pub fn start_session(
     AgentSession::start(execution_id, resource, descriptor, host, pi_env)
 }
 
-const PI_INTERFACE_VERSION: &str = "v2.6.0";
+const PI_INTERFACE_VERSION: &str = "v2.11.0";
 const PI_CLIENT_NAME: &str = "MaaTauriAndroid";
 
 /// Maps the UI setting to the Project Interface locale. System follows the
@@ -974,13 +974,18 @@ mod tests {
             "zh_cn",
             Some("0.1.0"),
             &BTreeMap::from([("resource-description".to_string(), "官方资源".to_string())]),
-            Some(Path::new("/data/user/0/app/files")),
+            Some(Path::new(
+                "/storage/emulated/10/Android/data/app/files/user-data",
+            )),
         );
-        assert_eq!(environment["PI_INTERFACE_VERSION"], "v2.6.0");
+        assert_eq!(environment["PI_INTERFACE_VERSION"], "v2.11.0");
         assert_eq!(environment["PI_CLIENT_NAME"], "MaaTauriAndroid");
         assert_eq!(environment["PI_CLIENT_VERSION"], env!("CARGO_PKG_VERSION"));
         assert_eq!(environment["PI_CLIENT_LANGUAGE"], "zh_cn");
-        assert_eq!(environment["PI_USER_DATA_DIR"], "/data/user/0/app/files");
+        assert_eq!(
+            environment["PI_USER_DATA_DIR"],
+            "/storage/emulated/10/Android/data/app/files/user-data"
+        );
         assert_eq!(environment["PI_VERSION"], "0.1.0");
         set_maa_framework_version(&mut environment, "5.14.2");
         assert_eq!(environment["PI_CLIENT_MAAFW_VERSION"], "5.14.2");

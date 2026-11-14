@@ -3283,6 +3283,12 @@ async fn start_run_core(
     let max_run_duration = run_supervisor::configured_limit(configuration.max_run_duration_seconds);
     let pretask_commands = domain::pretask::resolve_pretasks(&project, &configuration)
         .map_err(|error| fail_preparing(error.to_string(), "pretaskOptions"))?;
+    #[cfg(target_os = "android")]
+    let user_data_dir = call_runtime_bridge_optional_string("sharedUserDataDirectory")
+        .ok()
+        .flatten()
+        .map(PathBuf::from);
+    #[cfg(not(target_os = "android"))]
     let user_data_dir = app.path().app_data_dir().ok();
     let pi_env = if agent_count > 0 || !pretask_commands.is_empty() {
         Some(agent::pi_environment(

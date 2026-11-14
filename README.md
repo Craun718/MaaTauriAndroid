@@ -15,6 +15,7 @@ MaaTauriAndroid 本身不包含具体业务资源。Android 上要把资源在**
 ### 任务与资源
 
 - 支持 Project Interface V2 的任务、选项、预设、国际化和 `import`；支持 PI 声明的 agent（自定义识别器 / 动作）。
+- PI 扩展能力按 v2.11.0 实现：支持预任务及其预设配置、设置分区、热键、密码、checkbox 数量限制、公告列表、文件／目录选择、资源哈希与遥测。Android 的程序部署和路径约定见[资源接入](docs/resource-packaging.md#资源约定)。
 - 任务说明支持 Markdown 渲染。
 - 支持中文 / 英文界面切换。
 

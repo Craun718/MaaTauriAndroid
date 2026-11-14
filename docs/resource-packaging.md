@@ -86,6 +86,7 @@ pi.profile=/path/to/repo/resource/m9a.toml
 | `languages{}` | 已声明的翻译文件 |
 | 任意深度及每个导入文件中的 `icon` / `contact` / `license` / `description` / `doc` / `desc` / `welcome` | 当值指向文件时打包该文件；`$Key` 在每个已声明语言里查表，Markdown 图片链接和正文文件自身链接的目标都会一起打包 |
 | `agent`（对象或数组） | 包含 `child_args` 入口点的 `agent` 目录 |
+| `pretask`（对象或数组，含导入文件） | 项目内的 `exec` 和 `args` 文件路径；需要的同目录模块、配置等额外依赖通过 `pi_include` 补充 |
 | — | `data/`，Agent 会读取它，但协议不会声明它 |
 
 接口声明了、但项目中并不存在的路径会**使构建失败**，因为无声的错误打包正是以这种方式进入产物的。M9A v4.9.0 把 `i18n/` 改名为 `locales/`；旧的许可名单没有匹配到任何内容，构建仍然通过，最终 APK 里的接口指向了自身压缩包中不存在的翻译文件，在真机上导致硬性的项目加载失败。
@@ -93,6 +94,10 @@ pi.profile=/path/to/repo/resource/m9a.toml
 被文档描述为“文件路径、URL 或纯文本”的值只在能解析为现有路径时才被当作路径处理，因此普通文字和远程 URL 会原样保留。绝对路径和 `..` 逃逸会被忽略。开发残留物（`__pycache__`、`.git`、`node_modules`、`.venv`、`*.pyc`/`*.pyo`）会在复制时被过滤掉。
 
 ## 资源约定
+
+预任务在创建或连接 MaaFramework 控制器前按声明和导入顺序执行，工作目录是设备上包含 `interface.json` 的项目目录。设置页可勾选预任务并配置选项；不适用于当前控制器或资源的预任务不会执行。选项值以紧凑 JSON 追加为最后一个参数，只用于预任务，不参与 Pipeline 覆盖。任一预任务启动失败或退出码非零都会中止本次启动；停止运行或达到运行时限会结束正在执行的预任务。参数和进程输出可能包含密码，因此不会进入运行日志。
+
+预任务使用应用身份和 Android 的进程环境，程序必须适用于 Android 且可执行。例如可用 `exec: "/system/bin/sh"` 配合 `args: ["./scripts/prepare.sh"]` 执行打包的脚本。桌面上的 `python`、`cmd.exe` 或桌面二进制不会自动映射到 Android 程序；Agent 的独立 Python runtime 也不会自动成为预任务解释器。Android 对应用可写目录中的二进制执行有限制，资源作者需要适配解释器或可执行程序的部署方式。
 
 按桌面端习惯写即可，下面几条是 Android 上会对不上的地方：
 

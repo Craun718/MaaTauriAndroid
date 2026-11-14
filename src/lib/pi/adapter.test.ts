@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildAndroidProject, metadataTextPaths } from "./adapter";
-import type { ProjectSource, ProjectTextReader } from "./rawTypes";
+import type {
+  ProjectSource,
+  ProjectTextReader,
+  RawJsonValue,
+} from "./rawTypes";
 
 const files: Record<string, string> = {
   CONTACT: "Contact body",
@@ -294,3 +298,80 @@ describe("metadataTextPaths", () => {
     ]);
   });
 });
+
+it("loads anonymous pretasks, localizes display fields and defaults field labels", async () => {
+  const input = source();
+  input.document.pretask = [
+    { exec: "python", args: ["one.py"] },
+    { exec: "python", args: ["two.py"] },
+    {
+      name: "python#0",
+      exec: "tool",
+      label: "$label",
+      description: "$input.description",
+      icon: "$icon",
+      option: ["text", "key"],
+      controller: ["ADB"],
+      resource: ["main"],
+    },
+  ];
+  input.translations.en_us.icon = "prepare.png";
+  input.document.option = {
+    text: { type: "input", inputs: [{ name: "token", password: true }] },
+    key: { type: "hotkey", hotkeys: [{ name: "attack" }] },
+  };
+  input.document.task = [];
+  input.document.global_option = [];
+  const project = await buildAndroidProject(input, "en_us", reader);
+  expect(project.pretasks.map((task) => task.name)).toEqual([
+    "python#0#",
+    "python#1",
+    "python#0",
+  ]);
+  expect(project.pretasks[0]).toMatchObject({
+    label: "python",
+    args: ["one.py"],
+  });
+  expect(project.pretasks[0].explicitName).toBeUndefined();
+  expect(project.pretasks[2]).toMatchObject({
+    explicitName: "python#0",
+    label: "Profiled Project",
+    description: "Input help",
+    icon: "prepare.png",
+    options: ["text", "key"],
+    controllers: ["ADB"],
+    resources: ["main"],
+  });
+  expect(project.options.text).toMatchObject({
+    inputs: [{ name: "token", label: "token", password: true }],
+  });
+  expect(project.options.key).toMatchObject({
+    hotkeys: [{ name: "attack", label: "attack" }],
+  });
+  input.document.pretask = { exec: "tool" };
+  expect(
+    (await buildAndroidProject(input, "en_us", reader)).pretasks,
+  ).toHaveLength(1);
+});
+
+const invalidPretasks: RawJsonValue[] = [
+  {},
+  { exec: "" },
+  { exec: "python", args: [1] },
+  { exec: "python", args: "bad" },
+  { exec: "python", name: "" },
+  { exec: "python", option: ["missing"] },
+  [
+    { name: "same", exec: "a" },
+    { name: "same", exec: "b" },
+  ],
+  1,
+];
+it.each(invalidPretasks.map((pretask) => ({ pretask })))(
+  "rejects malformed pretask declarations $pretask",
+  async ({ pretask }) => {
+    const input = source();
+    input.document.pretask = pretask;
+    await expect(buildAndroidProject(input, "en_us", reader)).rejects.toThrow();
+  },
+);

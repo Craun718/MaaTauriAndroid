@@ -243,6 +243,23 @@ fn validate_configuration(
         }
     }
 
+    for (name, configured) in &configuration.pretask_values {
+        let definition = project
+            .pretasks
+            .iter()
+            .find(|item| &item.name == name)
+            .ok_or_else(|| validation_error(format!("unknown pretask: {name}")))?;
+        let declared = crate::domain::pretask::declared_options(project, &definition.options);
+        for (option, value) in &configured.option_values {
+            if !declared.contains(option) {
+                return Err(validation_error(format!(
+                    "pretask {name} does not declare option {option}"
+                )));
+            }
+            validate_option_value(project, option, value).map_err(validation_error)?;
+        }
+    }
+
     validate_option_map(
         project,
         &project.global_options,
@@ -467,6 +484,9 @@ pub fn remove_password_values(
     for values in configuration.resource_option_values.values_mut() {
         remove_password_option_values(values, &password_fields);
     }
+    for pretask in configuration.pretask_values.values_mut() {
+        remove_password_option_values(&mut pretask.option_values, &password_fields);
+    }
     for run in &mut configuration.run_configurations {
         for task in &mut run.tasks {
             remove_password_option_values(&mut task.option_values, &password_fields);
@@ -601,6 +621,7 @@ mod tests {
                 ("credentials".to_string(), credentials),
                 ("mode".to_string(), mode),
             ]),
+            pretasks: Vec::new(),
             global_options: vec!["mode".to_string()],
             presets: Vec::new(),
             agents: Vec::new(),
@@ -658,6 +679,83 @@ mod tests {
     fn export_bytes() -> Vec<u8> {
         let backup = export_configuration(&project(), &configuration(), &[schedule_rule()]);
         serialize_configuration(&backup).unwrap()
+    }
+
+    #[test]
+    fn pretask_backup_round_trip_strips_passwords_on_export_and_untrusted_import() {
+        let mut project = project();
+        project
+            .pretasks
+            .push(crate::domain::types::PretaskDefinition {
+                name: "prepare".into(),
+                explicit_name: Some("prepare".into()),
+                label: "Prepare".into(),
+                exec: "tool".into(),
+                args: vec![],
+                description: None,
+                icon: None,
+                controllers: vec![],
+                resources: vec![],
+                options: vec!["mode".into()],
+            });
+        let OptionDefinition::Select { cases, .. } = project.options.get_mut("mode").unwrap()
+        else {
+            panic!()
+        };
+        cases[0].options = vec!["credentials".into()];
+        let mut config = configuration();
+        config.pretask_values.insert(
+            "prepare".into(),
+            crate::domain::types::ConfiguredPretask {
+                enabled: false,
+                option_values: config.run_configurations[0].tasks[0].option_values.clone(),
+            },
+        );
+        // Inactive sub-options are still valid stored settings and must also be sanitized.
+        validate_configuration(&project, &config).unwrap();
+        let exported = export_configuration(&project, &config, &[]);
+        let OptionValue::Inputs { values } =
+            &exported.configuration.pretask_values["prepare"].option_values["credentials"]
+        else {
+            panic!()
+        };
+        assert!(!values.contains_key("password"));
+        assert!(values.contains_key("secondary"));
+        let mut untrusted = serde_json::to_value(&exported).unwrap();
+        untrusted["configuration"]["pretaskValues"]["prepare"]["optionValues"]["credentials"]
+            ["values"]["password"] = serde_json::json!("injected-secret");
+        let imported =
+            parse_import_configuration(&serde_json::to_vec(&untrusted).unwrap(), &project).unwrap();
+        assert!(!serde_json::to_string(&imported.configuration)
+            .unwrap()
+            .contains("injected-secret"));
+        assert!(!imported.configuration.pretask_values["prepare"].enabled);
+        let mut invalid = config.clone();
+        invalid
+            .pretask_values
+            .insert("unknown".into(), Default::default());
+        assert!(validate_configuration(&project, &invalid).is_err());
+        invalid = config.clone();
+        invalid
+            .pretask_values
+            .get_mut("prepare")
+            .unwrap()
+            .option_values
+            .insert("unknown".into(), OptionValue::Single { case: "x".into() });
+        assert!(validate_configuration(&project, &invalid).is_err());
+        invalid = config;
+        invalid
+            .pretask_values
+            .get_mut("prepare")
+            .unwrap()
+            .option_values
+            .insert(
+                "mode".into(),
+                OptionValue::Single {
+                    case: "unknown".into(),
+                },
+            );
+        assert!(validate_configuration(&project, &invalid).is_err());
     }
 
     #[test]

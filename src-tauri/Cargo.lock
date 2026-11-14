@@ -2219,6 +2219,7 @@ dependencies = [
  "hex",
  "jni",
  "jsonc-parser",
+ "libc",
  "log",
  "maa-framework",
  "node-semver",

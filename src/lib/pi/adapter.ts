@@ -6,6 +6,7 @@ import type {
   OptionApplicability,
   OptionCase,
   OptionDefinition,
+  PretaskDefinition,
   Project,
   ProjectMetadata,
   ResourceDefinition,
@@ -137,11 +138,8 @@ function parseInputField(
 ): InputFieldDefinition {
   const item = object(value);
   const name = optionalString(item?.name);
-  const rawLabel = optionalString(item?.label);
-  if (!item || !name || !rawLabel) {
-    throw new Error(
-      "could not parse input definition: name and label are required",
-    );
+  if (!item || !name) {
+    throw new Error("could not parse input definition: name is required");
   }
   const pipelineType = optionalString(item.pipeline_type) ?? "string";
   const inputType = optionalString(item.input_type) ?? "text";
@@ -162,7 +160,7 @@ function parseInputField(
   }
   return {
     name,
-    label: localize(item.label) ?? rawLabel,
+    label: localize(item.label) ?? name,
     description: localize(item.description),
     placeholder: localize(item.placeholder),
     default: optionalString(item.default),
@@ -180,15 +178,12 @@ function parseHotkeyField(
 ) {
   const item = object(value);
   const name = optionalString(item?.name);
-  const rawLabel = optionalString(item?.label);
-  if (!item || !name || !rawLabel) {
-    throw new Error(
-      "could not parse hotkey definition: name and label are required",
-    );
+  if (!item || !name) {
+    throw new Error("could not parse hotkey definition: name is required");
   }
   return {
     name,
-    label: localize(item.label) ?? rawLabel,
+    label: localize(item.label) ?? name,
     default: optionalString(item?.default),
   };
 }
@@ -512,6 +507,58 @@ export async function buildAndroidProject(
     });
   }
 
+  const pretaskItems =
+    document.pretask === undefined
+      ? []
+      : Array.isArray(document.pretask)
+        ? document.pretask
+        : isRawObject(document.pretask)
+          ? [document.pretask]
+          : undefined;
+  if (!pretaskItems) throw new Error("pretask must be an object or array");
+  const pretaskNames = new Set<string>();
+  for (const value of pretaskItems) {
+    const name = optionalString(object(value)?.name);
+    if (name !== undefined) {
+      if (pretaskNames.has(name))
+        throw new Error(`duplicate pretask name: ${name}`);
+      pretaskNames.add(name);
+    }
+  }
+  const pretasks: PretaskDefinition[] = pretaskItems.map((value, index) => {
+    const item = object(value);
+    const exec = optionalString(item?.exec);
+    if (!item || !exec?.trim())
+      throw new Error("missing required field: pretask.exec");
+    const explicitName = optionalString(item.name);
+    if (item.name !== undefined && !explicitName?.trim()) {
+      throw new Error("pretask name must be a non-empty string");
+    }
+    let name = explicitName ?? `${exec}#${index}`;
+    if (explicitName === undefined) {
+      while (pretaskNames.has(name)) name += "#";
+      pretaskNames.add(name);
+    }
+    if (
+      item.args !== undefined &&
+      (!Array.isArray(item.args) || !item.args.every(isString))
+    ) {
+      throw new Error(`pretask args for ${name} must be a string array`);
+    }
+    return {
+      name,
+      explicitName,
+      exec,
+      args: strings(item.args),
+      label: localizeText(item.label) ?? explicitName ?? exec,
+      description: localizeText(item.description),
+      icon: localizeText(item.icon),
+      options: strings(item.option),
+      controllers: strings(item.controller),
+      resources: strings(item.resource),
+    };
+  });
+
   const optionRecords = object(document.option) ?? {};
   const options: Record<string, OptionDefinition> = {};
   for (const name of Object.keys(optionRecords).sort(compareUtf8)) {
@@ -521,7 +568,7 @@ export async function buildAndroidProject(
   for (const name of globalOptions) {
     if (!options[name]) throw new Error(`unknown option reference: ${name}`);
   }
-  for (const task of tasks) {
+  for (const task of [...tasks, ...pretasks]) {
     for (const name of task.options) {
       if (!options[name]) throw new Error(`unknown option reference: ${name}`);
     }
@@ -580,6 +627,7 @@ export async function buildAndroidProject(
     resources,
     groups,
     settingSections,
+    pretasks,
     tasks,
     options,
     globalOptions,

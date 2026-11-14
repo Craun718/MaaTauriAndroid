@@ -112,6 +112,14 @@ impl Drop for MaaSessions {
 }
 
 impl MaaSessions {
+    pub fn preparing_stop_requested(&self, execution_id: &str) -> bool {
+        self.pending_stop
+            .lock()
+            .expect("pending stop lock poisoned")
+            .as_deref()
+            == Some(execution_id)
+    }
+
     pub fn begin_preparing(&self, execution_id: &str) -> Result<bool, RuntimeError> {
         self.reclaim_retired();
         let previous = {

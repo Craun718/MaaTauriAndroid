@@ -407,48 +407,7 @@ impl<'a> PipelineMerger<'a> {
         inputs: &[InputFieldDefinition],
         values: &BTreeMap<String, String>,
     ) -> Result<BTreeMap<String, String>, ResolverError> {
-        let mut resolved = BTreeMap::new();
-        for field in inputs {
-            let raw = values
-                .get(&field.name)
-                .cloned()
-                .or_else(|| field.default.clone());
-            let raw = raw.unwrap_or_default();
-            if field.input_type == InputType::Time && !raw.is_empty() && !is_24_hour_time(&raw) {
-                return Err(ResolverError::InvalidInput {
-                    option: option.to_string(),
-                    field: field.name.clone(),
-                    message: "expected a 24-hour time in HH:mm format".to_string(),
-                });
-            }
-            if let Some(pattern) = &field.verify {
-                let regex = Regex::new(pattern).map_err(|error| ResolverError::InvalidInput {
-                    option: option.to_string(),
-                    field: field.name.clone(),
-                    message: error.to_string(),
-                })?;
-                if !regex.is_match(&raw) {
-                    return Err(ResolverError::InvalidInput {
-                        option: option.to_string(),
-                        field: field.name.clone(),
-                        message: field
-                            .pattern_message
-                            .clone()
-                            .unwrap_or_else(|| "value does not match the expected pattern".into()),
-                    });
-                }
-            }
-            resolved.insert(field.name.clone(), raw);
-        }
-        for field in values.keys() {
-            if !inputs.iter().any(|definition| &definition.name == field) {
-                return Err(ResolverError::UnknownInputField {
-                    option: option.to_string(),
-                    field: field.clone(),
-                });
-            }
-        }
-        Ok(resolved)
+        resolve_input_values(option, inputs, values)
     }
 
     fn merge_override(&mut self, value: Option<&Value>) {
@@ -457,6 +416,55 @@ impl<'a> PipelineMerger<'a> {
         };
         merge_json(&mut self.output, value);
     }
+}
+
+pub(super) fn resolve_input_values(
+    option: &str,
+    inputs: &[InputFieldDefinition],
+    values: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, ResolverError> {
+    let mut resolved = BTreeMap::new();
+    for field in inputs {
+        let raw = values
+            .get(&field.name)
+            .cloned()
+            .or_else(|| field.default.clone());
+        let raw = raw.unwrap_or_default();
+        if field.input_type == InputType::Time && !raw.is_empty() && !is_24_hour_time(&raw) {
+            return Err(ResolverError::InvalidInput {
+                option: option.to_string(),
+                field: field.name.clone(),
+                message: "expected a 24-hour time in HH:mm format".to_string(),
+            });
+        }
+        if let Some(pattern) = &field.verify {
+            let regex = Regex::new(pattern).map_err(|error| ResolverError::InvalidInput {
+                option: option.to_string(),
+                field: field.name.clone(),
+                message: error.to_string(),
+            })?;
+            if !regex.is_match(&raw) {
+                return Err(ResolverError::InvalidInput {
+                    option: option.to_string(),
+                    field: field.name.clone(),
+                    message: field
+                        .pattern_message
+                        .clone()
+                        .unwrap_or_else(|| "value does not match the expected pattern".into()),
+                });
+            }
+        }
+        resolved.insert(field.name.clone(), raw);
+    }
+    for field in values.keys() {
+        if !inputs.iter().any(|definition| &definition.name == field) {
+            return Err(ResolverError::UnknownInputField {
+                option: option.to_string(),
+                field: field.clone(),
+            });
+        }
+    }
+    Ok(resolved)
 }
 
 fn is_24_hour_time(value: &str) -> bool {
@@ -475,7 +483,7 @@ fn is_24_hour_time(value: &str) -> bool {
     hour <= 23 && minute <= 59
 }
 
-fn hotkey_values(
+pub(super) fn hotkey_values(
     option: &str,
     hotkeys: &[HotkeyFieldDefinition],
     values: &BTreeMap<String, String>,

@@ -20,6 +20,8 @@ pub enum ProjectError {
     MissingField(&'static str),
     #[error("duplicate task name: {0}")]
     DuplicateTask(String),
+    #[error("invalid pretask definition: {0}")]
+    Pretask(String),
     #[error("unknown option reference: {0}")]
     UnknownOption(String),
     #[error("could not parse input definition for {option}: {source}")]
@@ -221,10 +223,87 @@ impl ProjectLoader {
             });
         }
 
+        let pretask_items = match document.get("pretask") {
+            None => Vec::new(),
+            Some(Value::Object(_)) => vec![&document["pretask"]],
+            Some(Value::Array(items)) => items.iter().collect(),
+            Some(_) => return Err(ProjectError::Pretask("expected object or array".into())),
+        };
+        let mut pretasks = Vec::<PretaskDefinition>::new();
+        let mut pretask_names = std::collections::BTreeSet::new();
+        for item in &pretask_items {
+            if let Some(name) = item.get("name").and_then(Value::as_str) {
+                if !pretask_names.insert(name.to_string()) {
+                    return Err(ProjectError::Pretask(format!("duplicate name: {name}")));
+                }
+            }
+        }
+        for (index, item) in pretask_items.into_iter().enumerate() {
+            let exec = item
+                .get("exec")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or(ProjectError::MissingField("pretask.exec"))?
+                .to_string();
+            let explicit_name = match item.get("name") {
+                None => None,
+                Some(Value::String(name)) if !name.trim().is_empty() => Some(name.clone()),
+                _ => {
+                    return Err(ProjectError::Pretask(
+                        "name must be a non-empty string".into(),
+                    ))
+                }
+            };
+            let name = explicit_name.clone().unwrap_or_else(|| {
+                let mut key = format!("{exec}#{index}");
+                while pretask_names.contains(&key) {
+                    key.push('#');
+                }
+                pretask_names.insert(key.clone());
+                key
+            });
+            let args = match item.get("args") {
+                None => Vec::new(),
+                Some(Value::Array(items)) => items
+                    .iter()
+                    .map(|value| {
+                        value.as_str().map(str::to_string).ok_or_else(|| {
+                            ProjectError::Pretask(format!("args for {name} must contain strings"))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                Some(_) => {
+                    return Err(ProjectError::Pretask(format!(
+                        "args for {name} must be an array"
+                    )))
+                }
+            };
+            pretasks.push(PretaskDefinition {
+                label: text(item.get("label"))
+                    .unwrap_or_else(|| explicit_name.clone().unwrap_or_else(|| exec.clone())),
+                description: text(item.get("description")),
+                icon: text(item.get("icon")),
+                options: strings(item.get("option")).unwrap_or_default(),
+                controllers: strings(item.get("controller")).unwrap_or_default(),
+                resources: strings(item.get("resource")).unwrap_or_default(),
+                name,
+                explicit_name,
+                exec,
+                args,
+            });
+        }
+
         let mut options = BTreeMap::new();
         if let Some(raw) = document.get("option").and_then(Value::as_object) {
             for (name, item) in raw {
                 options.insert(name.clone(), parse_option(name, item, &text)?);
+            }
+        }
+        for pretask in &pretasks {
+            for name in &pretask.options {
+                if !options.contains_key(name) {
+                    return Err(ProjectError::UnknownOption(name.clone()));
+                }
             }
         }
         let references = ["global_option"];
@@ -312,6 +391,7 @@ impl ProjectLoader {
             resources,
             groups,
             setting_sections,
+            pretasks,
             tasks,
             options,
             global_options: strings(document.get("global_option")).unwrap_or_default(),
@@ -578,9 +658,8 @@ fn parse_option(
                 };
                 if let Some(raw_inputs) = fields.and_then(Value::as_array) {
                     for (input, raw_input) in inputs.iter_mut().zip(raw_inputs) {
-                        if let Some(label) = text(raw_input.get("label")) {
-                            input.label = label;
-                        }
+                        input.label =
+                            text(raw_input.get("label")).unwrap_or_else(|| input.name.clone());
                         input.description = text(raw_input.get("description"));
                         input.placeholder = text(raw_input.get("placeholder"));
                     }
@@ -610,9 +689,8 @@ fn parse_option(
                     .unwrap_or_default();
                 if let Some(raw_hotkeys) = fields.and_then(Value::as_array) {
                     for (hotkey, raw_hotkey) in hotkeys.iter_mut().zip(raw_hotkeys) {
-                        if let Some(label) = text(raw_hotkey.get("label")) {
-                            hotkey.label = label;
-                        }
+                        hotkey.label =
+                            text(raw_hotkey.get("label")).unwrap_or_else(|| hotkey.name.clone());
                         hotkey.description = text(raw_hotkey.get("description"));
                     }
                 }
@@ -925,6 +1003,62 @@ pub(crate) fn strings(value: Option<&Value>) -> Option<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parses_anonymous_pretasks_and_optional_field_labels() {
+        let project = ProjectLoader::default().load_embedded(serde_json::json!({
+            "interface_version": 2, "name": "test", "pretask": [
+                {"exec": "python"}, {"exec": "python"},
+                {"name": "python#0", "exec": "explicit", "label": "$label", "description": "$description", "icon": "$icon"}
+            ], "option": {
+                "text": {"type": "input", "inputs": [{"name": "token"}]},
+                "key": {"type": "hotkey", "hotkeys": [{"name": "attack"}]}
+            }
+        }), BTreeMap::from([("label".into(), "Localized".into()), ("description".into(), "Help".into()), ("icon".into(), "icon.png".into())]), "en_us").unwrap();
+        assert_eq!(project.pretasks[0].name, "python#0#");
+        assert_eq!(project.pretasks[1].name, "python#1");
+        assert_eq!(project.pretasks[0].label, "python");
+        assert!(project.pretasks[0].explicit_name.is_none());
+        assert_eq!(
+            project.pretasks[2].explicit_name.as_deref(),
+            Some("python#0")
+        );
+        assert_eq!(project.pretasks[2].label, "Localized");
+        assert_eq!(project.pretasks[2].description.as_deref(), Some("Help"));
+        assert_eq!(project.pretasks[2].icon.as_deref(), Some("icon.png"));
+        let OptionDefinition::Input { inputs, .. } = &project.options["text"] else {
+            panic!()
+        };
+        assert_eq!(inputs[0].label, "token");
+        let OptionDefinition::Hotkey { hotkeys, .. } = &project.options["key"] else {
+            panic!()
+        };
+        assert_eq!(hotkeys[0].label, "attack");
+    }
+
+    #[test]
+    fn rejects_malformed_pretasks_and_duplicate_explicit_names() {
+        for pretask in [
+            serde_json::json!({}),
+            serde_json::json!({"exec": ""}),
+            serde_json::json!({"exec": "python", "args": [1]}),
+            serde_json::json!({"exec": "python", "args": "bad"}),
+            serde_json::json!({"exec": "python", "name": ""}),
+            serde_json::json!({"exec": "python", "option": ["missing"]}),
+            serde_json::json!([{"name": "same", "exec": "a"}, {"name": "same", "exec": "b"}]),
+            serde_json::json!(1),
+        ] {
+            assert!(ProjectLoader::default()
+                .load_value(
+                    ".",
+                    serde_json::json!({
+                        "interface_version": 2, "name": "test", "pretask": pretask
+                    }),
+                    "en_us"
+                )
+                .is_err());
+        }
+    }
+
     #[test]
     fn merges_single_and_array_pretasks_in_order() {
         let main = serde_json::json!({ "pretask": { "exec": "main" } });

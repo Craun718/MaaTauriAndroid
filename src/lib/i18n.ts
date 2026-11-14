@@ -581,6 +581,7 @@ const en = {
   updateFailureStorage: "The download could not be written to storage.",
   updateFailureInstallerNotFound: "No app on this device can install updates.",
   updateFailureInternal: "Unexpected error. See the logs for details.",
+  pretasks: "Pre-tasks",
 };
 
 export type MessageKey = keyof typeof en;
@@ -1109,6 +1110,7 @@ const zh: Record<MessageKey, string> = {
   guideProgress: "{current} / {total}",
   guideRunActive: "请在当前运行结束后查看指引。",
   guideUnavailable: "暂时无法显示指引，请稍后从设置页重试。",
+  pretasks: "预任务",
 };
 
 const catalog: Record<AppLanguage, Record<MessageKey, string>> = { en, zh };

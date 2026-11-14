@@ -37,6 +37,132 @@ class PiPackageTest {
     """.trimIndent()
 
     @Test
+    fun packagesAShellPretaskScriptAndExistingRelativeFileArguments() {
+        val root = project(
+            """{
+                "interface_version": 2,
+                "pretask": {
+                    "exec": "/system/bin/sh",
+                    "args": ["./scripts/prepare.sh", "config/startup.json", "配置 文件.txt", "--fast", "generated.json"]
+                }
+            }""",
+            mapOf(
+                "scripts/prepare.sh" to "echo ready",
+                "config/startup.json" to "{}",
+                "配置 文件.txt" to "input",
+            ),
+        )
+
+        val plan = PiPackage.plan(root)
+
+        assertEquals(
+            listOf("interface.json", "scripts/prepare.sh", "config/startup.json", "配置 文件.txt"),
+            plan.entries,
+        )
+        assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
+    fun collectsRelativeExecutablesAndArgumentsFromImportedPretaskArrays() {
+        val root = project(
+            """{
+                "interface_version": 2,
+                "import": ["tasks/startup.json"],
+                "pretask": [{"exec": "./tools/bootstrap", "args": ["./scripts/shared.sh"]}]
+            }""",
+            mapOf(
+                "tasks/startup.json" to """{
+                    "pretask": [
+                        {"exec": "tools/check", "args": ["./scripts/check.sh", "./scripts/shared.sh"]},
+                        {"exec": "/system/bin/sh", "args": ["./scripts/imported.sh"]}
+                    ]
+                }""",
+                "tools/bootstrap" to "executable",
+                "tools/check" to "executable",
+                "scripts/shared.sh" to "echo shared",
+                "scripts/check.sh" to "echo check",
+                "scripts/imported.sh" to "echo imported",
+            ),
+        )
+
+        val plan = PiPackage.plan(root)
+
+        assertEquals(
+            listOf(
+                "interface.json", "tasks/startup.json", "tools/bootstrap", "scripts/shared.sh",
+                "tools/check", "scripts/check.sh", "scripts/imported.sh",
+            ),
+            plan.entries,
+        )
+        assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
+    fun collectsAnObjectPretaskFromAnImportRelativeToTheInterfaceDirectory() {
+        val root = project(
+            """{"interface_version": 2, "import": ["tasks/startup.json"]}""",
+            mapOf(
+                "tasks/startup.json" to """{"pretask": {"exec": "./tools/prepare", "args": ["input.txt"]}}""",
+                "tools/prepare" to "executable",
+                "input.txt" to "root input",
+                "tasks/input.txt" to "wrong base directory",
+            ),
+        )
+
+        val plan = PiPackage.plan(root)
+
+        assertEquals(listOf("interface.json", "tasks/startup.json", "tools/prepare", "input.txt"), plan.entries)
+        assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
+    fun reportsMissingRelativePretaskExecutablesButDoesNotRequirePathProgramsOrArguments() {
+        val root = project(
+            """{
+                "interface_version": 2,
+                "pretask": [
+                    {"exec": "./tools/missing", "args": ["missing-input.txt"]},
+                    {"exec": "python", "args": ["--version"]}
+                ]
+            }""",
+            mapOf("python" to "not a project-relative executable reference"),
+        )
+
+        val plan = PiPackage.plan(root)
+
+        assertEquals(listOf("interface.json"), plan.entries)
+        assertEquals(listOf("tools/missing"), plan.missing)
+    }
+
+    @Test
+    fun ignoresNonFileArgumentsAndPretaskPathsOutsideTheProject() {
+        val root = project(
+            """{
+                "interface_version": 2,
+                "pretask": [
+                    {"exec": "../outside", "args": [
+                        "../outside.txt", "/system/bin/sh", "C:/tools/prepare.exe",
+                        "https://example.com/input", "--input=config.json", "inputs"
+                    ]},
+                    {"exec": "C:/tools/prepare.exe"},
+                    {"exec": "https://example.com/tool"}
+                ]
+            }""",
+            mapOf(
+                "inputs/keep.txt" to "not a file argument",
+                "--input=config.json" to "not an independent path argument",
+            ),
+        )
+        root.parentFile.resolve("outside").writeText("outside executable")
+        root.parentFile.resolve("outside.txt").writeText("outside input")
+
+        val plan = PiPackage.plan(root)
+
+        assertEquals(listOf("interface.json"), plan.entries)
+        assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
     fun packagesTheTranslationDirectoryTheInterfaceDeclares() {
         // Regression guard for M9A v4.9.0: i18n/ became locales/ and a hard-coded glob
         // matched nothing, so the packaged interface pointed at files that were not in it.

@@ -17,6 +17,7 @@ pub struct Project {
     pub groups: Vec<GroupDefinition>,
     pub setting_sections: Vec<SettingSectionDefinition>,
     pub tasks: Vec<TaskDefinition>,
+    pub pretasks: Vec<PretaskDefinition>,
     pub options: BTreeMap<String, OptionDefinition>,
     pub global_options: Vec<String>,
     pub presets: Vec<ConfigurationTemplate>,
@@ -80,6 +81,62 @@ pub struct TaskDefinition {
     pub pipeline_override: Value,
     pub default_check: bool,
     pub icon: Option<String>,
+}
+
+/// A program declared by PI, executed before controller startup.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PretaskDefinition {
+    /// Stable configuration key; anonymous entries use exec plus declaration index.
+    pub name: String,
+    /// Only this identifier is eligible for a future preset reference.
+    pub explicit_name: Option<String>,
+    pub label: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub exec: String,
+    pub args: Vec<String>,
+    pub options: Vec<String>,
+    pub controllers: Vec<String>,
+    pub resources: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfiguredPretask {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub option_values: BTreeMap<String, OptionValue>,
+}
+
+impl Default for ConfiguredPretask {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            option_values: BTreeMap::new(),
+        }
+    }
+}
+
+/// Arguments are ready for the process runner, including the final options JSON.
+/// Debug redacts args and serialization is intentionally unavailable: args may contain passwords.
+#[derive(Clone, PartialEq)]
+pub struct ResolvedPretask {
+    pub name: String,
+    pub exec: String,
+    pub args: Vec<String>,
+}
+
+impl std::fmt::Debug for ResolvedPretask {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ResolvedPretask")
+            .field("name", &self.name)
+            .field("exec", &self.exec)
+            .field("args", &"<redacted>")
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +242,7 @@ pub struct OptionCase {
 #[serde(rename_all = "camelCase")]
 pub struct InputFieldDefinition {
     pub name: String,
+    #[serde(default)]
     pub label: String,
     pub description: Option<String>,
     pub placeholder: Option<String>,
@@ -204,6 +262,7 @@ pub struct InputFieldDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct HotkeyFieldDefinition {
     pub name: String,
+    #[serde(default)]
     pub label: String,
     pub description: Option<String>,
     pub default: Option<String>,
@@ -392,6 +451,8 @@ pub struct UserConfiguration {
     #[serde(default)]
     pub ui_language: UiLanguage,
     pub active_resource: Option<String>,
+    #[serde(default)]
+    pub pretask_values: BTreeMap<String, ConfiguredPretask>,
     pub global_option_values: BTreeMap<String, OptionValue>,
     pub controller_option_values: BTreeMap<String, BTreeMap<String, OptionValue>>,
     pub resource_option_values: BTreeMap<String, BTreeMap<String, OptionValue>>,
@@ -445,6 +506,7 @@ impl Default for UserConfiguration {
             debug_mode: false,
             ui_language: UiLanguage::System,
             active_resource: None,
+            pretask_values: BTreeMap::new(),
             global_option_values: BTreeMap::new(),
             controller_option_values: BTreeMap::new(),
             resource_option_values: BTreeMap::new(),
@@ -464,6 +526,24 @@ impl Default for UserConfiguration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_configuration_defaults_pretasks_and_round_trips_explicit_disabling() {
+        let mut value = serde_json::to_value(UserConfiguration::default()).unwrap();
+        value.as_object_mut().unwrap().remove("pretaskValues");
+        let mut configuration: UserConfiguration = serde_json::from_value(value).unwrap();
+        assert!(configuration.pretask_values.is_empty());
+        configuration.pretask_values.insert(
+            "prepare".into(),
+            ConfiguredPretask {
+                enabled: false,
+                ..Default::default()
+            },
+        );
+        let restored: UserConfiguration =
+            serde_json::from_value(serde_json::to_value(&configuration).unwrap()).unwrap();
+        assert_eq!(configuration, restored);
+    }
 
     #[test]
     fn legacy_configuration_defaults_force_stop_to_false() {

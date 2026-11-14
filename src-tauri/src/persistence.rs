@@ -397,6 +397,7 @@ mod tests {
             setting_sections: Vec::new(),
             tasks: Vec::new(),
             options: BTreeMap::new(),
+            pretasks: Vec::new(),
             global_options: Vec::new(),
             presets: Vec::new(),
             agents: Vec::new(),

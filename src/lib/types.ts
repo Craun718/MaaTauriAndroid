@@ -171,6 +171,7 @@ export interface Project {
   groups: GroupDefinition[];
   settingSections: SettingSection[];
   tasks: TaskDefinition[];
+  pretasks: PretaskDefinition[];
   options: Record<string, OptionDefinition>;
   globalOptions: string[];
   presets: ConfigurationTemplate[];
@@ -323,6 +324,7 @@ export interface UserConfiguration {
   debugMode?: boolean;
   uiLanguage?: UiLanguage;
   activeResource?: string;
+  pretaskValues: Record<string, ConfiguredPretask>;
   globalOptionValues: Record<string, OptionValue>;
   controllerOptionValues: Record<string, Record<string, OptionValue>>;
   resourceOptionValues: Record<string, Record<string, OptionValue>>;
@@ -584,4 +586,23 @@ export interface UpdatePrefs {
   source: UpdateSourceSetting;
   channel: UpdateChannelSetting;
   cdk: string;
+}
+
+export interface PretaskDefinition {
+  /** Configuration identity; anonymous entries use exec plus declaration index. */
+  name: string;
+  explicitName?: string;
+  label: string;
+  description?: string;
+  icon?: string;
+  exec: string;
+  args: string[];
+  options: string[];
+  controllers: string[];
+  resources: string[];
+}
+
+export interface ConfiguredPretask {
+  enabled: boolean;
+  optionValues: Record<string, OptionValue>;
 }

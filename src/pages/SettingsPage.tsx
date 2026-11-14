@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
+import { PretaskSettings } from "../components/PretaskSettings";
 import { ProjectImage } from "../components/ProjectImage";
 import { ReleaseNotesEntry } from "../components/ReleaseNotes";
 import { RichDescription } from "../components/RichDescription";
@@ -175,6 +176,13 @@ export function SettingsPage() {
       </section>
       {project && snapshot && (
         <>
+          <PretaskSettings
+            project={project}
+            configuration={snapshot.configuration}
+            onChange={(configuration) => {
+              void saveConfiguration(configuration);
+            }}
+          />
           {project.settingSections.length > 0 &&
             project.globalOptions.length > 0 && (
               <h2 className="text-lg font-semibold">{t("taskSettings")}</h2>

@@ -420,3 +420,10 @@ export async function validateCredential(): Promise<
 > {
   return invoke("update_validate_credential");
 }
+
+/** Returns a shared native path, or null when the system picker was cancelled. */
+export async function pickOptionPath(
+  kind: "file" | "directory",
+): Promise<string | null> {
+  return invoke<string | null>("pick_option_path", { kind });
+}

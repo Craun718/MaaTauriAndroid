@@ -153,6 +153,12 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun pickOptionFile(): String? = OptionPathPicker.pick(directory = false)
+
+    @JvmStatic
+    fun pickOptionDirectory(): String? = OptionPathPicker.pick(directory = true)
+
+    @JvmStatic
     fun pickConfigurationFile(): String? {
         if (agentContext == null) return JSONObject().put("error", "readFailed").toString()
         val request = ConfigurationPickRequest()

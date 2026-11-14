@@ -6,6 +6,7 @@ mod diagnostics;
 mod directory_access;
 mod domain;
 mod focus;
+mod option_path;
 mod persistence;
 mod pretask;
 mod run_diagnosis;
@@ -3973,6 +3974,26 @@ async fn import_configuration(
     }
 }
 
+/// Resolves a SAF selection to a native shared-storage path for Agent use; preserves directories.
+#[tauri::command]
+async fn pick_option_path(kind: option_path::OptionPathKind) -> Result<Option<String>, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        let raw = tokio::task::spawn_blocking(move || pick_file_via_bridge(kind.bridge_method()))
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))??;
+        option_path::parse_picker_result(raw.as_deref()).map_err(AppError::Message)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = kind.bridge_method();
+        Err(AppError::Message(
+            "option path selection is only available on Android; enter a native path manually"
+                .into(),
+        ))
+    }
+}
+
 #[tauri::command]
 async fn import_background_image(
     app: AppHandle,
@@ -6082,6 +6103,7 @@ pub fn run() {
             export_configuration,
             import_configuration,
             import_background_image,
+            pick_option_path,
             remove_background_image,
             read_background_image,
             update::update_get_credential_status,

@@ -4,6 +4,7 @@ import { stripInlineRichText } from "../lib/richText";
 import type { OptionDefinition, OptionValue } from "../lib/types";
 import { InlineMarkdownLabel, RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
+import { PathPickerField } from "./ui/PathPickerField";
 import { SegmentGroup } from "./ui/SegmentGroup";
 import { Select } from "./ui/Select";
 import { TextField } from "./ui/TextField";
@@ -231,6 +232,34 @@ export function OptionEditor({
           !matchesTime(current)
             ? t("invalidTimeInput")
             : undefined;
+        if (
+          option.kind === "input" &&
+          (field.inputType === "file" || field.inputType === "directory")
+        ) {
+          return (
+            <PathPickerField
+              key={`${option.name}:${field.name}`}
+              kind={field.inputType}
+              label={<InlineMarkdownLabel text={field.label} />}
+              value={current}
+              password={field.password}
+              placeholder={field.placeholder}
+              compact={compact}
+              error={patternError}
+              description={
+                field.description ? (
+                  <RichDescription text={field.description} />
+                ) : undefined
+              }
+              onValueChange={(next) =>
+                onChange({
+                  type: "inputs",
+                  values: { ...values, [field.name]: next },
+                })
+              }
+            />
+          );
+        }
         if (option.kind === "input" && field.inputType === "time") {
           return (
             <TimePickerField

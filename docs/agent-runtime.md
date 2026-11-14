@@ -81,7 +81,7 @@ NumPy 仍为 2.3.2，StrEnum 仍为 0.4.15。OpenCV 和 ORT 均使用目标 CPyt
 
 ```bash
 python3 scripts/build_agent_core.py \
-  --python-version 3.13.15 --maafw-version 5.14.2 \
+  --python-version 3.13.15 --maafw-version 5.15.0 \
   --work-dir build/agent-core --jobs 2
 
 scripts/build-agent-runtime.sh \
@@ -99,9 +99,9 @@ core 的 `provides` 会声明这两者及 ORT 的依赖，runtime 组装会跳�
 
 | 变量 | 值 | 作用 |
 |:---|:---|:---|
-| `MAAFW_VERSION` | `v5.14.2` | MaaFramework 原生库版本（`vendor/maa` 与兜底下载） |
+| `MAAFW_VERSION` | `v5.15.0` | MaaFramework 原生库版本（`vendor/maa` 与兜底下载） |
 | `MAAFW_CORE_REPO` | `Craun718/MaaAgentCoreAndroid` | 预编译 Python 核心的来源 fork |
-| `MAAFW_CORE_TAG` | `agent-core-3.13.15-maafw5.14.2` | 核心版本（对应 MaaFW 5.14.2） |
+| `MAAFW_CORE_TAG` | `agent-core-3.13.15-maafw5.15.0` | 核心版本（对应 MaaFW 5.15.0） |
 
 对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC，patch 版本间保持兼容。
 

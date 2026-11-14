@@ -2192,8 +2192,8 @@ checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
 
 [[package]]
 name = "maa-framework"
-version = "1.25.2"
-source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=85b367bd16532f6c7631fe887f4c4da10a2ec58b#85b367bd16532f6c7631fe887f4c4da10a2ec58b"
+version = "1.28.0"
+source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=fd4e42d7485b4f7a376d3c5bc970d331a86d27bd#fd4e42d7485b4f7a376d3c5bc970d331a86d27bd"
 dependencies = [
  "bitflags 2.13.2",
  "maa-framework-sys",
@@ -2204,8 +2204,8 @@ dependencies = [
 
 [[package]]
 name = "maa-framework-sys"
-version = "5.14.2"
-source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=85b367bd16532f6c7631fe887f4c4da10a2ec58b#85b367bd16532f6c7631fe887f4c4da10a2ec58b"
+version = "5.15.0"
+source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=fd4e42d7485b4f7a376d3c5bc970d331a86d27bd#fd4e42d7485b4f7a376d3c5bc970d331a86d27bd"
 dependencies = [
  "libloading 0.8.9",
  "once_cell",
@@ -2213,7 +2213,7 @@ dependencies = [
 
 [[package]]
 name = "maa_tauri_android"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "hex",

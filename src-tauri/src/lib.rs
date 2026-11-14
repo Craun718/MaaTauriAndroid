@@ -3261,12 +3261,14 @@ async fn start_run_core(
     let close_target_app_after_run = configuration.close_target_app_after_run;
     let exit_app_after_run = cfg!(target_os = "android") && configuration.exit_app_after_run;
     let max_run_duration = run_supervisor::configured_limit(configuration.max_run_duration_seconds);
+    let user_data_dir = app.path().app_data_dir().ok();
     let pi_env = if agent_count > 0 {
         Some(agent::pi_environment(
             &resolved,
             &client_language,
             project_version.as_deref(),
             &focus_translations,
+            user_data_dir.as_deref(),
         ))
     } else {
         None

@@ -707,7 +707,7 @@ mod tests {
         let store = ScheduleStore::new(&dir);
         let rule = ScheduleRule {
             id: "one".into(),
-            name: String::new(),
+            name: "Daily".into(),
             enabled: true,
             auto_start: true,
             run_configuration_id: "run".into(),

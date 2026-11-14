@@ -1184,7 +1184,7 @@ async fn bootstrap_snapshot(
     };
     welcome::defer_remote_announcements(&mut project.metadata);
     #[cfg(target_os = "android")]
-    runtime::validate_ocr_models(&project.root, &project.resources)?;
+    runtime::validate_ocr_models(&project.root, &project.resources, &project.controllers)?;
     let loaded = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let LoadedConfiguration {
         configuration: stored,
@@ -2811,7 +2811,7 @@ async fn reload_project(
     let mut project =
         ProjectLoader::default().load(PathBuf::from(root).join("interface.json"), language)?;
     welcome::defer_remote_announcements(&mut project.metadata);
-    runtime::validate_ocr_models(&project.root, &project.resources)?;
+    runtime::validate_ocr_models(&project.root, &project.resources, &project.controllers)?;
     let loaded = UserConfigurationStore::new(config_path.clone()).load(&project)?;
     let LoadedConfiguration {
         configuration: stored,

@@ -1,5 +1,5 @@
 use crate::agent::AgentSession;
-use crate::domain::types::{ResolvedTask, ResourceDefinition};
+use crate::domain::types::{ControllerDefinition, ResolvedTask, ResourceDefinition};
 #[cfg(target_os = "android")]
 use jni::objects::{GlobalRef, JClass, JString};
 use maa_framework::{
@@ -687,7 +687,37 @@ pub fn android_controller_config(
     })
 }
 
-const OCR_MODEL_FILES: [&str; 3] = ["det.onnx", "rec.onnx", "keys.txt"];
+const OCR_ONNX_MODEL_FILES: [&str; 3] = ["det.onnx", "rec.onnx", "keys.txt"];
+const OCR_NCNN_MODEL_FILES: [&str; 7] = [
+    "det.ncnn.param",
+    "det.ncnn.bin",
+    "det.ncnn.json",
+    "rec.ncnn.param",
+    "rec.ncnn.bin",
+    "rec.ncnn.json",
+    "keys.txt",
+];
+
+/// Reports whether any resource path ships NCNN model weights.
+///
+/// MaaFramework's NCNN backend is an all-or-nothing switch for both neural
+/// network recognition and OCR, so a single `.ncnn.param` file anywhere under
+/// a resource's `model/` tree selects it for that resource.
+fn paths_use_ncnn(project_root: &str, paths: &[&str]) -> bool {
+    paths.iter().any(|path| {
+        let model_dir = resource_path(project_root, path).join("model");
+        walkdir::WalkDir::new(&model_dir)
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry.file_type().is_file()
+                    && entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|name| name.ends_with(".ncnn.param"))
+            })
+    })
+}
 
 /// Verifies every declared Project Interface resource can supply the OCR model
 /// before the app starts a run. Multiple bundles may split the files across
@@ -695,15 +725,31 @@ const OCR_MODEL_FILES: [&str; 3] = ["det.onnx", "rec.onnx", "keys.txt"];
 pub fn validate_ocr_models(
     project_root: &str,
     resources: &[ResourceDefinition],
+    controllers: &[ControllerDefinition],
 ) -> Result<(), RuntimeError> {
+    let attached_paths = controllers
+        .iter()
+        .flat_map(controller_attach_resource_paths)
+        .collect::<Vec<_>>();
     for resource in resources {
-        let model_dirs: Vec<PathBuf> = resource
+        let paths = resource
             .paths
+            .iter()
+            .map(String::as_str)
+            .chain(attached_paths.iter().map(String::as_str))
+            .collect::<Vec<_>>();
+        let model_files: &[&str] = if paths_use_ncnn(project_root, &paths) {
+            &OCR_NCNN_MODEL_FILES
+        } else {
+            &OCR_ONNX_MODEL_FILES
+        };
+        let model_dirs: Vec<PathBuf> = paths
             .iter()
             .map(|path| resource_path(project_root, path).join("model").join("ocr"))
             .collect();
-        let missing_files: Vec<&str> = OCR_MODEL_FILES
-            .into_iter()
+        let missing_files: Vec<&str> = model_files
+            .iter()
+            .copied()
             .filter(|file| {
                 !model_dirs
                     .iter()
@@ -1171,6 +1217,24 @@ pub fn create_session(
 
     let resource = Resource::new()?;
 
+    // The inference backend is locked once resource loading starts, so NCNN
+    // must be selected before the first `post_bundle`. Attached resource
+    // bundles are loaded into the same resource, so their model trees also
+    // participate in backend selection.
+    let attached_paths = controller_attach_resource_paths(&resolved.controller);
+    let resource_paths = resolved
+        .resource
+        .paths
+        .iter()
+        .map(String::as_str)
+        .chain(attached_paths.iter().map(String::as_str))
+        .collect::<Vec<_>>();
+    if paths_use_ncnn(project_root, &resource_paths) {
+        resource
+            .use_ncnn()
+            .map_err(|error| RuntimeError::Maa(error.to_string()))?;
+    }
+
     let agent_session = match agent {
         Some(prepared) if !prepared.descriptor.runtimes.is_empty() => {
             crate::agent::set_maa_framework_version(
@@ -1242,7 +1306,7 @@ pub fn create_session(
         }
     }
 
-    for relative in attach_resource_paths(resolved) {
+    for relative in &attached_paths {
         let path = resource_path(project_root, &relative);
         if !path.is_dir() {
             return Err(RuntimeError::LibraryNotLoaded(format!(
@@ -1278,9 +1342,8 @@ pub fn create_session(
 
 /// `controller.attach_resource_path` extras loaded after the selected resource's
 /// own paths (and after the resource hash check, matching the Project Interface).
-fn attach_resource_paths(resolved: &crate::domain::types::ResolvedRun) -> Vec<String> {
-    resolved
-        .controller
+fn controller_attach_resource_paths(controller: &ControllerDefinition) -> Vec<String> {
+    controller
         .raw
         .get("attach_resource_path")
         .and_then(Value::as_array)
@@ -1948,6 +2011,7 @@ mod tests {
                 hash: None,
                 raw: serde_json::Value::Null,
             }],
+            &[],
         );
 
         assert!(result.is_ok());
@@ -1970,6 +2034,7 @@ mod tests {
                 hash: None,
                 raw: serde_json::Value::Null,
             }],
+            &[],
         )
         .unwrap_err();
 
@@ -1999,10 +2064,178 @@ mod tests {
                 hash: None,
                 raw: serde_json::Value::Null,
             }],
+            &[],
         )
         .unwrap_err();
 
         assert!(error.to_string().contains("rec.onnx"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn test_resource(paths: &[&str]) -> ResourceDefinition {
+        ResourceDefinition {
+            name: "official".to_string(),
+            label: "Official".to_string(),
+            description: None,
+            paths: paths.iter().map(|path| (*path).to_string()).collect(),
+            controllers: Vec::new(),
+            options: Vec::new(),
+            hash: None,
+            raw: serde_json::Value::Null,
+        }
+    }
+
+    fn test_controller(paths: &[&str]) -> ControllerDefinition {
+        ControllerDefinition {
+            name: "ADB".to_string(),
+            label: "Android".to_string(),
+            controller_type: "AndroidNative".to_string(),
+            raw: serde_json::json!({
+                "attach_resource_path": paths,
+            }),
+        }
+    }
+
+    #[test]
+    fn ncnn_detection_finds_a_model_anywhere_in_a_path_tree() {
+        let root = std::env::temp_dir().join(format!("mta-ncnn-{}", uuid::Uuid::new_v4()));
+        let model = root.join("base/model/detect");
+        std::fs::create_dir_all(&model).unwrap();
+        std::fs::write(model.join("yolo.ncnn.param"), b"param").unwrap();
+
+        assert!(paths_use_ncnn(&root.to_string_lossy(), &["base"]));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ncnn_detection_includes_controller_attached_paths() {
+        let root = std::env::temp_dir().join(format!("mta-ncnn-{}", uuid::Uuid::new_v4()));
+        let onnx_model = root.join("base/model/ocr");
+        let attached_model = root.join("attached/model/detect");
+        std::fs::create_dir_all(&onnx_model).unwrap();
+        std::fs::create_dir_all(&attached_model).unwrap();
+        std::fs::write(onnx_model.join("det.onnx"), b"det").unwrap();
+        std::fs::write(attached_model.join("yolo.ncnn.param"), b"param").unwrap();
+
+        assert!(paths_use_ncnn(
+            &root.to_string_lossy(),
+            &["base", "attached"]
+        ));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ncnn_detection_ignores_onnx_and_empty_path_trees() {
+        let onnx_root = std::env::temp_dir().join(format!("mta-ncnn-{}", uuid::Uuid::new_v4()));
+        let onnx_model = onnx_root.join("base/model/ocr");
+        std::fs::create_dir_all(&onnx_model).unwrap();
+        std::fs::write(onnx_model.join("det.onnx"), b"det").unwrap();
+
+        let empty_root = std::env::temp_dir().join(format!("mta-ncnn-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(empty_root.join("base/model/ocr")).unwrap();
+
+        assert!(!paths_use_ncnn(&onnx_root.to_string_lossy(), &["base"]));
+        assert!(!paths_use_ncnn(&empty_root.to_string_lossy(), &["base"]));
+        std::fs::remove_dir_all(onnx_root).unwrap();
+        std::fs::remove_dir_all(empty_root).unwrap();
+    }
+
+    #[test]
+    fn ocr_model_validation_accepts_a_complete_ncnn_model() {
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
+        let model = root.join("base/model/ocr");
+        std::fs::create_dir_all(&model).unwrap();
+        let expected_files = [
+            "det.ncnn.param",
+            "det.ncnn.bin",
+            "det.ncnn.json",
+            "rec.ncnn.param",
+            "rec.ncnn.bin",
+            "rec.ncnn.json",
+            "keys.txt",
+        ];
+        assert_eq!(OCR_NCNN_MODEL_FILES.as_slice(), expected_files.as_slice());
+        for file in expected_files {
+            std::fs::write(model.join(file), file).unwrap();
+        }
+
+        let result = validate_ocr_models(&root.to_string_lossy(), &[test_resource(&["base"])], &[]);
+        assert!(result.is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ocr_model_validation_enforces_every_ncnn_requirement() {
+        let expected_files = [
+            "det.ncnn.param",
+            "det.ncnn.bin",
+            "det.ncnn.json",
+            "rec.ncnn.param",
+            "rec.ncnn.bin",
+            "rec.ncnn.json",
+            "keys.txt",
+        ];
+        for missing_file in expected_files {
+            let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
+            let model = root.join("base/model/ocr");
+            std::fs::create_dir_all(&model).unwrap();
+            for file in expected_files {
+                if file != missing_file {
+                    std::fs::write(model.join(file), file).unwrap();
+                }
+            }
+
+            let error =
+                validate_ocr_models(&root.to_string_lossy(), &[test_resource(&["base"])], &[])
+                    .unwrap_err();
+
+            assert!(matches!(error, RuntimeError::OcrModelIncomplete(_)));
+            assert!(error.to_string().contains(missing_file));
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn ocr_model_validation_requires_ncnn_files_from_controller_attachments() {
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
+        let base_model = root.join("base/model/ocr");
+        let attached_model = root.join("attached/model/ocr");
+        std::fs::create_dir_all(&base_model).unwrap();
+        std::fs::create_dir_all(&attached_model).unwrap();
+        std::fs::write(base_model.join("det.onnx"), b"onnx").unwrap();
+        std::fs::write(attached_model.join("model.ncnn.param"), b"param").unwrap();
+
+        let error = validate_ocr_models(
+            &root.to_string_lossy(),
+            &[test_resource(&["base"])],
+            &[test_controller(&["attached"])],
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, RuntimeError::OcrModelIncomplete(_)));
+        assert!(error.to_string().contains("det.ncnn.param"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ocr_model_validation_accepts_ncnn_files_across_attachments() {
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
+        let base_model = root.join("base/model/detect");
+        let attached_model = root.join("attached/model/ocr");
+        std::fs::create_dir_all(&base_model).unwrap();
+        std::fs::create_dir_all(&attached_model).unwrap();
+        std::fs::write(base_model.join("detector.ncnn.param"), b"param").unwrap();
+        for file in OCR_NCNN_MODEL_FILES {
+            std::fs::write(attached_model.join(file), file).unwrap();
+        }
+
+        let result = validate_ocr_models(
+            &root.to_string_lossy(),
+            &[test_resource(&["base"])],
+            &[test_controller(&["attached"])],
+        );
+
+        assert!(result.is_ok());
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -2058,32 +2291,10 @@ mod tests {
 
     #[test]
     fn attach_resource_paths_come_from_the_controller() {
-        let resolved = ResolvedRun {
-            controller: ControllerDefinition {
-                name: "ADB".to_string(),
-                label: "Android".to_string(),
-                controller_type: "AndroidNative".to_string(),
-                raw: serde_json::json!({
-                    "attach_resource_path": ["resource/extra", "resource/shared"]
-                }),
-            },
-            resource: ResourceDefinition {
-                name: "base".to_string(),
-                label: "Base".to_string(),
-                description: None,
-                paths: vec!["resource/base".to_string()],
-                controllers: Vec::new(),
-                options: Vec::new(),
-                hash: None,
-                raw: serde_json::Value::Null,
-            },
-            tasks: Vec::new(),
-            base_pipeline: serde_json::Value::Null,
-            pipeline_override: serde_json::Value::Null,
-        };
+        let controller = test_controller(&["resource/extra", "resource/shared"]);
 
         assert_eq!(
-            attach_resource_paths(&resolved),
+            controller_attach_resource_paths(&controller),
             vec!["resource/extra".to_string(), "resource/shared".to_string()]
         );
     }

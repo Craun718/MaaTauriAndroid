@@ -579,6 +579,17 @@ pub struct RunResult {
     pub message: String,
 }
 
+impl RunResult {
+    pub fn idle() -> Self {
+        Self {
+            execution_id: None,
+            state: RunState::Idle,
+            severity: RunResultSeverity::Info,
+            message: "No run has been started in this session".to_string(),
+        }
+    }
+}
+
 fn set_error(message: String) -> RuntimeError {
     RuntimeError::Maa(message)
 }
@@ -2287,6 +2298,19 @@ mod tests {
             serde_json::json!("info")
         );
         clear_run_result();
+    }
+
+    #[test]
+    fn idle_run_result_serializes_without_an_execution_id() {
+        let idle = RunResult::idle();
+        assert_eq!(idle.state, RunState::Idle);
+        assert_eq!(idle.severity, RunResultSeverity::Info);
+        assert_eq!(idle.execution_id, None);
+
+        let value = serde_json::to_value(&idle).expect("idle result should serialize");
+        assert_eq!(value["executionId"], serde_json::Value::Null);
+        assert_eq!(value["state"], serde_json::json!("Idle"));
+        assert_eq!(value["severity"], serde_json::json!("info"));
     }
 
     #[test]

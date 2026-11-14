@@ -107,6 +107,22 @@ object PiPackage {
         val translations = translationsByLanguage(root, languagePaths)
         val richTextBodies = linkedSetOf<String>()
         for (documentFile in listOf(document) + imported) {
+            // Pre-tasks use the interface directory as CWD, including those declared
+            // in imports. Bare executable names belong to PATH; arguments are opaque
+            // strings, so only collect ones that already name a relative file.
+            for (pretask in objectMapListOrSingle(documentFile["pretask"])) {
+                val executable = pretask["exec"] as? String
+                if (executable != null && !URL_SCHEME.containsMatchIn(executable) &&
+                    (executable.contains('/') || executable.contains('\\'))
+                ) {
+                    record(executable, required = true)
+                }
+                for (argument in stringList(pretask["args"])) {
+                    if (argument.startsWith("-") || URL_SCHEME.containsMatchIn(argument)) continue
+                    val normalized = normalize(argument) ?: continue
+                    if (root.resolve(normalized).isFile) record(argument, required = false)
+                }
+            }
             collectPathValues(documentFile, translations) { value ->
                 record(value, required = false)?.let { richTextBodies += it }
             }
@@ -250,8 +266,8 @@ object PiPackage {
     }
 
     /**
-     * `agent` is the one protocol table that may be a single object instead of an array;
-     * MaaFwApp and NarutoMobile both use that shape. Keep the other lists strict.
+     * `agent` and `pretask` may be single objects instead of arrays. Keep the other
+     * protocol lists strict.
      */
     private fun objectMapListOrSingle(value: Any?): List<Map<*, *>> = when (value) {
         is Map<*, *> -> listOf(value)

@@ -1,9 +1,14 @@
+import {
+  checkboxSelectionState,
+  updateCheckboxSelection,
+} from "../lib/checkboxSelection";
 import { useTranslation } from "../lib/i18n";
 import { defaultOptionValue, switchCases } from "../lib/options";
 import { stripInlineRichText } from "../lib/richText";
 import type { OptionDefinition, OptionValue } from "../lib/types";
 import { InlineMarkdownLabel, RichDescription } from "./RichDescription";
 import { Checkbox } from "./ui/Checkbox";
+import { PathPickerField } from "./ui/PathPickerField";
 import { SegmentGroup } from "./ui/SegmentGroup";
 import { Select } from "./ui/Select";
 import { TextField } from "./ui/TextField";
@@ -121,8 +126,10 @@ export function OptionEditor({
   }
 
   if (option.kind === "checkbox") {
-    const selected =
-      value?.type === "multiple" ? value.cases : option.defaultCases;
+    const { selected, atMaximum, minimumRequired } = checkboxSelectionState(
+      option,
+      value,
+    );
     return (
       <div className={compact ? "space-y-1.5" : "space-y-3"}>
         <div>
@@ -143,12 +150,16 @@ export function OptionEditor({
                     : "min-h-11 gap-3 rounded-md border border-line px-3"
                 }`}
                 checked={checked}
+                disabled={!checked && atMaximum}
                 onCheckedChange={(next) => {
                   onChange({
                     type: "multiple",
-                    cases: next
-                      ? [...selected, item.name]
-                      : selected.filter((name) => name !== item.name),
+                    cases: updateCheckboxSelection(
+                      option,
+                      selected,
+                      item.name,
+                      next,
+                    ),
                   });
                 }}
               >
@@ -166,6 +177,11 @@ export function OptionEditor({
             );
           })}
         </div>
+        {minimumRequired !== undefined && (
+          <p role="alert" className="text-[0.8125rem] text-error">
+            {t("checkboxMinimumSelection", { count: minimumRequired })}
+          </p>
+        )}
       </div>
     );
   }
@@ -180,7 +196,7 @@ export function OptionEditor({
     pipelineType?: "string" | "int" | "bool";
     verify?: string;
     patternMessage?: string;
-    inputType?: "text" | "file" | "time";
+    inputType?: "text" | "file" | "directory" | "time";
   }> = option.kind === "input" ? option.inputs : option.hotkeys;
   const values = value?.type === "inputs" ? value.values : {};
   return (
@@ -231,6 +247,34 @@ export function OptionEditor({
           !matchesTime(current)
             ? t("invalidTimeInput")
             : undefined;
+        if (
+          option.kind === "input" &&
+          (field.inputType === "file" || field.inputType === "directory")
+        ) {
+          return (
+            <PathPickerField
+              key={`${option.name}:${field.name}`}
+              kind={field.inputType}
+              label={<InlineMarkdownLabel text={field.label} />}
+              value={current}
+              password={field.password}
+              placeholder={field.placeholder}
+              compact={compact}
+              error={patternError}
+              description={
+                field.description ? (
+                  <RichDescription text={field.description} />
+                ) : undefined
+              }
+              onValueChange={(next) =>
+                onChange({
+                  type: "inputs",
+                  values: { ...values, [field.name]: next },
+                })
+              }
+            />
+          );
+        }
         if (option.kind === "input" && field.inputType === "time") {
           return (
             <TimePickerField

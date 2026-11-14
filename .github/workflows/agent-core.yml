@@ -10,7 +10,7 @@ on:
         type: string
       maafw_version:
         description: MaaFramework Python binding version
-        default: '5.14.2'
+        default: '5.15.0'
         required: true
         type: string
 

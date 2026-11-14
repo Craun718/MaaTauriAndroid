@@ -86,6 +86,7 @@ pi.profile=/path/to/repo/resource/m9a.toml
 | `languages{}` | 已声明的翻译文件 |
 | 任意深度及每个导入文件中的 `icon` / `contact` / `license` / `description` / `doc` / `desc` / `welcome` | 当值指向文件时打包该文件；`$Key` 在每个已声明语言里查表，Markdown 图片链接和正文文件自身链接的目标都会一起打包 |
 | `agent`（对象或数组） | 包含 `child_args` 入口点的 `agent` 目录 |
+| `pretask`（对象或数组，含导入文件） | 项目内的 `exec` 和 `args` 文件路径；需要的同目录模块、配置等额外依赖通过 `pi_include` 补充 |
 | — | `data/`，Agent 会读取它，但协议不会声明它 |
 
 接口声明了、但项目中并不存在的路径会**使构建失败**，因为无声的错误打包正是以这种方式进入产物的。M9A v4.9.0 把 `i18n/` 改名为 `locales/`；旧的许可名单没有匹配到任何内容，构建仍然通过，最终 APK 里的接口指向了自身压缩包中不存在的翻译文件，在真机上导致硬性的项目加载失败。
@@ -93,6 +94,14 @@ pi.profile=/path/to/repo/resource/m9a.toml
 被文档描述为“文件路径、URL 或纯文本”的值只在能解析为现有路径时才被当作路径处理，因此普通文字和远程 URL 会原样保留。绝对路径和 `..` 逃逸会被忽略。开发残留物（`__pycache__`、`.git`、`node_modules`、`.venv`、`*.pyc`/`*.pyo`）会在复制时被过滤掉。
 
 ## 资源约定
+
+预任务在创建或连接 MaaFramework 控制器前按声明和导入顺序执行，工作目录是设备上包含 `interface.json` 的项目目录。设置页可勾选预任务并配置选项；不适用于当前控制器或资源的预任务不会执行。选项值以紧凑 JSON 追加为最后一个参数，只用于预任务，不参与 Pipeline 覆盖。任一预任务启动失败或退出码非零都会中止本次启动；停止运行或达到运行时限会结束正在执行的预任务。参数和进程输出可能包含密码，因此不会进入运行日志。
+
+预任务使用应用身份和 Android 的进程环境，程序必须适用于 Android 且可执行。例如可用 `exec: "/system/bin/sh"` 配合 `args: ["./scripts/prepare.sh"]` 执行打包的脚本。桌面上的 `python`、`cmd.exe` 或桌面二进制不会自动映射到 Android 程序；Agent 的独立 Python runtime 也不会自动成为预任务解释器。Android 对应用可写目录中的二进制执行有限制，资源作者需要适配解释器或可执行程序的部署方式。
+
+`input_type: "file"` / `"directory"` 使用系统选择器，本地共享存储中的选择保留原路径供特权 Agent 使用；目录不会复制到其他位置。没有可解析本地路径的文件在 Android 10 及以上通过 MediaStore 导入共享下载目录（最多 256 MiB）；云目录或其他没有本地路径的目录不能作为原生目录传给 MaaFramework。路径也可手动填写。选择路径不会给应用身份下的预任务额外授予文件系统权限，资源作者需按实际消费路径的进程身份确认访问权限。
+
+Agent 和预任务收到的 `PI_INTERFACE_VERSION` 为 `v2.11.0`。Android 的 `PI_USER_DATA_DIR` 指向 `Context.getExternalFilesDir(null)` 下的 `user-data`，用于界面与 shell/root 子进程共享运行数据；外部存储不可用时省略此变量，不回退到 Agent 无法访问的内部私有目录。该路径保留 Android 返回的用户目录，不硬编码主用户存储路径。含密码的应用配置和 Keystore 仍由原有内部持久化流程管理。
 
 按桌面端习惯写即可，下面几条是 Android 上会对不上的地方：
 
@@ -184,7 +193,7 @@ python3 src-tauri/profiles/pack_agent_bundle.py \
 
 它会解引用符号链接、强制非 ZIP64，把两个 `.so` 放进 `lib/<abi>/`，并且额外要求 MaaAgentCoreAndroid bundle 的 `agent-core.json` 标记。
 
-> 注意：原生库由 `MAAFW_VERSION` 固定在 MaaFramework `v5.14.2`；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `agent-core-3.13.15-maafw5.14.2`，所以 bundle 里的 Python `maa` 包保持 5.14.2，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，该协议在补丁版本之间保持兼容。
+> 注意：原生库由 `MAAFW_VERSION` 固定在 MaaFramework `v5.15.0`；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `agent-core-3.13.15-maafw5.15.0`，所以 bundle 里的 Python `maa` 包保持 5.15.0，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，该协议在补丁版本之间保持兼容。
 
 ### 编译型（C++ / Go / Rust）
 

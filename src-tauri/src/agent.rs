@@ -304,7 +304,7 @@ pub fn start_session(
     AgentSession::start(execution_id, resource, descriptor, host, pi_env)
 }
 
-const PI_INTERFACE_VERSION: &str = "v2.6.0";
+const PI_INTERFACE_VERSION: &str = "v2.11.0";
 const PI_CLIENT_NAME: &str = "MaaTauriAndroid";
 
 /// Maps the UI setting to the Project Interface locale. System follows the
@@ -325,6 +325,7 @@ pub fn pi_environment(
     client_language: &str,
     project_version: Option<&str>,
     translations: &BTreeMap<String, String>,
+    user_data_dir: Option<&Path>,
 ) -> BTreeMap<String, String> {
     let mut environment = BTreeMap::new();
     environment.insert(
@@ -332,6 +333,11 @@ pub fn pi_environment(
         PI_INTERFACE_VERSION.to_string(),
     );
     environment.insert("PI_CLIENT_NAME".to_string(), PI_CLIENT_NAME.to_string());
+    if let Some(path) = user_data_dir.filter(|path| path.is_absolute()) {
+        if let Some(path) = path.to_str() {
+            environment.insert("PI_USER_DATA_DIR".to_string(), path.to_string());
+        }
+    }
     environment.insert(
         "PI_CLIENT_VERSION".to_string(),
         env!("CARGO_PKG_VERSION").to_string(),
@@ -968,11 +974,18 @@ mod tests {
             "zh_cn",
             Some("0.1.0"),
             &BTreeMap::from([("resource-description".to_string(), "官方资源".to_string())]),
+            Some(Path::new(
+                "/storage/emulated/10/Android/data/app/files/user-data",
+            )),
         );
-        assert_eq!(environment["PI_INTERFACE_VERSION"], "v2.6.0");
+        assert_eq!(environment["PI_INTERFACE_VERSION"], "v2.11.0");
         assert_eq!(environment["PI_CLIENT_NAME"], "MaaTauriAndroid");
         assert_eq!(environment["PI_CLIENT_VERSION"], env!("CARGO_PKG_VERSION"));
         assert_eq!(environment["PI_CLIENT_LANGUAGE"], "zh_cn");
+        assert_eq!(
+            environment["PI_USER_DATA_DIR"],
+            "/storage/emulated/10/Android/data/app/files/user-data"
+        );
         assert_eq!(environment["PI_VERSION"], "0.1.0");
         set_maa_framework_version(&mut environment, "5.14.2");
         assert_eq!(environment["PI_CLIENT_MAAFW_VERSION"], "5.14.2");
@@ -989,6 +1002,11 @@ mod tests {
         assert_eq!(resource["path"], serde_json::json!(["resource/base"]));
         assert_eq!(resource["hash"], "abc123");
         assert_eq!(resource["description"], "官方资源");
+
+        for path in [None, Some(Path::new("relative/path"))] {
+            let environment = pi_environment(&resolved, "en_us", None, &BTreeMap::new(), path);
+            assert!(!environment.contains_key("PI_USER_DATA_DIR"));
+        }
     }
 
     #[test]

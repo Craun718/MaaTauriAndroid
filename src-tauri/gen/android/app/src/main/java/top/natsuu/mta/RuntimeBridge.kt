@@ -153,6 +153,12 @@ object RuntimeBridge {
     }
 
     @JvmStatic
+    fun pickOptionFile(): String? = OptionPathPicker.pick(directory = false)
+
+    @JvmStatic
+    fun pickOptionDirectory(): String? = OptionPathPicker.pick(directory = true)
+
+    @JvmStatic
     fun pickConfigurationFile(): String? {
         if (agentContext == null) return JSONObject().put("error", "readFailed").toString()
         val request = ConfigurationPickRequest()
@@ -1185,6 +1191,17 @@ object RuntimeBridge {
     fun agentNativeLibraryDir(): String {
         return requireNotNull(agentContext).applicationInfo.nativeLibraryDir
     }
+
+    /** App and shell/root subprocesses share this directory; internal filesDir is app-only. */
+    @JvmStatic
+    fun sharedUserDataDirectory(): String? = runCatching {
+        val context = requireNotNull(agentContext)
+        val external = context.getExternalFilesDir(null) ?: return@runCatching null
+        val directory = File(external, "user-data")
+        check(directory.isDirectory || directory.mkdirs()) { "could not create shared user data directory" }
+        check(directory.canRead() && directory.canWrite()) { "shared user data directory is unavailable" }
+        directory.absolutePath
+    }.getOrNull()
 
     @JvmStatic
     fun nativeLibraryPath(name: String): String {

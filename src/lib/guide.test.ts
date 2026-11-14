@@ -16,6 +16,7 @@ function configurationWith(
     forceStopTargetApp: false,
     closeTargetAppAfterRun: true,
     telemetryEnabled: false,
+    pretaskValues: {},
     globalOptionValues: {},
     controllerOptionValues: {},
     resourceOptionValues: {},

@@ -6,7 +6,9 @@ mod diagnostics;
 mod directory_access;
 mod domain;
 mod focus;
+mod option_path;
 mod persistence;
+mod pretask;
 mod run_diagnosis;
 mod run_history;
 mod run_log;
@@ -607,6 +609,20 @@ fn log_loaded_project(project: &Project, configuration: &UserConfiguration) {
 
 fn normalize_configuration(project: &Project, configuration: &mut UserConfiguration) {
     let first_install = !configuration.initialized;
+    configuration
+        .pretask_values
+        .retain(|name, _| project.pretasks.iter().any(|task| &task.name == name));
+    for task in &project.pretasks {
+        let configured = configuration
+            .pretask_values
+            .entry(task.name.clone())
+            .or_default();
+        let declared = domain::pretask::declared_options(project, &task.options);
+        configured
+            .option_values
+            .retain(|name, _| declared.contains(name));
+    }
+
     if !project
         .resources
         .iter()
@@ -1460,6 +1476,10 @@ fn apply_preset(
         .ok_or_else(|| AppError::Message("Active run configuration disappeared".to_string()))?;
     let existing_tasks = run.tasks.clone();
     run.tasks = configuration_tasks_from_preset(&project, &preset, &existing_tasks);
+    for task in &mut run.tasks {
+        domain::preset::remove_password_values(&project.options, &mut task.option_values);
+    }
+    domain::preset::apply_pretasks(&project, &preset, &mut configuration);
     state.set_configuration(configuration.clone())?;
     Ok(configuration)
 }
@@ -3261,31 +3281,105 @@ async fn start_run_core(
     let close_target_app_after_run = configuration.close_target_app_after_run;
     let exit_app_after_run = cfg!(target_os = "android") && configuration.exit_app_after_run;
     let max_run_duration = run_supervisor::configured_limit(configuration.max_run_duration_seconds);
-    let pi_env = if agent_count > 0 {
+    let pretask_commands = domain::pretask::resolve_pretasks(&project, &configuration)
+        .map_err(|error| fail_preparing(error.to_string(), "pretaskOptions"))?;
+    #[cfg(target_os = "android")]
+    let user_data_dir = call_runtime_bridge_optional_string("sharedUserDataDirectory")
+        .ok()
+        .flatten()
+        .map(PathBuf::from);
+    #[cfg(not(target_os = "android"))]
+    let user_data_dir = app.path().app_data_dir().ok();
+    let pi_env = if agent_count > 0 || !pretask_commands.is_empty() {
         Some(agent::pi_environment(
             &resolved,
             &client_language,
             project_version.as_deref(),
             &focus_translations,
+            user_data_dir.as_deref(),
         ))
     } else {
         None
     };
     drop(_lifecycle_guard);
     tokio::spawn(async move {
-        // Watches the game's health on the controlled display for the whole
-        // run: samples FPS once per second, polls the target app state once
-        // per second, and stops the run early on target exit or display
-        // loss. The guard stops the watcher on every exit path.
+        let preparation_started = std::time::Instant::now();
+        let fail = abort_preparing_run;
+        let empty_environment = BTreeMap::new();
+        let pretask_future = pretask::run(
+            Path::new(&project_root),
+            &pretask_commands,
+            pi_env.as_ref().unwrap_or(&empty_environment),
+            || sessions.preparing_stop_requested(&run_execution_id),
+            |name| {
+                if let Ok(event) = logger_for_run.append(
+                    run_log::RunEventKind::Preparing,
+                    runtime::RunState::Preparing,
+                    format!("Running pre-task: {name}"),
+                    None,
+                    None,
+                ) {
+                    let _ = app.emit("run-event", &event);
+                }
+            },
+        );
+        let pretask_result = if let Some(limit) = max_run_duration {
+            match tokio::time::timeout(limit, pretask_future).await {
+                Ok(result) => result,
+                Err(_) => {
+                    sessions.finish_with(&run_execution_id, || {
+                        fail(
+                            &app,
+                            &logger_for_run,
+                            "The run exceeded its maximum duration during pre-tasks".to_string(),
+                            "pretaskTimeout",
+                        );
+                    });
+                    return;
+                }
+            }
+        } else {
+            pretask_future.await
+        };
+        if let Err(error) = pretask_result {
+            sessions.finish_with(&run_execution_id, || {
+                if matches!(error, pretask::PretaskError::Cancelled) {
+                    stop_run_foreground_service();
+                    run_progress::finish_run_overlay();
+                    let message = sessions.stop_origin().message().to_string();
+                    if let Ok(event) = logger_for_run.append(
+                        run_log::RunEventKind::Cancelled,
+                        runtime::RunState::Idle,
+                        message.clone(),
+                        None,
+                        None,
+                    ) {
+                        let _ = app.emit("run-event", &event);
+                    }
+                    runtime::set_execution_result(
+                        Some(&run_execution_id),
+                        runtime::RunState::Idle,
+                        runtime::RunResultSeverity::Info,
+                        message.clone(),
+                    );
+                    telemetry::run_event("stopped", &message, None);
+                    telemetry::run_finished("stopped");
+                } else {
+                    fail(&app, &logger_for_run, error.to_string(), "pretask");
+                }
+            });
+            return;
+        }
+        // Pre-tasks can intentionally stop or launch the target app. Begin
+        // health probing only after they finish, retaining the total time limit.
         let _supervisor = run_supervisor::SupervisorGuard::start(
             &app,
             logger_for_run.clone(),
             sessions.clone(),
             &run_execution_id,
             controller_display_id,
-            max_run_duration,
+            max_run_duration.map(|limit| limit.saturating_sub(preparation_started.elapsed())),
         );
-        let fail = abort_preparing_run;
         let creation = tokio::task::spawn_blocking(move || {
             let agent = agent::prepare_android(agent_count)
                 .map_err(|error| crate::runtime::RuntimeError::Maa(error.to_string()))?;
@@ -3887,6 +3981,26 @@ async fn import_configuration(
             imported: true,
             snapshot: Some(current_snapshot(&state)),
         })
+    }
+}
+
+/// Resolves a SAF selection to a native shared-storage path for Agent use; preserves directories.
+#[tauri::command]
+async fn pick_option_path(kind: option_path::OptionPathKind) -> Result<Option<String>, AppError> {
+    #[cfg(target_os = "android")]
+    {
+        let raw = tokio::task::spawn_blocking(move || pick_file_via_bridge(kind.bridge_method()))
+            .await
+            .map_err(|error| AppError::Message(error.to_string()))??;
+        option_path::parse_picker_result(raw.as_deref()).map_err(AppError::Message)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = kind.bridge_method();
+        Err(AppError::Message(
+            "option path selection is only available on Android; enter a native path manually"
+                .into(),
+        ))
     }
 }
 
@@ -4551,6 +4665,7 @@ mod tests {
             setting_sections: Vec::new(),
             tasks: Vec::new(),
             options: BTreeMap::new(),
+            pretasks: Vec::new(),
             global_options: Vec::new(),
             presets: Vec::new(),
             agents: Vec::new(),
@@ -4627,6 +4742,37 @@ mod tests {
     }
 
     #[test]
+    fn normalization_initializes_pretasks_and_preserves_disabled_options() {
+        let mut project = project();
+        project.pretasks.push(domain::types::PretaskDefinition {
+            name: "prepare".into(),
+            explicit_name: Some("prepare".into()),
+            label: "Prepare".into(),
+            exec: "tool".into(),
+            args: vec![],
+            description: None,
+            icon: None,
+            controllers: vec![],
+            resources: vec![],
+            options: vec![],
+        });
+        let mut configuration = UserConfiguration::default();
+        normalize_configuration(&project, &mut configuration);
+        assert!(configuration.pretask_values["prepare"].enabled);
+        configuration
+            .pretask_values
+            .get_mut("prepare")
+            .unwrap()
+            .enabled = false;
+        configuration
+            .pretask_values
+            .insert("removed".into(), Default::default());
+        normalize_configuration(&project, &mut configuration);
+        assert!(!configuration.pretask_values["prepare"].enabled);
+        assert!(!configuration.pretask_values.contains_key("removed"));
+    }
+
+    #[test]
     fn applying_a_preset_keeps_the_preset_order_instead_of_the_import_order() {
         let mut project = project();
         project.tasks = ["AndroidOpenGame", "SellProduct", "DailyRewards"]
@@ -4646,6 +4792,7 @@ mod tests {
             })
             .collect();
         let preset = ConfigurationTemplate {
+            pretasks: None,
             name: "DailyFull".to_string(),
             label: "Daily".to_string(),
             description: None,
@@ -5967,6 +6114,7 @@ pub fn run() {
             export_configuration,
             import_configuration,
             import_background_image,
+            pick_option_path,
             remove_background_image,
             read_background_image,
             update::update_get_credential_status,

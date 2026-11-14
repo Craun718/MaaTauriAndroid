@@ -33,6 +33,16 @@ const SHIZUKU_PERMISSION_REQUIRED_DIAGNOSTIC =
   "Shizuku permission has not been granted; grant MaaTauriAndroid access in Shizuku, then try again";
 
 const en = {
+  checkboxMinimumSelection: "Select at least {count} options.",
+  optionPathFile: "Choose file",
+  optionPathDirectory: "Choose directory",
+  optionPathPicking: "Selecting / importing…",
+  optionPathClear: "Clear path",
+  optionPathCopyHint:
+    "Resolvable local files and directories keep their original shared-storage paths. Other files are copied to shared Downloads (up to 256 MiB). Directories without a local path are not supported. You can also enter a native path manually.",
+  optionPathPickFailed:
+    "Could not select this path. Use a shared-storage location accessible to the privileged Agent; cloud directories are unsupported. File imports require Android 10+ and must be within 256 MiB. Close any open picker and retry, or enter a native path manually.",
+
   settingHelpFor: "Explain {name}",
   demoTitle: "Try configuring tasks",
   demoReplay: "Practice task setup",
@@ -581,6 +591,7 @@ const en = {
   updateFailureStorage: "The download could not be written to storage.",
   updateFailureInstallerNotFound: "No app on this device can install updates.",
   updateFailureInternal: "Unexpected error. See the logs for details.",
+  pretasks: "Pre-tasks",
 };
 
 export type MessageKey = keyof typeof en;
@@ -597,6 +608,16 @@ export function configurationRecoveryMessageKey(
 }
 
 const zh: Record<MessageKey, string> = {
+  checkboxMinimumSelection: "请至少选择 {count} 项。",
+  optionPathFile: "选择文件",
+  optionPathDirectory: "选择目录",
+  optionPathPicking: "正在选择 / 导入…",
+  optionPathClear: "清空路径",
+  optionPathCopyHint:
+    "可解析的本地文件和目录保留共享存储中的原路径。其他文件复制到共享下载目录（最多 256 MiB），不支持没有本地路径的目录。也可手动填写原生路径。",
+  optionPathPickFailed:
+    "无法选择此路径。请选择特权 Agent 可访问的共享存储位置，不支持云目录。文件导入需要 Android 10 及以上，且不能超过 256 MiB。请关闭仍打开的选择器后重试，或手动填写原生路径。",
+
   settingHelpFor: "查看「{name}」说明",
   demoTitle: "试着配置任务",
   demoReplay: "练习任务设置",
@@ -1109,6 +1130,7 @@ const zh: Record<MessageKey, string> = {
   guideProgress: "{current} / {total}",
   guideRunActive: "请在当前运行结束后查看指引。",
   guideUnavailable: "暂时无法显示指引，请稍后从设置页重试。",
+  pretasks: "预任务",
 };
 
 const catalog: Record<AppLanguage, Record<MessageKey, string>> = { en, zh };

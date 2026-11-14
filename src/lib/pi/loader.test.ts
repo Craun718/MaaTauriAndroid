@@ -13,6 +13,67 @@ function reader(files: Record<string, string>) {
 }
 
 describe("loadProjectSource", () => {
+  it("keeps the first group and global option when imports repeat them", async () => {
+    const source = await loadProjectSource(
+      "/project",
+      reader({
+        "interface.json": JSON.stringify({
+          import: ["first.json", "second.json"],
+          group: [{ name: "daily", label: "Main" }],
+          global_option: ["Mode"],
+          task: [{ name: "Main" }],
+        }),
+        "first.json": JSON.stringify({
+          import: ["nested.json"],
+          group: [
+            { name: "daily", label: "Imported" },
+            { name: "extra", label: "First" },
+          ],
+          global_option: ["Mode", "Extra"],
+        }),
+        "nested.json": JSON.stringify({
+          group: [{ name: "extra", label: "Nested" }],
+          global_option: ["Extra", "Nested"],
+        }),
+        "second.json": JSON.stringify({
+          group: [{ name: "daily", label: "Second" }],
+          global_option: ["Nested", "Last"],
+          task: [{ name: "Main" }],
+        }),
+      }),
+    );
+    expect(source.document.group).toEqual([
+      { name: "daily", label: "Main" },
+      { name: "extra", label: "First" },
+    ]);
+    expect(source.document.global_option).toEqual([
+      "Mode",
+      "Extra",
+      "Nested",
+      "Last",
+    ]);
+    expect(source.document.task).toEqual([{ name: "Main" }, { name: "Main" }]);
+  });
+
+  it("merges single and array pretask declarations in import order", async () => {
+    const source = await loadProjectSource(
+      "/project",
+      reader({
+        "interface.json": JSON.stringify({
+          pretask: { exec: "main" },
+          import: ["first.json", "second.json"],
+        }),
+        "first.json": JSON.stringify({ pretask: [{ exec: "first" }] }),
+        "second.json": JSON.stringify({ pretask: { exec: "second" } }),
+      }),
+    );
+    expect(source.document.pretask).toEqual([
+      { exec: "main" },
+      { exec: "first" },
+      { exec: "second" },
+    ]);
+  });
+
   it("parses JSONC and recursively merges imports", async () => {
     const source = await loadProjectSource(
       "/project",

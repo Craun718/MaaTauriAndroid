@@ -114,6 +114,9 @@ fn transform_configuration(
     for (resource_name, values) in &mut configuration.resource_option_values {
         transform_option_values(values, &["resource", resource_name], transform)?;
     }
+    for (name, pretask) in &mut configuration.pretask_values {
+        transform_option_values(&mut pretask.option_values, &["pretask", name], transform)?;
+    }
     for run in &mut configuration.run_configurations {
         for task in &mut run.tasks {
             transform_option_values(
@@ -310,6 +313,7 @@ mod tests {
                 icon: None,
             }],
             options,
+            pretasks: Vec::new(),
             global_options: Vec::new(),
             presets: Vec::new(),
             agents: Vec::new(),
@@ -332,6 +336,7 @@ mod tests {
             telemetry_enabled: false,
             ui_language: Default::default(),
             active_resource: None,
+            pretask_values: BTreeMap::new(),
             global_option_values: BTreeMap::new(),
             controller_option_values: BTreeMap::new(),
             resource_option_values: BTreeMap::new(),
@@ -365,6 +370,50 @@ mod tests {
             background_image: None,
             background_card_opacity: 100,
         }
+    }
+
+    #[test]
+    fn pretask_passwords_use_scoped_manifest_keys_and_propagate_bridge_failure() {
+        let project = project();
+        let fields = password_fields(&project);
+        let mut source = configuration();
+        source.pretask_values.insert(
+            "prepare".into(),
+            crate::domain::types::ConfiguredPretask {
+                enabled: false,
+                option_values: source.run_configurations[0].tasks[0].option_values.clone(),
+            },
+        );
+        let original = source.clone();
+        let mut manifest = SecretManifest::default();
+        transform_configuration(&mut source, &mut |key, value| {
+            if is_password_key(key, &fields) {
+                manifest.insert(key.into());
+                Ok(format!("{ENVELOPE_PREFIX}{value}"))
+            } else {
+                Ok(value.into())
+            }
+        })
+        .unwrap();
+        assert!(manifest.contains(r#"["pretask","prepare","Login","token"]"#));
+        assert!(!manifest.contains(r#"["pretask","prepare","Login","plain"]"#));
+        transform_configuration(&mut source, &mut |key, value| {
+            if manifest.contains(key) {
+                Ok(value.strip_prefix(ENVELOPE_PREFIX).unwrap().into())
+            } else {
+                Ok(value.into())
+            }
+        })
+        .unwrap();
+        assert_eq!(source, original);
+        let result = transform_configuration(&mut source, &mut |key, value| {
+            if key.starts_with(r#"["pretask""#) && is_password_key(key, &fields) {
+                Err(SecretError::BridgeUnavailable)
+            } else {
+                Ok(value.into())
+            }
+        });
+        assert!(matches!(result, Err(SecretError::BridgeUnavailable)));
     }
 
     #[test]

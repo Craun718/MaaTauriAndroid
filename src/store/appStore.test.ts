@@ -76,6 +76,7 @@ const configuration: UserConfiguration = {
   closeTargetAppAfterRun: false,
   telemetryEnabled: false,
   activeResource: undefined,
+  pretaskValues: {},
   globalOptionValues: {},
   controllerOptionValues: {},
   resourceOptionValues: {},

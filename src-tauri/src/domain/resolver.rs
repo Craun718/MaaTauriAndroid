@@ -407,48 +407,7 @@ impl<'a> PipelineMerger<'a> {
         inputs: &[InputFieldDefinition],
         values: &BTreeMap<String, String>,
     ) -> Result<BTreeMap<String, String>, ResolverError> {
-        let mut resolved = BTreeMap::new();
-        for field in inputs {
-            let raw = values
-                .get(&field.name)
-                .cloned()
-                .or_else(|| field.default.clone());
-            let raw = raw.unwrap_or_default();
-            if field.input_type == InputType::Time && !raw.is_empty() && !is_24_hour_time(&raw) {
-                return Err(ResolverError::InvalidInput {
-                    option: option.to_string(),
-                    field: field.name.clone(),
-                    message: "expected a 24-hour time in HH:mm format".to_string(),
-                });
-            }
-            if let Some(pattern) = &field.verify {
-                let regex = Regex::new(pattern).map_err(|error| ResolverError::InvalidInput {
-                    option: option.to_string(),
-                    field: field.name.clone(),
-                    message: error.to_string(),
-                })?;
-                if !regex.is_match(&raw) {
-                    return Err(ResolverError::InvalidInput {
-                        option: option.to_string(),
-                        field: field.name.clone(),
-                        message: field
-                            .pattern_message
-                            .clone()
-                            .unwrap_or_else(|| "value does not match the expected pattern".into()),
-                    });
-                }
-            }
-            resolved.insert(field.name.clone(), raw);
-        }
-        for field in values.keys() {
-            if !inputs.iter().any(|definition| &definition.name == field) {
-                return Err(ResolverError::UnknownInputField {
-                    option: option.to_string(),
-                    field: field.clone(),
-                });
-            }
-        }
-        Ok(resolved)
+        resolve_input_values(option, inputs, values)
     }
 
     fn merge_override(&mut self, value: Option<&Value>) {
@@ -457,6 +416,55 @@ impl<'a> PipelineMerger<'a> {
         };
         merge_json(&mut self.output, value);
     }
+}
+
+pub(super) fn resolve_input_values(
+    option: &str,
+    inputs: &[InputFieldDefinition],
+    values: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, ResolverError> {
+    let mut resolved = BTreeMap::new();
+    for field in inputs {
+        let raw = values
+            .get(&field.name)
+            .cloned()
+            .or_else(|| field.default.clone());
+        let raw = raw.unwrap_or_default();
+        if field.input_type == InputType::Time && !raw.is_empty() && !is_24_hour_time(&raw) {
+            return Err(ResolverError::InvalidInput {
+                option: option.to_string(),
+                field: field.name.clone(),
+                message: "expected a 24-hour time in HH:mm format".to_string(),
+            });
+        }
+        if let Some(pattern) = &field.verify {
+            let regex = Regex::new(pattern).map_err(|error| ResolverError::InvalidInput {
+                option: option.to_string(),
+                field: field.name.clone(),
+                message: error.to_string(),
+            })?;
+            if !regex.is_match(&raw) {
+                return Err(ResolverError::InvalidInput {
+                    option: option.to_string(),
+                    field: field.name.clone(),
+                    message: field
+                        .pattern_message
+                        .clone()
+                        .unwrap_or_else(|| "value does not match the expected pattern".into()),
+                });
+            }
+        }
+        resolved.insert(field.name.clone(), raw);
+    }
+    for field in values.keys() {
+        if !inputs.iter().any(|definition| &definition.name == field) {
+            return Err(ResolverError::UnknownInputField {
+                option: option.to_string(),
+                field: field.clone(),
+            });
+        }
+    }
+    Ok(resolved)
 }
 
 fn is_24_hour_time(value: &str) -> bool {
@@ -475,7 +483,7 @@ fn is_24_hour_time(value: &str) -> bool {
     hour <= 23 && minute <= 59
 }
 
-fn hotkey_values(
+pub(super) fn hotkey_values(
     option: &str,
     hotkeys: &[HotkeyFieldDefinition],
     values: &BTreeMap<String, String>,
@@ -487,11 +495,11 @@ fn hotkey_values(
             .cloned()
             .or_else(|| field.default.clone())
             .unwrap_or_default();
-        if hotkey_code(&raw).is_none() {
+        if hotkey_codes(&raw).is_none() {
             return Err(ResolverError::InvalidInput {
                 option: option.to_string(),
                 field: field.name.clone(),
-                message: format!("invalid key {raw:?}: expected a key name such as F, 1, or F1"),
+                message: format!("invalid shortcut {raw:?}: expected a primary key with at most two distinct modifiers (Ctrl, Shift, Alt, Meta/Win)"),
             });
         }
         resolved.insert(field.name.clone(), raw);
@@ -507,16 +515,36 @@ fn hotkey_values(
     Ok(resolved)
 }
 
-fn hotkey_code(value: &str) -> Option<i64> {
-    let primary = value
-        .rsplit_once('+')
-        .map(|(_, key)| key)
-        .unwrap_or(value)
-        .trim();
-    if primary.is_empty() {
+/// Primary, modifier1 and modifier2 in declaration order. PI does not specify
+/// absent modifiers; this client substitutes 0 for each unused modifier slot.
+fn hotkey_codes(value: &str) -> Option<[i64; 3]> {
+    let parts: Vec<&str> = value.split('+').map(str::trim).collect();
+    if parts.len() > 3 || parts.iter().any(|part| part.is_empty()) {
         return None;
     }
+    let mut codes = [0; 3];
+    codes[0] = key_code(parts.last()?)?;
+    for (index, modifier) in parts[..parts.len() - 1].iter().enumerate() {
+        let code = modifier_code(modifier)?;
+        if codes[1..index + 1].contains(&code) || codes[0] == code {
+            return None;
+        }
+        codes[index + 1] = code;
+    }
+    Some(codes)
+}
 
+fn modifier_code(value: &str) -> Option<i64> {
+    match value.to_ascii_uppercase().as_str() {
+        "CTRL" | "CONTROL" => Some(0x11),
+        "SHIFT" => Some(0x10),
+        "ALT" => Some(0x12),
+        "META" | "WIN" => Some(0x5B),
+        _ => None,
+    }
+}
+
+fn key_code(primary: &str) -> Option<i64> {
     let primary = primary.to_ascii_uppercase();
     let code = match primary.as_str() {
         "CTRL" | "CONTROL" => 0x11,
@@ -557,13 +585,24 @@ fn hotkey_code(value: &str) -> Option<i64> {
     Some(code)
 }
 
-fn hotkey_placeholder(text: &str) -> Option<(&str, bool)> {
-    let name = text.trim().strip_prefix('{')?.strip_suffix('}')?;
-    match name.split_once('.') {
-        Some((field, "primary")) => Some((field, true)),
-        Some(_) => None,
-        None => Some((name, false)),
-    }
+fn hotkey_placeholder(text: &str) -> Option<(&str, usize)> {
+    let (name, suffix) = text.trim().strip_prefix('{')?.split_once('}')?;
+    let (field, part) = if suffix.is_empty() {
+        // Accept the old {name.primary} spelling as well as {name}.
+        match name.rsplit_once('.') {
+            Some((field, part)) => (field, part),
+            None => (name, "primary"),
+        }
+    } else {
+        (name, suffix.strip_prefix('.')?)
+    };
+    let index = match part {
+        "primary" => 0,
+        "modifier1" => 1,
+        "modifier2" => 2,
+        _ => return None,
+    };
+    Some((field, index))
 }
 
 fn substitute_hotkeys(
@@ -574,41 +613,43 @@ fn substitute_hotkeys(
 ) -> Result<Value, ResolverError> {
     match value {
         Value::String(text) => {
-            if let Some((field_name, _)) = hotkey_placeholder(text) {
-                if let Some(field) = hotkeys.iter().find(|field| field.name == field_name) {
-                    let raw = values
-                        .get(&field.name)
-                        .map(String::as_str)
-                        .unwrap_or_default();
-                    let code = hotkey_code(raw).ok_or_else(|| ResolverError::InvalidInput {
-                        option: option.to_string(),
-                        field: field.name.clone(),
-                        message: format!(
-                            "invalid key {raw:?}: expected a key name such as F, 1, or F1"
-                        ),
-                    })?;
-                    return Ok(Value::Number(code.into()));
-                }
-            }
-
-            let mut output = text.clone();
+            let mut codes = BTreeMap::new();
             for field in hotkeys {
                 let raw = values
                     .get(&field.name)
                     .map(String::as_str)
                     .unwrap_or_default();
-                let code = hotkey_code(raw).ok_or_else(|| ResolverError::InvalidInput {
+                let parsed = hotkey_codes(raw).ok_or_else(|| ResolverError::InvalidInput {
                     option: option.to_string(),
                     field: field.name.clone(),
                     message: format!(
-                        "invalid key {raw:?}: expected a key name such as F, 1, or F1"
+                        "invalid shortcut {raw:?}: expected a primary key with at most two distinct modifiers (Ctrl, Shift, Alt, Meta/Win)"
                     ),
                 })?;
-                let replacement = code.to_string();
-                output = output.replace(&format!("{{{}.primary}}", field.name), &replacement);
-                output = output.replace(&format!("{{{}}}", field.name), &replacement);
+                codes.insert(field.name.as_str(), parsed);
             }
-            Ok(Value::String(output))
+            if let Some((field, index)) = hotkey_placeholder(text) {
+                if let Some(codes) = codes.get(field) {
+                    return Ok(Value::Number(codes[index].into()));
+                }
+            }
+
+            // Consume the suffix together with the braces so the bare {name}
+            // replacement cannot turn {name}.modifier1 into "65.modifier1".
+            static PLACEHOLDERS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+            let placeholders = PLACEHOLDERS.get_or_init(|| {
+                Regex::new(r"\{[^{}]+\}(?:\.[A-Za-z0-9_]+)?")
+                    .expect("hotkey placeholder regex must be valid")
+            });
+            let output = placeholders.replace_all(text, |capture: &regex::Captures<'_>| {
+                let token = &capture[0];
+                hotkey_placeholder(token)
+                    .and_then(|(field, index)| {
+                        codes.get(field).map(|codes| codes[index].to_string())
+                    })
+                    .unwrap_or_else(|| token.to_string())
+            });
+            Ok(Value::String(output.into_owned()))
         }
         Value::Array(items) => Ok(Value::Array(
             items
@@ -883,8 +924,9 @@ mod tests {
                 pipeline_override: json!({
                     "Interact": { "key": "{Interact.primary}" },
                     "Combo": {
-                        "key": "{Combo.primary}",
-                        "description": "combo {Combo.primary}"
+                        "key": "{Combo}.primary",
+                        "keys": ["{Combo}.modifier1", "{Combo}.modifier2", "{Combo}"],
+                        "description": "combo {Combo}.modifier1+{Combo}.primary"
                     }
                 }),
                 icon: None,
@@ -903,7 +945,7 @@ mod tests {
         );
         assert_eq!(
             resolved.pipeline_override.get("Combo"),
-            Some(&json!({ "key": 112, "description": "combo 112" }))
+            Some(&json!({ "key": 112, "keys": [0, 0, 112], "description": "combo 0+112" }))
         );
 
         let mut config = configuration(&project, "normal", None, "Yes");
@@ -923,7 +965,7 @@ mod tests {
         );
         assert_eq!(
             resolved.pipeline_override.get("Combo"),
-            Some(&json!({ "key": 112, "description": "combo 112" }))
+            Some(&json!({ "key": 112, "keys": [17, 0, 112], "description": "combo 17+112" }))
         );
 
         config.global_option_values.insert(
@@ -937,6 +979,112 @@ mod tests {
         );
         let error = resolve_run(&project, &config).expect_err("an invalid hotkey should fail");
         assert!(error.to_string().contains("not-a-key"));
+    }
+
+    #[test]
+    fn parses_complete_hotkeys_and_preserves_modifier_order() {
+        for (raw, expected) in [
+            ("A", [65, 0, 0]),
+            ("1", [49, 0, 0]),
+            ("F24", [135, 0, 0]),
+            ("Ctrl+A", [65, 17, 0]),
+            (" ctrl + SHIFT + a ", [65, 17, 16]),
+            ("Shift+Control+F1", [112, 16, 17]),
+            ("Alt+Win+Enter", [13, 18, 91]),
+            ("Meta+Tab", [9, 91, 0]),
+            ("Ctrl", [17, 0, 0]),
+        ] {
+            assert_eq!(hotkey_codes(raw), Some(expected), "{raw}");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_hotkey_segments_in_defaults_and_configured_values() {
+        let mut field = HotkeyFieldDefinition {
+            name: "Combo".into(),
+            label: "Combo".into(),
+            description: None,
+            default: None,
+        };
+        for raw in [
+            "",
+            " ",
+            "+A",
+            "Ctrl+",
+            "Ctrl++A",
+            "Ctrl+ +A",
+            "Unknown+A",
+            "A+B",
+            "Ctrl+Unknown+A",
+            "Ctrl+Shift+Alt+A",
+            "Ctrl+Control+A",
+            "Meta+Win+A",
+            "Ctrl+Ctrl",
+            "Ctrl+F25",
+            "Ctrl+not-a-key",
+        ] {
+            field.default = Some(raw.into());
+            for values in [
+                BTreeMap::new(),
+                BTreeMap::from([("Combo".into(), raw.into())]),
+            ] {
+                assert!(
+                    matches!(
+                        hotkey_values("keys", std::slice::from_ref(&field), &values),
+                        Err(ResolverError::InvalidInput { option, field, .. })
+                            if option == "keys" && field == "Combo"
+                    ),
+                    "{raw:?} must not silently discard invalid segments"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn substitutes_hotkey_parts_as_integers_in_nested_templates() {
+        let fields = vec![HotkeyFieldDefinition {
+            name: "Combo".into(),
+            label: "Combo".into(),
+            description: None,
+            default: Some("Ctrl+Shift+A".into()),
+        }];
+        let values = hotkey_values("keys", &fields, &BTreeMap::new()).unwrap();
+        let template = json!({
+            "primary": "{Combo}.primary",
+            "bare": "{Combo}",
+            "legacy": "{Combo.primary}",
+            "nested": [{"keys": ["{Combo}.modifier1", "{Combo}.modifier2", "{Combo}.primary"]}],
+            "text": "keys {Combo}.modifier1+{Combo}.modifier2+{Combo}.primary / {Combo.primary}",
+            "unknown": ["{Other}.primary", "{Combo}.modifier3", "{Combo.unknown}"],
+            "unchanged": [7, true, null]
+        });
+        assert_eq!(
+            substitute_hotkeys(&template, "keys", &fields, &values).unwrap(),
+            json!({
+                "primary": 65,
+                "bare": 65,
+                "legacy": 65,
+                "nested": [{"keys": [17, 16, 65]}],
+                "text": "keys 17+16+65 / 65",
+                "unknown": ["{Other}.primary", "{Combo}.modifier3", "{Combo.unknown}"],
+                "unchanged": [7, true, null]
+            })
+        );
+    }
+
+    #[test]
+    fn hotkey_substitution_rejects_invalid_combinations_without_prior_validation() {
+        let fields = vec![HotkeyFieldDefinition {
+            name: "Combo".into(),
+            label: "Combo".into(),
+            description: None,
+            default: None,
+        }];
+        let values = BTreeMap::from([("Combo".into(), "Unknown+A".into())]);
+        assert!(matches!(
+            substitute_hotkeys(&json!("{Combo}.modifier1"), "keys", &fields, &values),
+            Err(ResolverError::InvalidInput { .. })
+        ));
     }
 
     #[test]

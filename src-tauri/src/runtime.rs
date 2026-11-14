@@ -2309,7 +2309,7 @@ mod tests {
 
         let value = serde_json::to_value(&idle).expect("idle result should serialize");
         assert_eq!(value["executionId"], serde_json::Value::Null);
-        assert_eq!(value["state"], serde_json::json!("idle"));
+        assert_eq!(value["state"], serde_json::json!("Idle"));
         assert_eq!(value["severity"], serde_json::json!("info"));
     }
 

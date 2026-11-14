@@ -24,7 +24,8 @@ pub fn remove_password_values(
 
 /// None is a legacy preset and leaves all pre-task state untouched. A present
 /// list is a checkbox snapshot, including when empty. Unlisted options remain
-/// stored for reuse; listed entries replace their option values with the snapshot.
+/// stored for reuse; listed entries replace non-password values with the snapshot
+/// while retaining passwords already stored for that pre-task.
 pub fn apply_pretasks(
     project: &Project,
     preset: &ConfigurationTemplate,
@@ -46,13 +47,42 @@ pub fn apply_pretasks(
         configured.enabled = item.is_some_and(|item| item.enabled);
         if let Some(item) = item {
             let declared = declared_options(project, &task.options);
-            configured.option_values = item
+            let mut snapshot: BTreeMap<_, _> = item
                 .option
                 .iter()
                 .filter(|(name, _)| declared.contains(*name))
                 .map(|(name, value)| (name.clone(), value.clone()))
                 .collect();
-            remove_password_values(&project.options, &mut configured.option_values);
+            remove_password_values(&project.options, &mut snapshot);
+            for (name, old_value) in &configured.option_values {
+                if !declared.contains(name) {
+                    continue;
+                }
+                let (Some(OptionDefinition::Input { inputs, .. }), OptionValue::Inputs { values }) =
+                    (project.options.get(name), old_value)
+                else {
+                    continue;
+                };
+                for field in inputs.iter().filter(|field| field.password) {
+                    if let Some(secret) = values.get(&field.name) {
+                        let entry =
+                            snapshot
+                                .entry(name.clone())
+                                .or_insert_with(|| OptionValue::Inputs {
+                                    values: BTreeMap::new(),
+                                });
+                        if !matches!(entry, OptionValue::Inputs { .. }) {
+                            *entry = OptionValue::Inputs {
+                                values: BTreeMap::new(),
+                            };
+                        }
+                        if let OptionValue::Inputs { values } = entry {
+                            values.insert(field.name.clone(), secret.clone());
+                        }
+                    }
+                }
+            }
+            configured.option_values = snapshot;
         }
     }
 }
@@ -241,9 +271,10 @@ mod tests {
         );
         let first: Value = serde_json::from_str(commands[0].args.last().unwrap()).unwrap();
         assert_eq!(first["credentials"]["username"], "child");
-        assert_eq!(first["credentials"]["password"], "");
+        assert_eq!(first["credentials"]["password"], "device-secret");
         let second: Value = serde_json::from_str(commands[1].args.last().unwrap()).unwrap();
         assert_eq!(second["credentials"]["username"], "preset");
+        assert_eq!(second["credentials"]["password"], "device-secret");
     }
 
     #[test]
@@ -288,6 +319,55 @@ mod tests {
             panic!()
         };
         assert_eq!(values["username"], "safe");
+        assert_eq!(values["password"], "device-secret");
+    }
+
+    #[test]
+    fn snapshot_omitting_an_option_keeps_only_its_existing_password() {
+        let project = project();
+        let mut configuration = configuration(&project);
+        let mut preset = project.presets[2].clone();
+        preset.pretasks = Some(vec![TemplatePretask {
+            name: "second".into(),
+            enabled: true,
+            option: BTreeMap::new(),
+        }]);
+        apply_pretasks(&project, &preset, &mut configuration);
+        let OptionValue::Inputs { values } =
+            &configuration.pretask_values["second"].option_values["credentials"]
+        else {
+            panic!()
+        };
+        assert_eq!(values.len(), 1);
+        assert_eq!(values["password"], "device-secret");
+        let commands = resolve_pretasks(&project, &configuration).unwrap();
+        let options: Value = serde_json::from_str(commands[0].args.last().unwrap()).unwrap();
+        assert_eq!(options["credentials"]["username"], "default");
+        assert_eq!(options["credentials"]["password"], "device-secret");
+    }
+
+    #[test]
+    fn preset_password_is_ignored_when_no_local_password_exists() {
+        let project = project();
+        let mut configuration = UserConfiguration::default();
+        let mut preset = project.presets[2].clone();
+        let item = &mut preset.pretasks.as_mut().unwrap()[0];
+        item.option.insert(
+            "credentials".into(),
+            OptionValue::Inputs {
+                values: BTreeMap::from([
+                    ("username".into(), "preset-user".into()),
+                    ("password".into(), "injected".into()),
+                ]),
+            },
+        );
+        apply_pretasks(&project, &preset, &mut configuration);
+        let OptionValue::Inputs { values } =
+            &configuration.pretask_values["second"].option_values["credentials"]
+        else {
+            panic!()
+        };
+        assert_eq!(values["username"], "preset-user");
         assert!(!values.contains_key("password"));
     }
 }

@@ -21,6 +21,20 @@ const reader: ProjectTextReader = async (path) => {
   return content;
 };
 
+it("filters presets by the Android controller", async () => {
+  const input = source();
+  input.document.preset = [
+    { name: "all" },
+    { name: "android", controller: ["ADB"] },
+    { name: "desktop", controller: ["PC"] },
+  ];
+  const project = await buildAndroidProject(input, "en_us", reader);
+  expect(project.presets.map((preset) => preset.name)).toEqual([
+    "all",
+    "android",
+  ]);
+});
+
 function source(): ProjectSource {
   return {
     root: "/project",

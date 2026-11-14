@@ -526,6 +526,13 @@ export async function buildAndroidProject(
     const item = object(value);
     const presetName = optionalString(item?.name);
     if (!item || !presetName) return [];
+    const controllers = strings(item.controller);
+    if (
+      controllers.length > 0 &&
+      !controllers.includes(androidController(document).name)
+    ) {
+      return [];
+    }
     return [
       {
         name: presetName,

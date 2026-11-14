@@ -246,6 +246,10 @@ impl ProjectLoader {
         let presets = array(&document, "preset")
             .into_iter()
             .filter_map(|item| {
+                let allowed = strings(item.get("controller")).unwrap_or_default();
+                if !allowed.is_empty() && !allowed.contains(&controllers[0].name) {
+                    return None;
+                }
                 let name = item.get("name")?.as_str()?.to_string();
                 let tasks = item
                     .get("task")
@@ -1386,6 +1390,35 @@ mod tests {
         assert_eq!(label, "Controls");
         assert_eq!(hotkeys[0].label, "Attack");
         assert_eq!(hotkeys[0].description.as_deref(), Some("Attack the target"));
+    }
+
+    #[test]
+    fn filters_presets_by_android_controller() {
+        let project = ProjectLoader::default()
+            .load_embedded(
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "controller": [{"name": "ADB", "type": "Adb"}],
+                    "resource": [{"name": "base", "path": ["resource/base"]}],
+                    "preset": [
+                        {"name": "all"},
+                        {"name": "android", "controller": ["ADB"]},
+                        {"name": "desktop", "controller": ["PC"]}
+                    ]
+                }),
+                BTreeMap::new(),
+                "en_us",
+            )
+            .expect("project should load");
+        assert_eq!(
+            project
+                .presets
+                .iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["all", "android"]
+        );
     }
 
     #[test]

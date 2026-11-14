@@ -1,5 +1,13 @@
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
-import { EVENTS, Joyride, STATUS, type Step } from "react-joyride";
+import { type Config, type Driver, type DriveStep, driver } from "driver.js";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import "driver.js/dist/driver.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getRunStatus } from "../lib/api";
 import { GUIDE_STEPS, guideSelector, shouldShowGuide } from "../lib/guide";
@@ -8,7 +16,6 @@ import { useAppStore } from "../store/appStore";
 import { useGuideStore } from "../store/guideStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { usePreparationStore } from "../store/preparationStore";
-import { GuideTooltip } from "./GuideTooltip";
 import { TaskDemo } from "./TaskDemo";
 
 export function GuideHost(): ReactElement | null {
@@ -52,30 +59,34 @@ interface GuideGeometry {
   padding: { top: number; right: number; bottom: number; left: number };
 }
 
-/** A before hook must wait for React's route commit, including Suspense. */
+/** A guide transition must wait for React's route commit, including Suspense. */
 function waitForGuideTarget(
   selector: string,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<boolean> {
   return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(false);
+      return;
+    }
     function visible(): boolean {
       const element = document.querySelector(selector);
       return Boolean(element?.getClientRects().length);
     }
-    if (signal.aborted || visible()) {
-      resolve();
+    if (visible()) {
+      resolve(true);
       return;
     }
     function finish(): void {
       observer.disconnect();
       window.clearTimeout(timeout);
       signal.removeEventListener("abort", finish);
-      resolve();
+      resolve(visible());
     }
     const observer = new MutationObserver(() => {
       if (visible()) finish();
     });
-    // An optional/missing target is left to Joyride's normal skip behavior.
+    // An optional/missing target is skipped instead of blocking the tour.
     const timeout = window.setTimeout(finish, 4000);
     observer.observe(document.body, {
       childList: true,
@@ -94,6 +105,10 @@ function GuideSession(): ReactElement {
   const { pathname } = useLocation();
   const returnPath = useRef(pathname);
   const displayed = useRef(false);
+  const advancing = useRef(false);
+  const stopping = useRef(false);
+  const stepIndex = useRef<number | undefined>(undefined);
+  const tourDriver = useRef<Driver | undefined>(undefined);
   const targetWait = useRef<AbortController | undefined>(undefined);
   const probe = useRef<HTMLDivElement>(null);
   const [geometry, setGeometry] = useState<GuideGeometry>();
@@ -101,6 +116,44 @@ function GuideSession(): ReactElement {
   const cancel = useGuideStore((state) => state.cancel);
   const finish = useGuideStore((state) => state.finish);
   const setTarget = useGuideStore((state) => state.setTarget);
+
+  const goToStep = useCallback(
+    async (nextIndex: number): Promise<void> => {
+      const definition = GUIDE_STEPS[nextIndex];
+      const activeDriver = tourDriver.current;
+      if (!definition || !activeDriver || advancing.current) return;
+
+      targetWait.current?.abort();
+      const controller = new AbortController();
+      targetWait.current = controller;
+      advancing.current = true;
+      stepIndex.current = nextIndex;
+      setTarget(definition.target);
+      navigation.current(definition.route, { replace: true });
+
+      const visible = await waitForGuideTarget(
+        guideSelector(definition.target),
+        controller.signal,
+      );
+      advancing.current = false;
+      if (
+        controller.signal.aborted ||
+        targetWait.current !== controller ||
+        !activeDriver.isActive()
+      ) {
+        return;
+      }
+
+      if (visible) {
+        activeDriver.drive(nextIndex);
+      } else if (nextIndex === GUIDE_STEPS.length - 1) {
+        activeDriver.destroy();
+      } else {
+        activeDriver.drive(nextIndex + 1);
+      }
+    },
+    [setTarget],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -163,99 +216,116 @@ function GuideSession(): ReactElement {
     };
   }, []);
 
-  const steps = useMemo<Step[]>(
+  const steps = useMemo<DriveStep[]>(
     () =>
-      GUIDE_STEPS.map((definition) => ({
-        target: guideSelector(definition.target),
-        title: t(definition.titleKey),
-        content: t(definition.bodyKey),
-        placement: "bottom",
-        before: async () => {
-          setTarget(definition.target);
-          navigation.current(definition.route, { replace: true });
-          if (targetWait.current) {
-            await waitForGuideTarget(
-              guideSelector(definition.target),
-              targetWait.current.signal,
-            );
-          }
+      GUIDE_STEPS.map((definition, index) => ({
+        element: guideSelector(definition.target),
+        popover: {
+          title: t(definition.titleKey),
+          description: t(definition.bodyKey),
+          side: "bottom",
+          align: "center",
+          onNextClick:
+            index < GUIDE_STEPS.length - 1
+              ? () => {
+                  void goToStep(index + 1);
+                }
+              : undefined,
+          onPrevClick:
+            index > 0
+              ? () => {
+                  void goToStep(index - 1);
+                }
+              : undefined,
         },
       })),
-    [setTarget, t],
+    [goToStep, t],
   );
+
+  const driverConfig = useMemo<Config>(
+    () => ({
+      animate: true,
+      allowClose: true,
+      allowScroll: false,
+      allowKeyboardControl: false,
+      advanceOn: false,
+      disableActiveInteraction: true,
+      overlayClickBehavior: "none",
+      overlayOpacity: 0.72,
+      showProgress: true,
+      showButtons: ["next", "previous", "close"],
+      progressText: t("guideProgress", {
+        current: "{{current}}",
+        total: "{{total}}",
+      }),
+      nextBtnText: t("guideNext"),
+      prevBtnText: t("guideBack"),
+      doneBtnText: t("guideDone"),
+      closeBtnLabel: t("guideSkip"),
+      popoverClass: "guide-driver-popover",
+      stagePadding: (geometry?.rem ?? 1) * 0.25,
+      stageRadius: (geometry?.rem ?? 1) * 0.5,
+      popoverOffset: (geometry?.rem ?? 1) * 0.5,
+      waitForElement: 5000,
+      skipMissingElement: true,
+      onPopoverRender: (popover) => {
+        displayed.current = true;
+        // Driver puts its close control in the corner; keep the tour's skip
+        // affordance in the footer position used by the previous tooltip.
+        popover.closeButton.textContent = t("guideSkip");
+        popover.footerButtons.prepend(popover.closeButton);
+      },
+      onDestroyStarted: (_element, _step, options) => {
+        options.driver.destroy();
+      },
+      onDestroyed: (_element, _step, options) => {
+        if (stopping.current) return;
+
+        const reason = options.reason;
+        if (reason === "done" && displayed.current) {
+          useGuideStore.getState().openDemo();
+        } else if (reason === "done" || reason === "close") {
+          finish();
+        } else {
+          cancel();
+          useNotificationStore
+            .getState()
+            .notify(t("guideUnavailable"), { tone: "warning" });
+        }
+        navigation.current(returnPath.current, { replace: true });
+      },
+    }),
+    [cancel, finish, geometry, t],
+  );
+
+  useEffect(() => {
+    if (!idle || !geometry) return;
+
+    const instance = driver(driverConfig);
+    instance.setSteps(steps);
+    tourDriver.current = instance;
+    displayed.current = false;
+    advancing.current = false;
+    stopping.current = false;
+    void goToStep(stepIndex.current ?? 0);
+
+    return () => {
+      stopping.current = true;
+      targetWait.current?.abort();
+      targetWait.current = undefined;
+      tourDriver.current = undefined;
+      instance.destroy();
+    };
+  }, [driverConfig, geometry, goToStep, idle, steps]);
 
   return (
     <>
-      {/* Resolve the existing CSS safe-area variables for Floating UI's numeric API. */}
+      {/* Resolve the existing CSS safe-area variables for tour geometry. */}
       <div
         ref={probe}
         aria-hidden="true"
         className="pointer-events-none invisible fixed inset-x-0 top-[var(--tt-safe-top)] bottom-[var(--tt-safe-bottom)] mx-auto max-w-md"
       />
-      {idle && geometry && (
-        <Joyride
-          continuous
-          run
-          steps={steps}
-          scrollToFirstStep
-          tooltipComponent={GuideTooltip}
-          loaderComponent={null}
-          locale={{
-            back: t("guideBack"),
-            close: t("guideSkip"),
-            last: t("guideDone"),
-            next: t("guideNext"),
-            skip: t("guideSkip"),
-          }}
-          options={{
-            skipBeacon: true,
-            blockTargetInteraction: true,
-            overlayClickAction: false,
-            dismissKeyAction: false,
-            closeButtonAction: "skip",
-            buttons: ["back", "primary", "skip"],
-            spotlightPadding: geometry.rem * 0.25,
-            spotlightRadius: geometry.rem * 0.5,
-            scrollOffset: geometry.rem,
-            offset: geometry.rem * 0.5,
-            targetWaitTimeout: 5000,
-            backgroundColor: "var(--tt-raised)",
-            textColor: "var(--tt-ink)",
-            primaryColor: "var(--tt-accent)",
-            zIndex: 70,
-          }}
-          floatingOptions={{
-            hideArrow: true,
-            strategy: "fixed",
-            flipOptions: { padding: geometry.padding },
-            shiftOptions: { padding: geometry.padding, crossAxis: true },
-          }}
-          onEvent={(data) => {
-            if (data.type === EVENTS.TOOLTIP) displayed.current = true;
-            if (data.type === EVENTS.ERROR) {
-              cancel();
-              useNotificationStore
-                .getState()
-                .notify(t("guideUnavailable"), { tone: "warning" });
-            }
-            if (data.type !== EVENTS.TOUR_END) return;
-            if (
-              data.status === STATUS.SKIPPED ||
-              (data.status === STATUS.FINISHED && displayed.current)
-            ) {
-              if (data.status === STATUS.FINISHED)
-                useGuideStore.getState().openDemo();
-              else finish();
-            } else {
-              cancel();
-              useNotificationStore
-                .getState()
-                .notify(t("guideUnavailable"), { tone: "warning" });
-            }
-            navigate(returnPath.current, { replace: true });
-          }}
-        />
-      )}
     </>
   );
 }

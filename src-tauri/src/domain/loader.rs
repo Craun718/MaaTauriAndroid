@@ -823,6 +823,23 @@ fn merge_fragment(mut base: Value, imported: Value) -> Value {
             }
         }
     }
+    // PI import semantics keep the first declaration, including across nested
+    // imports. Other ordered arrays (tasks, presets, settings) remain appended.
+    for key in ["group", "global_option"] {
+        if let Some(items) = base.get_mut(key).and_then(Value::as_array_mut) {
+            let mut seen = std::collections::BTreeSet::new();
+            items.retain(|item| {
+                let identity = if key == "group" {
+                    item.get("name")
+                } else {
+                    Some(item)
+                };
+                identity
+                    .and_then(Value::as_str)
+                    .is_none_or(|name| seen.insert(name.to_string()))
+            });
+        }
+    }
     if let Some(incoming) = imported.get("option").and_then(Value::as_object) {
         if let Some(existing) = base.get_mut("option").and_then(Value::as_object_mut) {
             for (key, value) in incoming {
@@ -1057,6 +1074,44 @@ mod tests {
                 )
                 .is_err());
         }
+    }
+
+    #[test]
+    fn imported_groups_and_global_options_keep_the_first_occurrence() {
+        let main = json!({
+            "group": [{"name": "daily", "label": "Main"}],
+            "global_option": ["Mode"],
+            "task": [{"name": "Main"}]
+        });
+        let first = merge_fragment(
+            json!({
+                "group": [{"name": "daily", "label": "Imported"}, {"name": "extra", "label": "First"}],
+                "global_option": ["Mode", "Extra"]
+            }),
+            json!({
+                "group": [{"name": "extra", "label": "Nested"}],
+                "global_option": ["Extra", "Nested"]
+            }),
+        );
+        let merged = merge_fragment(
+            merge_fragment(main, first),
+            json!({
+                "group": [{"name": "daily", "label": "Second"}],
+                "global_option": ["Nested", "Last"],
+                "task": [{"name": "Main"}]
+            }),
+        );
+        assert_eq!(
+            merged["group"],
+            json!([
+                {"name": "daily", "label": "Main"}, {"name": "extra", "label": "First"}
+            ])
+        );
+        assert_eq!(
+            merged["global_option"],
+            json!(["Mode", "Extra", "Nested", "Last"])
+        );
+        assert_eq!(merged["task"], json!([{"name": "Main"}, {"name": "Main"}]));
     }
 
     #[test]

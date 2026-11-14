@@ -139,7 +139,7 @@ function GuideSession(): ReactElement {
       if (
         controller.signal.aborted ||
         targetWait.current !== controller ||
-        !activeDriver.isActive()
+        tourDriver.current !== activeDriver
       ) {
         return;
       }

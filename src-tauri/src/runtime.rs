@@ -687,7 +687,39 @@ pub fn android_controller_config(
     })
 }
 
-const OCR_MODEL_FILES: [&str; 3] = ["det.onnx", "rec.onnx", "keys.txt"];
+const OCR_ONNX_MODEL_FILES: [&str; 3] = ["det.onnx", "rec.onnx", "keys.txt"];
+const OCR_NCNN_MODEL_FILES: [&str; 7] = [
+    "det.ncnn.param",
+    "det.ncnn.bin",
+    "det.ncnn.json",
+    "rec.ncnn.param",
+    "rec.ncnn.bin",
+    "rec.ncnn.json",
+    "keys.txt",
+];
+
+/// Reports whether any declared resource ships NCNN model weights.
+///
+/// MaaFramework's NCNN backend is an all-or-nothing switch for both neural
+/// network recognition and OCR, so a single `.ncnn.param` file anywhere under
+/// a resource's `model/` tree selects it for that resource.
+pub fn resource_uses_ncnn(project_root: &str, resources: &[ResourceDefinition]) -> bool {
+    resources.iter().any(|resource| {
+        resource.paths.iter().any(|path| {
+            let model_dir = resource_path(project_root, path).join("model");
+            walkdir::WalkDir::new(&model_dir)
+                .into_iter()
+                .filter_map(Result::ok)
+                .any(|entry| {
+                    entry.file_type().is_file()
+                        && entry
+                            .file_name()
+                            .to_str()
+                            .is_some_and(|name| name.ends_with(".ncnn.param"))
+                })
+        })
+    })
+}
 
 /// Verifies every declared Project Interface resource can supply the OCR model
 /// before the app starts a run. Multiple bundles may split the files across
@@ -697,12 +729,18 @@ pub fn validate_ocr_models(
     resources: &[ResourceDefinition],
 ) -> Result<(), RuntimeError> {
     for resource in resources {
+        let model_files: &[&str] =
+            if resource_uses_ncnn(project_root, std::slice::from_ref(resource)) {
+                &OCR_NCNN_MODEL_FILES
+            } else {
+                &OCR_ONNX_MODEL_FILES
+            };
         let model_dirs: Vec<PathBuf> = resource
             .paths
             .iter()
             .map(|path| resource_path(project_root, path).join("model").join("ocr"))
             .collect();
-        let missing_files: Vec<&str> = OCR_MODEL_FILES
+        let missing_files: Vec<&str> = model_files
             .into_iter()
             .filter(|file| {
                 !model_dirs
@@ -1170,6 +1208,15 @@ pub fn create_session(
     }
 
     let resource = Resource::new()?;
+
+    // The inference backend is locked once resource loading starts, so NCNN
+    // must be selected before the first `post_bundle`. Selecting it here means
+    // a resource only ships NCNN model weights (no ONNX fallback).
+    if resource_uses_ncnn(project_root, std::slice::from_ref(&resolved.resource)) {
+        resource
+            .use_ncnn()
+            .map_err(|error| RuntimeError::Maa(error.to_string()))?;
+    }
 
     let agent_session = match agent {
         Some(prepared) if !prepared.descriptor.runtimes.is_empty() => {
@@ -2003,6 +2050,89 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("rec.onnx"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn test_resource(paths: &[&str]) -> ResourceDefinition {
+        ResourceDefinition {
+            name: "official".to_string(),
+            label: "Official".to_string(),
+            description: None,
+            paths: paths.iter().map(|path| (*path).to_string()).collect(),
+            controllers: Vec::new(),
+            options: Vec::new(),
+            hash: None,
+            raw: serde_json::Value::Null,
+        }
+    }
+
+    #[test]
+    fn ncnn_detection_finds_a_model_anywhere_in_the_model_tree() {
+        let root = std::env::temp_dir().join(format!("mta-ncnn-{}", uuid::Uuid::new_v4()));
+        let model = root.join("base/model/detect");
+        std::fs::create_dir_all(&model).unwrap();
+        std::fs::write(model.join("yolo.ncnn.param"), b"param").unwrap();
+
+        let resource = test_resource(&["base"]);
+        assert!(resource_uses_ncnn(&root.to_string_lossy(), &[resource]));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ncnn_detection_ignores_onnx_and_empty_models() {
+        let onnx_root = std::env::temp_dir().join(format!("mta-ncnn-{}", uuid::Uuid::new_v4()));
+        let onnx_model = onnx_root.join("base/model/ocr");
+        std::fs::create_dir_all(&onnx_model).unwrap();
+        std::fs::write(onnx_model.join("det.onnx"), b"det").unwrap();
+
+        let empty_root = std::env::temp_dir().join(format!("mta-ncnn-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(empty_root.join("base/model/ocr")).unwrap();
+
+        let onnx_resource = test_resource(&["base"]);
+        let empty_resource = test_resource(&["base"]);
+        assert!(!resource_uses_ncnn(
+            &onnx_root.to_string_lossy(),
+            &[onnx_resource]
+        ));
+        assert!(!resource_uses_ncnn(
+            &empty_root.to_string_lossy(),
+            &[empty_resource]
+        ));
+        std::fs::remove_dir_all(onnx_root).unwrap();
+        std::fs::remove_dir_all(empty_root).unwrap();
+    }
+
+    #[test]
+    fn ocr_model_validation_accepts_a_complete_ncnn_model() {
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
+        let model = root.join("base/model/ocr");
+        std::fs::create_dir_all(&model).unwrap();
+        for file in OCR_NCNN_MODEL_FILES {
+            std::fs::write(model.join(file), file).unwrap();
+        }
+
+        let result = validate_ocr_models(&root.to_string_lossy(), &[test_resource(&["base"])]);
+        assert!(result.is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ocr_model_validation_rejects_an_incomplete_ncnn_model() {
+        let root = std::env::temp_dir().join(format!("mta-ocr-{}", uuid::Uuid::new_v4()));
+        let model = root.join("base/model/ocr");
+        std::fs::create_dir_all(&model).unwrap();
+        std::fs::write(model.join("det.ncnn.param"), b"param").unwrap();
+        std::fs::write(model.join("det.ncnn.bin"), b"bin").unwrap();
+        std::fs::write(model.join("det.ncnn.json"), b"json").unwrap();
+        std::fs::write(model.join("rec.ncnn.param"), b"param").unwrap();
+        std::fs::write(model.join("rec.ncnn.bin"), b"bin").unwrap();
+        std::fs::write(model.join("keys.txt"), b"keys").unwrap();
+
+        let error =
+            validate_ocr_models(&root.to_string_lossy(), &[test_resource(&["base"])]).unwrap_err();
+
+        assert!(matches!(error, RuntimeError::OcrModelIncomplete(_)));
+        assert!(error.to_string().contains("rec.ncnn.json"));
         std::fs::remove_dir_all(root).unwrap();
     }
 

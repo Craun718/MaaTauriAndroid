@@ -3711,8 +3711,7 @@ async fn start_run(
 
 #[tauri::command]
 fn run_status() -> Result<runtime::RunResult, AppError> {
-    runtime::run_result()
-        .ok_or_else(|| AppError::Message("No run has been started in this session".to_string()))
+    Ok(runtime::run_result().unwrap_or_else(runtime::RunResult::idle))
 }
 
 /// Acknowledges one `modal` focus message from the UI, releasing the run

@@ -1,9 +1,11 @@
 use super::types::*;
 use jsonc_parser::{errors::ParseError, parse_to_serde_value, ParseOptions};
+use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
@@ -532,7 +534,11 @@ fn parse_welcome(
         } else if is_project_file_candidate(&value) {
             declarations.push(declaration.clone());
             let relative = value.strip_prefix("./").unwrap_or(&value);
-            welcome.push(read_project_text(root, relative).unwrap_or(value));
+            welcome.push(
+                read_project_text(root, relative)
+                    .map(|body| rewrite_root_relative_targets(relative, &body))
+                    .unwrap_or(value),
+            );
         } else {
             declarations.push(declaration.clone());
             welcome.push(value);
@@ -1041,6 +1047,58 @@ fn read_project_text(root: &Path, relative: &str) -> Option<String> {
         }
     }
     fs::read_to_string(root.join(path)).ok()
+}
+
+/// Some resource projects write announcement assets with root-relative Markdown
+/// paths while the body itself lives beside the assets. Resolve those targets
+/// against the body's directory before the source path is lost in the body text.
+fn rewrite_root_relative_targets(source: &str, body: &str) -> String {
+    static MARKDOWN_TARGET: OnceLock<Regex> = OnceLock::new();
+    let pattern = MARKDOWN_TARGET.get_or_init(|| {
+        Regex::new(r#"(!?\[[^\]]*\]\(\s*)([^)\s]+)"#).expect("Markdown target regex must compile")
+    });
+
+    pattern
+        .replace_all(body, |captures: &regex::Captures| {
+            let target = captures[2].trim();
+            let replacement =
+                resolve_body_target(source, target).unwrap_or_else(|| target.to_string());
+            format!("{}{}", &captures[1], replacement)
+        })
+        .into_owned()
+}
+
+fn resolve_body_target(source: &str, target: &str) -> Option<String> {
+    // Query and fragment suffixes never name a project file; the renderer strips
+    // them again before requesting an image.
+    let target = target.split(['?', '#']).next()?;
+    if !target.starts_with('/') || target.starts_with("//") {
+        return None;
+    }
+
+    let source = source.replace('\\', "/");
+    let source_directory = Path::new(&source).parent()?;
+    let mut segments = Vec::new();
+    for component in source_directory.components() {
+        match component {
+            std::path::Component::Normal(part) => {
+                segments.push(part.to_string_lossy().into_owned())
+            }
+            std::path::Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    for component in Path::new(target.strip_prefix('/')?).components() {
+        match component {
+            std::path::Component::Normal(part) => {
+                segments.push(part.to_string_lossy().into_owned())
+            }
+            std::path::Component::CurDir => {}
+            _ => return None,
+        }
+    }
+
+    (!segments.is_empty()).then(|| segments.join("/"))
 }
 
 fn normalize_path(root: &Path, relative: &str) -> PathBuf {
@@ -1949,6 +2007,58 @@ mod tests {
             vec!["$Welcome.1".to_string()]
         );
         fs::remove_dir_all(&root).ok();
+    }
+
+    /// NarutoMobile keeps announcement images beside its Markdown but writes
+    /// them as `/images/...`; the body's source directory must supply the
+    /// missing project prefix before the body becomes a detached string.
+    #[test]
+    fn resolves_root_relative_markdown_targets_against_welcome_files() {
+        let root = std::env::temp_dir().join(format!(
+            "maa_tauri_android-project-loader-{}-welcome-root-images",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("announcement/images"))
+            .expect("announcement image directory should be created");
+        fs::write(root.join("announcement/images/logo.png"), "png")
+            .expect("the announcement image should be written");
+        fs::write(
+            root.join("announcement/intro.md"),
+            "![LOGO](/images/logo.png)",
+        )
+        .expect("the announcement body should be written");
+
+        let project = ProjectLoader::default()
+            .load_value(
+                &root,
+                json!({
+                    "interface_version": 2,
+                    "name": "profiled",
+                    "welcome": ["announcement/intro.md"],
+                    "resource": [{"name": "base", "path": ["resource/base"]}]
+                }),
+                "zh_cn",
+            )
+            .expect("a project with a root-relative announcement image should load");
+
+        assert_eq!(
+            project.metadata.welcome,
+            vec!["![LOGO](announcement/images/logo.png)".to_string()]
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn keeps_remote_and_unsafe_root_relative_targets_in_welcome_bodies() {
+        let body = "![remote](https://example.test/logo.png) \
+            ![protocol relative](//example.test/logo.png) \
+            ![escape](/../secret.png)";
+
+        assert_eq!(
+            rewrite_root_relative_targets("announcement/intro.md", body),
+            body
+        );
     }
 
     #[test]

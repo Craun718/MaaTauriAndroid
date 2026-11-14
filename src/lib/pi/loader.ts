@@ -12,7 +12,6 @@ const MERGED_ARRAYS = [
   "preset",
   "group",
   "setting",
-  "pretask",
   "global_option",
 ] as const;
 
@@ -37,6 +36,11 @@ function mergeFragment(
   imported: RawImportFragment,
 ): RawProjectInterface {
   const result: RawJsonObject = { ...asObject(base) };
+  if (imported.pretask !== undefined) {
+    const entries = (value: unknown) =>
+      Array.isArray(value) ? value : isRawObject(value) ? [value] : [];
+    result.pretask = [...entries(result.pretask), ...entries(imported.pretask)];
+  }
   for (const key of MERGED_ARRAYS) {
     const incoming = imported[key];
     if (!Array.isArray(incoming)) continue;

@@ -13,6 +13,25 @@ function reader(files: Record<string, string>) {
 }
 
 describe("loadProjectSource", () => {
+  it("merges single and array pretask declarations in import order", async () => {
+    const source = await loadProjectSource(
+      "/project",
+      reader({
+        "interface.json": JSON.stringify({
+          pretask: { exec: "main" },
+          import: ["first.json", "second.json"],
+        }),
+        "first.json": JSON.stringify({ pretask: [{ exec: "first" }] }),
+        "second.json": JSON.stringify({ pretask: { exec: "second" } }),
+      }),
+    );
+    expect(source.document.pretask).toEqual([
+      { exec: "main" },
+      { exec: "first" },
+      { exec: "second" },
+    ]);
+  });
+
   it("parses JSONC and recursively merges imports", async () => {
     const source = await loadProjectSource(
       "/project",

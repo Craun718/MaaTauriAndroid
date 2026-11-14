@@ -717,14 +717,22 @@ fn merge_child(
 }
 
 fn merge_fragment(mut base: Value, imported: Value) -> Value {
-    const MERGE_ARRAYS: [&str; 6] = [
-        "task",
-        "preset",
-        "group",
-        "setting",
-        "pretask",
-        "global_option",
-    ];
+    if let Some(incoming) = imported.get("pretask") {
+        let mut tasks = match base.get("pretask") {
+            Some(Value::Array(items)) => items.clone(),
+            Some(Value::Object(_)) => vec![base["pretask"].clone()],
+            _ => Vec::new(),
+        };
+        match incoming {
+            Value::Array(items) => tasks.extend(items.clone()),
+            Value::Object(_) => tasks.push(incoming.clone()),
+            _ => {}
+        }
+        if let Some(object) = base.as_object_mut() {
+            object.insert("pretask".to_string(), Value::Array(tasks));
+        }
+    }
+    const MERGE_ARRAYS: [&str; 5] = ["task", "preset", "group", "setting", "global_option"];
     for key in MERGE_ARRAYS {
         if let (Some(existing), Some(incoming)) = (
             base.get_mut(key).and_then(Value::as_array_mut),
@@ -917,6 +925,19 @@ pub(crate) fn strings(value: Option<&Value>) -> Option<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn merges_single_and_array_pretasks_in_order() {
+        let main = serde_json::json!({ "pretask": { "exec": "main" } });
+        let first = serde_json::json!({ "pretask": [{ "exec": "first" }] });
+        let second = serde_json::json!({ "pretask": { "exec": "second" } });
+        let result = super::merge_fragment(super::merge_fragment(main, first), second);
+        assert_eq!(
+            result["pretask"],
+            serde_json::json!([
+                { "exec": "main" }, { "exec": "first" }, { "exec": "second" }
+            ])
+        );
+    }
     use super::*;
 
     #[test]

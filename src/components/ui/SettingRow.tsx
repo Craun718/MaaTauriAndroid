@@ -23,27 +23,36 @@ export function SettingRow({
         {title && <div className="min-w-0 flex-1 font-medium">{title}</div>}
         {children && <div className="min-w-0 flex-1">{children}</div>}
         {description && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-square btn-sm shrink-0"
-            aria-label={
-              helpTitle
-                ? t("settingHelpFor", { name: helpTitle })
-                : t("settingHelp")
-            }
-            aria-expanded={expanded}
-            aria-controls={id}
-            onClick={() => setExpanded((value) => !value)}
+          <div
+            className={`tooltip tooltip-left shrink-0 ${expanded ? "tooltip-open" : ""}`}
           >
-            <CircleHelp size="1rem" />
-          </button>
+            <div
+              id={id}
+              role="tooltip"
+              className="tooltip-content w-64 max-w-[70vw] whitespace-normal text-left text-sm"
+            >
+              {description}
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-square btn-sm shrink-0"
+              aria-label={
+                helpTitle
+                  ? t("settingHelpFor", { name: helpTitle })
+                  : t("settingHelp")
+              }
+              aria-describedby={id}
+              onClick={() => setExpanded((value) => !value)}
+              onBlur={() => setExpanded(false)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setExpanded(false);
+              }}
+            >
+              <CircleHelp size="1rem" />
+            </button>
+          </div>
         )}
       </div>
-      {description && expanded && (
-        <p id={id} className="pb-3 text-sm text-base-content/60">
-          {description}
-        </p>
-      )}
     </div>
   );
 }

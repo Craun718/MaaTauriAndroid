@@ -427,3 +427,7 @@ export async function pickOptionPath(
 ): Promise<string | null> {
   return invoke<string | null>("pick_option_path", { kind });
 }
+
+export async function validateGithubToken(): Promise<boolean> {
+  return invoke("update_validate_github_token");
+}

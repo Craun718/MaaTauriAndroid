@@ -41,7 +41,7 @@ function status(
 }
 
 const prefs: UpdatePrefs = {
-  source: "auto",
+  source: "mirrorchyan",
   channel: "stable",
   cdk: "",
   githubToken: "",

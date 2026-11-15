@@ -1,17 +1,21 @@
 import type { MessageKey } from "./i18n";
 import type { UserConfiguration } from "./types";
 
-export const GUIDE_VERSION = 2;
+export const GUIDE_VERSION = 3;
 
 export type GuideRoute = "/" | "/tasks" | "/runs" | "/settings";
 export type GuideTargetName =
   | "home-privilege"
   | "home-summary"
+  | "nav-tasks"
+  | "nav-runs"
+  | "nav-settings"
   | "tasks-resource"
   | "tasks-configurations"
   | "tasks-run"
   | "tasks-activities"
   | "runs-history"
+  | "settings-export-logs"
   | "settings-about";
 
 export interface GuideStepDefinition {
@@ -33,6 +37,12 @@ export const GUIDE_STEPS: readonly GuideStepDefinition[] = [
     target: "home-privilege",
     titleKey: "guidePrivilegeTitle",
     bodyKey: "guidePrivilegeBody",
+  },
+  {
+    route: "/",
+    target: "nav-tasks",
+    titleKey: "guideTasksTabTitle",
+    bodyKey: "guideTasksTabBody",
   },
   {
     route: "/tasks",
@@ -59,10 +69,28 @@ export const GUIDE_STEPS: readonly GuideStepDefinition[] = [
     bodyKey: "guideActivitiesBody",
   },
   {
+    route: "/tasks",
+    target: "nav-runs",
+    titleKey: "guideRunsTabTitle",
+    bodyKey: "guideRunsTabBody",
+  },
+  {
     route: "/runs",
     target: "runs-history",
     titleKey: "guideHistoryTitle",
     bodyKey: "guideHistoryBody",
+  },
+  {
+    route: "/runs",
+    target: "nav-settings",
+    titleKey: "guideSettingsTabTitle",
+    bodyKey: "guideSettingsTabBody",
+  },
+  {
+    route: "/settings",
+    target: "settings-export-logs",
+    titleKey: "guideExportLogsTitle",
+    bodyKey: "guideExportLogsBody",
   },
   {
     route: "/settings",

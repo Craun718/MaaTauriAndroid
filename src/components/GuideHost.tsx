@@ -139,7 +139,7 @@ function GuideSession(): ReactElement {
       if (
         controller.signal.aborted ||
         targetWait.current !== controller ||
-        !activeDriver.isActive()
+        tourDriver.current !== activeDriver
       ) {
         return;
       }
@@ -268,15 +268,17 @@ function GuideSession(): ReactElement {
       popoverOffset: (geometry?.rem ?? 1) * 0.5,
       waitForElement: 5000,
       skipMissingElement: true,
+      onDestroyStarted: (_element, _step, options) => {
+        tourDriver.current = undefined;
+        targetWait.current?.abort();
+        options.driver.destroy();
+      },
       onPopoverRender: (popover) => {
         displayed.current = true;
         // Driver puts its close control in the corner; keep the tour's skip
         // affordance in the footer position used by the previous tooltip.
         popover.closeButton.textContent = t("guideSkip");
         popover.footerButtons.prepend(popover.closeButton);
-      },
-      onDestroyStarted: (_element, _step, options) => {
-        options.driver.destroy();
       },
       onDestroyed: (_element, _step, options) => {
         if (stopping.current) return;

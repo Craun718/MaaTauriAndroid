@@ -31,9 +31,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   } as CSSProperties;
   const navigation = [
     { to: "/", label: t("navHome"), icon: Home },
-    { to: "/tasks", label: t("navTasks"), icon: ListChecks },
-    { to: "/runs", label: t("navRuns"), icon: History },
-    { to: "/settings", label: t("navSettings"), icon: Settings },
+    {
+      to: "/tasks",
+      label: t("navTasks"),
+      icon: ListChecks,
+      guideTarget: "nav-tasks",
+    },
+    {
+      to: "/runs",
+      label: t("navRuns"),
+      icon: History,
+      guideTarget: "nav-runs",
+    },
+    {
+      to: "/settings",
+      label: t("navSettings"),
+      icon: Settings,
+      guideTarget: "nav-settings",
+    },
   ];
 
   return (
@@ -68,10 +83,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
         <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/82 pb-[var(--tt-safe-bottom)] backdrop-blur">
           <div className="mx-auto flex h-16 max-w-md items-stretch">
-            {navigation.map(({ to, label, icon: Icon }) => (
+            {navigation.map(({ to, label, icon: Icon, guideTarget }) => (
               <NavLink
                 key={to}
                 to={to}
+                data-guide-target={guideTarget}
                 end={to === "/"}
                 className={({ isActive }) =>
                   `flex flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] ${

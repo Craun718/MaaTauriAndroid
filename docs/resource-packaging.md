@@ -40,6 +40,8 @@ TOML profile 使用 snake_case 键。相对 `pi_assets` 和 `bundle` 路径相�
 
 本地打包须在构建命令前显式设置 `MTA_RESOURCE_TAG`，值取资源 checkout 的 HEAD tag，无 tag 时取短 commit hash，例如 `MTA_RESOURCE_TAG=v1.2.3 python3 scripts/build_apk.py --profile /absolute/path/to/your-pi-profile.toml`。未提供变量时仍允许构建，但资源版本显示“未知”。
 
+使用 PI profile 打包的 APK，其 Android `versionName` 同样取去除首尾空白后的 `MTA_RESOURCE_TAG`，让系统「应用信息」和安装界面显示资源版本；未提供或值为空时为 `unknown`。不使用 profile 的独立 MTA 壳包继续使用 Tauri 配置的 MTA 版本。`versionCode` 仍按 Tauri 现有规则生成，这里的显示版本调整不改变其升级排序规则。
+
 最小例子：
 
 ```toml

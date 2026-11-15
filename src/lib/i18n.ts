@@ -104,6 +104,9 @@ const en = {
   guidePrivilegeTitle: "Authorize the control unit",
   guidePrivilegeBody:
     "Tasks need Root or Shizuku access. Pick a backend, request access, and wait for the granted state here before starting a run.",
+  guideTasksTabTitle: "Open the Tasks tab",
+  guideTasksTabBody:
+    "Use the bottom navigation to switch to Tasks. The next steps cover resource selection, plans, and run controls.",
   guideResourceTitle: "Choose the resource",
   guideResourceBody:
     "The resource decides which task bundle, options, and updates the app uses. Switch it before arranging tasks.",
@@ -116,12 +119,21 @@ const en = {
   guideActivitiesTitle: "Follow the run",
   guideActivitiesBody:
     "Switch between the task list and live run logs. Logs remain collected while the task list is visible.",
+  guideRunsTabTitle: "Open the Runs tab",
+  guideRunsTabBody:
+    "Use the bottom navigation to switch to Runs. This is where past runs are reviewed.",
   guideHistoryTitle: "Inspect past runs",
   guideHistoryBody:
     "Every run is kept locally for 30 days. Open a record to review timing, task outcome, and detailed events.",
+  guideSettingsTabTitle: "Open the Settings tab",
+  guideSettingsTabBody:
+    "Use the bottom navigation to switch to Settings. The next steps cover diagnostics and this guide.",
   guideSettingsTitle: "Configure and diagnose",
   guideSettingsBody:
     "Settings contains run behavior, backup, diagnostics, updates, and this guide. Export logs before reporting an issue.",
+  guideExportLogsTitle: "Export logs",
+  guideExportLogsBody:
+    "Choose Export logs under diagnostics. The logs are saved to Downloads; attach them when reporting an issue.",
   guideBack: "Back",
   guideNext: "Next",
   guideDone: "Done",
@@ -1104,6 +1116,9 @@ const zh: Record<MessageKey, string> = {
   guidePrivilegeTitle: "授权控制单元",
   guidePrivilegeBody:
     "任务需要 Root 或 Shizuku 权限。先选择后端并发起授权，等这里显示已授权后再开始运行。",
+  guideTasksTabTitle: "打开任务标签",
+  guideTasksTabBody:
+    "点按底部导航栏切换到“任务”。接下来的步骤介绍资源、任务方案和运行控制。",
   guideResourceTitle: "选择资源",
   guideResourceBody:
     "资源决定当前使用的任务包、选项和更新来源。整理任务前先确认资源选择。",
@@ -1116,12 +1131,20 @@ const zh: Record<MessageKey, string> = {
   guideActivitiesTitle: "跟踪运行",
   guideActivitiesBody:
     "在任务列表和实时日志之间切换。即使停留在任务列表，日志也会继续收集。",
+  guideRunsTabTitle: "打开运行记录标签",
+  guideRunsTabBody: "点按底部导航栏切换到“运行记录”。这里可以回顾历史运行。",
   guideHistoryTitle: "查看历史运行",
   guideHistoryBody:
     "每轮运行会在本地保留 30 天。点开记录可以回顾耗时、任务结果和详细事件。",
+  guideSettingsTabTitle: "打开设置标签",
+  guideSettingsTabBody:
+    "点按底部导航栏切换到“设置”。接下来的步骤介绍诊断和本指引。",
   guideSettingsTitle: "配置与诊断",
   guideSettingsBody:
     "设置页包含运行行为、备份、诊断、更新和本指引。反馈问题前请先导出日志。",
+  guideExportLogsTitle: "导出日志",
+  guideExportLogsBody:
+    "在诊断操作里选择“导出日志”。日志会保存到下载目录，反馈问题时请附上这份文件。",
   guideBack: "上一步",
   guideNext: "下一步",
   guideDone: "完成",

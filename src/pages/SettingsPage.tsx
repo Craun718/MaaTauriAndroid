@@ -499,6 +499,7 @@ export function SettingsPage() {
         </button>
         <button
           type="button"
+          data-guide-target="settings-export-logs"
           disabled={exporting}
           onClick={() => {
             void exportLogs();

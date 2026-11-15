@@ -68,7 +68,7 @@ impl std::fmt::Debug for UpdatePrefs {
 impl Default for UpdatePrefs {
     fn default() -> Self {
         Self {
-            source: UpdateSource::Auto,
+            source: UpdateSource::Mirrorchyan,
             channel: UpdateChannel::Stable,
             cdk: String::new(),
             github_token: String::new(),
@@ -77,6 +77,15 @@ impl Default for UpdatePrefs {
 }
 
 impl UpdatePrefs {
+    /// The "auto" source is legacy UI state; normalize it to MirrorChyan on
+    /// every read so saved files and in-memory prefs never carry it forward.
+    pub(super) fn normalized(mut self) -> Self {
+        if self.source == UpdateSource::Auto {
+            self.source = UpdateSource::Mirrorchyan;
+        }
+        self
+    }
+
     /// Loads saved preferences and decrypts the token; missing/corrupt JSON uses defaults.
     pub fn load(dir: &Path) -> Self {
         Self::load_with(dir, crate::secrets::decrypt_credential)
@@ -88,8 +97,9 @@ impl UpdatePrefs {
     ) -> Self {
         let mut prefs: Self = std::fs::read_to_string(dir.join(PREFS_FILE))
             .ok()
-            .and_then(|contents| serde_json::from_str(&contents).ok())
-            .unwrap_or_default();
+            .and_then(|contents| serde_json::from_str::<Self>(&contents).ok())
+            .unwrap_or_default()
+            .normalized();
         if !prefs.github_token.is_empty() {
             // Never treat a stored value as a plaintext credential, including
             // after a Keystore reset or when importing settings from a device.
@@ -115,7 +125,7 @@ impl UpdatePrefs {
         dir: &Path,
         encrypt: impl FnOnce(&str) -> Result<String, crate::secrets::SecretError>,
     ) -> std::io::Result<()> {
-        let mut stored = self.clone();
+        let mut stored = self.clone().normalized();
         if !stored.github_token.is_empty() {
             stored.github_token = encrypt(&stored.github_token)
                 .map_err(|_| std::io::Error::other("GitHub token encryption failed"))?;
@@ -137,14 +147,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_are_auto_source_stable_channel_and_no_cdk() {
+    fn defaults_are_mirrorchyan_source_stable_channel_and_no_cdk() {
         let prefs = UpdatePrefs::default();
-        assert_eq!(prefs.source, UpdateSource::Auto);
+        assert_eq!(prefs.source, UpdateSource::Mirrorchyan);
         assert_eq!(prefs.channel, UpdateChannel::Stable);
         assert_eq!(prefs.cdk, "");
         assert_eq!(prefs.github_token, "");
-        assert_eq!(prefs.source.as_str(), "auto");
+        assert_eq!(prefs.source.as_str(), "mirrorchyan");
         assert_eq!(prefs.channel.as_str(), "stable");
+    }
+
+    #[test]
+    fn legacy_auto_source_loads_as_mirrorchyan_without_losing_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join(PREFS_FILE),
+            r#"{"source":"auto","channel":"beta","cdk":"existing"}"#,
+        )
+        .unwrap();
+        let prefs = UpdatePrefs::load(temp.path());
+        assert_eq!(prefs.source, UpdateSource::Mirrorchyan);
+        assert_eq!(prefs.channel, UpdateChannel::Beta);
+        assert_eq!(prefs.cdk, "existing");
+        prefs.save(temp.path()).unwrap();
+        assert_eq!(UpdatePrefs::load(temp.path()), prefs);
     }
 
     #[test]

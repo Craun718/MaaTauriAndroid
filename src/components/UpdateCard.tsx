@@ -14,12 +14,13 @@ import {
 } from "../lib/updateMessages";
 import { isActiveUpdatePhase, useUpdateStore } from "../store/updateStore";
 import { CredentialStatus } from "./CredentialStatus";
-import { ReleaseNoteContent } from "./ReleaseNotes";
+import { GithubTokenStatus } from "./GithubTokenStatus";
+import { ReleaseNoteContent, ReleaseNotesEntry } from "./ReleaseNotes";
 import { Select } from "./ui/Select";
 import { TextField } from "./ui/TextField";
 
 function isUpdateSource(value: string): value is UpdateSourceSetting {
-  return value === "auto" || value === "mirrorchyan" || value === "github";
+  return value === "mirrorchyan" || value === "github";
 }
 
 function isUpdateChannel(value: string): value is UpdateChannelSetting {
@@ -67,6 +68,16 @@ export function UpdateCard() {
       savedPrefs.cdk !== prefs.cdk ||
       savedPrefs.githubToken !== prefs.githubToken);
 
+  const actions = (
+    <UpdateActions
+      status={status}
+      onCheck={() => void check()}
+      onDownload={() => void resolve()}
+      onCancel={() => void cancel()}
+      onInstall={() => void install()}
+    />
+  );
+
   return (
     <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
       <h2 className="font-medium">{t("update")}</h2>
@@ -83,7 +94,6 @@ export function UpdateCard() {
               <Select
                 labelledBy="update-source-label"
                 items={[
-                  { value: "auto", label: t("updateSourceAuto") },
                   { value: "mirrorchyan", label: t("updateSourceMirrorchyan") },
                   { value: "github", label: t("updateSourceGithub") },
                 ]}
@@ -117,32 +127,34 @@ export function UpdateCard() {
               />
             </div>
           </div>
-          {savedPrefs.source !== "mirrorchyan" && (
+          <div className="flex items-end gap-2">
             <TextField
+              className="min-w-0 flex-1"
               type="password"
-              label={t("updateGithubToken")}
-              placeholder={t("updateGithubTokenPlaceholder")}
-              description={t("updateGithubTokenDescription")}
-              value={savedPrefs.githubToken}
+              label={t(
+                savedPrefs.source === "github"
+                  ? "updateGithubToken"
+                  : "updateCdk",
+              )}
+              placeholder={t(
+                savedPrefs.source === "github"
+                  ? "updateGithubTokenPlaceholder"
+                  : "updateCdkPlaceholder",
+              )}
+              value={
+                savedPrefs.source === "github"
+                  ? savedPrefs.githubToken
+                  : savedPrefs.cdk
+              }
               disabled={prefsBusy}
               onValueChange={(value) =>
-                setDraft({ ...savedPrefs, githubToken: value })
+                setDraft(
+                  savedPrefs.source === "github"
+                    ? { ...savedPrefs, githubToken: value }
+                    : { ...savedPrefs, cdk: value },
+                )
               }
             />
-          )}
-          <div className="flex items-end gap-2">
-            {savedPrefs.source !== "github" && (
-              <TextField
-                className="min-w-0 flex-1"
-                type="password"
-                label={t("updateCdk")}
-                placeholder={t("updateCdkPlaceholder")}
-                value={savedPrefs.cdk}
-                onValueChange={(value) =>
-                  setDraft({ ...savedPrefs, cdk: value })
-                }
-              />
-            )}
             <button
               type="button"
               disabled={!prefsDirty || prefsBusy}
@@ -165,27 +177,37 @@ export function UpdateCard() {
           {prefsSaveFailed && (
             <p className="text-sm text-error">{t("updatePrefsSaveFailed")}</p>
           )}
-          {savedPrefs.source !== "github" && (
-            <div className="space-y-2">
-              <p className="text-[0.8125rem]">{t("updateCdkDescription")}</p>
-              <CredentialStatus
-                savedCode={prefs.cdk}
-                dirty={prefsDirty || prefsBusy}
-              />
-            </div>
-          )}
+          <p className="text-[0.8125rem]">
+            {t(
+              savedPrefs.source === "github"
+                ? "updateGithubTokenDescription"
+                : "updateCdkDescription",
+            )}
+          </p>
         </>
       )}
-      <UpdateStatusView status={status} />
-      <div className="flex flex-wrap gap-2">
-        <UpdateActions
-          status={status}
-          onCheck={() => void check()}
-          onDownload={() => void resolve()}
-          onCancel={() => void cancel()}
-          onInstall={() => void install()}
-        />
+      <div className="flex flex-wrap items-center gap-2">
+        {(!savedPrefs || !prefs) && actions}
+        {savedPrefs &&
+          prefs &&
+          (savedPrefs.source === "github" ? (
+            <GithubTokenStatus
+              savedToken={prefs.githubToken}
+              dirty={prefsDirty || prefsBusy}
+            >
+              {actions}
+            </GithubTokenStatus>
+          ) : (
+            <CredentialStatus
+              savedCode={prefs.cdk}
+              dirty={prefsDirty || prefsBusy}
+            >
+              {actions}
+            </CredentialStatus>
+          ))}
       </div>
+      <UpdateStatusView status={status} />
+      <ReleaseNotesEntry />
     </section>
   );
 }
@@ -320,20 +342,20 @@ function UpdateActions({
     case "upToDate":
       return (
         <>
-          <span className={hint}>{t("updateUpToDate")}</span>
           <button type="button" className={secondary} onClick={onCheck}>
             {t("updateCheck")}
           </button>
+          <span className={`w-full ${hint}`}>{t("updateUpToDate")}</span>
         </>
       );
     case "available":
       return (
         <>
-          <button type="button" className={primary} onClick={onDownload}>
-            {t("updateDownload")}
-          </button>
           <button type="button" className={secondary} onClick={onCheck}>
             {t("updateCheck")}
+          </button>
+          <button type="button" className={primary} onClick={onDownload}>
+            {t("updateDownload")}
           </button>
         </>
       );

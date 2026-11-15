@@ -248,7 +248,7 @@ impl UpdateState {
         if inner.status.phase.is_active() {
             return inner.prefs.clone();
         }
-        let mut prefs = prefs;
+        let mut prefs = prefs.normalized();
         prefs.cdk = prefs.cdk.trim().to_string();
         prefs.github_token = prefs.github_token.trim().to_string();
         if prefs.save(&dirs.prefs_dir).is_err() {
@@ -1013,6 +1013,14 @@ pub async fn update_validate_credential(
 }
 
 #[tauri::command]
+pub async fn update_validate_github_token(
+    state: State<'_, UpdateState>,
+) -> Result<bool, UpdateFailure> {
+    let token = state.lock().prefs.github_token.clone();
+    github::validate_token(state.client.as_ref(), &token).await
+}
+
+#[tauri::command]
 pub async fn update_get_release_notes(
     app: AppHandle,
     state: State<'_, UpdateState>,
@@ -1150,7 +1158,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_failed_check_lands_on_idle_with_the_failure_code() {
-        // Auto picks MirrorChyan when a rid exists; the stub has no script, so
+        // MirrorChyan is the default source; the stub has no script, so
         // the request fails with a transport error.
         let state = UpdateState::with_client(Arc::new(StubClient::new()));
 
@@ -1180,7 +1188,7 @@ mod tests {
         assert_eq!(status.latest_version.as_deref(), Some("99.0.0"));
         assert_eq!(status.release_note.as_deref(), Some("note for 99.0.0"));
         assert!(status.failure.is_none());
-        // Auto prefers MirrorChyan, so GitHub is never asked.
+        // The default source is MirrorChyan, so GitHub is never asked.
         assert_eq!(client.requested_urls().len(), 1);
     }
 
@@ -1292,6 +1300,13 @@ mod tests {
         let state = UpdateState::with_client(client.clone());
         let env = test_env();
 
+        state.set_prefs(
+            &env.dirs,
+            UpdatePrefs {
+                source: UpdateSource::Github,
+                ..UpdatePrefs::default()
+            },
+        );
         state.lock().prefs.github_token = "ghp_test".into();
         state.begin_check(RepoInfo {
             mirrorchyan_rid: None,

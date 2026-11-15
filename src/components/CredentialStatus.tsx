@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, type ReactNode, useEffect } from "react";
 import { credentialPresentation } from "../lib/credentialStatus";
 import { useTranslation } from "../lib/i18n";
 import { updateFailureKey } from "../lib/updateMessages";
@@ -8,9 +8,11 @@ import { useUpdateStore } from "../store/updateStore";
 export function CredentialStatus({
   savedCode,
   dirty,
+  children,
 }: {
   savedCode: string;
   dirty: boolean;
+  children?: ReactNode;
 }): ReactElement {
   const { t } = useTranslation();
   const status = useCredentialStore((state) => state.status);
@@ -23,8 +25,8 @@ export function CredentialStatus({
   }, [load, savedCode, phase]);
   const presentation = credentialPresentation(status, Date.now() / 1000);
   return (
-    <div className="space-y-1 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="contents text-sm">
+      <div className="contents">
         <button
           type="button"
           className="btn btn-sm btn-outline"
@@ -33,19 +35,24 @@ export function CredentialStatus({
         >
           {t(pending ? "credentialChecking" : "credentialValidate")}
         </button>
-        <p className={presentation.warning ? "text-warning" : "text-ink-muted"}>
-          {dirty
-            ? t("credentialSaveFirst")
-            : t(
-                presentation.key,
-                presentation.days === undefined
-                  ? undefined
-                  : { days: presentation.days },
-              )}
-        </p>
+        {children}
+        {!dirty && (
+          <p
+            className={`w-full ${presentation.warning ? "text-warning" : "text-ink-muted"}`}
+          >
+            {t(
+              presentation.key,
+              presentation.days === undefined
+                ? undefined
+                : { days: presentation.days },
+            )}
+          </p>
+        )}
       </div>
       {status?.state === "valid" && status.failure && (
-        <p className="text-warning">{t(updateFailureKey(status.failure))}</p>
+        <p className="w-full text-warning">
+          {t(updateFailureKey(status.failure))}
+        </p>
       )}
     </div>
   );

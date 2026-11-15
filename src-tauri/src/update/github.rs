@@ -29,6 +29,27 @@ pub fn authenticated_client(
     Arc::new(GithubApiClient { client, token })
 }
 
+/// Check a saved personal token without changing the update phase.
+pub async fn validate_token(
+    client: &dyn UpdateHttpClient,
+    token: &str,
+) -> Result<bool, UpdateFailure> {
+    if token.trim().is_empty() {
+        return Ok(false);
+    }
+    let mut headers = api_headers();
+    headers.push(("Authorization".into(), format!("Bearer {}", token.trim())));
+    let response = client
+        .get("https://api.github.com/user", &headers)
+        .await
+        .map_err(|_| UpdateFailure::Network)?;
+    match response.status {
+        200 => Ok(true),
+        401 => Ok(false),
+        _ => Err(UpdateFailure::Network),
+    }
+}
+
 struct GithubApiClient {
     client: Arc<dyn UpdateHttpClient>,
     token: String,
@@ -387,6 +408,31 @@ mod tests {
         format!(
             r#"{{"name": "{name}", "size": 7, "browser_download_url": "https://github.com/owner/repo/releases/download/{name}"{digest}}}"#
         )
+    }
+
+    #[tokio::test]
+    async fn token_validation_checks_authentication_without_fetching_releases() {
+        for (status, expected) in [
+            (200, Ok(true)),
+            (401, Ok(false)),
+            (403, Err(UpdateFailure::Network)),
+            (429, Err(UpdateFailure::Network)),
+            (500, Err(UpdateFailure::Network)),
+        ] {
+            let client = StubClient::new().with_body("/user", status, "{}");
+            assert_eq!(validate_token(&client, "  ghp_test  ").await, expected);
+            assert_eq!(client.requested_urls(), vec!["https://api.github.com/user"]);
+            assert!(client.requested_headers()[0]
+                .contains(&("Authorization".into(), "Bearer ghp_test".into())));
+        }
+        let client = StubClient::new().with_failed_body("/user", "offline");
+        assert_eq!(
+            validate_token(&client, "ghp_test").await,
+            Err(UpdateFailure::Network)
+        );
+        let client = StubClient::new();
+        assert_eq!(validate_token(&client, "  ").await, Ok(false));
+        assert!(client.requested_urls().is_empty());
     }
 
     #[test]

@@ -14,7 +14,6 @@ import { AboutLinks } from "../components/AboutLinks";
 import { OptionEditor } from "../components/OptionEditor";
 import { PretaskSettings } from "../components/PretaskSettings";
 import { ProjectImage } from "../components/ProjectImage";
-import { ReleaseNotesEntry } from "../components/ReleaseNotes";
 import { RichDescription } from "../components/RichDescription";
 import { UpdateCard } from "../components/UpdateCard";
 import { Select } from "../components/ui/Select";
@@ -120,7 +119,6 @@ export function SettingsPage() {
     <div className="space-y-card-gap">
       <h1 className="text-xl font-semibold">{t("settings")}</h1>
       <UpdateCard />
-      <ReleaseNotesEntry />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
         <h2
           id="language-select-label"
@@ -233,76 +231,133 @@ export function SettingsPage() {
         <p className="text-sm text-ink-muted">
           {t("backupRestoreDescription")}
         </p>
-        <button
-          type="button"
-          disabled={
-            busy ||
-            saving ||
-            restartPending ||
-            exportingBackup ||
-            importingBackup ||
-            !snapshot
-          }
-          onClick={async () => {
-            setExportingBackup(true);
-            try {
-              const result = await exportConfiguration();
-              if (result.fileName) {
-                notify(t("configurationExported", { name: result.fileName }));
-              } else {
-                notify(t("configurationExportedPath", { path: result.path }));
-              }
-            } catch (error) {
-              notify(error instanceof Error ? error.message : String(error), {
-                tone: "error",
-              });
-            } finally {
-              setExportingBackup(false);
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={
+              busy ||
+              saving ||
+              restartPending ||
+              exportingBackup ||
+              importingBackup ||
+              !snapshot
             }
-          }}
-          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
-        >
-          <Download size="1rem" />
-          {exportingBackup
-            ? t("exportingConfiguration")
-            : t("exportConfiguration")}
-        </button>
-        <button
-          type="button"
-          disabled={
-            busy ||
-            saving ||
-            restartPending ||
-            exportingBackup ||
-            importingBackup ||
-            !snapshot
-          }
-          onClick={async () => {
-            if (!window.confirm(t("configurationImportConfirm"))) return;
-            setImportingBackup(true);
-            try {
-              const result = await importConfiguration();
-              if (result.imported) notify(t("configurationImported"));
-            } catch (error) {
-              notify(
-                localizeDiagnostic(
-                  error instanceof Error ? error.message : String(error),
-                  language,
-                ),
-                {
+            onClick={async () => {
+              setExportingBackup(true);
+              try {
+                const result = await exportConfiguration();
+                if (result.fileName) {
+                  notify(t("configurationExported", { name: result.fileName }));
+                } else {
+                  notify(t("configurationExportedPath", { path: result.path }));
+                }
+              } catch (error) {
+                notify(error instanceof Error ? error.message : String(error), {
                   tone: "error",
-                },
-              );
-            } finally {
-              setImportingBackup(false);
+                });
+              } finally {
+                setExportingBackup(false);
+              }
+            }}
+            className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+          >
+            <Download size="1rem" />
+            {exportingBackup
+              ? t("exportingConfiguration")
+              : t("exportConfiguration")}
+          </button>
+          <button
+            type="button"
+            disabled={
+              busy ||
+              saving ||
+              restartPending ||
+              exportingBackup ||
+              importingBackup ||
+              !snapshot
             }
+            onClick={async () => {
+              if (!window.confirm(t("configurationImportConfirm"))) return;
+              setImportingBackup(true);
+              try {
+                const result = await importConfiguration();
+                if (result.imported) notify(t("configurationImported"));
+              } catch (error) {
+                notify(
+                  localizeDiagnostic(
+                    error instanceof Error ? error.message : String(error),
+                    language,
+                  ),
+                  {
+                    tone: "error",
+                  },
+                );
+              } finally {
+                setImportingBackup(false);
+              }
+            }}
+            className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+          >
+            <Upload size="1rem" />
+            {importingBackup
+              ? t("importingConfiguration")
+              : t("importConfiguration")}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={busy || saving || restartPending || cleaning || !snapshot}
+            onClick={async () => {
+              const confirmed = window.confirm(t("deleteRunsConfirm"));
+              if (!confirmed) return;
+              setCleaning(true);
+              try {
+                const result = await clearDiagnosticData();
+                notify(t("deletedRuns", { count: result.deletedRunCount }));
+                // The restart re-arms the app log file handle that survives a
+                // plain deletion; a failed restart still leaves the cleanup done.
+                await restartApp();
+              } catch (error) {
+                notify(error instanceof Error ? error.message : String(error), {
+                  tone: "error",
+                });
+              } finally {
+                setCleaning(false);
+              }
+            }}
+            className="flex h-9 items-center justify-center gap-2 rounded-md border border-red-300 px-2.5 font-semibold text-red-600 disabled:opacity-50"
+          >
+            <Trash2 size="1rem" />
+            {cleaning ? t("deleting") : t("deleteRuns")}
+          </button>
+          <button
+            type="button"
+            data-guide-target="settings-export-logs"
+            disabled={exporting}
+            onClick={() => {
+              void exportLogs();
+            }}
+            className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+          >
+            <Download size="1rem" />
+            {exporting ? t("exportingLogs") : t("exportLogs")}
+          </button>
+        </div>
+        <button
+          type="button"
+          disabled={
+            busy || saving || restartPending || reinstalling || !snapshot
+          }
+          onClick={async () => {
+            setReinstalling(true);
+            await reinstallResources();
+            setReinstalling(false);
           }}
           className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
         >
-          <Upload size="1rem" />
-          {importingBackup
-            ? t("importingConfiguration")
-            : t("importConfiguration")}
+          <RefreshCw size="1rem" />
+          {reinstalling ? t("reinstallingResources") : t("reinstallResources")}
         </button>
       </section>
       <CustomBackgroundCard restartPending={restartPending} />
@@ -482,59 +537,6 @@ export function SettingsPage() {
             }}
           />
         </div>
-        <button
-          type="button"
-          disabled={
-            busy || saving || restartPending || reinstalling || !snapshot
-          }
-          onClick={async () => {
-            setReinstalling(true);
-            await reinstallResources();
-            setReinstalling(false);
-          }}
-          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
-        >
-          <RefreshCw size="1rem" />
-          {reinstalling ? t("reinstallingResources") : t("reinstallResources")}
-        </button>
-        <button
-          type="button"
-          data-guide-target="settings-export-logs"
-          disabled={exporting}
-          onClick={() => {
-            void exportLogs();
-          }}
-          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
-        >
-          <Download size="1rem" />
-          {exporting ? t("exportingLogs") : t("exportLogs")}
-        </button>
-        <button
-          type="button"
-          disabled={busy || saving || restartPending || cleaning || !snapshot}
-          onClick={async () => {
-            const confirmed = window.confirm(t("deleteRunsConfirm"));
-            if (!confirmed) return;
-            setCleaning(true);
-            try {
-              const result = await clearDiagnosticData();
-              notify(t("deletedRuns", { count: result.deletedRunCount }));
-              // The restart re-arms the app log file handle that survives a
-              // plain deletion; a failed restart still leaves the cleanup done.
-              await restartApp();
-            } catch (error) {
-              notify(error instanceof Error ? error.message : String(error), {
-                tone: "error",
-              });
-            } finally {
-              setCleaning(false);
-            }
-          }}
-          className="flex h-9 items-center justify-center gap-2 rounded-md border border-red-300 px-2.5 font-semibold text-red-600 disabled:opacity-50"
-        >
-          <Trash2 size="1rem" />
-          {cleaning ? t("deleting") : t("deleteRuns")}
-        </button>
       </section>
       {project?.metadata.telemetry?.dsn && (
         <section className="space-y-2 rounded-lg border border-line bg-raised p-card">

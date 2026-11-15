@@ -68,10 +68,12 @@ const en = {
   demoConfigurationStep: "4. Switch to the “Weekly” configuration.",
 
   settingHelp: "Show setting explanation",
+  githubTokenValidate: "Validate token",
+  githubTokenValid: "Token is valid.",
+  githubTokenInvalid: "Token is invalid or expired.",
   credentialValidate: "Validate CDK",
   credentialChecking: "Validating…",
   credentialUnknown: "Not verified in this session.",
-  credentialSaveFirst: "Save your changes before validating.",
   credentialExpiresIn: "Valid · expires in {days} days",
   credentialKnownExpiry:
     "Last known expiry: in {days} days · not verified this session",
@@ -404,11 +406,11 @@ const en = {
   backupRestore: "Backup & restore",
   backupRestoreDescription:
     "Export settings, run configurations and schedules. Password inputs are never exported; import replaces all of them.",
-  exportConfiguration: "Export backup",
+  exportConfiguration: "Export configuration",
   exportingConfiguration: "Exporting",
   configurationExported: "Backup exported to Downloads: {name}",
   configurationExportedPath: "Backup exported: {path}",
-  importConfiguration: "Import backup",
+  importConfiguration: "Import configuration",
   importingConfiguration: "Importing",
   configurationImportConfirm:
     "Import this backup? All current settings, run configurations and schedules will be replaced. Password inputs will be empty and must be entered again.",
@@ -557,7 +559,6 @@ const en = {
   // Update
   update: "Update",
   updateSource: "Source",
-  updateSourceAuto: "Auto",
   updateSourceMirrorchyan: "MirrorChyan",
   updateSourceGithub: "GitHub",
   updateChannel: "Channel",
@@ -659,10 +660,12 @@ const zh: Record<MessageKey, string> = {
   demoConfigurationStep: "4. 切换到「每周」配置。",
 
   settingHelp: "查看设置说明",
+  githubTokenValidate: "验证 Token",
+  githubTokenValid: "Token 有效。",
+  githubTokenInvalid: "Token 无效或已过期。",
   credentialValidate: "验证 CDK",
   credentialChecking: "验证中…",
   credentialUnknown: "本次启动尚未验证。",
-  credentialSaveFirst: "请先保存修改，再验证。",
   credentialExpiresIn: "有效 · 还有 {days} 天到期",
   credentialKnownExpiry: "上次记录还有 {days} 天到期 · 本次尚未验证",
   credentialValidUnknownExpiry: "有效 · 未获取到到期时间",
@@ -849,11 +852,11 @@ const zh: Record<MessageKey, string> = {
   backupRestore: "备份与恢复",
   backupRestoreDescription:
     "导出设置、运行配置和定时任务。密码输入不会导出；导入会整体替换这些数据。",
-  exportConfiguration: "导出备份",
+  exportConfiguration: "导出配置",
   exportingConfiguration: "导出中",
   configurationExported: "备份已导出到下载目录：{name}",
   configurationExportedPath: "备份已导出：{path}",
-  importConfiguration: "导入备份",
+  importConfiguration: "导入配置",
   importingConfiguration: "导入中",
   configurationImportConfirm:
     "要导入这份备份吗？当前设置、运行配置和定时任务都会被整体替换。密码输入将为空，需要重新填写。",
@@ -1072,7 +1075,6 @@ const zh: Record<MessageKey, string> = {
   scheduleOpenAutostartSettings: "打开自启动设置",
   update: "更新",
   updateSource: "更新源",
-  updateSourceAuto: "自动",
   updateSourceMirrorchyan: "Mirror酱",
   updateSourceGithub: "GitHub",
   updateChannel: "更新渠道",

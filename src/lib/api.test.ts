@@ -16,6 +16,7 @@ import {
   setVirtualDisplayLandscape,
   startRun,
   updateVirtualDisplayPip,
+  validateGithubToken,
 } from "./api";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -483,4 +484,19 @@ it("routes explicit input repair and settings actions through IPC", async () => 
   expect(invoke).toHaveBeenCalledWith("open_developer_settings");
   invoke.mockRejectedValueOnce(new Error("bridge unavailable"));
   await expect(enableAdbInput()).rejects.toThrow("bridge unavailable");
+});
+
+describe("GitHub token validation", () => {
+  it("validates the saved token through native IPC without sending a token argument", async () => {
+    invoke.mockResolvedValueOnce(true);
+    await expect(validateGithubToken()).resolves.toBe(true);
+    expect(invoke).toHaveBeenLastCalledWith("update_validate_github_token");
+  });
+
+  it("preserves invalid-token and request-failure outcomes", async () => {
+    invoke.mockResolvedValueOnce(false);
+    await expect(validateGithubToken()).resolves.toBe(false);
+    invoke.mockRejectedValueOnce("network");
+    await expect(validateGithubToken()).rejects.toBe("network");
+  });
 });

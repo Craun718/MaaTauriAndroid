@@ -12,12 +12,12 @@ import {
   openShizuku,
   requestPrivilegedAccess,
   setPrivilegedBackend,
-} from "../lib/api";
-import type { MessageKey } from "../lib/i18n";
-import { localizeDiagnostic, useTranslation } from "../lib/i18n";
-import type { PrivilegedBackend, PrivilegedStatus } from "../lib/types";
-import { useNotificationStore } from "../store/notificationStore";
-import { Select } from "./ui/Select";
+} from "../../lib/api";
+import type { MessageKey } from "../../lib/i18n";
+import { localizeDiagnostic, useTranslation } from "../../lib/i18n";
+import type { PrivilegedBackend, PrivilegedStatus } from "../../lib/types";
+import { useNotificationStore } from "../../store/notificationStore";
+import { Select } from "../ui/Select";
 
 type PrivilegeAction = "request" | "openShizuku" | "switch";
 

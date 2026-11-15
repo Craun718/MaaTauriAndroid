@@ -28,25 +28,25 @@ import {
   requestNotificationPermission,
   resolveCurrent,
   stopRun,
-} from "../lib/api";
+} from "../../lib/api";
 import {
   type DisplayHazard,
   pendingDisplayHazards,
-} from "../lib/displayHazards";
+} from "../../lib/displayHazards";
 import {
   localizeDiagnostic,
   localizeRunEvent,
   useTranslation,
-} from "../lib/i18n";
-import { canAcceptRunEvent } from "../lib/runEvents";
-import type { ResolvedRun, RunEvent, TaskRunSelection } from "../lib/types";
-import { useLogExport } from "../lib/useLogExport";
-import { useRunStartRetry } from "../lib/useRunStartRetry";
-import { useAppStore, waitForPendingSaves } from "../store/appStore";
-import { useNotificationStore } from "../store/notificationStore";
-import { usePreparationStore } from "../store/preparationStore";
-import { BottomDrawer } from "./ui/BottomDrawer";
-import { Modal } from "./ui/Modal";
+} from "../../lib/i18n";
+import { canAcceptRunEvent } from "../../lib/runEvents";
+import type { ResolvedRun, RunEvent, TaskRunSelection } from "../../lib/types";
+import { useLogExport } from "../../lib/useLogExport";
+import { useRunStartRetry } from "../../lib/useRunStartRetry";
+import { useAppStore, waitForPendingSaves } from "../../store/appStore";
+import { useNotificationStore } from "../../store/notificationStore";
+import { usePreparationStore } from "../../store/preparationStore";
+import { BottomDrawer } from "../ui/BottomDrawer";
+import { Modal } from "../ui/Modal";
 
 /**
  * Run controls for the active run configuration. Rendered inside the Tasks panel

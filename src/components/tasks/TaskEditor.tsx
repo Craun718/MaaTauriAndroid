@@ -14,15 +14,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Eye, GripVertical, Play, Plus, SquarePen, Trash2 } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
-import { useTranslation } from "../lib/i18n";
+import { useTranslation } from "../../lib/i18n";
 import {
   activeController,
   activeResource,
   defaultOptionValue,
   optionValueSummary,
   visibleOptions,
-} from "../lib/options";
-import type { TaskEdit } from "../lib/taskEditing";
+} from "../../lib/options";
+import type { TaskEdit } from "../../lib/taskEditing";
 import type {
   ConfigurationTemplate,
   ConfiguredTask,
@@ -31,15 +31,15 @@ import type {
   ResourceDefinition,
   TaskDefinition,
   UserConfiguration,
-} from "../lib/types";
-import { useLongPress } from "../lib/useLongPress";
-import { OptionEditor } from "./OptionEditor";
-import { RichDescription } from "./RichDescription";
-import { Checkbox } from "./ui/Checkbox";
-import { Modal } from "./ui/Modal";
-import { Select } from "./ui/Select";
-import { Tabs } from "./ui/Tabs";
-import { TextField } from "./ui/TextField";
+} from "../../lib/types";
+import { useLongPress } from "../../lib/useLongPress";
+import { OptionEditor } from "../OptionEditor";
+import { RichDescription } from "../RichDescription";
+import { Checkbox } from "../ui/Checkbox";
+import { Modal } from "../ui/Modal";
+import { Select } from "../ui/Select";
+import { Tabs } from "../ui/Tabs";
+import { TextField } from "../ui/TextField";
 
 export interface TaskActionTarget {
   runConfigurationId: string;

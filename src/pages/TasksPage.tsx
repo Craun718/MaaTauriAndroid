@@ -6,9 +6,12 @@ import {
   type RunActivityTab,
   RunActivityTabs,
 } from "../components/RunActivityTabs";
-import type { RunPanelHandle } from "../components/RunPanel";
-import { RunPanel } from "../components/RunPanel";
-import { type TaskActionTarget, TaskEditor } from "../components/TaskEditor";
+import type { RunPanelHandle } from "../components/run/RunPanel";
+import { RunPanel } from "../components/run/RunPanel";
+import {
+  type TaskActionTarget,
+  TaskEditor,
+} from "../components/tasks/TaskEditor";
 import { Modal } from "../components/ui/Modal";
 import { VirtualDisplayCard } from "../components/VirtualDisplayCard";
 import { isNotificationGranted } from "../lib/api";

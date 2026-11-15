@@ -9,14 +9,14 @@ import {
 } from "react";
 import "driver.js/dist/driver.css";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getRunStatus } from "../lib/api";
-import { GUIDE_STEPS, guideSelector, shouldShowGuide } from "../lib/guide";
-import { useTranslation } from "../lib/i18n";
-import { useAppStore } from "../store/appStore";
-import { useGuideStore } from "../store/guideStore";
-import { useNotificationStore } from "../store/notificationStore";
-import { usePreparationStore } from "../store/preparationStore";
-import { TaskDemo } from "./TaskDemo";
+import { getRunStatus } from "../../lib/api";
+import { GUIDE_STEPS, guideSelector, shouldShowGuide } from "../../lib/guide";
+import { useTranslation } from "../../lib/i18n";
+import { useAppStore } from "../../store/appStore";
+import { useGuideStore } from "../../store/guideStore";
+import { useNotificationStore } from "../../store/notificationStore";
+import { usePreparationStore } from "../../store/preparationStore";
+import { TaskDemo } from "../TaskDemo";
 
 export function GuideHost(): ReactElement | null {
   const snapshot = useAppStore((state) => state.snapshot);

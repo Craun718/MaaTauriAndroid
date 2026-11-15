@@ -11,22 +11,22 @@ import {
   getVirtualDisplayStream,
   setVirtualDisplayTouchMarkers,
   touchVirtualDisplay,
-} from "../lib/api";
+} from "../../lib/api";
 import {
   reportFrontendDebug,
   reportFrontendError,
   reportFrontendWarning,
-} from "../lib/frontendLogging";
-import { useTranslation } from "../lib/i18n";
-import type { VirtualDisplayStatus } from "../lib/types";
+} from "../../lib/frontendLogging";
+import { useTranslation } from "../../lib/i18n";
+import type { VirtualDisplayStatus } from "../../lib/types";
 import {
   VIRTUAL_DISPLAY_TOUCH_MARKER_TTL_MS,
   VirtualDisplayMoveScheduler,
   VirtualDisplayPointerSlots,
   VirtualDisplayTouchMarkerTimeline,
   virtualDisplayPoint,
-} from "../lib/virtualDisplayTouch";
-import { useNotificationStore } from "../store/notificationStore";
+} from "../../lib/virtualDisplayTouch";
+import { useNotificationStore } from "../../store/notificationStore";
 
 type StreamConfig = {
   type: "config";

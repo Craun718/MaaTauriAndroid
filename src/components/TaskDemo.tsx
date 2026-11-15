@@ -7,7 +7,7 @@ import {
   editTaskDemo,
   taskDemoStepComplete,
 } from "../lib/taskDemo";
-import { TaskEditor } from "./TaskEditor";
+import { TaskEditor } from "./tasks/TaskEditor";
 
 export function TaskDemo({ onDone }: { onDone: () => void }): ReactElement {
   const { t } = useTranslation();

@@ -50,6 +50,15 @@ val maaTauriAndroidAbi = rootProject.ext.get("maaTauriAndroidAbi") as? String
 
 val piProfile = piProfileFile?.let { PiProfileReader.read(it, maaTauriAndroidAbi) }
 
+// Match the resource identity shown in the app, including untagged builds.
+// Only the standalone shell uses Tauri's MTA version as its package version.
+val maaTauriAndroidVersionName = if (piProfile != null) {
+    providers.environmentVariable("MTA_RESOURCE_TAG").orNull
+        ?.trim()?.takeIf { it.isNotEmpty() } ?: "unknown"
+} else {
+    tauriProperties.getProperty("tauri.android.versionName", "1.0")
+}
+
 val piAssets = piProfile?.assets
 val maaTauriAndroidResourceId = piProfile?.resourceId ?: "fixture"
 val maaTauriAndroidAppName = piProfile?.appName ?: "MaaTauriAndroid"
@@ -279,7 +288,7 @@ extensions.configure<ApplicationExtension> {
         minSdk = 28
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        versionName = maaTauriAndroidVersionName
         buildConfigField(
             "String",
             "VIRTUAL_DISPLAY_ORIENTATION",

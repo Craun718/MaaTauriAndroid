@@ -89,17 +89,17 @@ scripts/build-agent-runtime.sh \
   --core build/agent-core/dist/agent-core-3.13.15-arm64-v8a.tar.gz
 ```
 
-也可手动触发 `.github/workflows/agent-core.yml`，从 `android-python-agent-core-<commit>` artifact 下载两种 ABI 的 core、构建元数据和哈希。该工作流只上传构建产物，不发布 release，也不修改已有 core tag。构建时检查 ELF 架构、文件布局及 RECORD 哈希；Python 导入、OpenCV 运算和 ORT 模型推理仍需 Android 真机验证。
+也可手动触发 `.github/workflows/agent-core.yml`，从 `android-python-agent-core-<commit>` artifact 下载两种 ABI 的 core、构建元数据和哈希。MaaFramework 版本输入留空时读取根目录 `.maafwversion`。该工作流只上传构建产物，不发布 release，也不修改已有 core tag。构建时检查 ELF 架构、文件布局及 RECORD 哈希；Python 导入、OpenCV 运算和 ORT 模型推理仍需 Android 真机验证。
 
 core 的 `provides` 会声明这两者及 ORT 的依赖，runtime 组装会跳过 requirements 中对应项的版本钉定；`opencv-python-headless` 也映射到 core 的无 GUI OpenCV，不提供 `opencv-contrib-python`。OpenCV 这里的版本是源码版本 `4.12.0`，不包含 PyPI wheel 的打包后缀。完整依赖锁建议传 `--no-deps`，避免 pip 为传递依赖重新解析 core 已包含的原生库。
 
 ### 下载预编译 core
 
-全部集中在 `scripts/env.sh`，可用同名环境变量覆盖；改动时同步 `.github/workflows/ci.yml` 和 `vendor/maa/README.md`：
+MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag），`scripts/env.sh`、Rust 构建和资源 APK CI 共用该文件。预编译 core 的来源和 tag 仍配置在 `scripts/env.sh`（CI 中的 core tag 需同步）；均可用同名环境变量覆盖：
 
 | 变量 | 值 | 作用 |
 |:---|:---|:---|
-| `MAAFW_VERSION` | `v5.15.0` | MaaFramework 原生库版本（`vendor/maa` 与兜底下载） |
+| `MAAFW_VERSION` | `v5.15.0` | 从 `.maafwversion` 读取的 MaaFramework 原生库版本（`vendor/maa` 与兜底下载） |
 | `MAAFW_CORE_REPO` | `Craun718/MaaAgentCoreAndroid` | 预编译 Python 核心的来源 fork |
 | `MAAFW_CORE_TAG` | `agent-core-3.13.15-maafw5.15.0` | 核心版本（对应 MaaFW 5.15.0） |
 

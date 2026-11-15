@@ -41,6 +41,7 @@ jobs:
               - 'scripts/build_agent_bundle.py'
               - 'scripts/fetch-maafw.sh'
               - 'scripts/env.sh'
+              - '.maafwversion'
               - 'src/**'
               - 'src-tauri/profiles/**'
               - 'src-tauri/src/**'
@@ -199,8 +200,6 @@ jobs:
       # The Python agent runtime is built by the vendored script
       # scripts/build_agent_bundle.py (AGPL-3.0, from MaaFwApp);
       # MAAFW_CORE_REPO defaults to scripts/env.sh.
-      # Keep in sync with the MaaFramework binaries vendored in vendor/maa/.
-      MAAFW_VERSION: v5.15.0
       MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.15.0
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
@@ -208,6 +207,11 @@ jobs:
       RESOURCE_REPO: MAA1999/M9A
     steps:
       - uses: actions/checkout@v7
+
+      - name: Read MaaFramework version
+        run: |
+          source scripts/env.sh
+          echo "MAAFW_VERSION=$MAAFW_VERSION" >> "$GITHUB_ENV"
 
       - name: Resolve latest stable M9A release
         id: resource_release
@@ -366,8 +370,6 @@ jobs:
       actions: write
       contents: read
     env:
-      # Keep in sync with scripts/env.sh and the M9A job.
-      MAAFW_VERSION: v5.15.0
       MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.15.0
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
@@ -375,6 +377,11 @@ jobs:
       RESOURCE_REPO: duorua/narutomobile
     steps:
       - uses: actions/checkout@v7
+
+      - name: Read MaaFramework version
+        run: |
+          source scripts/env.sh
+          echo "MAAFW_VERSION=$MAAFW_VERSION" >> "$GITHUB_ENV"
 
       - name: Resolve latest stable NarutoMobile release
         id: resource_release
@@ -506,8 +513,6 @@ jobs:
       actions: write
       contents: read
     env:
-      # Keep in sync with scripts/env.sh and the M9A job.
-      MAAFW_VERSION: v5.15.0
       MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.15.0
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
@@ -515,6 +520,11 @@ jobs:
       RESOURCE_REPO: Maa-Assistant-PVZ-The-best/MAAPVZ
     steps:
       - uses: actions/checkout@v7
+
+      - name: Read MaaFramework version
+        run: |
+          source scripts/env.sh
+          echo "MAAFW_VERSION=$MAAFW_VERSION" >> "$GITHUB_ENV"
 
       - name: Resolve latest stable MAAPVZ release
         id: resource_release
@@ -649,7 +659,6 @@ jobs:
     env:
       # The application build still uses NDK 28.2. MaaEnd's upstream Android
       # agent recipe requires NDK 29 and CMake 3.31 for cpp-algo.
-      MAAFW_VERSION: v5.15.0
       MAAEND_REPO: MaaEnd/MaaEnd
       AGENT_NDK_VERSION: 29.0.14206865
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
@@ -657,6 +666,11 @@ jobs:
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Read MaaFramework version
+        run: |
+          source scripts/env.sh
+          echo "MAAFW_VERSION=$MAAFW_VERSION" >> "$GITHUB_ENV"
 
       - name: Resolve latest stable MaaEnd release
         id: resource_release

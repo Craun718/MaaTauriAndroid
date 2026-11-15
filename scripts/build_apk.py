@@ -104,7 +104,7 @@ def load_env() -> None:
     if not env_sh.is_file():
         return
     result = subprocess.run(
-        ["bash", "-c", f"source {env_sh} && env"],
+        ["bash", "-c", 'set -a; source "$1" && env', "bash", str(env_sh)],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,

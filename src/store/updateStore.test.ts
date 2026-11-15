@@ -40,7 +40,12 @@ function status(
   };
 }
 
-const prefs: UpdatePrefs = { source: "auto", channel: "stable", cdk: "" };
+const prefs: UpdatePrefs = {
+  source: "auto",
+  channel: "stable",
+  cdk: "",
+  githubToken: "",
+};
 
 const mocked = {
   getUpdateStatus: vi.mocked(getUpdateStatus),
@@ -72,6 +77,7 @@ describe("updateStore", () => {
       status: undefined,
       prefs: undefined,
       prefsBusy: false,
+      prefsSaveFailed: false,
     });
   });
 
@@ -188,14 +194,16 @@ describe("updateStore", () => {
       source: "github",
       channel: "beta",
       cdk: "ignored",
+      githubToken: "  ghp_test  ",
     };
-    const saved: UpdatePrefs = { ...next, cdk: "trimmed-away" };
+    const saved: UpdatePrefs = { ...next, githubToken: "ghp_test" };
     mocked.setUpdatePrefs.mockResolvedValue(saved);
 
     await useUpdateStore.getState().setPrefs(next);
 
     expect(mocked.setUpdatePrefs).toHaveBeenCalledWith(next);
     expect(useUpdateStore.getState().prefs).toEqual(saved);
+    expect(useUpdateStore.getState().prefsSaveFailed).toBe(false);
     expect(useUpdateStore.getState().prefsBusy).toBe(false);
   });
 
@@ -206,6 +214,29 @@ describe("updateStore", () => {
     await useUpdateStore.getState().setPrefs({ ...prefs, channel: "beta" });
 
     expect(useUpdateStore.getState().prefs?.channel).toBe("stable");
+    expect(useUpdateStore.getState().prefsSaveFailed).toBe(true);
     expect(useUpdateStore.getState().prefsBusy).toBe(false);
+  });
+
+  it("reports an unchanged backend response when a token save is refused", async () => {
+    useUpdateStore.setState({ prefs });
+    mocked.setUpdatePrefs.mockResolvedValue(prefs);
+    await useUpdateStore
+      .getState()
+      .setPrefs({ ...prefs, githubToken: "ghp_new" });
+    expect(useUpdateStore.getState().prefs).toEqual(prefs);
+    expect(useUpdateStore.getState().prefsSaveFailed).toBe(true);
+  });
+
+  it("clears a saved token and resets the previous save error", async () => {
+    useUpdateStore.setState({
+      prefs: { ...prefs, githubToken: "ghp_old" },
+      prefsSaveFailed: true,
+    });
+    mocked.setUpdatePrefs.mockResolvedValue(prefs);
+    await useUpdateStore.getState().setPrefs(prefs);
+    expect(mocked.setUpdatePrefs).toHaveBeenCalledWith(prefs);
+    expect(useUpdateStore.getState().prefs?.githubToken).toBe("");
+    expect(useUpdateStore.getState().prefsSaveFailed).toBe(false);
   });
 });

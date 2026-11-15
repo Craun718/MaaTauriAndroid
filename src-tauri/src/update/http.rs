@@ -78,7 +78,14 @@ impl UpdateHttpClient for ReqwestUpdateClient {
         Box::pin(async move {
             let mut request = self.client.get(url).timeout(GET_TIMEOUT);
             for (name, value) in headers {
-                request = request.header(name, value);
+                if name.eq_ignore_ascii_case("authorization") {
+                    let mut value = reqwest::header::HeaderValue::from_str(value)
+                        .map_err(|_| "invalid authorization header".to_string())?;
+                    value.set_sensitive(true);
+                    request = request.header(reqwest::header::AUTHORIZATION, value);
+                } else {
+                    request = request.header(name, value);
+                }
             }
             let response = request
                 .send()
@@ -98,7 +105,14 @@ impl UpdateHttpClient for ReqwestUpdateClient {
         Box::pin(async move {
             let mut request = self.client.get(url);
             for (name, value) in headers {
-                request = request.header(name, value);
+                if name.eq_ignore_ascii_case("authorization") {
+                    let mut value = reqwest::header::HeaderValue::from_str(value)
+                        .map_err(|_| "invalid authorization header".to_string())?;
+                    value.set_sensitive(true);
+                    request = request.header(reqwest::header::AUTHORIZATION, value);
+                } else {
+                    request = request.header(name, value);
+                }
             }
             let response = request
                 .send()
@@ -188,6 +202,7 @@ pub(crate) mod testing {
         bodies: Mutex<Vec<BodyScript>>,
         streams: Mutex<Vec<StreamScript>>,
         requested_urls: Mutex<Vec<String>>,
+        requested_headers: Mutex<Vec<Vec<(String, String)>>>,
     }
 
     impl StubClient {
@@ -196,6 +211,7 @@ pub(crate) mod testing {
                 bodies: Mutex::new(Vec::new()),
                 streams: Mutex::new(Vec::new()),
                 requested_urls: Mutex::new(Vec::new()),
+                requested_headers: Mutex::new(Vec::new()),
             }
         }
 
@@ -233,6 +249,10 @@ pub(crate) mod testing {
             self
         }
 
+        pub fn requested_headers(&self) -> Vec<Vec<(String, String)>> {
+            self.requested_headers.lock().unwrap().clone()
+        }
+
         pub fn requested_urls(&self) -> Vec<String> {
             self.requested_urls.lock().unwrap().clone()
         }
@@ -248,10 +268,14 @@ pub(crate) mod testing {
         fn get<'a>(
             &'a self,
             url: &'a str,
-            _headers: &'a [(String, String)],
+            headers: &'a [(String, String)],
         ) -> HttpFuture<'a, HttpResponse> {
             Box::pin(async move {
                 self.requested_urls.lock().unwrap().push(url.to_string());
+                self.requested_headers
+                    .lock()
+                    .unwrap()
+                    .push(headers.to_vec());
                 let mut bodies = self.bodies.lock().unwrap();
                 let index = bodies
                     .iter()
@@ -264,10 +288,14 @@ pub(crate) mod testing {
         fn get_stream<'a>(
             &'a self,
             url: &'a str,
-            _headers: &'a [(String, String)],
+            headers: &'a [(String, String)],
         ) -> HttpFuture<'a, StreamResponse> {
             Box::pin(async move {
                 self.requested_urls.lock().unwrap().push(url.to_string());
+                self.requested_headers
+                    .lock()
+                    .unwrap()
+                    .push(headers.to_vec());
                 let spec = {
                     let mut streams = self.streams.lock().unwrap();
                     let index = streams
@@ -337,5 +365,18 @@ pub(crate) mod testing {
             body.extend_from_slice(&chunk.unwrap());
         }
         assert_eq!(body, b"hello");
+    }
+
+    #[tokio::test]
+    async fn invalid_authorization_headers_fail_without_exposing_the_token() {
+        let client = ReqwestUpdateClient::new();
+        let headers = vec![("Authorization".into(), "Bearer secret\ninvalid".into())];
+        let url = "https://api.github.com/repos/owner/repo/releases";
+        assert_eq!(
+            client.get(url, &headers).await.unwrap_err(),
+            "invalid authorization header"
+        );
+        let error = client.get_stream(url, &headers).await.err().unwrap();
+        assert_eq!(error, "invalid authorization header");
     }
 }

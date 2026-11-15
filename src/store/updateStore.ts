@@ -22,6 +22,7 @@ interface UpdateStore {
   prefs?: UpdatePrefs;
   /** True while a prefs save is in flight; edits stay disabled meanwhile. */
   prefsBusy: boolean;
+  prefsSaveFailed: boolean;
   load: () => Promise<void>;
   poll: () => Promise<void>;
   check: () => Promise<void>;
@@ -58,6 +59,7 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   status: undefined,
   prefs: undefined,
   prefsBusy: false,
+  prefsSaveFailed: false,
   async load() {
     set({
       status: await getUpdateStatus().catch(() => undefined),
@@ -88,10 +90,19 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   },
   async setPrefs(next) {
     const previous = get().prefs;
-    set({ prefsBusy: true });
+    set({ prefsBusy: true, prefsSaveFailed: false });
     // The backend echoes the saved prefs back, and keeps the old values when a
     // task is in flight; either way the response is authoritative.
     const saved = await invokeSetUpdatePrefs(next).catch(() => undefined);
-    set({ prefs: saved ?? previous, prefsBusy: false });
+    set({
+      prefs: saved ?? previous,
+      prefsBusy: false,
+      prefsSaveFailed:
+        !saved ||
+        saved.source !== next.source ||
+        saved.channel !== next.channel ||
+        saved.cdk !== next.cdk.trim() ||
+        saved.githubToken !== next.githubToken.trim(),
+    });
   },
 }));

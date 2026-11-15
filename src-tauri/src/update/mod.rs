@@ -250,7 +250,10 @@ impl UpdateState {
         }
         let mut prefs = prefs;
         prefs.cdk = prefs.cdk.trim().to_string();
-        let _ = prefs.save(&dirs.prefs_dir);
+        prefs.github_token = prefs.github_token.trim().to_string();
+        if prefs.save(&dirs.prefs_dir).is_err() {
+            return inner.prefs.clone();
+        }
         if inner.prefs.cdk != prefs.cdk {
             inner.credential.reset();
             let _ = credential::save_expiry(&dirs.prefs_dir, &prefs.cdk, None);
@@ -299,7 +302,7 @@ impl UpdateState {
         let cancelled = Arc::new(AtomicBool::new(false));
         let task_cancelled = cancelled.clone();
         let state = self.clone();
-        let client = self.client.clone();
+        let client = github::authenticated_client(self.client.clone(), prefs.github_token.clone());
         let channel = prefs.channel;
         let handle = tokio::spawn(async move {
             let outcome = match &source {
@@ -403,7 +406,7 @@ impl UpdateState {
         let cancelled = Arc::new(AtomicBool::new(false));
         let task_cancelled = cancelled.clone();
         let state = self.clone();
-        let client = self.client.clone();
+        let client = github::authenticated_client(self.client.clone(), prefs.github_token.clone());
         let handle = tokio::spawn(async move {
             let outcome = run_download(
                 &state,
@@ -1105,6 +1108,7 @@ mod tests {
             source: UpdateSource::Github,
             channel: UpdateChannel::Stable,
             cdk: String::new(),
+            ..UpdatePrefs::default()
         }
     }
 
@@ -1250,6 +1254,7 @@ mod tests {
                 source: UpdateSource::Auto,
                 channel: UpdateChannel::Stable,
                 cdk: "  cdk-key  ".to_string(),
+                ..UpdatePrefs::default()
             },
         );
         state.begin_download(env.dirs.clone());
@@ -1284,9 +1289,10 @@ mod tests {
                 .with_body("page=2", 200, "[]")
                 .with_stream(&asset_name, stream),
         );
-        let state = UpdateState::with_client(client);
+        let state = UpdateState::with_client(client.clone());
         let env = test_env();
 
+        state.lock().prefs.github_token = "ghp_test".into();
         state.begin_check(RepoInfo {
             mirrorchyan_rid: None,
             github: Some("https://github.com/owner/repo".to_string()),
@@ -1303,6 +1309,23 @@ mod tests {
             std::fs::read(status.apk_path.as_ref().unwrap()).unwrap(),
             b"github apk"
         );
+        for (url, headers) in client
+            .requested_urls()
+            .iter()
+            .zip(client.requested_headers())
+        {
+            let auth = headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("authorization"));
+            if url.starts_with("https://api.github.com/") {
+                assert_eq!(
+                    auth.map(|(_, value)| value.as_str()),
+                    Some("Bearer ghp_test")
+                );
+            } else {
+                assert!(auth.is_none(), "unexpected token for {url}");
+            }
+        }
     }
 
     #[tokio::test]
@@ -1424,10 +1447,11 @@ mod tests {
                 .with_body("page=2", 200, "[]")
                 .with_stream(&pinned_asset, stream),
         );
-        let state = UpdateState::with_client(client);
+        let state = UpdateState::with_client(client.clone());
         let env = test_env();
         state.set_prefs(&env.dirs, github_prefs());
 
+        state.lock().prefs.github_token = "ghp_test".into();
         state.begin_check(RepoInfo {
             mirrorchyan_rid: Some("m9a".to_string()),
             github: Some("https://github.com/owner/repo".to_string()),
@@ -1443,6 +1467,23 @@ mod tests {
             std::fs::read(status.apk_path.as_ref().unwrap()).unwrap(),
             b"pinned apk"
         );
+        for (url, headers) in client
+            .requested_urls()
+            .iter()
+            .zip(client.requested_headers())
+        {
+            let auth = headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("authorization"));
+            if url.starts_with("https://api.github.com/") {
+                assert_eq!(
+                    auth.map(|(_, value)| value.as_str()),
+                    Some("Bearer ghp_test")
+                );
+            } else {
+                assert!(auth.is_none(), "unexpected token for {url}");
+            }
+        }
     }
 
     #[tokio::test]
@@ -1726,6 +1767,7 @@ mod tests {
                 source: UpdateSource::Mirrorchyan,
                 channel: UpdateChannel::Beta,
                 cdk: "  key-1  ".to_string(),
+                ..UpdatePrefs::default()
             },
         );
         assert_eq!(saved.cdk, "key-1");
@@ -1734,5 +1776,19 @@ mod tests {
         let reloaded = UpdateState::with_client(Arc::new(StubClient::new()));
         reloaded.load_prefs(&env.dirs);
         assert_eq!(reloaded.lock().prefs, saved);
+    }
+
+    #[test]
+    fn failed_prefs_save_keeps_the_cached_preferences() {
+        let env = test_env();
+        let state = UpdateState::with_client(Arc::new(StubClient::new()));
+        let mut dirs = env.dirs.clone();
+        std::fs::create_dir_all(&dirs.prefs_dir).unwrap();
+        let blocked = dirs.prefs_dir.join("file");
+        std::fs::write(&blocked, "occupied").unwrap();
+        dirs.prefs_dir = blocked;
+        let saved = state.set_prefs(&dirs, github_prefs());
+        assert_eq!(saved, UpdatePrefs::default());
+        assert_eq!(state.lock().prefs, UpdatePrefs::default());
     }
 }

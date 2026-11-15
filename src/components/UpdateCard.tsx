@@ -33,6 +33,7 @@ export function UpdateCard() {
   const status = useUpdateStore((state) => state.status);
   const prefs = useUpdateStore((state) => state.prefs);
   const prefsBusy = useUpdateStore((state) => state.prefsBusy);
+  const prefsSaveFailed = useUpdateStore((state) => state.prefsSaveFailed);
   const load = useUpdateStore((state) => state.load);
   const poll = useUpdateStore((state) => state.poll);
   const check = useUpdateStore((state) => state.check);
@@ -63,7 +64,8 @@ export function UpdateCard() {
     prefs !== undefined &&
     (savedPrefs.source !== prefs.source ||
       savedPrefs.channel !== prefs.channel ||
-      savedPrefs.cdk !== prefs.cdk);
+      savedPrefs.cdk !== prefs.cdk ||
+      savedPrefs.githubToken !== prefs.githubToken);
 
   return (
     <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
@@ -115,6 +117,19 @@ export function UpdateCard() {
               />
             </div>
           </div>
+          {savedPrefs.source !== "mirrorchyan" && (
+            <TextField
+              type="password"
+              label={t("updateGithubToken")}
+              placeholder={t("updateGithubTokenPlaceholder")}
+              description={t("updateGithubTokenDescription")}
+              value={savedPrefs.githubToken}
+              disabled={prefsBusy}
+              onValueChange={(value) =>
+                setDraft({ ...savedPrefs, githubToken: value })
+              }
+            />
+          )}
           <div className="flex items-end gap-2">
             {savedPrefs.source !== "github" && (
               <TextField
@@ -136,6 +151,7 @@ export function UpdateCard() {
                 const saved = useUpdateStore.getState().prefs;
                 if (
                   saved?.cdk === savedPrefs.cdk.trim() &&
+                  saved.githubToken === savedPrefs.githubToken.trim() &&
                   saved.source === savedPrefs.source &&
                   saved.channel === savedPrefs.channel
                 )
@@ -146,6 +162,9 @@ export function UpdateCard() {
               {t("updateApplyPrefs")}
             </button>
           </div>
+          {prefsSaveFailed && (
+            <p className="text-sm text-error">{t("updatePrefsSaveFailed")}</p>
+          )}
           {savedPrefs.source !== "github" && (
             <div className="space-y-2">
               <p className="text-[0.8125rem]">{t("updateCdkDescription")}</p>

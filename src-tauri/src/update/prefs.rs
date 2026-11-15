@@ -95,9 +95,9 @@ impl UpdatePrefs {
         dir: &Path,
         decrypt: impl FnOnce(&str) -> Result<String, crate::secrets::SecretError>,
     ) -> Self {
-        let prefs: Self = std::fs::read_to_string(dir.join(PREFS_FILE))
+        let mut prefs: Self = std::fs::read_to_string(dir.join(PREFS_FILE))
             .ok()
-            .and_then(|contents| serde_json::from_str(&contents).ok())
+            .and_then(|contents| serde_json::from_str::<Self>(&contents).ok())
             .unwrap_or_default()
             .normalized();
         if !prefs.github_token.is_empty() {

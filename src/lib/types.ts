@@ -594,6 +594,7 @@ export interface UpdatePrefs {
   source: UpdateSourceSetting;
   channel: UpdateChannelSetting;
   cdk: string;
+  githubToken: string;
 }
 
 export interface PretaskDefinition {

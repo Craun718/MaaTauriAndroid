@@ -6,8 +6,9 @@
 //! preference first, and a sha256 digest is mandatory.
 
 use serde::Deserialize;
+use std::sync::Arc;
 
-use super::http::UpdateHttpClient;
+use super::http::{HttpFuture, HttpResponse, StreamResponse, UpdateHttpClient};
 use super::semver::Version;
 use super::{UpdateError, UpdateFailure};
 
@@ -17,6 +18,95 @@ pub const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Linux; Android 10; K) AppleWe
 const API_BASE: &str = "https://api.github.com";
 const PAGE_SIZE: usize = 100;
 const MAX_PAGES: usize = 3;
+
+/// Attach credentials only to GitHub's HTTPS API, never to MirrorChyan,
+/// browser download URLs or third-party release hosts. Reqwest strips
+/// Authorization when the API redirects to a different host.
+pub fn authenticated_client(
+    client: Arc<dyn UpdateHttpClient>,
+    token: String,
+) -> Arc<dyn UpdateHttpClient> {
+    Arc::new(GithubApiClient { client, token })
+}
+
+struct GithubApiClient {
+    client: Arc<dyn UpdateHttpClient>,
+    token: String,
+}
+
+fn is_api_url(url: &str) -> bool {
+    reqwest::Url::parse(url).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url.host_str() == Some("api.github.com")
+            && url.port_or_known_default() == Some(443)
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.path().starts_with("/repos/")
+    })
+}
+
+fn is_asset_api_url(url: &str) -> bool {
+    if !is_api_url(url) {
+        return false;
+    }
+    let Ok(url) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    let parts = url.path().split('/').collect::<Vec<_>>();
+    matches!(parts.as_slice(), ["", "repos", owner, repo, "releases", "assets", id]
+        if !owner.is_empty() && !repo.is_empty() && !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+impl GithubApiClient {
+    fn headers(
+        &self,
+        url: &str,
+        headers: &[(String, String)],
+        stream: bool,
+    ) -> Vec<(String, String)> {
+        let mut headers = headers.to_vec();
+        if is_api_url(url) && !self.token.trim().is_empty() {
+            headers.retain(|(name, _)| !name.eq_ignore_ascii_case("authorization"));
+            headers.push((
+                "Authorization".into(),
+                format!("Bearer {}", self.token.trim()),
+            ));
+        }
+        if stream && is_asset_api_url(url) {
+            headers.retain(|(name, _)| {
+                !name.eq_ignore_ascii_case("accept")
+                    && !name.eq_ignore_ascii_case("x-github-api-version")
+            });
+            headers.push(("Accept".into(), "application/octet-stream".into()));
+            headers.push(("X-GitHub-Api-Version".into(), "2022-11-28".into()));
+        }
+        headers
+    }
+}
+
+impl UpdateHttpClient for GithubApiClient {
+    fn get<'a>(
+        &'a self,
+        url: &'a str,
+        headers: &'a [(String, String)],
+    ) -> HttpFuture<'a, HttpResponse> {
+        Box::pin(async move {
+            let headers = self.headers(url, headers, false);
+            self.client.get(url, &headers).await
+        })
+    }
+
+    fn get_stream<'a>(
+        &'a self,
+        url: &'a str,
+        headers: &'a [(String, String)],
+    ) -> HttpFuture<'a, StreamResponse> {
+        Box::pin(async move {
+            let headers = self.headers(url, headers, true);
+            self.client.get_stream(url, &headers).await
+        })
+    }
+}
 
 /// Asset-name markers that mean "this APK runs on this build", in preference
 /// order. Empty on unsupported desktop targets so no wrong-architecture APK can
@@ -154,7 +244,12 @@ fn release_from(release: &Release) -> Result<GithubRelease, UpdateError> {
     Ok(GithubRelease {
         version: display.to_string(),
         note: release.body.clone().filter(|body| !body.trim().is_empty()),
-        url: asset.browser_download_url.clone(),
+        url: asset
+            .url
+            .as_ref()
+            .filter(|url| is_asset_api_url(url))
+            .cloned()
+            .unwrap_or_else(|| asset.browser_download_url.clone()),
         sha256: asset_digest(asset).expect("pick_asset returns digested assets"),
         size: asset.size,
     })
@@ -266,6 +361,8 @@ struct Asset {
     size: Option<u64>,
     #[serde(default)]
     browser_download_url: String,
+    #[serde(default)]
+    url: Option<String>,
     #[serde(default)]
     digest: Option<String>,
 }
@@ -598,5 +695,110 @@ mod tests {
         );
         assert_eq!(download_headers().len(), 1);
         assert_eq!(download_headers()[0].1, BROWSER_USER_AGENT);
+    }
+
+    #[test]
+    fn token_headers_are_scoped_to_the_github_https_api() {
+        let client = GithubApiClient {
+            client: Arc::new(StubClient::new()),
+            token: "  ghp_test  ".into(),
+        };
+        for url in [
+            "https://api.github.com/repos/owner/repo/releases",
+            "https://api.github.com/repos/owner/repo/releases?per_page=100&page=2",
+        ] {
+            let headers = client.headers(url, &api_headers(), false);
+            assert!(headers.contains(&("Authorization".into(), "Bearer ghp_test".into())));
+        }
+        for url in [
+            "https://github.com/owner/repo/releases/download/v1/app.apk",
+            "https://api.mirrorchyan.com/api/resources/m9a/latest",
+            "https://objects.githubusercontent.com/app.apk",
+            "https://api.github.com.evil.example/repos/owner/repo/releases",
+            "http://api.github.com/repos/owner/repo/releases",
+            "https://api.github.com:8443/repos/owner/repo/releases",
+            "https://user@api.github.com/repos/owner/repo/releases",
+        ] {
+            assert!(
+                !client
+                    .headers(url, &download_headers(), true)
+                    .iter()
+                    .any(|(name, _)| name.eq_ignore_ascii_case("authorization")),
+                "{url}"
+            );
+        }
+        let anonymous = GithubApiClient {
+            client: Arc::new(StubClient::new()),
+            token: "  ".into(),
+        };
+        assert_eq!(
+            anonymous.headers(
+                "https://api.github.com/repos/owner/repo/releases",
+                &api_headers(),
+                false
+            ),
+            api_headers()
+        );
+    }
+
+    #[tokio::test]
+    async fn api_asset_downloads_use_octet_stream_and_the_token() {
+        let inner = Arc::new(StubClient::new().with_stream(
+            "/assets/123",
+            super::super::http::testing::StreamSpec {
+                status: 200,
+                content_length: Some(3),
+                chunks: vec![Ok(b"apk".to_vec())],
+            },
+        ));
+        let client = authenticated_client(inner.clone(), "ghp_test".into());
+        client
+            .get_stream(
+                "https://api.github.com/repos/owner/repo/releases/assets/123",
+                &download_headers(),
+            )
+            .await
+            .unwrap();
+        let headers = &inner.requested_headers()[0];
+        assert!(headers.contains(&("Authorization".into(), "Bearer ghp_test".into())));
+        assert!(headers.contains(&("Accept".into(), "application/octet-stream".into())));
+        assert!(headers.contains(&("X-GitHub-Api-Version".into(), "2022-11-28".into())));
+    }
+
+    #[tokio::test]
+    async fn authenticated_release_queries_preserve_http_failures() {
+        for status in [401, 403, 429] {
+            let inner = Arc::new(StubClient::new().with_body("page=1", status, "{}"));
+            let client = authenticated_client(inner.clone(), "ghp_test".into());
+            let error = latest_release(client.as_ref(), "owner/repo", "stable", "1.0.0")
+                .await
+                .unwrap_err();
+            assert_eq!(error.failure, UpdateFailure::Network);
+            assert!(!error.detail.contains("ghp_test"));
+            assert!(inner.requested_headers()[0]
+                .contains(&("Authorization".into(), "Bearer ghp_test".into())));
+        }
+    }
+
+    #[test]
+    fn release_assets_prefer_the_api_url_and_fall_back_to_the_browser_url() {
+        let mut release: Release = serde_json::from_str(&release_json(
+            "v2.0.0",
+            r#""prerelease":false"#,
+            &runtime_abi_apk_asset(Some(&"a".repeat(64))),
+        ))
+        .unwrap();
+        let browser_url = release.assets[0].browser_download_url.clone();
+        let api_url = "https://api.github.com/repos/owner/repo/releases/assets/123";
+        release.assets[0].url = Some(api_url.into());
+        assert_eq!(release_from(&release).unwrap().url, api_url);
+        for url in [
+            None,
+            Some("https://other.example/asset".into()),
+            Some("https://api.github.com/repos/owner/repo/releases/assets/not-an-id".into()),
+        ] {
+            release.assets[0].url = url;
+            assert_eq!(release_from(&release).unwrap().url, browser_url);
+        }
     }
 }

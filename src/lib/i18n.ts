@@ -563,6 +563,12 @@ const en = {
   updateChannel: "Channel",
   updateChannelStable: "Stable",
   updateChannelBeta: "Beta",
+  updateGithubToken: "GitHub Token",
+  updateGithubTokenPlaceholder: "Token (optional)",
+  updateGithubTokenDescription:
+    "Used to authenticate GitHub release queries and API asset downloads, with a higher API rate limit. Stored encrypted on this device. Leave empty for anonymous requests; clear and save to remove.",
+  updatePrefsSaveFailed:
+    "Could not save update settings. Try again when no update is running.",
   updateCdk: "MirrorChyan CDK",
   updateCdkDescription: "The CDK is only stored on this device.",
   updateCdkPlaceholder: "CDK (optional)",
@@ -1072,6 +1078,11 @@ const zh: Record<MessageKey, string> = {
   updateChannel: "更新渠道",
   updateChannelStable: "稳定版",
   updateChannelBeta: "测试版",
+  updateGithubToken: "GitHub Token",
+  updateGithubTokenPlaceholder: "Token（可选）",
+  updateGithubTokenDescription:
+    "用于 GitHub 版本查询和 API 附件下载的身份认证，提高 API 请求额度。加密保存在本机。留空使用匿名请求；清空后保存即可移除。",
+  updatePrefsSaveFailed: "更新设置保存失败，请在没有更新任务运行时重试。",
   updateCdk: "Mirror酱 CDK",
   updateCdkDescription: "CDK 仅保存在本机。",
   updateCdkPlaceholder: "CDK（可选）",

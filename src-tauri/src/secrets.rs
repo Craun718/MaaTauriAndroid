@@ -3,7 +3,6 @@ use crate::domain::types::OptionValue;
 use crate::domain::types::{Project, UserConfiguration};
 use std::collections::BTreeMap;
 
-#[cfg(any(target_os = "android", test))]
 pub const ENVELOPE_PREFIX: &str = "enc:v1:";
 
 #[derive(Debug, thiserror::Error)]
@@ -248,6 +247,32 @@ pub(crate) mod android {
 #[cfg(target_os = "android")]
 fn call_bridge(method: &str, value: &str) -> Result<String, SecretError> {
     android::call(method, value)
+}
+
+/// Protect a standalone credential with the same Android Keystore as passwords.
+/// Other platforms fail closed rather than persisting the credential as plaintext.
+pub(crate) fn encrypt_credential(value: &str) -> Result<String, SecretError> {
+    #[cfg(target_os = "android")]
+    {
+        call_bridge("encrypt", value)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = value;
+        Err(SecretError::BridgeUnavailable)
+    }
+}
+
+pub(crate) fn decrypt_credential(value: &str) -> Result<String, SecretError> {
+    #[cfg(target_os = "android")]
+    {
+        call_bridge("decrypt", value)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = value;
+        Err(SecretError::BridgeUnavailable)
+    }
 }
 
 #[cfg(test)]

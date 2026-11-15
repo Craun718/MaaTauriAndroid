@@ -21,7 +21,6 @@ import {
   saveScheduleRule,
   setScheduleRuleEnabled,
 } from "../lib/api";
-import type { MessageKey } from "../lib/i18n";
 import { useTranslation } from "../lib/i18n";
 import type { ScheduleHealthIssue } from "../lib/schedules";
 import {
@@ -39,41 +38,15 @@ import type {
 } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
-
-const WEEKDAY_KEYS: MessageKey[] = [
-  "scheduleWeekdayMonday",
-  "scheduleWeekdayTuesday",
-  "scheduleWeekdayWednesday",
-  "scheduleWeekdayThursday",
-  "scheduleWeekdayFriday",
-  "scheduleWeekdaySaturday",
-  "scheduleWeekdaySunday",
-];
-
-const ERROR_KEYS: Record<string, MessageKey> = {
-  nameRequired: "scheduleErrorNameRequired",
-  runConfigurationRequired: "scheduleErrorRunConfigurationRequired",
-  weekdayRequired: "scheduleErrorWeekdayRequired",
-  timeRequired: "scheduleErrorTimeRequired",
-  timeInvalid: "scheduleErrorTimeInvalid",
-  intervalInvalid: "scheduleErrorIntervalInvalid",
-};
-
-function currentTimeValue(date = new Date()): string {
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
-}
-
-interface TimeEditorState {
-  hour: number;
-  minute: number;
-  originalTime?: string;
-}
-
-function timeValue({ hour, minute }: TimeEditorState): string {
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
+import {
+  currentTimeValue,
+  describeTrigger,
+  ERROR_KEYS,
+  nonNegative,
+  type TimeEditorState,
+  timeValue,
+  WEEKDAY_KEYS,
+} from "./schedules/helpers";
 
 export function SchedulesPage() {
   const { t, language } = useTranslation();
@@ -606,20 +579,4 @@ export function SchedulesPage() {
       )}
     </div>
   );
-}
-
-function describeTrigger(
-  rule: ScheduleRuleStatus,
-  t: (key: MessageKey, params?: Record<string, string | number>) => string,
-) {
-  if (rule.trigger.kind === "interval") {
-    const hours = rule.trigger.intervalDays * 24 + rule.trigger.intervalHours;
-    return t("scheduleIntervalSummary", { hours });
-  }
-  return rule.trigger.times.join(", ");
-}
-
-function nonNegative(value: string) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }

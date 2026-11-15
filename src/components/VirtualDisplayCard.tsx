@@ -34,7 +34,7 @@ import { pipEligible, pipSourceRect } from "../lib/virtualDisplayPip";
 import { useAppStore } from "../store/appStore";
 import { useNotificationStore } from "../store/notificationStore";
 import { Modal } from "./ui/Modal";
-import { VirtualDisplayPreview } from "./VirtualDisplayPreview";
+import { VirtualDisplayPreview } from "./virtual-display/VirtualDisplayPreview";
 
 // Non-fullscreen preview cap. A portrait virtual display (720x1280) laid out at
 // the full column width is 1.78x that width tall, which swallows the tasks page

@@ -12,6 +12,7 @@ export default defineConfig(() => ({
   test: {
     environment: "jsdom",
     setupFiles: "./tests/setup.ts",
+    include: ["tests/**/*.test.{ts,tsx}"],
     // Stale git worktrees and the pnpm content-addressable store contain full
     // copies of this repo; without this exclude Vitest runs their tests too
     // (against outdated sources) and fails the suite.

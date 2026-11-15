@@ -1,7 +1,7 @@
 import { Loader2, Megaphone } from "lucide-react";
 import { useState } from "react";
 import { AnnouncementModal } from "../components/AnnouncementModal";
-import { PrivilegeStatusCard } from "../components/PrivilegeStatusCard";
+import { PrivilegeStatusCard } from "../components/privilege/PrivilegeStatusCard";
 import { ReleaseNotesPrompt } from "../components/ReleaseNotes";
 import { ScheduleEntryCard } from "../components/ScheduleEntryCard";
 import { VersionCard } from "../components/VersionCard";

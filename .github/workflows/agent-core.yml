@@ -9,9 +9,8 @@ on:
         required: true
         type: string
       maafw_version:
-        description: MaaFramework Python binding version
-        default: '5.15.0'
-        required: true
+        description: MaaFramework Python binding version (blank uses .maafwversion)
+        required: false
         type: string
 
 jobs:
@@ -38,9 +37,10 @@ jobs:
           PYTHON_VERSION: ${{ inputs.python_version }}
           MAAFW_VERSION: ${{ inputs.maafw_version }}
         run: |
+          source scripts/env.sh
           python scripts/build_agent_core.py \
             --python-version "$PYTHON_VERSION" \
-            --maafw-version "$MAAFW_VERSION" \
+            --maafw-version "${MAAFW_VERSION#v}" \
             --work-dir build/agent-core \
             --jobs 2
       - uses: actions/upload-artifact@v7

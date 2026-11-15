@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 
 /// MaaFramework release the Android libraries were vendored from, resolved by
-/// `build.rs` out of `scripts/env.sh` (environment variable wins when set).
+/// `build.rs` out of `.maafwversion` (environment variable wins when set).
 pub const MAA_FRAMEWORK_VERSION: &str = env!("MAAFW_VERSION");
 
 /// This application's version, from `Cargo.toml`.
@@ -172,27 +172,20 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// The point of the `build.rs` parser is that the compiled-in pin tracks
-    /// `scripts/env.sh`. Re-read the file here so a divergence fails a test rather
+    /// The compiled-in default pin tracks `.maafwversion`.
+    /// Re-read the file here so a divergence fails a test rather
     /// than silently shipping a wrong version.
     #[test]
-    fn compiled_framework_version_matches_scripts_env_sh() {
-        let Ok(contents) = std::fs::read_to_string(env_sh_path()) else {
+    fn compiled_framework_version_matches_version_file() {
+        let Ok(contents) = std::fs::read_to_string(version_file_path()) else {
             // Built from a packaged copy without the repository around it.
             return;
         };
-        let expected = contents
-            .lines()
-            .find_map(|line| {
-                let rest = line.trim().strip_prefix("MAAFW_VERSION=")?;
-                let rest = rest.trim().trim_matches(['"', '\'']);
-                let value = rest
-                    .strip_prefix("${MAAFW_VERSION:-")
-                    .map(|inner| inner.trim_end_matches('}'))
-                    .unwrap_or(rest);
-                Some(value.trim().to_string())
-            })
-            .expect("scripts/env.sh declares MAAFW_VERSION");
+        assert!(
+            !contents.trim().is_empty(),
+            ".maafwversion must not be empty"
+        );
+        let expected = contents.trim();
         assert_eq!(MAA_FRAMEWORK_VERSION, expected);
     }
 
@@ -267,7 +260,7 @@ mod tests {
         assert!(rows.ends_with('\n'));
     }
 
-    fn env_sh_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/env.sh")
+    fn version_file_path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.maafwversion")
     }
 }

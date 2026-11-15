@@ -63,9 +63,8 @@ fn watch_git_history(repo: &Path) {
 
 /// MaaFramework release the Android libraries are vendored from.
 ///
-/// `scripts/env.sh` is the single source of truth (kept in sync with
-/// `.github/workflows/ci.yml` and `vendor/maa/README.md`). The environment
-/// variable wins when set, so CI can build against a different pin.
+/// The repository's `.maafwversion` is the single source of truth. The
+/// environment variable wins when set, so CI can build against a different pin.
 fn maa_framework_version() -> String {
     if let Ok(value) = std::env::var("MAAFW_VERSION") {
         let value = value.trim().to_string();
@@ -74,11 +73,12 @@ fn maa_framework_version() -> String {
         }
     }
 
-    let env_sh = manifest_dir().join("../scripts/env.sh");
-    println!("cargo:rerun-if-changed={}", env_sh.display());
-    if let Ok(contents) = std::fs::read_to_string(&env_sh) {
-        if let Some(version) = parse_env_sh_version(&contents) {
-            return version;
+    let version_file = repo_root().join(".maafwversion");
+    println!("cargo:rerun-if-changed={}", version_file.display());
+    if let Ok(contents) = std::fs::read_to_string(&version_file) {
+        let version = contents.trim();
+        if !version.is_empty() {
+            return version.to_string();
         }
     }
 
@@ -86,27 +86,6 @@ fn maa_framework_version() -> String {
     // two builds of MaaFramework apart.
     short_file_hash(&manifest_dir().join("../vendor/maa/android/arm64-v8a/libMaaFramework.so"))
         .unwrap_or_else(|| "unknown".to_string())
-}
-
-/// Reads the default out of a `MAAFW_VERSION="${MAAFW_VERSION:-v5.15.0}"`
-/// assignment. Deliberately a narrow parser instead of sourcing the script:
-/// a build script must not execute repository shell.
-fn parse_env_sh_version(contents: &str) -> Option<String> {
-    for line in contents.lines() {
-        let Some(rest) = line.trim().strip_prefix("MAAFW_VERSION=") else {
-            continue;
-        };
-        let rest = rest.trim().trim_matches(['"', '\'']);
-        let value = match rest.strip_prefix("${MAAFW_VERSION:-") {
-            Some(inner) => inner.trim_end_matches('}'),
-            None => rest,
-        };
-        let value = value.trim();
-        if !value.is_empty() {
-            return Some(value.to_string());
-        }
-    }
-    None
 }
 
 /// A short non-crypto hash of a file — enough to tell two builds of the same

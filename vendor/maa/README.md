@@ -3,8 +3,10 @@
 The `android/arm64-v8a` directory contains unmodified official MaaFramework
 runtime libraries for Android arm64, downloaded by `scripts/fetch-maafw.sh`.
 The binaries are not committed to git; run the script to populate the directory.
-A `.maafw-version` marker records the requested release so changing the pin
-refreshes an existing checkout.
+The repository root `.maafwversion` declares the release used by setup scripts,
+Rust builds, and resource APK CI; `MAAFW_VERSION` can override it.
+A `.maafw-version` marker in each ABI directory records the requested release
+so changing the pin refreshes an existing checkout.
 MaaFramework is distributed under the GNU Lesser General Public License version
 3; see `MAA-LICENSE.md`.
 

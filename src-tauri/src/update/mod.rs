@@ -1300,6 +1300,13 @@ mod tests {
         let state = UpdateState::with_client(client.clone());
         let env = test_env();
 
+        state.set_prefs(
+            &env.dirs,
+            UpdatePrefs {
+                source: UpdateSource::Github,
+                ..UpdatePrefs::default()
+            },
+        );
         state.lock().prefs.github_token = "ghp_test".into();
         state.begin_check(RepoInfo {
             mirrorchyan_rid: None,

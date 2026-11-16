@@ -404,6 +404,17 @@ pub enum UiLanguage {
     En,
 }
 
+/// Interface theme. `System` follows the OS `prefers-color-scheme`; `Light` /
+/// `Dark` pin the palette explicitly via a root attribute in the WebView.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 /// Points at one generated image in the app-private background directory.
 /// The image body stays on this device and is never embedded in configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -464,6 +475,8 @@ pub struct UserConfiguration {
     pub debug_mode: bool,
     #[serde(default)]
     pub ui_language: UiLanguage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<ThemeMode>,
     pub active_resource: Option<String>,
     #[serde(default)]
     pub pretask_values: BTreeMap<String, ConfiguredPretask>,
@@ -519,6 +532,7 @@ impl Default for UserConfiguration {
             pip_on_home: true,
             debug_mode: false,
             ui_language: UiLanguage::System,
+            theme: None,
             active_resource: None,
             pretask_values: BTreeMap::new(),
             global_option_values: BTreeMap::new(),

@@ -360,6 +360,7 @@ mod tests {
             pip_on_home: true,
             telemetry_enabled: false,
             ui_language: Default::default(),
+            theme: None,
             active_resource: None,
             pretask_values: BTreeMap::new(),
             global_option_values: BTreeMap::new(),

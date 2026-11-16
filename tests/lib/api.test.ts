@@ -13,6 +13,7 @@ import {
   requestNotificationPermission,
   resolveFocusModal,
   setPrivilegedBackend,
+  setVirtualDisplayLandscape,
   startRun,
   updateVirtualDisplayPip,
   validateGithubToken,
@@ -238,6 +239,32 @@ describe("project text reader", () => {
     ).rejects.toThrow("entity not found");
     expect(invoke).toHaveBeenCalledWith("read_project_texts", {
       paths: ["interface.json", "missing.json"],
+    });
+  });
+});
+
+describe("virtual display fullscreen orientation", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("requests orientation changes with an explicit flag", async () => {
+    invoke.mockResolvedValue(undefined);
+
+    await expect(setVirtualDisplayLandscape(true)).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith("set_virtual_display_landscape", {
+      enabled: true,
+    });
+  });
+
+  it("propagates an orientation bridge failure", async () => {
+    invoke.mockRejectedValue(new Error("host activity unavailable"));
+
+    await expect(setVirtualDisplayLandscape(false)).rejects.toThrow(
+      "host activity unavailable",
+    );
+    expect(invoke).toHaveBeenCalledWith("set_virtual_display_landscape", {
+      enabled: false,
     });
   });
 });

@@ -1887,6 +1887,26 @@ fn update_virtual_display_pip(request: VirtualDisplayPipRequest) -> Result<(), A
 }
 
 #[tauri::command]
+fn set_virtual_display_landscape(enabled: bool) -> Result<(), AppError> {
+    #[cfg(target_os = "android")]
+    {
+        if call_runtime_bridge_boolean_with_bool("setVirtualDisplayLandscape", enabled)? {
+            Ok(())
+        } else {
+            Err(AppError::Message(
+                "The host activity is unavailable for fullscreen orientation".to_string(),
+            ))
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = enabled;
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn virtual_display_touch(
     display_id: i32,
     action: i32,
@@ -6060,6 +6080,7 @@ pub fn run() {
             stop_virtual_display,
             virtual_display_status,
             virtual_display_stream,
+            set_virtual_display_landscape,
             update_virtual_display_pip,
             virtual_display_touch,
             virtual_display_back,

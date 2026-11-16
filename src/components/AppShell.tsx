@@ -1,5 +1,6 @@
 import { History, Home, ListChecks, Settings } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
+import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import {
   backgroundCardOpacity,
@@ -13,9 +14,19 @@ import { NotificationHost } from "./ui/NotificationHost";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
+  const theme = useAppStore(
+    (state) => state.snapshot?.configuration.theme ?? "system",
+  );
   const backgroundImage = useAppStore(
     (state) => state.snapshot?.configuration.backgroundImage,
   );
+  useEffect(() => {
+    if (theme === "system") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = theme;
+    }
+  }, [theme]);
   const savedCardOpacity = useAppStore(
     (state) => state.snapshot?.configuration.backgroundCardOpacity,
   );

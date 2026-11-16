@@ -1,6 +1,7 @@
 import {
   Download,
   Globe,
+  Palette,
   RefreshCw,
   Settings2,
   Trash2,
@@ -28,7 +29,7 @@ import {
 } from "../lib/language";
 import { activeResource } from "../lib/options";
 
-import type { UiLanguage, UserConfiguration } from "../lib/types";
+import type { ThemeMode, UiLanguage, UserConfiguration } from "../lib/types";
 import { useLogExport } from "../lib/useLogExport";
 import { useAppStore } from "../store/appStore";
 import { useGuideStore } from "../store/guideStore";
@@ -41,6 +42,10 @@ import {
 
 function isUiLanguage(value: string): value is UiLanguage {
   return value === "system" || value === "zh" || value === "en";
+}
+
+function isThemeMode(value: string): value is ThemeMode {
+  return value === "system" || value === "light" || value === "dark";
 }
 
 export function SettingsPage() {
@@ -149,6 +154,29 @@ export function SettingsPage() {
               {t("apply")}
             </button>
           </div>
+        </SettingRow>
+      </section>
+      <section className="space-y-2 rounded-lg border border-line bg-raised p-card">
+        <h2 className="flex items-center gap-2 font-medium">
+          <Palette size="1rem" />
+          {t("displaySettings")}
+        </h2>
+        <SettingRow>
+          <Select
+            items={[
+              { value: "system", label: t("themeSystem") },
+              { value: "light", label: t("themeLight") },
+              { value: "dark", label: t("themeDark") },
+            ]}
+            value={snapshot?.configuration.theme ?? "system"}
+            onValueChange={(value) => {
+              if (!isThemeMode(value)) return;
+              update((configuration) => ({
+                ...configuration,
+                theme: value,
+              }));
+            }}
+          />
         </SettingRow>
       </section>
       {project && snapshot && (

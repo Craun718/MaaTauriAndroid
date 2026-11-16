@@ -40,8 +40,36 @@
   --tt-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* 手动主题：root 属性钉死深浅色；system 时不写属性，交给下面的媒体查询。 */
+:root[data-theme="light"] {
+  --tt-surface: #f5f7fb;
+  --tt-raised: #ffffff;
+  --tt-surface-muted: #e8edf5;
+  --tt-ink: #172033;
+  --tt-ink-muted: #637086;
+  --tt-line: #d7deea;
+  --tt-accent: #0f766e;
+  --tt-on-accent: #ffffff;
+  --tt-danger: #dc2626;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --tt-surface: #101418;
+  --tt-raised: #181f27;
+  --tt-surface-muted: #222b35;
+  --tt-ink: #eef2f7;
+  --tt-ink-muted: #a2adc0;
+  --tt-line: #313d4b;
+  --tt-accent: #34d399;
+  /* 深色下 accent 是浅薄荷绿，勾选标记用白会看不清，改用深色前景。 */
+  --tt-on-accent: #08251f;
+  --tt-danger: #f87171;
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --tt-surface: #101418;
     --tt-raised: #181f27;
     --tt-surface-muted: #222b35;

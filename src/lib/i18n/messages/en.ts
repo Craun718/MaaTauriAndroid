@@ -66,6 +66,7 @@ export const en = {
   controller: "Controller",
   resource: "Resource",
   preset: "Preset",
+  defaultGroup: "Default",
   enabled: "Enabled",
 
   // First-use guide
@@ -333,6 +334,11 @@ export const en = {
   apply: "Apply",
   language: "Language",
   languageSystem: "System",
+  displaySettings: "Display",
+  theme: "Theme",
+  themeSystem: "Follow system",
+  themeLight: "Light",
+  themeDark: "Dark",
   languageChinese: "简体中文",
   languageEnglish: "English",
   projectDirectory: "Project directory",

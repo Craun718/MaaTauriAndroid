@@ -30,6 +30,12 @@ export interface BackgroundImage {
 export type UiLanguage = "system" | "zh" | "en";
 
 /**
+ * Interface theme. "system" follows the OS `prefers-color-scheme`;
+ * "light" / "dark" pin the palette explicitly via a root attribute.
+ */
+export type ThemeMode = "system" | "light" | "dark";
+
+/**
  * What the user configured. There is no controller field: Android can only drive
  * its own native control unit, so the controller is a property of the platform
  * (see `activeController` in `lib/options.ts`), not a per-user choice.
@@ -53,6 +59,7 @@ export interface UserConfiguration {
   pipOnHome?: boolean;
   debugMode?: boolean;
   uiLanguage?: UiLanguage;
+  theme?: ThemeMode;
   activeResource?: string;
   pretaskValues: Record<string, import("./project").ConfiguredPretask>;
   globalOptionValues: Record<string, OptionValue>;

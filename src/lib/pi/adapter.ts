@@ -623,6 +623,7 @@ export async function buildAndroidProject(
         name: presetName,
         label: localizeText(item.label) ?? presetName,
         description: localizeText(item.description),
+        group: optionalString(item.group),
         tasks: array(item.task)
           .map((task) => parseTemplateTask(task, localizeText, options))
           .filter((task): task is TemplateTask => task !== undefined),

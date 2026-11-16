@@ -43,6 +43,19 @@ it("filters presets by the Android controller", async () => {
   ]);
 });
 
+it("parses preset groups", async () => {
+  const input = source();
+  input.document.preset = [
+    { name: "grouped", group: "daily" },
+    { name: "plain" },
+  ];
+  const project = await buildAndroidProject(input, "en_us", reader);
+  expect(project.presets.map((preset) => preset.group)).toEqual([
+    "daily",
+    undefined,
+  ]);
+});
+
 it("loads directory input fields", async () => {
   const input = source();
   input.document.option = {

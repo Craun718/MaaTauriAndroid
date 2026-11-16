@@ -164,6 +164,8 @@ export interface ConfigurationTemplate {
   name: string;
   label: string;
   description?: string;
+  /** Optional interface group that owns this preset. */
+  group?: string;
   tasks: TemplateTask[];
   /** Omitted preserves settings; an empty list disables every pre-task. */
   pretasks?: TemplatePretask[];

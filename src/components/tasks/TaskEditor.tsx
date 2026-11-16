@@ -22,9 +22,9 @@ import {
   optionValueSummary,
   visibleOptions,
 } from "../../lib/options";
+import { type PresetGroup, presetGroups } from "../../lib/presetGroups";
 import type { TaskEdit } from "../../lib/taskEditing";
 import type {
-  ConfigurationTemplate,
   ConfiguredTask,
   OptionValue,
   Project,
@@ -64,6 +64,7 @@ export function TaskEditor({
 }): ReactElement {
   const { t } = useTranslation();
   const [selectedPreset, setSelectedPreset] = useState<string>();
+  const [selectedGroup, setSelectedGroup] = useState<string>();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
@@ -100,7 +101,13 @@ export function TaskEditor({
         <section className="space-y-2">
           <h2 className="font-medium">{t("presets")}</h2>
           <PresetPicker
-            presets={project.presets}
+            groups={presetGroups(
+              project.presets,
+              project.groups,
+              t("defaultGroup"),
+            )}
+            selectedGroup={selectedGroup}
+            onGroupChange={setSelectedGroup}
             value={selectedPreset}
             onValueChange={setSelectedPreset}
             onApply={onApplyPreset}
@@ -280,23 +287,43 @@ function ResourcePicker({
  * `value` 不匹配任何预设（如项目刚加载）时回落到第一个预设。
  */
 function PresetPicker({
-  presets,
+  groups,
+  selectedGroup,
+  onGroupChange,
   value,
   onValueChange,
   onApply,
   applyLabel,
   disabled = false,
 }: {
-  presets: ConfigurationTemplate[];
+  groups: PresetGroup[];
+  selectedGroup?: string;
+  onGroupChange: (name: string) => void;
   value?: string;
   onValueChange: (name: string) => void;
   onApply: (name: string) => void;
   applyLabel: string;
   disabled?: boolean;
 }) {
+  const activeGroup =
+    groups.find((group) => group.name === selectedGroup) ?? groups[0];
+  const presets = activeGroup?.presets ?? [];
   const active = presets.find((preset) => preset.name === value) ?? presets[0];
   return (
     <div className="space-y-2">
+      {groups.length > 1 && (
+        <Tabs
+          items={groups.map((group) => ({
+            value: group.name,
+            label: group.label,
+            content: null,
+          }))}
+          value={activeGroup?.name}
+          onValueChange={onGroupChange}
+          disabled={disabled}
+          ariaLabel={applyLabel}
+        />
+      )}
       <div className="flex gap-2">
         <Select
           className="min-w-0 flex-1"
@@ -307,19 +334,19 @@ function PresetPicker({
             value: preset.name,
             label: preset.label,
           }))}
-          value={active.name}
+          value={active?.name}
           onValueChange={onValueChange}
         />
         <button
           type="button"
-          onClick={() => onApply(active.name)}
-          disabled={disabled}
+          onClick={() => active && onApply(active.name)}
+          disabled={disabled || !active}
           className="h-9 shrink-0 rounded-md bg-accent px-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-50"
         >
           {applyLabel}
         </button>
       </div>
-      <RichDescription text={active.description} />
+      <RichDescription text={active?.description} />
     </div>
   );
 }

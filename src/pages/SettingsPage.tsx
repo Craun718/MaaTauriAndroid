@@ -283,46 +283,6 @@ export function SettingsPage() {
               : t("importConfiguration")}
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            disabled={busy || saving || restartPending || cleaning || !snapshot}
-            onClick={async () => {
-              const confirmed = window.confirm(t("deleteRunsConfirm"));
-              if (!confirmed) return;
-              setCleaning(true);
-              try {
-                const result = await clearDiagnosticData();
-                notify(t("deletedRuns", { count: result.deletedRunCount }));
-                // The restart re-arms the app log file handle that survives a
-                // plain deletion; a failed restart still leaves the cleanup done.
-                await restartApp();
-              } catch (error) {
-                notify(error instanceof Error ? error.message : String(error), {
-                  tone: "error",
-                });
-              } finally {
-                setCleaning(false);
-              }
-            }}
-            className="flex h-9 items-center justify-center gap-2 rounded-md border border-red-300 px-2.5 font-semibold text-red-600 disabled:opacity-50"
-          >
-            <Trash2 size="1rem" />
-            {cleaning ? t("deleting") : t("deleteRuns")}
-          </button>
-          <button
-            type="button"
-            data-guide-target="settings-export-logs"
-            disabled={exporting}
-            onClick={() => {
-              void exportLogs();
-            }}
-            className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
-          >
-            <Download size="1rem" />
-            {exporting ? t("exportingLogs") : t("exportLogs")}
-          </button>
-        </div>
         <button
           type="button"
           disabled={
@@ -515,6 +475,46 @@ export function SettingsPage() {
               })();
             }}
           />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={busy || saving || restartPending || cleaning || !snapshot}
+            onClick={async () => {
+              const confirmed = window.confirm(t("deleteRunsConfirm"));
+              if (!confirmed) return;
+              setCleaning(true);
+              try {
+                const result = await clearDiagnosticData();
+                notify(t("deletedRuns", { count: result.deletedRunCount }));
+                // The restart re-arms the app log file handle that survives a
+                // plain deletion; a failed restart still leaves the cleanup done.
+                await restartApp();
+              } catch (error) {
+                notify(error instanceof Error ? error.message : String(error), {
+                  tone: "error",
+                });
+              } finally {
+                setCleaning(false);
+              }
+            }}
+            className="flex h-9 items-center justify-center gap-2 rounded-md border border-red-300 px-2.5 font-semibold text-red-600 disabled:opacity-50"
+          >
+            <Trash2 size="1rem" />
+            {cleaning ? t("deleting") : t("deleteRuns")}
+          </button>
+          <button
+            type="button"
+            data-guide-target="settings-export-logs"
+            disabled={exporting}
+            onClick={() => {
+              void exportLogs();
+            }}
+            className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+          >
+            <Download size="1rem" />
+            {exporting ? t("exportingLogs") : t("exportLogs")}
+          </button>
         </div>
       </section>
       {project?.metadata.telemetry?.dsn && (

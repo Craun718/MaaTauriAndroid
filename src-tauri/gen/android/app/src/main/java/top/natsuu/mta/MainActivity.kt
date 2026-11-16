@@ -82,7 +82,6 @@ class MainActivity : TauriActivity() {
 
   override fun onDestroy() {
     pipController.destroy()
-    RuntimeBridge.setVirtualDisplayLandscape(false)
     RuntimeBridge.detachActivity(this)
     if (!RunForegroundService.isRunning) {
       RuntimeBridge.stopVirtualDisplay()

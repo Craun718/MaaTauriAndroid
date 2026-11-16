@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.app.ActivityManager
 import android.app.Activity
-import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -357,33 +356,6 @@ object RuntimeBridge {
             Runtime.getRuntime().exit(0)
         }
         return true
-    }
-
-    @JvmStatic
-    fun setVirtualDisplayLandscape(enabled: Boolean): Boolean {
-        val activity = hostActivity?.get() ?: return false
-        val targetOrientation = if (enabled) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        }
-        logDebug(
-            "Virtual display orientation requested: enabled=$enabled, " +
-                "current=${activity.requestedOrientation}, target=$targetOrientation",
-        )
-        return runCatching {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                activity.requestedOrientation = targetOrientation
-            } else {
-                mainHandler.post {
-                    activity.requestedOrientation = targetOrientation
-                    logDebug(
-                        "Virtual display orientation posted: enabled=$enabled",
-                    )
-                }
-            }
-            true
-        }.getOrDefault(false)
     }
 
     @JvmStatic

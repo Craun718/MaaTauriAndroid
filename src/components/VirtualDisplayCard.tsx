@@ -19,15 +19,11 @@ import { createPortal } from "react-dom";
 import {
   getVirtualDisplayStatus,
   pressVirtualDisplayBack,
-  setVirtualDisplayLandscape,
   stopRun,
   stopVirtualDisplay,
   updateVirtualDisplayPip,
 } from "../lib/api";
-import {
-  reportFrontendDebug,
-  reportFrontendError,
-} from "../lib/frontendLogging";
+import { reportFrontendError } from "../lib/frontendLogging";
 import { useTranslation } from "../lib/i18n";
 import type { VirtualDisplayStatus } from "../lib/types";
 import { pipEligible, pipSourceRect } from "../lib/virtualDisplayPip";
@@ -214,51 +210,6 @@ export function VirtualDisplayCard({
         leaveFullscreen,
       );
   }, []);
-
-  useEffect(() => {
-    if (!fullscreen || status?.active !== true) return;
-
-    let disposed = false;
-    const portrait = status.height > status.width;
-    const landscape = !portrait;
-    reportFrontendDebug("Virtual display fullscreen orientation requested", {
-      landscape,
-      displayId: status.displayId,
-      width: status.width,
-      height: status.height,
-    });
-    setVirtualDisplayLandscape(landscape).catch((error) => {
-      reportFrontendError(
-        "Virtual display fullscreen orientation request failed",
-        error,
-        { landscape },
-      );
-    });
-
-    return () => {
-      if (disposed) return;
-      disposed = true;
-      void setVirtualDisplayLandscape(false)
-        .then(() => {
-          reportFrontendDebug(
-            "Virtual display fullscreen orientation restored",
-            { portrait: true },
-          );
-        })
-        .catch((error) => {
-          reportFrontendError(
-            "Virtual display fullscreen orientation restore failed",
-            error,
-          );
-        });
-    };
-  }, [
-    fullscreen,
-    status?.active,
-    status?.displayId,
-    status?.width,
-    status?.height,
-  ]);
 
   async function stopDisplay() {
     if (actionPending) return;

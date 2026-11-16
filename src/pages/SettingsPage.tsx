@@ -311,21 +311,25 @@ export function SettingsPage() {
               : t("importConfiguration")}
           </button>
         </div>
-        <button
-          type="button"
-          disabled={
-            busy || saving || restartPending || reinstalling || !snapshot
-          }
-          onClick={async () => {
-            setReinstalling(true);
-            await reinstallResources();
-            setReinstalling(false);
-          }}
-          className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
-        >
-          <RefreshCw size="1rem" />
-          {reinstalling ? t("reinstallingResources") : t("reinstallResources")}
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={
+              busy || saving || restartPending || reinstalling || !snapshot
+            }
+            onClick={async () => {
+              setReinstalling(true);
+              await reinstallResources();
+              setReinstalling(false);
+            }}
+            className="flex h-9 items-center justify-center gap-2 rounded-md border border-line px-2.5 font-semibold disabled:opacity-50"
+          >
+            <RefreshCw size="1rem" />
+            {reinstalling
+              ? t("reinstallingResources")
+              : t("reinstallResources")}
+          </button>
+        </div>
       </section>
       <CustomBackgroundCard restartPending={restartPending} />
       <section className="space-y-2 rounded-lg border border-line bg-raised p-card">

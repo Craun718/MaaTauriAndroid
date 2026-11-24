@@ -81,7 +81,7 @@ NumPy 仍为 2.3.2，StrEnum 仍为 0.4.15。OpenCV 和 ORT 均使用目标 CPyt
 
 ```bash
 python3 scripts/build_agent_core.py \
-  --python-version 3.13.15 --maafw-version 5.15.0 \
+  --python-version 3.13.15 --maafw-version 5.16.0 \
   --work-dir build/agent-core --jobs 2
 
 scripts/build-agent-runtime.sh \
@@ -99,9 +99,11 @@ MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag
 
 | 变量 | 值 | 作用 |
 |:---|:---|:---|
-| `MAAFW_VERSION` | `v5.15.0` | 从 `.maafwversion` 读取的 MaaFramework 原生库版本（`vendor/maa` 与兜底下载） |
+| `MAAFW_VERSION` | `v5.16.0` | 从 `.maafwversion` 读取的 MaaFramework 原生库版本（`vendor/maa` 与兜底下载） |
 | `MAAFW_CORE_REPO` | `Craun718/MaaAgentCoreAndroid` | 预编译 Python 核心的来源 fork |
-| `MAAFW_CORE_TAG` | `agent-core-3.13.15-maafw5.15.0` | 核心版本（对应 MaaFW 5.15.0） |
+| `MAAFW_CORE_TAG` | `agent-core-3.13.15-maafw5.16.0` | 核心版本（对应 MaaFW 5.16.0） |
+
+下载或复用缓存时，组装脚本会按仓库、release tag 和 ABI 对照 `scripts/build_agent_bundle.py` 中固定的 SHA-256，校验通过后才重新解包。如果缓存校验失败，构建会停止；可删除报错所指的归档后重试。更换远程 core 时需同步录入可信的 SHA-256；显式传入 `--core` 的本地产物由调用方自行验证。
 
 对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC，patch 版本间保持兼容。
 

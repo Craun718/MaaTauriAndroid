@@ -12,6 +12,8 @@
 #                 the same input always produces the same archive bytes;
 #               - zip_date_time() takes that timestamp from SOURCE_DATE_EPOCH,
 #                 which scripts/build-resource.py exports from the resource commit.
+#               - fetch_core() verifies the pinned Android core SHA-256 before
+#                 extraction, including when reading from the download cache.
 #             The body also carries plain lint cleanups from ruff.toml
 #             (`select = ["ALL"]`), which are not itemized here, so expect a
 #             `git diff` against upstream to show style changes as well.
@@ -45,6 +47,7 @@ requirements.txt cannot be handed to pip as-is. Three filters apply, each logged
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -59,14 +62,24 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-CORE_REPO = "Aliothmoon/MaaAgentCoreAndroid"
-CORE_TAG = "3.13.15-maafw5.12.3"
+CORE_REPO = "Craun718/MaaAgentCoreAndroid"
+CORE_TAG = "agent-core-3.13.15-maafw5.16.0"
 CORE_PY = "3.13.15"
 CORE_URL = "https://github.com/{repo}/releases/download/{tag}/{asset}"
 CORE_MANIFEST = "agent-core.json"
+# Keep literal release coordinates here so switching the defaults cannot carry
+# a previous release's pins forward.
+CORE_SHA256 = {
+    ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw5.16.0", "arm64-v8a"): (
+        "490b71591f06a5cf03dc9bc838ce7a7d739091c97895b3aa75757af553932df9"
+    ),
+    ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw5.16.0", "x86_64"): (
+        "adb214a6dfca64d712eb2d96b8e8d96ad37573aeb1dcf0901cde92d9b469e273"
+    ),
+}
 ZIP_EPOCH_TIMESTAMP = 315532800
 
-# 下载与解包都落在项目里，跨构建复用
+# 下载落在项目里，跨构建复用；解包只用本次运行的临时目录。
 WORK_DIR = Path(__file__).resolve().parents[1] / ".maafw"
 
 EXTRA_INDEX = "https://chaquo.com/pypi-upstream/"
@@ -237,29 +250,45 @@ def requirement_name(spec: str) -> str:
 # ---------------------------------------------------------------- core
 
 
-def fetch_core(abi: str, repo: str, tag: str, work: Path) -> Path:
-    """下载并解包内核，两步都以 .maafw 里已有的产物为准，不重复拉."""
+def extract_verified_core(archive: Path, expected: str, destination: Path) -> None:
+    """Check the compressed bytes before passing them to the tar parser."""
+    with archive.open("rb") as source:
+        actual = hashlib.file_digest(source, "sha256").hexdigest()
+        if actual != expected:
+            raise SystemExit(f"agent core SHA-256 mismatch for {archive}: expected {expected}, got {actual}")
+        source.seek(0)
+        with tarfile.open(fileobj=source, mode="r:gz") as tar:
+            tar.extractall(destination, filter="tar")
+
+
+def fetch_core(abi: str, repo: str, tag: str, work: Path, stack: list[tempfile.TemporaryDirectory]) -> Path:
+    """Verify a pinned release archive even when reusing a cached download."""
+    expected = CORE_SHA256.get((repo, tag, abi))
+    if expected is None:
+        raise SystemExit(f"no pinned agent core SHA-256 for {repo} / {tag} / {abi}; add a trusted pin or use --core")
+
     asset = f"agent-core-{CORE_PY}-{abi}.tar.gz"
-    archive = work / asset
-    if not archive.is_file() or archive.stat().st_size == 0:
+    # The release filename has no MaaFramework version. Key the cache by the
+    # expected digest so another release of CPython's same version cannot collide.
+    archive = work / f"{expected}-{asset}"
+    # Never reuse an extracted bundle: the archive hash does not cover cached
+    # files after extraction.
+    staging = tempfile.TemporaryDirectory(prefix="agent-core-")
+    stack.append(staging)
+    extracted = Path(staging.name)
+    if archive.is_file() and archive.stat().st_size:
+        log(f"cached   {archive.name}")
+        extract_verified_core(archive, expected, extracted)
+    else:
         url = CORE_URL.format(repo=repo, tag=tag, asset=asset)
         log(f"download {url}")
-        part = archive.with_suffix(archive.suffix + ".part")
-        with urllib.request.urlopen(url, timeout=120) as response, part.open("wb") as sink:  # noqa: S310 -- constant https URL
-            shutil.copyfileobj(response, sink)
-        part.replace(archive)
-    else:
-        log(f"cached   {archive.name}")
-
-    # 归档里就是 <abi>/bundle/，各 ABI 天然不撞；重解时只清自己那棵，
-    # 清整个 core-<tag> 会把同目录下另一个 ABI 一起端了
-    extracted = work / f"core-{tag}"
-    bundle = extracted / abi / "bundle"
-    if not (bundle / CORE_MANIFEST).is_file():
-        rmtree(bundle.parent)
-        with tarfile.open(archive) as tar:
-            tar.extractall(extracted, filter="tar")
-    return bundle
+        with tempfile.TemporaryDirectory(prefix=".agent-core-download-", dir=work) as temporary:
+            part = Path(temporary) / asset
+            with urllib.request.urlopen(url, timeout=120) as response, part.open("wb") as sink:  # noqa: S310 -- constant https URL
+                shutil.copyfileobj(response, sink)
+            extract_verified_core(part, expected, extracted)
+            part.replace(archive)
+    return extracted / abi / "bundle"
 
 
 def local_core(value: str, abi: str, stack: list[tempfile.TemporaryDirectory]) -> Path:
@@ -608,7 +637,7 @@ def main() -> int:
     parser.add_argument("--core", help="local core directory or tar.gz instead of downloading")
     parser.add_argument("--core-repo", default=CORE_REPO, help=f"default {CORE_REPO}")
     parser.add_argument("--core-tag", default=CORE_TAG, help=f"default {CORE_TAG}")
-    parser.add_argument("--work", help=f"download and unpack directory, default {WORK_DIR}")
+    parser.add_argument("--work", help=f"download cache and work directory, default {WORK_DIR}")
     args = parser.parse_args()
 
     args.requirement_files = [Path(item).resolve() for item in args.requirements]
@@ -628,7 +657,7 @@ def main() -> int:
             core = (
                 local_core(args.core, abi, staging)
                 if args.core
-                else fetch_core(abi, args.core_repo, args.core_tag, work)
+                else fetch_core(abi, args.core_repo, args.core_tag, work, staging)
             )
             build(core, out, abi, args, work)
     finally:

@@ -5,14 +5,103 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import tarfile
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
-from build_agent_bundle import pack_site_packages
+from build_agent_bundle import CORE_SHA256, fetch_core, pack_site_packages
 from build_agent_core import BuildError, regenerate_records, validate_records
 from build_agent_native import NativeBuildError, patch_once, write_distribution
+
+
+def core_tarball(payload: bytes) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        member = tarfile.TarInfo("arm64-v8a/bundle/agent-core.json")
+        member.size = len(payload)
+        archive.addfile(member, io.BytesIO(payload))
+    return buffer.getvalue()
+
+
+class CoreDownloadTests(unittest.TestCase):
+    """Exercise the integrity check on downloads and existing caches."""
+
+    def setUp(self) -> None:
+        """Create a pinned fixture and use only in-memory HTTP responses."""
+        self.key = ("Example/Core", "fixture-tag", "arm64-v8a")
+        self.archive_bytes = core_tarball(b'{"verified": true}')
+        digest = hashlib.sha256(self.archive_bytes).hexdigest()
+        self.enterContext(mock.patch.dict(CORE_SHA256, {self.key: digest}))
+        self.urlopen = self.enterContext(mock.patch("build_agent_bundle.urllib.request.urlopen"))
+        self.work = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.asset = "agent-core-3.13.15-arm64-v8a.tar.gz"
+        self.archive = self.work / f"{digest}-{self.asset}"
+        self.staging: list[tempfile.TemporaryDirectory] = []
+        self.addCleanup(self._cleanup_staging)
+
+    def _cleanup_staging(self) -> None:
+        for item in self.staging:
+            item.cleanup()
+
+    def _fetch(self) -> Path:
+        repo, tag, abi = self.key
+        return fetch_core(abi, repo, tag, self.work, self.staging)
+
+    def test_verified_download_is_cached(self) -> None:
+        """Only a valid archive may reach the persistent cache."""
+        (self.work / self.asset).write_bytes(core_tarball(b'{"verified": false}'))
+        self.urlopen.return_value = io.BytesIO(self.archive_bytes)
+        bundle = self._fetch()
+        self.assertEqual((bundle / "agent-core.json").read_bytes(), b'{"verified": true}')
+        self.assertEqual(self.archive.read_bytes(), self.archive_bytes)
+        self.urlopen.assert_called_once_with(f"https://github.com/Example/Core/releases/download/fixture-tag/{self.asset}", timeout=120)
+
+    def test_unverified_download_is_not_extracted_or_cached(self) -> None:
+        """A valid tar with different contents must fail before the tar parser."""
+        self.urlopen.return_value = io.BytesIO(core_tarball(b'{"verified": false}'))
+        with mock.patch("build_agent_bundle.tarfile.open") as parser, self.assertRaisesRegex(
+            SystemExit, "agent core SHA-256 mismatch",
+        ):
+            self._fetch()
+        parser.assert_not_called()
+        self.assertEqual(list(self.work.iterdir()), [])
+
+    def test_bad_cache_cannot_reuse_an_existing_extracted_bundle(self) -> None:
+        """A previous extracted manifest cannot bypass a mismatched cached archive."""
+        self.archive.write_bytes(core_tarball(b'{"verified": false}'))
+        legacy = self.work / "core-fixture-tag/arm64-v8a/bundle"
+        legacy.mkdir(parents=True)
+        (legacy / "agent-core.json").write_bytes(b'{"verified": true}')
+        with mock.patch("build_agent_bundle.tarfile.open") as parser, self.assertRaisesRegex(
+            SystemExit, "agent core SHA-256 mismatch",
+        ):
+            self._fetch()
+        parser.assert_not_called()
+        self.urlopen.assert_not_called()
+
+    def test_good_cache_is_extracted_again(self) -> None:
+        """Only verified archives, not their previously extracted files, are reused."""
+        self.archive.write_bytes(self.archive_bytes)
+        legacy = self.work / "core-fixture-tag/arm64-v8a/bundle"
+        legacy.mkdir(parents=True)
+        (legacy / "agent-core.json").write_bytes(b'{"verified": false}')
+        bundle = self._fetch()
+        self.assertEqual((bundle / "agent-core.json").read_bytes(), b'{"verified": true}')
+        self.urlopen.assert_not_called()
+
+    def test_unpinned_remote_is_rejected(self) -> None:
+        """Changing any of the release coordinates cannot inherit a trusted pin."""
+        self.archive.write_bytes(self.archive_bytes)
+        repo, tag, abi = self.key
+        for other_abi, other_repo, other_tag in ((abi, "Other/Core", tag), (abi, repo, "other-tag"), ("x86_64", repo, tag)):
+            with self.assertRaisesRegex(SystemExit, "no pinned agent core SHA-256"):
+                fetch_core(other_abi, other_repo, other_tag, self.work, self.staging)
+        self.urlopen.assert_not_called()
 
 
 class NativePackagingTests(unittest.TestCase):

@@ -32,12 +32,12 @@
 ```bash
 scripts/setup.sh                              # MaaFramework 原生库
 python3 scripts/build-resource.py \
-  https://github.com/MAA1999/M9A.git \
-  --id m9a --ref f4640501729562a7106a39bdad48274c6c8ba424 \
-  --submodules --exclude pillow --require pillow==11.0.0
+  "$RESOURCE_REPO_URL" \
+  --id my_project --ref "$RESOURCE_REF" \
+  --submodules
 ```
 
-`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本；传 `--skip-runtime` 时会在 PI 准备和 MaaFramework 下载后停止，供编译型 agent 自己构建。资源目录和 Python runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，内置 profile 会通过 `{abi}` 自动解析。`build-agent-runtime.sh` 本身继续保持通用：`--project-dir` 与 `--out` 必填，其余参数都有默认值（`--help` 查看完整说明）。仓库内置项目的完整调用参数见下文「仓库内置项目的构建参数」。
+`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本；传 `--skip-runtime` 时会在 PI 准备和 MaaFramework 下载后停止，供编译型 agent 自己构建。资源目录和 Python runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，配方里的 `{abi}` 占位符会解析为目标 ABI。`build-agent-runtime.sh` 的 `--project-dir` 与 `--out` 必填；其余选项见 `--help`。上例中的 `RESOURCE_REPO_URL` 和 `RESOURCE_REF` 应设置为你的资源仓库 URL 和分支、标签或提交。
 
 没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
 
@@ -52,7 +52,7 @@ python3 scripts/build-resource.py \
 
 `--reuse-runtime-zip` 只用于已有 runtime 产物的 profile；没有 agent 时不要传它。`build_apk.py` 的旧选项 `--skip-runtime` 仍保留为隐藏兼容别名，新调用应使用 `--reuse-runtime-zip`。`build-resource.py` 的 `--skip-runtime` 是另一个语义：它让资源准备在 Python runtime 打包前停止，供编译型 agent 自己构建。
 
-runtime ZIP 是构建产物，不进 git——CI 每次重新构建。Python 项目的本地构建保持 `<项目>-agent-runtime-<abi>.zip` 这个名字（profile 的 `bundle` 按它解析）；CI 在上传前会把它改名为 `<项目>-agent-runtime-<abi>-<7 位 commit hash>.zip`，APK 同理，便于把下载到的包对应回具体提交。MaaEnd 是双编译型 agent 例外：CI 上传一个 `maaend-agent-runtime-<abi>-<hash>` artifact，其中包含 `maaend-go-service-runtime-<abi>-<hash>.zip` 和 `maaend-cpp-algo-runtime-<abi>-<hash>.zip` 两个 bundle。
+runtime ZIP 是构建产物，不提交到 Git。配方的 `bundle` 应指向本次打包实际使用的文件，例如 `<项目>-agent-runtime-<abi>.zip`。
 
 ## 流水线三步
 
@@ -107,20 +107,7 @@ MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag
 
 对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC；v6.0.0-beta.3 使用协议 9，不要与 5.x 的库混用。组装时会在安装依赖前核对 core 清单的 ABI 和版本；Git tag `v6.0.0-beta.3` 与 Python 版本 `6.0.0b3` 视作同版。
 
-上述预编译 core 不含 ORT；资源 APK 的 CI 下载对应 ABI 的 core，maapvz 的 `--exclude onnxruntime` 保持不变。使用新库时，通过 `--core` 传入新产物，或发布新 core 后再更新 tag。新 core 已提供 ORT 时，requirements 中的排除参数不会删除 core 自带的副本。
-
-## 仓库内置项目的构建参数
-
-各资源只差 `requirements.txt` 与排除/重钉列表。URL、ref 和 runtime 参数由 CI 调用 `scripts/build-resource.py` 时传入；PI 组装由 `scripts/prepare-pi.py` 自动适配：
-
-| 项目 | 重钉 | 排除 |
-|:---|:---|:---|
-| m9a | `pillow==11.0.0` | `pillow` |
-| narutomobile | `pillow==11.0.0` | `pillow` `win32-setctime` `colorama` `jeepney` |
-| maapvz | `pillow==11.0.0` | `pillow` `win32-setctime` `colorama` `jeepney` `onnxruntime` |
-| maaend | 不适用 | 不适用；上游脚本交叉编译 `go-service` 与 `cpp-algo` |
-
-模式是统一的：先排除依赖解析默认选中的版本，再用 `--require` 钉回 Chaquopy 索引上有 Android 轮子的版本（桌面 PyPI 上的 pillow 没有 arm64 Android 轮子）；纯桌面依赖直接剪掉。
+默认预编译 core 不含 Python `onnxruntime`。资源项目确实需要它时，可通过 `--core` 提供带 Android 对应实现的 core，或发布新 core 后更新 tag。
 
 ### `--exclude` 的替换语义与当前限制
 
@@ -146,10 +133,6 @@ core 自带库的替换目前还有限制：
 4. 按最终选择复制组件、安装其他依赖并更新 runtime 清单；共享依赖按所有已选组件的需求保留。
 
 例如，项目声明了 `onnxruntime`，同时传入 `--exclude onnxruntime`，且 core 提供 Android ORT 时，应保留 ORT 的需求并选择 core 实现。OpenCV 的 `opencv-python` / `opencv-python-headless` 名称应归一到同一个组件；ORT 的 Python 依赖和 `libc++_shared.so` 应按依赖关系保留，不能因为移除某个组件而删掉其他组件仍需要的文件。
-
-### MaaEnd 例外
-
-MaaEnd `v2.32.0`（commit `5501b27f3b3f552e8897a8839521dd36caf617a9`）有两个编译型 agent。CI 先用 `build-resource.py --submodules --prepare ... --skip-runtime` 组装 PI，并把 `AndroidOpenGame` 插到 `DailyFull` / `QuickDaily` / `RealtimeAssist` 三个预设首位；随后按上游 `tools/build_android_agents.py` 交叉编译，再用 `scripts/pack_compiled_agent.py` 分别产出两个 ZIP。两个 ZIP 与 `interface.json` 的 agent 顺序一一对应，不能合成一个 bundle，否则 APK 会把同一份 agent 负载重复打包两次。
 
 ## 给下游：为自己的资源构建
 

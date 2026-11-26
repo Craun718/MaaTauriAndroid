@@ -37,7 +37,7 @@ jobs:
               - 'scripts/prepare-pi.py'
               - 'scripts/prepare-maaend.py'
               - 'scripts/pack_compiled_agent.py'
-              - 'scripts/build-agent-runtime.sh'
+              - 'scripts/build-agent-runtime.py'
               - 'scripts/build_agent_bundle.py'
               - 'scripts/agent_runtime_versions.py'
               - 'scripts/fetch-maafw.sh'
@@ -200,7 +200,7 @@ jobs:
     env:
       # The Python agent runtime is built by the vendored script
       # scripts/build_agent_bundle.py (AGPL-3.0, from MaaFwApp);
-      # MAAFW_CORE_REPO defaults to scripts/env.sh.
+      # MAAFW_CORE_REPO defaults to the repository in build_agent_bundle.py.
       MAAFW_CORE_TAG: agent-core-3.13.15-maafw6.0.0b3
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
@@ -256,12 +256,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .cache/maafw
-          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.py') }}
       - name: Cache the M9A Python dependencies
         uses: actions/cache@v6
         with:
           path: .cache/pip
-          key: m9a-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: m9a-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.py') }}
       # Pin the debug keystore. Without this every run generates a fresh one, so
       # each APK is signed with a different key: `adb install -r` then fails with
       # INSTALL_FAILED_UPDATE_INCOMPATIBLE and verifying a build on a device
@@ -426,12 +426,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .cache/maafw
-          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.py') }}
       - name: Cache the NarutoMobile Python dependencies
         uses: actions/cache@v6
         with:
           path: .cache/pip
-          key: narutomobile-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: narutomobile-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.py') }}
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6
@@ -569,12 +569,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .cache/maafw
-          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: agent-downloads-${{ env.ANDROID_ABI }}-${{ env.MAAFW_CORE_TAG }}-${{ env.MAAFW_VERSION }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.py') }}
       - name: Cache the MAAPVZ Python dependencies
         uses: actions/cache@v6
         with:
           path: .cache/pip
-          key: maapvz-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.sh') }}
+          key: maapvz-agent-wheels-${{ env.ANDROID_ABI }}-${{ steps.resource_release.outputs.ref }}-${{ env.MAAFW_CORE_TAG }}-${{ hashFiles('scripts/build_agent_bundle.py', 'scripts/build-agent-runtime.py') }}
 
       - name: Cache the Android debug keystore
         uses: actions/cache@v6

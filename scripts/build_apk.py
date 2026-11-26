@@ -100,25 +100,6 @@ def ensure_rust_target(target: str) -> None:
     subprocess.run(["rustup", "target", "add", target], check=True)
 
 
-def load_env() -> None:
-    env_sh = REPO_ROOT / "scripts" / "env.sh"
-    if not env_sh.is_file():
-        return
-    result = subprocess.run(
-        ["bash", "-c", 'set -a; source "$1" && env', "bash", str(env_sh)],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-        check=False,
-    )
-    if result.returncode != 0:
-        die(f"failed to source {env_sh}")
-    for line in result.stdout.splitlines():
-        key, _, value = line.partition("=")
-        if key in ("MAAFW_VERSION", "MAAFW_CORE_REPO", "MAAFW_CORE_TAG"):
-            os.environ.setdefault(key, value)
-
-
 def build(args: argparse.Namespace) -> None:
     if args.abi not in ABIS:
         die(f"unsupported ABI: {args.abi}")
@@ -198,7 +179,7 @@ def build(args: argparse.Namespace) -> None:
         log(f"==> [2/4] Building agent runtime ({args.abi})…")
         run(["python3", str(REPO_ROOT / "scripts" / "prepare-pi.py"), str(project_dir)])
         runtime_cmd = [
-            "bash", str(REPO_ROOT / "scripts" / "build-agent-runtime.sh"),
+            sys.executable, str(REPO_ROOT / "scripts" / "build-agent-runtime.py"),
             "--project-dir", str(project_dir),
             "--out", str(runtime_zip),
             "--abi", args.abi,
@@ -292,11 +273,10 @@ def main() -> None:
         "--use-prebuilt-core", action="store_true",
         help="Download the prebuilt agent core instead of compiling from source",
     )
-    parser.add_argument("--exclude", action="append", default=[], metavar="PKG", help="Pass to build-agent-runtime.sh")
-    parser.add_argument("--require", action="append", default=[], metavar="SPEC", help="Pass to build-agent-runtime.sh")
+    parser.add_argument("--exclude", action="append", default=[], metavar="PKG", help="Pass to build-agent-runtime.py")
+    parser.add_argument("--require", action="append", default=[], metavar="SPEC", help="Pass to build-agent-runtime.py")
     args = parser.parse_args()
 
-    load_env()
     build(args)
 
 

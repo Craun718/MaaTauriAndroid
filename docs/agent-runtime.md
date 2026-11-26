@@ -32,14 +32,14 @@
 从 MaaTauriAndroid 仓库根目录运行：
 
 ```bash
-scripts/build-agent-runtime.sh \
+python3 scripts/build-agent-runtime.py \
   --project-dir "/path/to/your/resource" \
   --out "/path/to/your/resource-agent-runtime-arm64-v8a.zip"
 ```
 
 把两个示例路径分别替换成你的资源目录和 ZIP 输出位置。脚本使用资源目录里的 `requirements.txt`；文件在别处时用 `--requirements` 指定。如果没有额外 Python 依赖，传一个空的 requirements 文件即可。这个脚本只组装 runtime，不克隆资源，也不修改 `interface.json`。
 
-默认目标是 `arm64-v8a`。如需 `x86_64`，加 `--abi x86_64`，并让 ZIP 文件名、配方中的 `{abi}` 和 APK 的目标架构一致。其他参数见 `scripts/build-agent-runtime.sh --help`。
+默认目标是 `arm64-v8a`。如需 `x86_64`，加 `--abi x86_64`，并让 ZIP 文件名、配方中的 `{abi}` 和 APK 的目标架构一致。其他参数见 `python3 scripts/build-agent-runtime.py --help`。
 
 把产出的 ZIP 填到配方的 `[[agent.runtimes]].bundle`；每个 agent 对应一个 ZIP，按 `interface.json` 中的声明顺序填写。ZIP 不提交到 Git。配方与 APK 命令见[资源接入](resource-packaging.md)。如果直接用 Tauri/Gradle 出包，先用 `scripts/setup.sh` 下载与目标 ABI 对应的 APK 原生库；下面的 `build_apk.py` 会自己准备原生库。
 
@@ -78,7 +78,7 @@ python3 scripts/build-resource.py \
 
 ## 流水线三步
 
-`scripts/build-agent-runtime.sh` 做三件事：
+`scripts/build-agent-runtime.py` 做三件事：
 
 1. **组装 Python 核心 + site-packages**：仓库内 `scripts/build_agent_bundle.py`（vendored 自 MaaFwApp，AGPL-3.0，来源 commit 见文件头；升级脚本时手动同步副本并同步头注释）从 MaaAgentCoreAndroid 的 release 下载预编译核心（CPython + 标准库 + `maa` 包，仓库与版本由 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG` 钉定，缓存在 `.cache/maafw/`），再用资源项目自己的 `requirements.txt` 装依赖——Android 轮子来自 Chaquopy 索引（`--extra-index-url https://chaquo.com/pypi-13.1/`），装完剪掉排除列表里的包，纯 Python 的收进 `pure.zip`。
 2. **备 agent 库**：仅当 `vendor/maa/android/<abi>/.maafw-version` 与 `MAAFW_VERSION` 一致且两个库均存在时，复用其中的 `libMaaAgentClient.so` / `libMaaAgentServer.so`；否则使用该版本的缓存或从 MaaFramework release 下载对应架构。直接用 Tauri/Gradle 构建 APK 前，使用 `scripts/setup.sh <abi>` 准备配套的壳内原生库。
@@ -106,7 +106,7 @@ python3 scripts/build_agent_core.py \
   --python-version 3.13.15 --maafw-version 6.0.0b3 \
   --work-dir build/agent-core --jobs 2
 
-scripts/build-agent-runtime.sh \
+python3 scripts/build-agent-runtime.py \
   --project-dir "/path/to/your/resource" --out /tmp/agent-runtime.zip \
   --core build/agent-core/dist/agent-core-3.13.15-arm64-v8a.tar.gz
 ```
@@ -117,7 +117,7 @@ core 的 `provides` 会声明这两者及 ORT 的依赖，runtime 组装会跳�
 
 ### 下载预编译 core
 
-MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag），`scripts/env.sh`、Rust 构建和资源 APK CI 共用该文件。预编译 core 的来源和 tag 仍配置在 `scripts/env.sh`（CI 中的 core tag 需同步）。独立组装 runtime 时可用同名环境变量选用另一套相互匹配的版本；MTA 自身的 APK 构建要求原生包匹配 `.maafwversion` 中与 Rust 绑定配套的版本：
+MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag），`scripts/env.sh`、Rust 构建和资源 APK CI 共用该文件。预编译 core 的默认来源和 tag 由 `scripts/build_agent_bundle.py` 定义（CI 中的 core tag 需同步）。独立组装 runtime 时可用同名环境变量选用另一套相互匹配的版本；MTA 自身的 APK 构建要求原生包匹配 `.maafwversion` 中与 Rust 绑定配套的版本：
 
 | 变量 | 值 | 作用 |
 |:---|:---|:---|

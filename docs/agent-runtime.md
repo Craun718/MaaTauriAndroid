@@ -68,9 +68,13 @@ python3 scripts/build-resource.py \
 | 配方没有 `[agent]` | 不准备 runtime |
 | 默认 | 从源码构建 core，再组装 Python runtime |
 | `--use-prebuilt-core` | 下载预编译 core，再组装 Python runtime |
-| `--reuse-runtime-zip` | 复用配方中的已有 ZIP，检查 ABI 和版本是否匹配 |
+| `--reuse-runtime-zip` | 复用配方中的所有已有 ZIP，不重新组装 runtime |
 
-编译型 agent 自行打包后也可用 `--reuse-runtime-zip`。`build_apk.py` 的旧参数 `--skip-runtime` 是该选项的兼容别名；它与 CI 脚本里「只准备资源」的 `--skip-runtime` 用途不同。
+默认模式和 `--use-prebuilt-core` 都只组装配方中的第一个 runtime。若配方声明了多个 runtime，先分别准备好所有 ZIP，再用 `--reuse-runtime-zip` 构建 APK。自行打包的编译型 agent 也用这个选项。
+
+复用时会逐个检查 ZIP 是否含目标 ABI 的两个 Maa agent 库。Python ZIP 必须有版本清单；Python ZIP 和带清单的编译型 ZIP 都会核对清单里的 ABI 和 MaaFramework 版本。旧的编译型 ZIP 没有清单，只有 APK 使用带版本标记的标准原生库时，Gradle 才会用 SHA-256 比对 ZIP 内的两个库。新打包的编译型 agent 请用下文的 `pack_compiled_agent.py` 生成带清单的 ZIP。
+
+`build_apk.py` 的旧参数 `--skip-runtime` 是 `--reuse-runtime-zip` 的兼容别名；它与 CI 脚本里「只准备资源」的 `--skip-runtime` 用途不同。
 
 ## 流水线三步
 

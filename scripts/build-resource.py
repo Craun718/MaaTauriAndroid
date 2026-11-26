@@ -152,7 +152,8 @@ def build(arguments: argparse.Namespace, resource_id: str) -> None:
 
     output = REPO_ROOT / "resource" / f"{resource_id}-agent-runtime-{arguments.abi}.zip"
     command = [
-        str(REPO_ROOT / "scripts" / "build-agent-runtime.sh"),
+        sys.executable,
+        str(REPO_ROOT / "scripts" / "build-agent-runtime.py"),
         "--project-dir",
         f"resource/{resource_id}",
         "--out",
@@ -235,7 +236,7 @@ def parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="ARG",
-        help="extra argument passed to scripts/build-agent-runtime.sh; repeatable",
+        help="extra argument passed to scripts/build-agent-runtime.py; repeatable",
     )
     return result
 

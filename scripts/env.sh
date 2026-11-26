@@ -7,5 +7,3 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # MAAFW_VERSION against the version paired with the pinned Rust binding.
 MAAFW_PIN="$(cat "${REPO_ROOT}/.maafwversion")"
 MAAFW_VERSION="${MAAFW_VERSION:-${MAAFW_PIN}}"
-MAAFW_CORE_REPO="${MAAFW_CORE_REPO:-Craun718/MaaAgentCoreAndroid}"
-MAAFW_CORE_TAG="${MAAFW_CORE_TAG:-agent-core-3.13.15-maafw6.0.0b3}"

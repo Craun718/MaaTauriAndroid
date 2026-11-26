@@ -168,7 +168,7 @@ bundle ZIP 有硬性约束，任何语言的 agent 都躲不开：
 用仓库脚本组运行时，不要自己拼一套 CPython。Python 内核来自 MaaAgentCoreAndroid 的预编译 core，本地只叠资源项目的依赖：
 
 ```bash
-scripts/build-agent-runtime.sh \
+python3 scripts/build-agent-runtime.py \
   --project-dir resource/my_project \
   --out resource/my_project-agent-runtime-arm64-v8a.zip \
   --exclude pillow \
@@ -177,7 +177,7 @@ scripts/build-agent-runtime.sh \
 
 这里的 `--exclude pillow` 跳过上游 Pillow 的安装项或版本约束，再由 `--require` 提供 Android 替代版本；不能据此认为项目不需要 Pillow。core 自带库的替换限制，以及尚未实现的按需组件选择，见 [Agent runtime 构建：替换语义与当前限制](agent-runtime.md#--exclude-的替换语义与当前限制)。
 
-组装与打包都走仓库内的通用工具：`scripts/build_agent_bundle.py`（vendored 自 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)，AGPL-3.0，来源 commit 见文件头，许可见 [../../scripts/MAA-FWAPP-LICENSE.md](../scripts/MAA-FWAPP-LICENSE.md)）组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，`src-tauri/profiles/pack_agent_bundle.py` 出 ZIP；`--core-repo` / `--core-tag` 由 `scripts/env.sh` 传入（默认 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)）。
+组装与打包都走仓库内的通用工具：`scripts/build_agent_bundle.py`（vendored 自 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp)，AGPL-3.0，来源 commit 见文件头，许可见 [../../scripts/MAA-FWAPP-LICENSE.md](../scripts/MAA-FWAPP-LICENSE.md)）组装 CPython + 标准库 + `maa` 包 + 资源项目的 `requirements.txt`，`src-tauri/profiles/pack_agent_bundle.py` 出 ZIP；`--core-repo` / `--core-tag` 由 runtime 脚本根据环境变量或默认值传入（默认 [Craun718/MaaAgentCoreAndroid](https://github.com/Craun718/MaaAgentCoreAndroid)）。
 
 `src-tauri/profiles/pack_agent_bundle.py` 是构建 **Python** agent 压缩包的唯一受支持方式：
 

@@ -8,6 +8,9 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -15,8 +18,14 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from agent_runtime_versions import validate_runtime_zip
-from build_agent_bundle import CORE_SHA256, fetch_core, pack_site_packages
+from agent_runtime_versions import AGENT_LIBS, validate_runtime_zip
+from build_agent_bundle import (
+    CORE_PY,
+    CORE_REPO,
+    CORE_SHA256,
+    fetch_core,
+    pack_site_packages,
+)
 from build_agent_core import BuildError, regenerate_records, validate_records
 from build_agent_native import NativeBuildError, patch_once, write_distribution
 
@@ -154,6 +163,82 @@ class RuntimeVersionTests(unittest.TestCase):
         validate_runtime_zip(self.path, "x86_64", "v6.0.0-beta.3")
         with self.assertRaisesRegex(ValueError, "MaaFramework is"):
             validate_runtime_zip(self.path, "x86_64", "v5.16.0")
+
+
+class RuntimeScriptTests(unittest.TestCase):
+    """Run the Python runtime CLI without the network or Android tooling."""
+
+    def setUp(self) -> None:
+        """Create resource and cache paths containing spaces."""
+        self.root = Path(__file__).resolve().parents[1]
+        self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.project = self.scratch / "project folder"
+        self.project.mkdir()
+        self.work = self.scratch / "runtime cache"
+        self.out = self.scratch / "output" / "runtime.zip"
+
+    def _invoke(self, *args: str, **environment: str) -> subprocess.CompletedProcess[str]:
+        def relative_to_checkout(path: Path) -> str:
+            return os.path.relpath(path, self.root)
+
+        return subprocess.run(
+            [
+                sys.executable, str(self.root / "scripts" / "build-agent-runtime.py"),
+                "--project-dir", relative_to_checkout(self.project),
+                "--out", relative_to_checkout(self.out), "--work", relative_to_checkout(self.work),
+                *args,
+            ],
+            cwd=self.scratch,
+            env={**os.environ, **environment},
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+    def test_packages_a_local_core_with_the_matching_abi_and_release(self) -> None:
+        """Honor repeatable exclusions, repo-relative paths and the native cache."""
+        abi, release = "x86_64", "v6.0.0-beta.2"
+        core = self.scratch / "local core"
+        bundle = core / abi / "bundle"
+        (bundle / "bin").mkdir(parents=True)
+        (bundle / "bin" / "python3").write_bytes(b"interpreter")
+        (bundle / "site-packages").mkdir()
+        (bundle / "agent-core.json").write_text(
+            json.dumps({"abi": abi, "python": CORE_PY, "provides": {"maafw": "6.0.0b2"}}), encoding="utf-8",
+        )
+        (self.project / "requirements.txt").write_text("skip-first==1\nskip-second==2\n", encoding="utf-8")
+        cache = self.work / "agent-libs" / release / abi
+        cache.mkdir(parents=True)
+        for name in AGENT_LIBS:
+            (cache / name).write_bytes(name.encode())
+        result = self._invoke(
+            "--abi", abi, "--core", os.path.relpath(core, self.root),
+            "--exclude", "skip-first", "--exclude", "skip-second", "--no-deps",
+            MAAFW_VERSION=release, MAAFW_CORE_REPO="Example/Unpinned", MAAFW_CORE_TAG="unused",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("reusing cached MaaFW agent libraries", result.stdout)
+        self.assertTrue((self.out.parent / "project folder-agent-dist" / abi / "bundle").is_dir())
+        validate_runtime_zip(self.out, abi, release)
+        with zipfile.ZipFile(self.out) as archive:
+            for name in AGENT_LIBS:
+                self.assertEqual(archive.read(f"lib/{abi}/{name}"), name.encode())
+
+    def test_rejects_a_tampered_pinned_download_before_packing(self) -> None:
+        """Environment overrides must go through the existing digest gate."""
+        tag, abi = "agent-core-3.13.15-maafw5.16.0", "arm64-v8a"
+        self.work.mkdir()
+        digest = CORE_SHA256[CORE_REPO, tag, abi]
+        (self.work / f"{digest}-agent-core-{CORE_PY}-{abi}.tar.gz").write_bytes(b"tampered")
+        requirements = self.scratch / "custom requirements.txt"
+        requirements.touch()
+        result = self._invoke(
+            "--requirements", os.path.relpath(requirements, self.root),
+            MAAFW_VERSION="v5.16.0", MAAFW_CORE_REPO=CORE_REPO, MAAFW_CORE_TAG=tag,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("agent core SHA-256 mismatch", result.stderr)
+        self.assertFalse(self.out.exists())
 
 
 class NativePackagingTests(unittest.TestCase):

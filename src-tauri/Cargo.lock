@@ -2192,8 +2192,8 @@ checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
 
 [[package]]
 name = "maa-framework"
-version = "1.29.0"
-source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=f8457ec1ac7a8476ee1a6ab39f20324b6648ea11#f8457ec1ac7a8476ee1a6ab39f20324b6648ea11"
+version = "1.29.1"
+source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=f144527bffb7dc40dd98f48acd769d0257037afc#f144527bffb7dc40dd98f48acd769d0257037afc"
 dependencies = [
  "bitflags 2.13.2",
  "maa-framework-sys",
@@ -2204,8 +2204,8 @@ dependencies = [
 
 [[package]]
 name = "maa-framework-sys"
-version = "5.16.0"
-source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=f8457ec1ac7a8476ee1a6ab39f20324b6648ea11#f8457ec1ac7a8476ee1a6ab39f20324b6648ea11"
+version = "6.0.0-beta.3"
+source = "git+https://github.com/MaaXYZ/maa-framework-rs?rev=f144527bffb7dc40dd98f48acd769d0257037afc#f144527bffb7dc40dd98f48acd769d0257037afc"
 dependencies = [
  "libloading 0.8.9",
  "once_cell",

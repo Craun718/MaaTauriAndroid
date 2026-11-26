@@ -195,7 +195,7 @@ python3 src-tauri/profiles/pack_agent_bundle.py \
 
 它会解引用符号链接、强制非 ZIP64，把两个 `.so` 放进 `lib/<abi>/`，并且额外要求 MaaAgentCoreAndroid bundle 的 `agent-core.json` 标记。
 
-> 注意：原生库版本由根目录 `.maafwversion` 声明（当前为 `v5.16.0`），通过 `MAAFW_VERSION` 传入构建；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `agent-core-3.13.15-maafw5.16.0`，所以 bundle 里的 Python `maa` 包保持 5.16.0，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，该协议在补丁版本之间保持兼容。
+> 注意：原生库版本由根目录 `.maafwversion` 声明（当前为 `v6.0.0-beta.3`），通过 `MAAFW_VERSION` 传入构建；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `agent-core-3.13.15-maafw6.0.0b3`，所以 bundle 里的 Python `maa` 包保持 `6.0.0b3`，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，应使用同版客户端和服务端；MaaFW 6 的协议不能与 5.x 混用。
 
 ### 编译型（C++ / Go / Rust）
 

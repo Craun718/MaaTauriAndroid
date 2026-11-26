@@ -63,13 +63,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 CORE_REPO = "Craun718/MaaAgentCoreAndroid"
-CORE_TAG = "agent-core-3.13.15-maafw5.16.0"
+CORE_TAG = "agent-core-3.13.15-maafw6.0.0b3"
 CORE_PY = "3.13.15"
 CORE_URL = "https://github.com/{repo}/releases/download/{tag}/{asset}"
 CORE_MANIFEST = "agent-core.json"
 # Keep literal release coordinates here so switching the defaults cannot carry
 # a previous release's pins forward.
 CORE_SHA256 = {
+    ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw6.0.0b3", "arm64-v8a"): (
+        "99079108e08160128119247c3fe8546a9a025985881aff2cc72aa1d05ac54208"
+    ),
+    ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw6.0.0b3", "x86_64"): (
+        "a31844252b335c19de9aee715d2302dc73eff06a02a86269b4b148c6a987a403"
+    ),
     ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw5.16.0", "arm64-v8a"): (
         "490b71591f06a5cf03dc9bc838ce7a7d739091c97895b3aa75757af553932df9"
     ),

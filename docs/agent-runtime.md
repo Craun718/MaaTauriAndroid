@@ -20,46 +20,64 @@
     └── libMaaAgentServer.so
 ```
 
-出包时它由配方的 `bundle` 指向，构建进 APK 的 assets；设备上由 `AgentRuntimeManager` 解包到应用私有目录，按 `[[agent.runtimes]]` 拉起子进程。ZIP 有两条硬性约束（`ZipSafety` / `validateAgentBundle` 强制）：
+出包时它由配方的 `bundle` 指向，构建进 APK 的 assets；设备上由 `AgentRuntimeManager` 解包到应用私有目录，按 `[[agent.runtimes]]` 拉起子进程。ZIP 有两条硬性约束（`ZipSafety` / `AgentRuntimeZip` 强制）：
 
 - **不能含符号链接**——打包时解引用成普通文件，解不开的链接直接报错；
 - **不能触发 ZIP64**——条目数上限 0xFFFF，超限直接失败，而不是产出一个设备端打不开的包。
 
-## 一键与分步
+## 已有本地资源：构建 Python runtime
 
-`interface.json` 不声明 agent 时，不需要 runtime ZIP，配方也不要写 `[agent]`。下面所有 runtime 构建步骤都只发生在资源确实声明了 agent 的场景。
+先看资源的 `interface.json`：未声明 `agent` 就不需要 runtime ZIP，配方也不要写 `[agent]`。使用 C++、Go 或 Rust agent 时，见下方「编译型 agent（ELF）」。以下步骤只适用于 Python agent。
+
+从 MaaTauriAndroid 仓库根目录运行：
 
 ```bash
-scripts/setup.sh                              # MaaFramework 原生库
-python3 scripts/build-resource.py \
-  "$RESOURCE_REPO_URL" \
-  --id my_project --ref commit_hash \
-  --submodules
+scripts/build-agent-runtime.sh \
+  --project-dir "/path/to/your/resource" \
+  --out "/path/to/your/resource-agent-runtime-arm64-v8a.zip"
 ```
 
-`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本；传 `--skip-runtime` 时会在 PI 准备和 MaaFramework 下载后停止，供编译型 agent 自己构建。资源目录和 Python runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，配方里的 `{abi}` 占位符会解析为目标 ABI。`build-agent-runtime.sh` 的 `--project-dir` 与 `--out` 必填；其余选项见 `--help`。运行前，把 `RESOURCE_REPO_URL` 设为你的资源仓库 URL，并把 `commit_hash` 替换成该仓库的实际提交哈希。
+把两个示例路径分别替换成你的资源目录和 ZIP 输出位置。脚本使用资源目录里的 `requirements.txt`；文件在别处时用 `--requirements` 指定。如果没有额外 Python 依赖，传一个空的 requirements 文件即可。这个脚本只组装 runtime，不克隆资源，也不修改 `interface.json`。
 
-没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
+默认目标是 `arm64-v8a`。如需 `x86_64`，加 `--abi x86_64`，并让 ZIP 文件名、配方中的 `{abi}` 和 APK 的目标架构一致。其他参数见 `scripts/build-agent-runtime.sh --help`。
 
-`scripts/build_apk.py` 是从已有资源目录到 APK 的半自动构建入口。它按 profile 判断是否需要 runtime：
+把产出的 ZIP 填到配方的 `[[agent.runtimes]].bundle`；每个 agent 对应一个 ZIP，按 `interface.json` 中的声明顺序填写。ZIP 不提交到 Git。配方与 APK 命令见[资源接入](resource-packaging.md)。如果直接用 Tauri/Gradle 出包，先用 `scripts/setup.sh` 下载与目标 ABI 对应的 APK 原生库；下面的 `build_apk.py` 会自己准备原生库。
 
-| profile 配置 | `build_apk.py` 选项 | agent core | runtime ZIP |
-| --- | --- | --- | --- |
-| 没有 `[agent]` / `[[agent.runtimes]]` | 不需要 runtime 选项 | 不构建 | 不准备 |
-| 有 `[agent]` / `[[agent.runtimes]]` | 默认 | 从源码交叉编译 | 用 core 和资源项目的 Python 依赖重新打包 |
-| 有 `[agent]` / `[[agent.runtimes]]` | `--use-prebuilt-core` | 下载预编译产物 | 仍重新打包 |
-| 有 `[agent]` / `[[agent.runtimes]]` | `--reuse-runtime-zip` | 不构建 | 直接复用 profile `bundle` 指向的本地 ZIP，但该 ZIP 必须已存在 |
+## 在 CI 中从 Git 提交构建
 
-`--reuse-runtime-zip` 只用于已有 runtime 产物的 profile；没有 agent 时不要传它。`build_apk.py` 的旧选项 `--skip-runtime` 仍保留为隐藏兼容别名，新调用应使用 `--reuse-runtime-zip`。`build-resource.py` 的 `--skip-runtime` 是另一个语义：它让资源准备在 Python runtime 打包前停止，供编译型 agent 自己构建。
+已有资源目录时跳过本节。`build-resource.py` 只在 GitHub Actions 中运行，用来从同一个提交重建资源和 runtime。它将资源检出到 `resource/<id>`，不会覆盖已有目录；随后下载对应 ABI 的 MaaFramework 原生库、整理 PI，再调用上面的 runtime 脚本。
 
-runtime ZIP 是构建产物，不提交到 Git。配方的 `bundle` 应指向本次打包实际使用的文件，例如 `<项目>-agent-runtime-<abi>.zip`。
+在 workflow 的 `run` 步骤中使用，例如：
+
+```bash
+python3 scripts/build-resource.py \
+  "https://github.com/example/resource.git" \
+  --id my_project --ref commit_hash
+```
+
+把 URL 和 `commit_hash` 换成资源仓库地址与实际提交哈希。默认输出 `resource/my_project-agent-runtime-arm64-v8a.zip`。**只有资源仓库依赖 Git 子模块时才加 `--submodules`**，脚本会递归检出各子模块锁定的提交。它与 Python 依赖安装无关。
+
+如果只准备资源、不构建 Python runtime，例如资源没有 agent，或要自己交叉编译 agent，加 `--skip-runtime`。
+
+## 从本地配方构建 APK
+
+`scripts/build_apk.py` 从已有资源目录和本地配方构建 APK。对 Python agent，可选以下方式：
+
+| 配方或选项 | runtime 处理 |
+| --- | --- |
+| 配方没有 `[agent]` | 不准备 runtime |
+| 默认 | 从源码构建 core，再组装 Python runtime |
+| `--use-prebuilt-core` | 下载预编译 core，再组装 Python runtime |
+| `--reuse-runtime-zip` | 复用配方中的已有 ZIP，检查 ABI 和版本是否匹配 |
+
+编译型 agent 自行打包后也可用 `--reuse-runtime-zip`。`build_apk.py` 的旧参数 `--skip-runtime` 是该选项的兼容别名；它与 CI 脚本里「只准备资源」的 `--skip-runtime` 用途不同。
 
 ## 流水线三步
 
 `scripts/build-agent-runtime.sh` 做三件事：
 
 1. **组装 Python 核心 + site-packages**：仓库内 `scripts/build_agent_bundle.py`（vendored 自 MaaFwApp，AGPL-3.0，来源 commit 见文件头；升级脚本时手动同步副本并同步头注释）从 MaaAgentCoreAndroid 的 release 下载预编译核心（CPython + 标准库 + `maa` 包，仓库与版本由 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG` 钉定，缓存在 `.cache/maafw/`），再用资源项目自己的 `requirements.txt` 装依赖——Android 轮子来自 Chaquopy 索引（`--extra-index-url https://chaquo.com/pypi-13.1/`），装完剪掉排除列表里的包，纯 Python 的收进 `pure.zip`。
-2. **备 agent 库**：仅当 `vendor/maa/android/<abi>/.maafw-version` 与 `MAAFW_VERSION` 一致且两个库均存在时，复用其中的 `libMaaAgentClient.so` / `libMaaAgentServer.so`；否则使用该版本的缓存或从 MaaFramework release 下载对应架构。构建 APK 前仍须通过 `scripts/setup.sh <abi>` 更新壳内原生库，使其与 bundle 对齐。
+2. **备 agent 库**：仅当 `vendor/maa/android/<abi>/.maafw-version` 与 `MAAFW_VERSION` 一致且两个库均存在时，复用其中的 `libMaaAgentClient.so` / `libMaaAgentServer.so`；否则使用该版本的缓存或从 MaaFramework release 下载对应架构。直接用 Tauri/Gradle 构建 APK 前，使用 `scripts/setup.sh <abi>` 准备配套的壳内原生库。
 3. **打包**：`src-tauri/profiles/pack_agent_bundle.py` 把 bundle 目录和两个 `.so` 打成上述约束的 ZIP，并校验 `lib/<abi>/` 里两个 `.so` 齐全。
 
 ## 版本钉定
@@ -85,7 +103,7 @@ python3 scripts/build_agent_core.py \
   --work-dir build/agent-core --jobs 2
 
 scripts/build-agent-runtime.sh \
-  --project-dir <你的资源目录> --out /tmp/agent-runtime.zip \
+  --project-dir "/path/to/your/resource" --out /tmp/agent-runtime.zip \
   --core build/agent-core/dist/agent-core-3.13.15-arm64-v8a.tar.gz
 ```
 
@@ -134,30 +152,13 @@ core 自带库的替换目前还有限制：
 
 例如，项目声明了 `onnxruntime`，同时传入 `--exclude onnxruntime`，且 core 提供 Android ORT 时，应保留 ORT 的需求并选择 core 实现。OpenCV 的 `opencv-python` / `opencv-python-headless` 名称应归一到同一个组件；ORT 的 Python 依赖和 `libc++_shared.so` 应按依赖关系保留，不能因为移除某个组件而删掉其他组件仍需要的文件。
 
-## 给下游：为自己的资源构建
-
-`build-agent-runtime.sh` 对任何资源项目都是直接可用的通用脚本（内部组装与打包分别由 `scripts/build_agent_bundle.py` 和 `src-tauri/profiles/pack_agent_bundle.py` 完成，`--help` 可看全部参数）：
-
-```bash
-scripts/build-agent-runtime.sh \
-  --project-dir <你的资源目录> \
-  --out /tmp/你的-runtime-arm64-v8a.zip \
-  [--requirements <文件>] \
-  [--exclude pkg]... [--require spec]... \
-  [--abi arm64-v8a|x86_64] [--extra-index-url url]... [--work <缓存目录>]
-```
-
-核心（CPython + 标准库 + `maa` 包）默认取 `scripts/env.sh` 钉定的 `MAAFW_CORE_REPO` / `MAAFW_CORE_TAG`，需要对齐壳内 MaaFramework 版本时用同名环境变量覆盖。
-
-然后在配方里把 `[[agent.runtimes]]` 的 `bundle` 指向产出的 ZIP，条数与 PI 的 `agent[]` 一一对应。PI 没声明 agent 时，配方里的 `agent` 整段删掉即可。
-
 ## 编译型 agent（ELF）
 
 `[[agent.runtimes]]` 只声明一个 ZIP（`bundle`）、包内可执行体路径（`exec`）、要标记可执行的文件（`executables`）、命令行（`args`）、工作目录（`working_dir`）与环境（`env`）。Rust 侧每次运行给每个 runtime 起一个 `AgentClient` TCP，端口经 `{identifier}` 占位符传给子进程；Kotlin 侧用 `ProcessBuilder` 直接执行 `exec`。C++ / Go / Rust 单文件 ELF（或二进制 + 共享库）把可执行体放进 bundle 即可，配方写法见 [打包规则与配方说明](resource-packaging.md)。
 
 编译型 agent 的包体约束：
 
-- **包体**：bundle 是普通 ZIP，须满足无符号链接、条目数不超 0xFFFF，且构建期 `validateAgentBundle` 强制包内含 `lib/<abi>/libMaaAgentClient.so` 与 `libMaaAgentServer.so`。子进程真正需要的是 Server 库（链接它，或经 `MAAFW_BINARY_PATH` / `LD_LIBRARY_PATH` 加载）；Client 库只被壳内宿主进程使用，但每个 bundle 仍必须带上。
+- **包体**：bundle 是普通 ZIP，须满足无符号链接、条目数不超 0xFFFF，且构建期 `AgentRuntimeZip` 强制包内含 `lib/<abi>/libMaaAgentClient.so` 与 `libMaaAgentServer.so`。子进程真正需要的是 Server 库（链接它，或经 `MAAFW_BINARY_PATH` / `LD_LIBRARY_PATH` 加载）；Client 库只被壳内宿主进程使用，但每个 bundle 仍必须带上。
 - **打包工具**：优先用 `scripts/pack_compiled_agent.py` 打包单 ELF agent；用普通 `zip` 时自行保证无符号链接、条目数不超 0xFFFF。
 - **通信协议**：子进程必须实现 MaaFW 的 AgentServer 侧，监听 `{identifier}`（TCP 端口）与壳内 `AgentClient` 走 AgentClient/Server IPC。`interface.json` 的 `agent.child_args` 指向入口——ELF 就写包内二进制路径，`agent/` 目录整体随 PI 打包。
 
@@ -193,6 +194,6 @@ python3 scripts/pack_compiled_agent.py \
 如果手写 bundle 目录，出包只需把目录压成 ZIP，`exec` 与 `executables` 指向的文件在设备端会被 `AgentRuntimeManager` 自动标成可执行：
 
 ```bash
-cd <bundle 目录>
+cd "/path/to/bundle"
 zip -r compiled-agent-runtime.zip .
 ```

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import tarfile
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+from agent_runtime_versions import validate_runtime_zip
 from build_agent_bundle import CORE_SHA256, fetch_core, pack_site_packages
 from build_agent_core import BuildError, regenerate_records, validate_records
 from build_agent_native import NativeBuildError, patch_once, write_distribution
@@ -102,6 +104,56 @@ class CoreDownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "no pinned agent core SHA-256"):
                 fetch_core(other_abi, other_repo, other_tag, self.work, self.staging)
         self.urlopen.assert_not_called()
+
+
+class RuntimeVersionTests(unittest.TestCase):
+    """Check Python and compiled runtime ZIP compatibility."""
+
+    def setUp(self) -> None:
+        """Allocate a small asset fixture."""
+        self.path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "runtime.zip"
+
+    def _write_zip(self, extra: dict[str, str], abi: str = "arm64-v8a") -> None:
+        with zipfile.ZipFile(self.path, "w") as archive:
+            for library in ("libMaaAgentClient.so", "libMaaAgentServer.so"):
+                archive.writestr(f"lib/{abi}/{library}", b"test")
+            for name, value in extra.items():
+                archive.writestr(name, value)
+
+    def test_pep440_beta_matches_native_pin(self) -> None:
+        """Python's version syntax must match the corresponding Git release."""
+        self._write_zip({
+            "bin/python3": "",
+            "agent-core.json": json.dumps({"abi": "arm64-v8a", "provides": {"maafw": "6.0.0b3"}}),
+        })
+        validate_runtime_zip(self.path, "arm64-v8a", "v6.0.0-beta.3")
+
+    def test_incompatible_core_metadata_is_not_accepted(self) -> None:
+        """Correct ZIP filenames alone do not prove native/API compatibility."""
+        for abi, release, error in (
+            ("arm64-v8a", "5.16.0", "MaaFramework is"),
+            ("arm64-v8a", "6.0.0b2", "MaaFramework is"),
+            ("x86_64", "6.0.0b3", "ABI is"),
+        ):
+            with self.subTest(abi=abi, release=release):
+                self._write_zip({
+                    "agent-core.json": json.dumps({"abi": abi, "provides": {"maafw": release}}),
+                })
+                with self.assertRaisesRegex(ValueError, error):
+                    validate_runtime_zip(self.path, "arm64-v8a", "v6.0.0-beta.3")
+
+    def test_missing_python_manifest_is_not_a_compiled_runtime(self) -> None:
+        """Removing the Python manifest must not bypass checks."""
+        self._write_zip({"bin/python3": ""})
+        with self.assertRaisesRegex(ValueError, "missing agent-core.json"):
+            validate_runtime_zip(self.path, "arm64-v8a", "v6.0.0-beta.3")
+
+    def test_compiled_manifest_does_not_require_python(self) -> None:
+        """A compiled runtime can use its own version record."""
+        self._write_zip({"agent-runtime.json": '{"abi":"x86_64","maafw":"v6.0.0-beta.3"}'}, abi="x86_64")
+        validate_runtime_zip(self.path, "x86_64", "v6.0.0-beta.3")
+        with self.assertRaisesRegex(ValueError, "MaaFramework is"):
+            validate_runtime_zip(self.path, "x86_64", "v5.16.0")
 
 
 class NativePackagingTests(unittest.TestCase):

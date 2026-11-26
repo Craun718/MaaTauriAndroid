@@ -95,7 +95,7 @@ core 的 `provides` 会声明这两者及 ORT 的依赖，runtime 组装会跳�
 
 ### 下载预编译 core
 
-MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag），`scripts/env.sh`、Rust 构建和资源 APK CI 共用该文件。预编译 core 的来源和 tag 仍配置在 `scripts/env.sh`（CI 中的 core tag 需同步）；均可用同名环境变量覆盖：
+MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag），`scripts/env.sh`、Rust 构建和资源 APK CI 共用该文件。预编译 core 的来源和 tag 仍配置在 `scripts/env.sh`（CI 中的 core tag 需同步）。独立组装 runtime 时可用同名环境变量选用另一套相互匹配的版本；MTA 自身的 APK 构建要求原生包匹配 `.maafwversion` 中与 Rust 绑定配套的版本：
 
 | 变量 | 值 | 作用 |
 |:---|:---|:---|
@@ -105,7 +105,7 @@ MaaFramework 版本集中在仓库根目录 `.maafwversion`（单行 release tag
 
 下载或复用缓存时，组装脚本会按仓库、release tag 和 ABI 对照 `scripts/build_agent_bundle.py` 中固定的 SHA-256，校验通过后才重新解包。如果缓存校验失败，构建会停止；可删除报错所指的归档后重试。更换远程 core 时需同步录入可信的 SHA-256；显式传入 `--core` 的本地产物由调用方自行验证。
 
-对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC；v6.0.0-beta.3 使用协议 9，不要与 5.x 的库混用。
+对齐规则：核心自带的 Python `maa` 包版本**覆盖** `requirements.txt` 里的 `maafw` 钉定，所以升级 MaaFramework 时必须连 `MAAFW_CORE_TAG` 一起换。Python agent 与原生库之间走 AgentClient/Server IPC；v6.0.0-beta.3 使用协议 9，不要与 5.x 的库混用。组装时会在安装依赖前核对 core 清单的 ABI 和版本；Git tag `v6.0.0-beta.3` 与 Python 版本 `6.0.0b3` 视作同版。
 
 上述预编译 core 不含 ORT；资源 APK 的 CI 下载对应 ABI 的 core，maapvz 的 `--exclude onnxruntime` 保持不变。使用新库时，通过 `--core` 传入新产物，或发布新 core 后再更新 tag。新 core 已提供 ORT 时，requirements 中的排除参数不会删除 core 自带的副本。
 

@@ -2,6 +2,11 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env.sh"
 
+if [ "${MAAFW_VERSION}" != "${MAAFW_PIN}" ]; then
+  echo "error: APK MaaFramework must match the Rust binding pin ${MAAFW_PIN}; got ${MAAFW_VERSION}" >&2
+  exit 2
+fi
+
 TMP=""
 trap 'if [ -n "${TMP}" ]; then rm -rf "${TMP}"; fi' EXIT
 

@@ -197,6 +197,8 @@ python3 src-tauri/profiles/pack_agent_bundle.py \
 
 > 注意：原生库版本由根目录 `.maafwversion` 声明（当前为 `v6.0.0-beta.3`），通过 `MAAFW_VERSION` 传入构建；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `agent-core-3.13.15-maafw6.0.0b3`，所以 bundle 里的 Python `maa` 包保持 `6.0.0b3`，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，应使用同版客户端和服务端；MaaFW 6 的协议不能与 5.x 混用。
 
+复用 ZIP 时，APK 构建会核对目标 ABI 与 Python core 清单中的 MaaFramework 版本；不匹配时请重建 ZIP。MTA 的编译型打包器会从标准原生库目录的版本标记写入独立清单，不需要 Python core。若复用不带清单的旧编译型 ZIP，且 APK 使用标准下载的原生库，Gradle 会比对 ZIP 的两份 Agent 动态库；不匹配时请重新打包。
+
 ### 编译型（C++ / Go / Rust）
 
 运行时契约与语言无关。编译型 agent（单文件 ELF，或二进制加共享库）直接把自己的文件放进 ZIP，`exec` 指向 ZIP 内入口，`executables` 列出要标记可执行的文件：

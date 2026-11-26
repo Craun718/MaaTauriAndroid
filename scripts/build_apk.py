@@ -17,6 +17,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from agent_runtime_versions import validate_runtime_zip
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENT_CORE_PY = "3.13.15"
 
@@ -44,16 +46,15 @@ def run(cmd: list[str], **kwargs: object) -> None:
     subprocess.run(cmd, check=True, **kwargs)
 
 
-def read_profile(path: Path) -> tuple[str, str]:
-    """Return (resource_id, bundle_template) from a profile TOML."""
+def read_profile(path: Path) -> tuple[str, list[str]]:
+    """Return the resource ID and all runtime bundle templates."""
     with path.open("rb") as f:
         data = tomllib.load(f)
     resource_id: str = data.get("resource_id", "")
     if not resource_id:
         die(f"{path} does not declare resource_id")
     runtimes: list[dict[str, str]] = data.get("agent", {}).get("runtimes", [])
-    bundle = runtimes[0]["bundle"] if runtimes else ""
-    return resource_id, bundle
+    return resource_id, [runtime["bundle"] for runtime in runtimes]
 
 
 def pick_ndk(android_home: Path) -> Path:
@@ -122,13 +123,17 @@ def build(args: argparse.Namespace) -> None:
     if args.abi not in ABIS:
         die(f"unsupported ABI: {args.abi}")
     rust_target, tauri_target = ABIS[args.abi]
+    pin = (REPO_ROOT / ".maafwversion").read_text(encoding="utf-8").strip()
+    maafw_version = os.environ.get("MAAFW_VERSION") or pin
+    if maafw_version != pin:
+        die(f"APK MaaFramework must match the Rust binding pin {pin}; got {maafw_version}")
 
     profile = args.profile.resolve()
     if not profile.is_file():
         die(f"profile not found: {profile}")
     profile_dir = profile.parent
 
-    resource_id, bundle_template = read_profile(profile)
+    resource_id, bundle_templates = read_profile(profile)
     project_dir = profile_dir / resource_id
     if not project_dir.is_dir():
         die(
@@ -136,10 +141,23 @@ def build(args: argparse.Namespace) -> None:
             "       clone it (and its submodules) first, or point --profile at the right place"
         )
 
-    runtime_zip = profile_dir / bundle_template.replace("{abi}", args.abi) if bundle_template else None
+    runtime_zips = [profile_dir / template.replace("{abi}", args.abi) for template in bundle_templates]
+    runtime_zip = runtime_zips[0] if runtime_zips else None
     args.skip_runtime = args.skip_runtime or args.reuse_runtime_zip
-    if args.skip_runtime and (runtime_zip is None or not runtime_zip.is_file()):
-        die(f"--reuse-runtime-zip requires an existing runtime ZIP at {runtime_zip}")
+    if args.skip_runtime:
+        if not runtime_zips:
+            die("--reuse-runtime-zip requires a runtime bundle in the profile")
+        for path in runtime_zips:
+            if not path.is_file():
+                die(f"--reuse-runtime-zip requires an existing runtime ZIP at {path}")
+            try:
+                validate_runtime_zip(path, args.abi, maafw_version)
+            except ValueError as error:
+                die(str(error))
+
+    for cmd in ["pnpm", "cargo", "python3", "curl", "unzip"]:
+        if not shutil.which(cmd):
+            die(f"{cmd} not found in PATH")
 
     build_mode = detect_build_mode(force_release=args.release, force_debug=args.debug)
     log(f"==> Building {resource_id} ({args.abi}) {build_mode} APK")
@@ -154,7 +172,6 @@ def build(args: argparse.Namespace) -> None:
 
     # --- 1/4 MaaFramework ------------------------------------------------------
 
-    maafw_version = os.environ.get("MAAFW_VERSION", "")
     log(f"==> [1/4] Fetching MaaFramework {maafw_version} ({args.abi})…")
     run([str(REPO_ROOT / "scripts" / "fetch-maafw.sh"), args.abi])
 
@@ -278,10 +295,6 @@ def main() -> None:
     parser.add_argument("--exclude", action="append", default=[], metavar="PKG", help="Pass to build-agent-runtime.sh")
     parser.add_argument("--require", action="append", default=[], metavar="SPEC", help="Pass to build-agent-runtime.sh")
     args = parser.parse_args()
-
-    for cmd in ["pnpm", "cargo", "python3", "curl", "unzip"]:
-        if not shutil.which(cmd):
-            die(f"{cmd} not found in PATH")
 
     load_env()
     build(args)

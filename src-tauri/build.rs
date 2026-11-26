@@ -63,23 +63,33 @@ fn watch_git_history(repo: &Path) {
 
 /// MaaFramework release the Android libraries are vendored from.
 ///
-/// The repository's `.maafwversion` is the single source of truth. The
-/// environment variable wins when set, so CI can build against a different pin.
+/// Android builds must use the release paired with the pinned Rust binding.
+/// Desktop builds may still override version reporting explicitly.
 fn maa_framework_version() -> String {
-    if let Ok(value) = std::env::var("MAAFW_VERSION") {
-        let value = value.trim().to_string();
-        if !value.is_empty() {
-            return value;
-        }
-    }
-
     let version_file = repo_root().join(".maafwversion");
     println!("cargo:rerun-if-changed={}", version_file.display());
-    if let Ok(contents) = std::fs::read_to_string(&version_file) {
-        let version = contents.trim();
-        if !version.is_empty() {
-            return version.to_string();
+    let pin = std::fs::read_to_string(&version_file)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let requested = std::env::var("MAAFW_VERSION")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
+        let pin = pin.expect("Android build requires a version in .maafwversion");
+        if let Some(requested) = requested {
+            assert_eq!(
+                requested, pin,
+                "APK MaaFramework must match the Rust binding pin {pin}; got {requested}"
+            );
         }
+        return pin;
+    }
+
+    if let Some(version) = requested.or(pin) {
+        return version;
     }
 
     // No pin to name: a short hash of the vendored framework binary still tells

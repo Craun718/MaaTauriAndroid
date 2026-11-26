@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import stat
 import sys
@@ -94,6 +95,18 @@ def pack(arguments: argparse.Namespace) -> None:
             info.compress_type = zipfile.ZIP_DEFLATED
             info.compress_level = 9
             archive.writestr(info, source.read_bytes())
+
+        # Custom library directories may not have a marker. Normal MTA
+        # downloads do, so emit their release without a Python manifest.
+        marker = maa_dir / arguments.abi / ".maafw-version"
+        if marker.is_file():
+            info = zipfile.ZipInfo("agent-runtime.json", date_time=zip_date_time())
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            archive.writestr(
+                info,
+                json.dumps({"abi": arguments.abi, "maafw": marker.read_text(encoding="utf-8").strip()}),
+            )
 
     required_names = [name for _, name, _ in entries]
     with zipfile.ZipFile(output) as archive:

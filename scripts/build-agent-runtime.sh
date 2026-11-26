@@ -124,6 +124,7 @@ echo "  1/3  building the Python core + site-packages bundle…"
 python3 "${REPO_ROOT}/scripts/build_agent_bundle.py" \
   --out "${DIST}" \
   --abi "${ABI}" \
+  --expected-maafw "${MAAFW_VERSION}" \
   --requirements "${REQUIREMENTS}" \
   "${EXCLUDES[@]}" \
   "${REQUIRES[@]}" \

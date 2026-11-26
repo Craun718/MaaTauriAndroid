@@ -39,6 +39,7 @@ jobs:
               - 'scripts/pack_compiled_agent.py'
               - 'scripts/build-agent-runtime.sh'
               - 'scripts/build_agent_bundle.py'
+              - 'scripts/agent_runtime_versions.py'
               - 'scripts/fetch-maafw.sh'
               - 'scripts/env.sh'
               - '.maafwversion'

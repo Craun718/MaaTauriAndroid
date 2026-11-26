@@ -13,7 +13,8 @@
 #               - zip_date_time() takes that timestamp from SOURCE_DATE_EPOCH,
 #                 which scripts/build-resource.py exports from the resource commit.
 #               - fetch_core() verifies the pinned Android core SHA-256 before
-#                 extraction, including when reading from the download cache.
+#                 extraction, including when reading from the download cache;
+#               - APK runtime assembly checks the manifest against the native release.
 #             The body also carries plain lint cleanups from ruff.toml
 #             (`select = ["ALL"]`), which are not itemized here, so expect a
 #             `git diff` against upstream to show style changes as well.
@@ -62,14 +63,22 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from agent_runtime_versions import validate_runtime_metadata
+
 CORE_REPO = "Craun718/MaaAgentCoreAndroid"
-CORE_TAG = "agent-core-3.13.15-maafw5.16.0"
+CORE_TAG = "agent-core-3.13.15-maafw6.0.0b3"
 CORE_PY = "3.13.15"
 CORE_URL = "https://github.com/{repo}/releases/download/{tag}/{asset}"
 CORE_MANIFEST = "agent-core.json"
 # Keep literal release coordinates here so switching the defaults cannot carry
 # a previous release's pins forward.
 CORE_SHA256 = {
+    ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw6.0.0b3", "arm64-v8a"): (
+        "99079108e08160128119247c3fe8546a9a025985881aff2cc72aa1d05ac54208"
+    ),
+    ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw6.0.0b3", "x86_64"): (
+        "a31844252b335c19de9aee715d2302dc73eff06a02a86269b4b148c6a987a403"
+    ),
     ("Craun718/MaaAgentCoreAndroid", "agent-core-3.13.15-maafw5.16.0", "arm64-v8a"): (
         "490b71591f06a5cf03dc9bc838ce7a7d739091c97895b3aa75757af553932df9"
     ),
@@ -577,7 +586,12 @@ def write_multiprocessing_shim(site: Path) -> None:
 
 def build(core: Path, out: Path, abi: str, options: argparse.Namespace, work: Path) -> None:
     manifest = read_manifest(core)
-    if manifest["abi"] != abi:
+    if options.expected_maafw:
+        try:
+            validate_runtime_metadata(manifest, abi, options.expected_maafw, str(core), python=True)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+    elif manifest["abi"] != abi:
         raise SystemExit(f"core declares abi {manifest['abi']}, expected {abi}: {core}")
     log(f"-- {abi} -- core CPython {manifest['python']}")
 
@@ -635,6 +649,7 @@ def main() -> int:
         help=f"additional index; {EXTRA_INDEX} is always included",
     )
     parser.add_argument("--core", help="local core directory or tar.gz instead of downloading")
+    parser.add_argument("--expected-maafw", help="require the Python core to match this native release")
     parser.add_argument("--core-repo", default=CORE_REPO, help=f"default {CORE_REPO}")
     parser.add_argument("--core-tag", default=CORE_TAG, help=f"default {CORE_TAG}")
     parser.add_argument("--work", help=f"download cache and work directory, default {WORK_DIR}")

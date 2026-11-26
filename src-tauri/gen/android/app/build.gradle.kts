@@ -1,13 +1,13 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import java.io.File
-import java.util.zip.ZipFile
 import java.util.Properties
 import java.util.TreeMap
 import org.gradle.api.tasks.PathSensitivity
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.android.build.api.dsl.ApplicationExtension
 
+import top.natsuu.mta.kotlin.AgentRuntimeZip
 import top.natsuu.mta.kotlin.PiProfileReader
 import top.natsuu.mta.kotlin.PiLauncherIcon
 import top.natsuu.mta.kotlin.PiSyncTask
@@ -72,6 +72,15 @@ val maaTauriAndroidMaaDirPath = if (File(maaTauriAndroidMaaDir).isAbsolute) {
         .resolve(maaTauriAndroidMaaDir)
         .normalize()
 }
+val maaFrameworkPinFile = rootProject.file("../../../.maafwversion")
+val maaFrameworkPin = maaFrameworkPinFile.readText().trim()
+val maaFrameworkOverride = providers.environmentVariable("MAAFW_VERSION").orNull?.trim().orEmpty()
+require(maaFrameworkOverride.isEmpty() || maaFrameworkOverride == maaFrameworkPin) {
+    "APK MaaFramework must match the Rust binding pin $maaFrameworkPin; got $maaFrameworkOverride"
+}
+val maaNativeAbiDir = maaTauriAndroidMaaDirPath.resolve(maaTauriAndroidAbi)
+val maaNativeMarker = maaNativeAbiDir.resolve(".maafw-version")
+val officialNativeLayout = maaTauriAndroidMaaDirPath == rootProject.file("../../../vendor/maa/android").normalize()
 // Release signing comes from the packager's `[signing]` profile section so a single
 // publisher keystore keeps upgrade signatures stable across builds; profiles without
 // the section keep the previous behavior.
@@ -104,23 +113,6 @@ fun canonicalValue(value: Any?): Any? = when (value) {
 }
 
 fun canonicalJson(value: Any?): String = JsonOutput.toJson(canonicalValue(value))
-
-fun validateAgentBundle(file: File, index: Int) {
-    val requiredLibraries = setOf(
-        "lib/$maaTauriAndroidAbi/libMaaAgentClient.so",
-        "lib/$maaTauriAndroidAbi/libMaaAgentServer.so",
-    )
-    ZipFile(file).use { archive ->
-        val entries = archive.entries().asSequence()
-            .map { entry -> entry.name.removePrefix("./") }
-            .toSet()
-        requiredLibraries.forEach { path ->
-            require(path in entries) {
-                "agent runtime $index is missing $path: $file"
-            }
-        }
-    }
-}
 
 val preparePiArchive = if (piProfile != null) {
     // The pack set is resolved from interface.json by PiSyncTask, so a directory rename
@@ -179,6 +171,11 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
         val agentProfile = requireNotNull(requireNotNull(piProfile).agent)
         val runtimes = agentProfile.runtimes
         inputs.property("abi", maaTauriAndroidAbi)
+        inputs.property("maafwVersion", maaFrameworkPin)
+        inputs.files(maaNativeMarker)
+        if (officialNativeLayout) {
+            inputs.files(AgentRuntimeZip.agentLibraries.map(maaNativeAbiDir::resolve))
+        }
         inputs.property("timeoutMs", agentProfile.timeoutMs)
         runtimes.forEach { runtime -> inputs.file(runtime.bundle) }
         inputs.files(piRootDir)
@@ -200,8 +197,13 @@ val prepareAgentRuntime = if (piProfile?.agent != null) {
             val packedPiArchive = packedRoot.resolve("pi.zip")
             require(packedPiArchive.isFile) { "the packed Project Interface archive is missing" }
 
+            val recordedVersion = maaNativeMarker.takeIf { it.isFile }?.readText()?.trim()
+            require(recordedVersion == null || recordedVersion == maaFrameworkPin) {
+                "APK native libraries record MaaFramework $recordedVersion; run scripts/setup.sh for $maaFrameworkPin"
+            }
+            val officialLibraries = maaNativeAbiDir.takeIf { officialNativeLayout && recordedVersion != null }
             val descriptorRuntimes = runtimes.mapIndexed { index, runtime ->
-                validateAgentBundle(runtime.bundle, index)
+                AgentRuntimeZip.validate(runtime.bundle, maaTauriAndroidAbi, maaFrameworkPin, officialLibraries)
                 val target = packedAgentRoot.resolve("runtime-$index.zip")
                 runtime.bundle.copyTo(target, overwrite = true)
                 linkedMapOf<String, Any?>(

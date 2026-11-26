@@ -39,6 +39,7 @@ jobs:
               - 'scripts/pack_compiled_agent.py'
               - 'scripts/build-agent-runtime.sh'
               - 'scripts/build_agent_bundle.py'
+              - 'scripts/agent_runtime_versions.py'
               - 'scripts/fetch-maafw.sh'
               - 'scripts/env.sh'
               - '.maafwversion'
@@ -200,7 +201,7 @@ jobs:
       # The Python agent runtime is built by the vendored script
       # scripts/build_agent_bundle.py (AGPL-3.0, from MaaFwApp);
       # MAAFW_CORE_REPO defaults to scripts/env.sh.
-      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.16.0
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw6.0.0b3
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -370,7 +371,7 @@ jobs:
       actions: write
       contents: read
     env:
-      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.16.0
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw6.0.0b3
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}
@@ -513,7 +514,7 @@ jobs:
       actions: write
       contents: read
     env:
-      MAAFW_CORE_TAG: agent-core-3.13.15-maafw5.16.0
+      MAAFW_CORE_TAG: agent-core-3.13.15-maafw6.0.0b3
       ANDROID_ABI: ${{ inputs.android_abi || 'arm64-v8a' }}
       ANDROID_RUST_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64-linux-android' || 'aarch64-linux-android' }}
       TAURI_ANDROID_TARGET: ${{ inputs.android_abi == 'x86_64' && 'x86_64' || 'aarch64' }}

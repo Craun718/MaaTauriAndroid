@@ -62,19 +62,12 @@ app_name = "Your PI"
 
 可选 `[signing]` 给 release APK 签名。没有 `[signing]` 时 release 保持未签名；签名后要长期复用同一个 keystore，Android 拒绝用不同签名覆盖安装。keystore 和密码不要提交进仓库。
 
-### 仓库内置配置
+### 使用自己的资源配方
 
-本仓库不在 Git 索引中内置 M9A、NarutoMobile、MAAPVZ、MaaEnd；CI 用 `scripts/build-resource.py` 传入上游 URL 和 commit 后克隆资源，profile 放在资源旁边并使用相对路径，这样同一份 profile 在每个 checkout 上都能工作：
-
-- `resource/m9a`、`resource/m9a.toml`：M9A 的 CI-only checkout 和 profile
-- `resource/narutomobile`、`resource/narutomobile.toml`：NarutoMobile 的 CI-only checkout 和 profile
-- `resource/maapvz`、`resource/maapvz.toml`：MAAPVZ 的 CI-only checkout 和 profile
-- `resource/maaend`、`resource/maaend.toml`：MaaEnd 的 CI-only checkout 和 profile（`v2.32.0`）
-
-M9A、NarutoMobile 与 MAAPVZ 的 Python agent runtime 由 CI 每次重新构建，默认是 `resource/*-agent-runtime-arm64-v8a.zip` 构建产物，不提交。MaaEnd 有两个编译型 agent，CI 分别生成 `resource/maaend-go-service-runtime-<abi>.zip` 与 `resource/maaend-cpp-algo-runtime-<abi>.zip`，同样不提交。某个 checkout 要使用仓库内资源，设：
+资源项目由打包者选择，不是 MaaTauriAndroid 的固定依赖。将配方放在自己的资源项目旁边，使用相对路径引用资源和 runtime ZIP；然后在 `local.properties` 中指定配方：
 
 ```properties
-pi.profile=/path/to/repo/resource/m9a.toml
+pi.profile=/path/to/your/pi-profile.toml
 ```
 
 ### 打包集合由推导得到，而不是显式列出
@@ -91,7 +84,7 @@ pi.profile=/path/to/repo/resource/m9a.toml
 | `pretask`（对象或数组，含导入文件） | 项目内的 `exec` 和 `args` 文件路径；需要的同目录模块、配置等额外依赖通过 `pi_include` 补充 |
 | — | `data/`，Agent 会读取它，但协议不会声明它 |
 
-接口声明了、但项目中并不存在的路径会**使构建失败**，因为无声的错误打包正是以这种方式进入产物的。M9A v4.9.0 把 `i18n/` 改名为 `locales/`；旧的许可名单没有匹配到任何内容，构建仍然通过，最终 APK 里的接口指向了自身压缩包中不存在的翻译文件，在真机上导致硬性的项目加载失败。
+接口声明了、但项目中并不存在的路径会**使构建失败**。例如，资源目录改名后若忘记同步 `interface.json`，打包阶段会直接报缺失路径，不会等到安装后才发现加载失败。
 
 被文档描述为“文件路径、URL 或纯文本”的值只在能解析为现有路径时才被当作路径处理，因此普通文字和远程 URL 会原样保留。绝对路径和 `..` 逃逸会被忽略。开发残留物（`__pycache__`、`.git`、`node_modules`、`.venv`、`*.pyc`/`*.pyo`）会在复制时被过滤掉。
 
@@ -176,8 +169,8 @@ bundle ZIP 有硬性约束，任何语言的 agent 都躲不开：
 
 ```bash
 scripts/build-agent-runtime.sh \
-  --project-dir resource/m9a \
-  --out resource/m9a-agent-runtime-arm64-v8a.zip \
+  --project-dir resource/my_project \
+  --out resource/my_project-agent-runtime-arm64-v8a.zip \
   --exclude pillow \
   --require pillow==11.0.0
 ```
@@ -195,7 +188,9 @@ python3 src-tauri/profiles/pack_agent_bundle.py \
 
 它会解引用符号链接、强制非 ZIP64，把两个 `.so` 放进 `lib/<abi>/`，并且额外要求 MaaAgentCoreAndroid bundle 的 `agent-core.json` 标记。
 
-> 注意：原生库版本由根目录 `.maafwversion` 声明（当前为 `v5.16.0`），通过 `MAAFW_VERSION` 传入构建；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `agent-core-3.13.15-maafw5.16.0`，所以 bundle 里的 Python `maa` 包保持 5.16.0，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，该协议在补丁版本之间保持兼容。
+> 注意：原生库版本由根目录 `.maafwversion` 声明（当前为 `v6.0.0-beta.3`），通过 `MAAFW_VERSION` 传入构建；`MAAFW_CORE_REPO` 和 `MAAFW_CORE_TAG` 把 core 固定在 `agent-core-3.13.15-maafw6.0.0b3`，所以 bundle 里的 Python `maa` 包保持 `6.0.0b3`，core 自带副本会优先于 `requirements.txt` 中的 `maafw` 固定版本。Python agent 通过 AgentClient/Server IPC 与本机 agent 原生库通信，应使用同版客户端和服务端；MaaFW 6 的协议不能与 5.x 混用。
+
+复用 ZIP 时，APK 构建会核对目标 ABI 与 Python core 清单中的 MaaFramework 版本；不匹配时请重建 ZIP。MTA 的编译型打包器会从标准原生库目录的版本标记写入独立清单，不需要 Python core。若复用不带清单的旧编译型 ZIP，且 APK 使用标准下载的原生库，Gradle 会比对 ZIP 的两份 Agent 动态库；不匹配时请重新打包。
 
 ### 编译型（C++ / Go / Rust）
 
@@ -248,7 +243,6 @@ debug 构建每次的签名可能不同，覆盖安装报 `INSTALL_FAILED_UPDATE
 | 构建报 agent 数量对不上 | `interface.json` 的 `agent[]` 和 `[[agent.runtimes]]` 没有按顺序一一对应 |
 | 构建报 bundle 缺 `.so` | ZIP 里没有当前 ABI 对应的 `libMaaAgentClient.so` 和 `libMaaAgentServer.so` |
 | 设备端拒绝解开 agent runtime | 包里有符号链接、触发了 ZIP64，或入口不是可执行文件 |
-| M9A v4.9.0 构建绿但真机加载失败 | 上游把 `i18n/` 改名成 `locales/`，旧许可名单失配；当前推导集合会直接报缺路径 |
 
 查看运行日志：
 

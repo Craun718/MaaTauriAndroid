@@ -33,11 +33,11 @@
 scripts/setup.sh                              # MaaFramework 原生库
 python3 scripts/build-resource.py \
   "$RESOURCE_REPO_URL" \
-  --id my_project --ref "$RESOURCE_REF" \
+  --id my_project --ref commit_hash \
   --submodules
 ```
 
-`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本；传 `--skip-runtime` 时会在 PI 准备和 MaaFramework 下载后停止，供编译型 agent 自己构建。资源目录和 Python runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，配方里的 `{abi}` 占位符会解析为目标 ABI。`build-agent-runtime.sh` 的 `--project-dir` 与 `--out` 必填；其余选项见 `--help`。上例中的 `RESOURCE_REPO_URL` 和 `RESOURCE_REF` 应设置为你的资源仓库 URL 和分支、标签或提交。
+`build-resource.py` 接收任意 Git URL，克隆指定 ref 及其子模块，先调用 `prepare-pi.py` 适配 interface 位置和 OCR 模型，再调用通用 runtime 脚本；传 `--skip-runtime` 时会在 PI 准备和 MaaFramework 下载后停止，供编译型 agent 自己构建。资源目录和 Python runtime ZIP 名字来自 `--id`；省略时从仓库名推导。`--abi arm64-v8a|x86_64` 选择 runtime ABI，默认保持 arm64；x86_64 runtime 还需要对应的壳层构建，配方里的 `{abi}` 占位符会解析为目标 ABI。`build-agent-runtime.sh` 的 `--project-dir` 与 `--out` 必填；其余选项见 `--help`。运行前，把 `RESOURCE_REPO_URL` 设为你的资源仓库 URL，并把 `commit_hash` 替换成该仓库的实际提交哈希。
 
 没有 `requirements.txt` 的 Python agent 项目会得到一个空的依赖锁，仍会打包预编译 Python 核心和 Maa agent 库；编译型 agent 仍需要单独的打包流程。
 
